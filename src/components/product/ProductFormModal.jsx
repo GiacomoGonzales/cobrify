@@ -1302,7 +1302,7 @@ const ProductFormModal = ({
         {/* ═══════════════════════════════════════════════════════════════════
             SECCIÓN: PRESENTACIONES DE VENTA (opcional)
         ═══════════════════════════════════════════════════════════════════ */}
-        {showPresentations && businessSettings?.presentationsEnabled && (
+        {showPresentations && (
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2 flex items-center gap-2">
               <Package className="w-4 h-4" />

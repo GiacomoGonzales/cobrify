@@ -704,7 +704,6 @@ export default function CreatePurchase() {
                 presentationName: item.presentationName || '',
                 presentationFactor: Number(item.presentationFactor) || 1,
                 presentations: (
-                  businessSettings?.presentationsEnabled &&
                   !item.variantSku &&
                   Array.isArray(prod?.presentations) && prod.presentations.length > 0
                 ) ? prod.presentations : [],
@@ -1152,7 +1151,6 @@ export default function CreatePurchase() {
     // costo POR PRESENTACIÓN; el stock entra en unidad base (cantidad × factor).
     // No aplica a series (1 serie = 1 unidad base) ni ingredientes.
     newItems[index].presentations = (
-      businessSettings?.presentationsEnabled &&
       item.itemType !== 'ingredient' &&
       !item.trackSerials &&
       Array.isArray(item.presentations) && item.presentations.length > 0

@@ -130,11 +130,10 @@ export const getAvailableStock = (product, variant = null) => {
  * al vender una caja el stock baje 12 y no 1. Viaja con la línea del carrito
  * hasta el POS, que ya sabe multiplicar por él al descontar.
  *
- * NO se consulta `business.presentationsEnabled`: las presentaciones están
- * activas para todos los negocios (el sistema lo fuerza al iniciar sesión),
- * pero 403 negocios tienen guardado un `false` que nadie eligió. El catálogo
- * lee los flags crudos de Firestore, así que mirarlo dejaría a esos negocios
- * con presentaciones en el POS y sin ellas en su tienda.
+ * No hay flag que consultar: las presentaciones son parte del producto, como
+ * las variantes. Existió un `presentationsEnabled` que quedó en `false` en 403
+ * negocios sin que nadie lo eligiera; se retiró del código y ese dato ya no lo
+ * lee nadie.
  *
  * Con VARIANTES no aplica: el producto se compra eligiendo la variante, y
  * mezclar las dos cosas no está soportado en ninguna pantalla del sistema.

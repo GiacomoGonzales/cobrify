@@ -110,7 +110,6 @@ export default function PriceUpdateTable({
   const toast = useToast()
 
   const multiPricesOn = !!businessSettings?.multiplePricesEnabled
-  const presentationsOn = !!businessSettings?.presentationsEnabled
   const priceLabels = businessSettings?.priceLabels || {}
   const labelOf = (key) =>
     priceLabels?.[key] ||
@@ -730,13 +729,12 @@ export default function PriceUpdateTable({
         </div>
 
         {/* Filtros de tipo */}
-        {(multiPricesOn || presentationsOn || products.some(hasVariants)) && (
-          <div className="mt-3 flex items-center gap-2 flex-wrap">
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
             <Filter className="w-4 h-4 text-gray-500 shrink-0" />
             {[
               { v: 'all', label: 'Todos' },
               { v: 'multi', label: 'Con múltiples precios', show: multiPricesOn },
-              { v: 'presentations', label: 'Con presentaciones', show: presentationsOn },
+              { v: 'presentations', label: 'Con presentaciones', show: true },
               { v: 'variants', label: 'Con variantes', show: products.some(hasVariants) },
             ].filter(o => o.show !== false).map(opt => (
               <button
@@ -751,8 +749,7 @@ export default function PriceUpdateTable({
                 {opt.label}
               </button>
             ))}
-          </div>
-        )}
+        </div>
       </div>
 
       {filteredProducts.length === 0 ? (
@@ -1118,7 +1115,7 @@ export default function PriceUpdateTable({
               {multiPricesOn && <option value="price3">{labelOf('price3')}</option>}
               {multiPricesOn && <option value="price4">{labelOf('price4')}</option>}
               {multiPricesOn && <option value="allPrices">Todos los precios (1–4)</option>}
-              {presentationsOn && <option value="presentations">Todas las presentaciones</option>}
+              <option value="presentations">Todas las presentaciones</option>
               <option value="variants">Todas las variantes (precio principal)</option>
             </select>
             <p className="text-xs text-gray-500 mt-1">

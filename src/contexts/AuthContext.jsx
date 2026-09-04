@@ -45,20 +45,21 @@ const AuthContext = createContext(null)
 // mostrarlos ("parpadeo/recarga al iniciar sesión").
 const EMPTY_PERMS = Object.freeze([])
 
-// PRESENTACIONES: activas para TODOS, siempre. No son configurables — se fuerza
-// aquí a propósito porque 403 negocios tienen un `presentationsEnabled: false`
-// guardado que nadie eligió (lo escribía Configuración > Ventas sin tener
-// interruptor, con el estado inicial apagado). Ignorar el valor almacenado
-// evita tener que corregir esos documentos.
+// NIVELES DE PRECIO: configurables. Manda lo guardado; `true` es el default
+// para quien nunca tocó la opción, para que nadie pierda la función.
 //
-// NIVELES DE PRECIO: sí son configurables. Manda lo guardado; `true` es el
-// default para quien nunca tocó la opción, para que nadie pierda la función.
+// Las PRESENTACIONES ya no llevan flag: son parte del producto, como las
+// variantes. Había un `presentationsEnabled` que esta función forzaba a `true`
+// ignorando lo guardado, porque 403 negocios tenían un `false` que nadie
+// eligió (lo escribía Configuración sin tener interruptor, con el estado
+// inicial apagado). Ese dato sigue en Firestore pero ya no lo lee nadie: se
+// quitó el flag del código en vez de dejar 403 documentos esperando a que una
+// pantalla nueva los leyera y les apagara las presentaciones en silencio.
 //
 // El catálogo público lee los flags del documento de Firestore, no de aquí.
 const withFeatureDefaults = (businessData) => ({
   ...businessData,
   multiplePricesEnabled: businessData?.multiplePricesEnabled ?? true,
-  presentationsEnabled: true,
 })
 
 export const AuthProvider = ({ children }) => {

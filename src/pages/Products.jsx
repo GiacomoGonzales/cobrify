@@ -1541,8 +1541,9 @@ export default function Products() {
         location: isPharmaLikeMode(businessMode) ? (pharmacyData.location || null) : (productLocation || null),
         // Add modifiers if in restaurant mode (only include if exists)
         ...(businessMode === 'restaurant' && modifiers ? { modifiers } : {}),
-        // Add presentations if enabled (venta por presentaciones)
-        ...(businessSettings?.presentationsEnabled ? { presentations: presentations.map(p => ({
+        // Venta por presentaciones (caja de 12, docena, saco): parte del
+        // producto, sin flag que la habilite.
+        presentations: presentations.map(p => ({
           ...p,
           factor: parseFloat(p.factor) || 1,
           price: parseFloat(p.price) || 0,
@@ -1553,7 +1554,7 @@ export default function Products() {
           price2: parseFloat(p.price2) > 0 ? parseFloat(p.price2) : null,
           price3: parseFloat(p.price3) > 0 ? parseFloat(p.price3) : null,
           price4: parseFloat(p.price4) > 0 ? parseFloat(p.price4) : null,
-        })) } : {}),
+        })),
         // Add pharmacy data if in pharmacy mode
         ...(isPharmaLikeMode(businessMode) ? {
           genericName: pharmacyData.genericName || null,
@@ -7542,26 +7543,24 @@ export default function Products() {
                 </div>
               </label>
 
-              {businessSettings?.presentationsEnabled ? (
-                <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={showPresentations}
-                    onChange={e => {
-                      setShowPresentations(e.target.checked)
-                      if (!e.target.checked) {
-                        setPresentations([])
-                        setNewPresentation({ name: '', factor: '', price: '', priceUSD: '', unit: '' })
-                      }
-                    }}
-                    className="w-4 h-4 mt-0.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                  />
-                  <div>
-                    <span className="text-sm font-medium text-gray-700">Presentaciones</span>
-                    <p className="text-xs text-gray-500 mt-0.5">Vender en pack, caja, etc.</p>
-                  </div>
-                </label>
-              ) : <div />}
+              <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={showPresentations}
+                onChange={e => {
+                  setShowPresentations(e.target.checked)
+                  if (!e.target.checked) {
+                    setPresentations([])
+                    setNewPresentation({ name: '', factor: '', price: '', priceUSD: '', unit: '' })
+                  }
+                }}
+                className="w-4 h-4 mt-0.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+              />
+              <div>
+                <span className="text-sm font-medium text-gray-700">Presentaciones</span>
+                <p className="text-xs text-gray-500 mt-0.5">Vender en pack, caja, etc.</p>
+              </div>
+            </label>
 
               <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
                 <input

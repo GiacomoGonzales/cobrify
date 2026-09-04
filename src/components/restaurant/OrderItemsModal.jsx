@@ -362,8 +362,7 @@ export default function OrderItemsModal({
     // Si tiene presentaciones (ej. Ron: Vaso / Botella) y no se eligió una,
     // preguntar: cada presentación tiene su precio y su factor (unidades que
     // consume del stock base). El "presentation" ya seleccionado no re-pregunta.
-    const hasPresentations = businessSettings?.presentationsEnabled &&
-      Array.isArray(product.presentations) && product.presentations.length > 0
+    const hasPresentations = Array.isArray(product.presentations) && product.presentations.length > 0
     if (!variant && !presentation && !selectedPrice && hasPresentations) {
       setProductForPresentation(product)
       setShowPresentationModal(true)
@@ -480,7 +479,6 @@ export default function OrderItemsModal({
   // Rango de precios (unidad base + presentaciones) y conteo, para la tarjeta.
   // Devuelve null si el producto no maneja presentaciones.
   const getPresentationInfo = (product) => {
-    if (!businessSettings?.presentationsEnabled) return null
     if (!Array.isArray(product?.presentations) || product.presentations.length === 0) return null
     const prices = [
       Number(product.price) || 0,

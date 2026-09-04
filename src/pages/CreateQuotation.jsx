@@ -810,9 +810,7 @@ export default function CreateQuotation() {
     }
 
     // Verificar si tiene presentaciones habilitadas
-    const hasPresentations = businessSettings?.presentationsEnabled &&
-                             product.presentations &&
-                             product.presentations.length > 0
+    const hasPresentations = product.presentations && product.presentations.length > 0
 
     // Verificar si tiene múltiples precios habilitados
     // Para variantes, verificar los precios de la variante; para productos normales, del producto
@@ -1983,8 +1981,7 @@ export default function CreateQuotation() {
                                 <div className="absolute z-20 left-0 w-full min-w-[450px] max-w-[90vw] mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                                   {getFilteredProducts(item.searchTerm).length > 0 ? (
                                     getFilteredProducts(item.searchTerm).map(product => {
-                                      const hasPresentations = businessSettings?.presentationsEnabled &&
-                                                               product.presentations?.length > 0
+                                      const hasPresentations = product.presentations?.length > 0
                                       const hasMultiplePrices = businessSettings?.multiplePricesEnabled &&
                                                                 (product.price2 || product.price3 || product.price4)
                                       const hasVariants = product.hasVariants && product.variants?.length > 0
@@ -2240,8 +2237,7 @@ export default function CreateQuotation() {
                           <div className="absolute z-20 left-0 w-full min-w-[450px] max-w-[90vw] mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                             {getFilteredProducts(item.searchTerm).length > 0 ? (
                               getFilteredProducts(item.searchTerm).map(product => {
-                                const hasPresentations = businessSettings?.presentationsEnabled &&
-                                                         product.presentations?.length > 0
+                                const hasPresentations = product.presentations?.length > 0
                                 const hasMultiplePrices = businessSettings?.multiplePricesEnabled &&
                                                           (product.price2 || product.price3 || product.price4)
                                 const hasVariants = product.hasVariants && product.variants?.length > 0

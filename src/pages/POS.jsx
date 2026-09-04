@@ -3972,7 +3972,7 @@ export default function POS() {
     }
 
     // Verificar si tiene presentaciones y no viene con presentación ya seleccionada
-    const hasPresentations = businessSettings?.presentationsEnabled && product.presentations && product.presentations.length > 0
+    const hasPresentations = product.presentations && product.presentations.length > 0
     if (hasPresentations && selectedPresentation === null) {
       setProductForPresentationSelection(product)
       setPendingBatchForPresentation(selectedBatch)
@@ -4285,7 +4285,7 @@ export default function POS() {
   const handleBatchSelection = (batch) => {
     if (!productForBatchSelection) return
     const product = productForBatchSelection
-    const hasPresentations = businessSettings?.presentationsEnabled && product.presentations && product.presentations.length > 0
+    const hasPresentations = product.presentations && product.presentations.length > 0
 
     setShowBatchModal(false)
     setProductForBatchSelection(null)

@@ -13,16 +13,16 @@ import { useDemoLogistics } from '@/contexts/DemoLogisticsContext'
 // `useEffect(..., [businessSettings])` que hiciera `setState` entraba en bucle
 // infinito en modo demo (lo detectó la reorganización de Configuración).
 const AJUSTES_DEMO_BASE = Object.freeze({
-  dispatchGuidesEnabled: true, enableProductImages: true, multiplePricesEnabled: true, presentationsEnabled: true,
+  dispatchGuidesEnabled: true, enableProductImages: true, multiplePricesEnabled: true,
 })
 const AJUSTES_DEMO_LOGISTICA = Object.freeze({
-  businessMode: 'logistics', enableProductImages: true, multiplePricesEnabled: true, presentationsEnabled: true, dispatchGuidesEnabled: true,
+  businessMode: 'logistics', enableProductImages: true, multiplePricesEnabled: true, dispatchGuidesEnabled: true,
 })
 const AJUSTES_DEMO_HOTEL = Object.freeze({
-  businessMode: 'hotel', enableProductImages: true, multiplePricesEnabled: true, presentationsEnabled: true, posCustomFields: {},
+  businessMode: 'hotel', enableProductImages: true, multiplePricesEnabled: true, posCustomFields: {},
 })
 const AJUSTES_DEMO_VETERINARIA = Object.freeze({
-  businessMode: 'veterinary', enableProductImages: true, multiplePricesEnabled: true, presentationsEnabled: true, batchControlEnabled: true,
+  businessMode: 'veterinary', enableProductImages: true, multiplePricesEnabled: true, batchControlEnabled: true,
 })
 
 /**
