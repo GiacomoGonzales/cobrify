@@ -21,6 +21,30 @@ const sanitizeSunatLine = (text, maxLen) => {
 }
 
 /**
+ * Las OBSERVACIONES de una guía de remisión, listas para el XML.
+ *
+ * Van en `/DespatchAdvice/cbc:Note`, que es el campo que SUNAT rotula
+ * "Observaciones" en la guía que muestra al escanear el QR. La app ya las pedía
+ * en pantalla —"Más Información (Observaciones)"— y las guardaba, pero el XML
+ * nunca las mandaba, así que nunca llegaban a SUNAT.
+ *
+ * Cada tipo de guía las guarda con otro nombre: la de remitente en
+ * `additionalInfo` y la de transportista en `observations`. Se aceptan los dos
+ * y algún alias más, para que el campo no se pierda otra vez si la pantalla
+ * cambia de nombre.
+ *
+ * Reglas de SUNAT (hoja de validaciones GRE 2.0, observación 4186, idéntica
+ * para remitente y transportista): alfanumérico de hasta 250 caracteres, sin
+ * saltos de línea, tabulaciones ni otros espacios en blanco raros, y que no sea
+ * solo espacios. `sanitizeSunatLine` colapsa todo eso a un espacio simple, que
+ * es justo lo que pide.
+ */
+const observacionesDeLaGuia = (guideData) => sanitizeSunatLine(
+  guideData?.additionalInfo || guideData?.observations || guideData?.observaciones || guideData?.notes || '',
+  250,
+)
+
+/**
  * Formatea la CANTIDAD de una línea para SUNAT (formato n(12,10): hasta 10
  * decimales). NUNCA redondear a 2 decimales: una venta de 0.225 MILLAR emitida
  * como "0.23" descuadra contra los montos (calculados con 0.225) y SUNAT
@@ -2756,6 +2780,14 @@ export function generateDispatchGuideXML(guideData, businessData) {
     'listURI': 'urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01'
   }).txt('09')
 
+  // Observaciones. En UBL 2.1 el cbc:Note del DespatchAdvice va DESPUES del
+  // tipo de documento y ANTES de cac:AdditionalDocumentReference; fuera de ese
+  // orden el XSD de SUNAT rechaza el documento.
+  const observaciones = observacionesDeLaGuia(guideData)
+  if (observaciones) {
+    root.ele('cbc:Note').dat(observaciones)
+  }
+
   // Referencia a documento relacionado (factura/boleta origen)
   if (guideData.referencedInvoice) {
     const additionalDoc = root.ele('cac:AdditionalDocumentReference')
@@ -3311,6 +3343,13 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
 
   // Tipo de documento: 31 = Guía de Remisión TRANSPORTISTA
   root.ele('cbc:DespatchAdviceTypeCode').txt('31')
+
+  // Observaciones. Mismo lugar y mismas reglas que en la de remitente: despues
+  // del tipo de documento y antes de cbc:LineCountNumeric.
+  const observaciones = observacionesDeLaGuia(guideData)
+  if (observaciones) {
+    root.ele('cbc:Note').dat(observaciones)
+  }
 
   // Cantidad de líneas
   const itemCount = (guideData.items && guideData.items.length > 0) ? guideData.items.length : 1
