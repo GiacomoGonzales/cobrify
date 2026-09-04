@@ -304,24 +304,42 @@ export default function Impresion() {
     }
   }
 
+  // ── Conectar una impresora: un solo camino para los tres tipos ────────────
+  //
+  // Conectar solo sabe de la CONEXIÓN: si está encendida, dónde está, cómo se
+  // llama y de qué tipo es. No sabe nada de las opciones del ticket, así que
+  // manda únicamente esos campos y `savePrinterConfig` (que hace merge)
+  // conserva en el equipo todo lo demás.
+  //
+  // Lo que faltaba era la PANTALLA. Los tres handlers reemplazaban el estado
+  // por ese objeto de cuatro campos, y los ocho interruptores del ticket
+  // —"Unidad de medida" entre ellos— quedaban dibujados en apagado aunque en
+  // el equipo siguieran encendidos. Carmen (JC&AN) tiene ticketera de red, que
+  // se reconecta seguido: entraba a Configuración, veía la unidad de medida
+  // apagada y la volvía a activar TODOS LOS DÍAS. El arreglo del 02-sep-2026
+  // salvó el ticket, pero ella seguía viendo la casilla caída.
+  //
+  // Por eso el estado se RELEE de lo guardado en vez de fusionarse contra sí
+  // mismo: si la config todavía no terminó de cargar, el estado trae los
+  // valores de fábrica y fusionarlo pisaría el ancho guardado con 80.
+  const conectarImpresora = async (datosDeConexion) => {
+    await savePrinterConfig(getBusinessId(), datosDeConexion)
+    const guardado = await getPrinterConfig(getBusinessId())
+    if (guardado.success && guardado.config) setPrinterConfig(guardado.config)
+    else setPrinterConfig((prev) => ({ ...prev, ...datosDeConexion }))
+  }
+
   const handleConnectPrinter = async (printerAddress, printerName) => {
     setIsConnecting(true)
     try {
       const result = await connectPrinter(printerAddress)
       if (result.success) {
-        const newConfig = {
+        await conectarImpresora({
           enabled: true,
           address: printerAddress,
           name: printerName,
           type: 'bluetooth',
-          // El ancho SOLO se manda si se sabe. Con `|| 58` acá, conectar la
-          // impresora con el estado todavía sin cargar forzaba 58mm y lo dejaba
-          // guardado — el ancho "se cambiaba solo" (reporte de JC&AN,
-          // 02-sep-2026). Sin el campo, savePrinterConfig conserva el guardado.
-          ...(printerConfig.paperWidth ? { paperWidth: printerConfig.paperWidth } : {}),
-        }
-        setPrinterConfig(newConfig)
-        await savePrinterConfig(getBusinessId(), newConfig)
+        })
         toast.success('Impresora conectada exitosamente')
       } else {
         toast.error(result.error || 'Error al conectar impresora')
@@ -336,10 +354,7 @@ export default function Impresion() {
 
   const handleChangePaperWidth = async (newWidth) => {
     try {
-      const newConfig = { ...printerConfig, paperWidth: parseInt(newWidth) }
-      setPrinterConfig(newConfig)
-      await savePrinterConfig(getBusinessId(), newConfig)
-      toast.success(`Ancho de papel actualizado a ${newWidth}mm`)
+      await guardarLocal({ paperWidth: parseInt(newWidth) }, `Ancho de papel actualizado a ${newWidth}mm`)
     } catch (error) {
       console.error('Error updating paper width:', error)
       toast.error('Error al actualizar ancho de papel')
@@ -396,10 +411,7 @@ export default function Impresion() {
 
   const handleDisablePrinter = async () => {
     try {
-      const newConfig = { ...printerConfig, enabled: false }
-      setPrinterConfig(newConfig)
-      await savePrinterConfig(getBusinessId(), newConfig)
-      toast.success('Impresora deshabilitada')
+      await guardarLocal({ enabled: false }, 'Impresora deshabilitada')
     } catch (error) {
       console.error('Error disabling printer:', error)
       toast.error('Error al deshabilitar impresora')
@@ -453,16 +465,12 @@ export default function Impresion() {
       const result = await connectPrinter(address)
 
       if (result.success) {
-        const newConfig = {
+        await conectarImpresora({
           enabled: true,
           address: address,
           name: wifiName.trim() || 'Impresora WiFi',
           type: 'wifi',
-          // El ancho SOLO se manda si se sabe (ver handleConnectPrinter).
-          ...(printerConfig.paperWidth ? { paperWidth: printerConfig.paperWidth } : {}),
-        }
-        setPrinterConfig(newConfig)
-        await savePrinterConfig(getBusinessId(), newConfig)
+        })
 
         toast.success('Impresora WiFi conectada exitosamente')
         setShowWifiConnect(false)
@@ -506,16 +514,12 @@ export default function Impresion() {
       const result = await connectPrinter('internal')
 
       if (result.success) {
-        const newConfig = {
+        await conectarImpresora({
           enabled: true,
           address: 'internal',
           name: 'Impresora Interna iMin',
           type: 'internal',
-          // El ancho SOLO se manda si se sabe (ver handleConnectPrinter).
-          ...(printerConfig.paperWidth ? { paperWidth: printerConfig.paperWidth } : {}),
-        }
-        setPrinterConfig(newConfig)
-        await savePrinterConfig(getBusinessId(), newConfig)
+        })
         toast.success('Impresora interna conectada exitosamente')
       } else {
         toast.error(result.error || 'Error al conectar impresora interna')
@@ -725,10 +729,17 @@ export default function Impresion() {
   // ── Ajustes de este equipo: un solo camino de guardado ────────────────────
   // Cada interruptor de la pestaña vieja repetía lo mismo: copiar el estado,
   // cambiar un campo, guardar en localStorage y avisar. Es un solo lugar.
+  // Se guarda SOLO el campo que se tocó, no la pantalla entera.
+  //
+  // Mandar `{ ...printerConfig, ...patch }` volvía a afirmar los ocho ajustes
+  // en cada clic, con los valores que esta pestaña tenía cargados. Si la config
+  // había cambiado en otra parte —otra pestaña, otra PC, una reconexión—, tocar
+  // un interruptor pisaba los demás con lo viejo, y un `false` explícito sí
+  // vence al merge de `savePrinterConfig`. Con el patch solo, lo que no se tocó
+  // ni se nombra.
   const guardarLocal = async (patch, mensaje) => {
-    const newConfig = { ...printerConfig, ...patch }
-    setPrinterConfig(newConfig)
-    await savePrinterConfig(getBusinessId(), newConfig)
+    await savePrinterConfig(getBusinessId(), patch)
+    setPrinterConfig((prev) => ({ ...prev, ...patch }))
     if (mensaje) toast.success(mensaje)
   }
 

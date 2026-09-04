@@ -419,6 +419,46 @@ export default function InvoiceList() {
     loadPrinterConfig()
   }, [user])
 
+  // Relee la configuración del equipo y deja el ticket listo para imprimirse.
+  //
+  // Las opciones del ticket viajan al <InvoiceTicket> por estado de React, y el
+  // estado se carga UNA sola vez al montar la página. Si la configuración
+  // cambió después —en Configuración, en otra pestaña o en otra PC—, la pestaña
+  // abierta seguía imprimiendo con lo viejo: el ticket salía sin la unidad de
+  // medida aunque Configuración la mostrara encendida. Por eso se relee JUSTO
+  // ANTES de imprimir, y se espera un tick para que el ticket se redibuje.
+  //
+  // Los tres valores de la HOJA se devuelven en un objeto, no se leen del
+  // estado: `setState` no cambia las variables de la función que llama, así que
+  // declarar la hoja con el ancho viejo mientras el ticket ya se dibuja con el
+  // nuevo es lo que hacía que el navegador lo encogiera (ver b3538f68).
+  const refrescarConfigDeImpresion = async () => {
+    const hoja = { ancho: ticketPaperWidth, esA4: a4SheetPrint, ajustar: ajustarHoja }
+    try {
+      const fresh = await getPrinterConfig(getBusinessId())
+      if (fresh.success && fresh.config) {
+        const c = fresh.config
+        setShowItemUnit(c.showItemUnit || false)
+        setWebPrintLegible(c.webPrintLegible || false)
+        setTicketFontSize(c.ticketFontSize || (c.webPrintLegible ? 'medium' : 'small'))
+        setCompactPrint(c.compactPrint || false)
+        setPrintMargins(c.printMargins ?? 8)
+        setSimplePrint(c.simplePrint || false)
+        setA4SheetPrint(c.a4SheetPrint || false)
+        setTicketPaperWidth(c.paperWidth || 80)
+        setAjustarHoja(c.ajustarHojaAlTicket !== false)
+        hoja.ancho = c.paperWidth || 80
+        hoja.esA4 = c.a4SheetPrint || false
+        hoja.ajustar = c.ajustarHojaAlTicket !== false
+        // Un tick para que el ticket se re-renderice con los valores frescos
+        await new Promise(resolve => setTimeout(resolve, 60))
+      }
+    } catch (e) {
+      console.error('Error releyendo config de impresora antes de imprimir:', e)
+    }
+    return hoja
+  }
+
   // Función para imprimir ticket
   const handlePrintTicket = async (invoiceArg) => {
     // Permite llamarlo desde el modal (sin args, usa viewingInvoice) o
@@ -461,42 +501,7 @@ export default function InvoiceList() {
     }
 
     // Fallback: impresión estándar (web o si falla la térmica).
-    // Releer la configuración FRESCA de localStorage antes de imprimir, para no usar
-    // valores cacheados en memoria que pueden estar desincronizados (mismo fix que el POS).
-    //
-    // Los tres valores que definen la HOJA se guardan aparte, en variables locales.
-    // `setState` NO cambia las variables de esta función —siguen siendo las del
-    // render en que se creó—, así que abajo la hoja se declaraba con el ancho
-    // VIEJO mientras el ticket ya se dibujaba con el NUEVO. Al no coincidir, el
-    // navegador encoge el ticket para que entre: es el "se desconfigura al
-    // reimprimir" de JC&AN. Salía mal solo la PRIMERA vez después de cambiar la
-    // configuración y bien a la segunda, que es lo que lo hacía difícil de creer.
-    //
-    // El POS no tenía el problema porque ni siquiera declara el tamaño de hoja.
-    let anchoDeHoja = ticketPaperWidth
-    let esHojaA4 = a4SheetPrint
-    let ajustarLaHoja = ajustarHoja
-    try {
-      const fresh = await getPrinterConfig(getBusinessId())
-      if (fresh.success && fresh.config) {
-        setShowItemUnit(fresh.config.showItemUnit || false)
-        setWebPrintLegible(fresh.config.webPrintLegible || false)
-        setTicketFontSize(fresh.config.ticketFontSize || (fresh.config.webPrintLegible ? 'medium' : 'small'))
-        setCompactPrint(fresh.config.compactPrint || false)
-        setPrintMargins(fresh.config.printMargins ?? 8)
-        setSimplePrint(fresh.config.simplePrint || false)
-        setA4SheetPrint(fresh.config.a4SheetPrint || false)
-        setTicketPaperWidth(fresh.config.paperWidth || 80)
-        setAjustarHoja(fresh.config.ajustarHojaAlTicket !== false)
-        anchoDeHoja = fresh.config.paperWidth || 80
-        esHojaA4 = fresh.config.a4SheetPrint || false
-        ajustarLaHoja = fresh.config.ajustarHojaAlTicket !== false
-        // Dar un tick para que el ticket se re-renderice con los valores frescos
-        await new Promise(resolve => setTimeout(resolve, 60))
-      }
-    } catch (e) {
-      console.error('Error releyendo config de impresora antes de imprimir:', e)
-    }
+    const hoja = await refrescarConfigDeImpresion()
     // Si viene desde la fila usamos rowPrintInvoice (estado dedicado) para
     // no abrir el modal de detalle ni interferir con la impresión masiva.
     // Si viene del modal, viewingInvoice ya está seteado y se imprime
@@ -504,9 +509,9 @@ export default function InvoiceList() {
     // La hoja se ajusta al ticket: sin esto el navegador cae en A4 y el
     // comprobante sale chiquito arriba con media hoja en blanco. En modo
     // "hoja A4" el propio componente pide A4 y no hay que medir nada.
-    const prepararHoja = () => esHojaA4
+    const prepararHoja = () => hoja.esA4
       ? () => {}
-      : aplicarTamanoDeHoja(ticketRef.current, anchoDeHoja, ajustarLaHoja)
+      : aplicarTamanoDeHoja(ticketRef.current, hoja.ancho, hoja.ajustar)
 
     if (invoiceArg && viewingInvoice?.id !== invoice.id) {
       setRowPrintInvoice(invoice)
@@ -603,7 +608,10 @@ export default function InvoiceList() {
         setBulkPrintProgress({ current: 0, total: 0 })
       }
     } else {
-      // Impresión web: window.print() renderiza el contenedor bulk
+      // Impresión web: window.print() renderiza el contenedor bulk.
+      // Se relee igual que en la reimpresión de a uno: este camino usaba el
+      // estado cargado al montar la página y salía sin la unidad de medida.
+      await refrescarConfigDeImpresion()
       window.print()
     }
   }
