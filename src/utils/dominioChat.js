@@ -21,7 +21,10 @@
 export const MARCA_CHAT = {
   nombre: 'Cobrify Chat',
   color: '#25BB6A',
-  icono: '/chat/icon-512.png',
+  // Cada medida donde se usa de verdad: el de 512 pesa 400 KB y ponerlo en la
+  // cabecera, que lo pinta a 24 px, era bajar eso para nada.
+  icono: '/chat/icon-192.png',       // login (se ve a ~64 px)
+  iconoChico: '/chat/icon-64.png',   // cabecera de la bandeja (24 px)
   favicon: '/chat/icon-64.png',
   iconoApple: '/chat/icon-180.png',
   manifiesto: '/chat/manifest.json',
