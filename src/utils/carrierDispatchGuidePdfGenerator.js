@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf'
 import { contrastTextColor } from '@/utils/pdfColors'
 import QRCode from 'qrcode'
+import { urlQrDeLaGuia } from '@/utils/qrGuiaSunat'
 import { storage } from '@/lib/firebase'
 import { ref, getDownloadURL, getBlob } from 'firebase/storage'
 import { Capacitor, CapacitorHttp } from '@capacitor/core'
@@ -134,7 +135,12 @@ const generateGuideQR = async (guide, companySettings) => {
   try {
     const [serie = '', numero = ''] = (guide.number || '').split('-')
 
-    const qrData = [
+    // La URL de SUNAT manda: escanearla ABRE la guía en el sitio de SUNAT, que
+    // es lo que el fedatario verifica en carretera. Lo de abajo es solo texto y
+    // queda como respaldo para las guías sin CDR guardado.
+    const urlSunat = urlQrDeLaGuia(guide)
+
+    const qrData = urlSunat || [
       companySettings?.ruc || '',
       '31', // Tipo de documento: GRE Transportista
       serie,

@@ -68,6 +68,33 @@ export default {
     },
 
     {
+      id: 'qr',
+      title: 'El código QR de la guía',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'La guía impresa lleva un **código QR de SUNAT**. Al escanearlo con cualquier celular se abre la guía en la página de SUNAT, con todos sus datos. Es lo que le permite al fedatario verificarla en el momento.',
+        },
+        {
+          type: 'consejo',
+          text: 'SUNAT acepta que se **exhiba el QR** para sustentar el traslado, sin necesidad de que la guía esté impresa. Basta con mostrarlo desde el celular.',
+        },
+        {
+          type: 'texto',
+          text: 'Ese QR lo genera SUNAT cuando acepta la guía, y sale solo en el PDF y en el ticket. No hay nada que configurar.',
+        },
+        {
+          type: 'ojo',
+          text: 'Solo lo tienen las guías **aceptadas por SUNAT**. Una guía rechazada, anulada o todavía sin enviar no tiene QR de SUNAT, y en su lugar se imprime el código con los datos del comprobante.',
+        },
+        {
+          type: 'ojo',
+          text: 'Las guías emitidas hace mucho tiempo pueden no tenerlo, porque en ese entonces no se guardaba la respuesta de SUNAT. Las nuevas lo traen siempre.',
+        },
+      ],
+    },
+
+    {
       id: 'conductores-vehiculos',
       title: 'Guardar tus conductores y vehículos',
       blocks: [

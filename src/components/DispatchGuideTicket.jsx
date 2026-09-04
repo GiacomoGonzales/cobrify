@@ -1,6 +1,7 @@
 import { forwardRef } from 'react'
 import React from 'react'
 import { QRCodeSVG } from 'qrcode.react'
+import { urlQrDeLaGuia } from '@/utils/qrGuiaSunat'
 
 /**
  * Componente de Ticket Imprimible para Guía de Remisión
@@ -55,6 +56,13 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
 
   // Generar código QR
   const generateQRData = () => {
+    // La URL de SUNAT primero: es la que al escanearla ABRE la guía en el sitio
+    // de SUNAT, y es lo que el fedatario necesita ver. El formato de tuberías
+    // es solo texto: escanearlo muestra caracteres y no lleva a ningún lado.
+    // Se conserva como respaldo para las guías que no tienen CDR guardado.
+    const url = urlQrDeLaGuia(guide)
+    if (url) return url
+
     const ruc = companySettings?.ruc || '00000000000'
     const tipoDoc = guide.documentType === '31' ? '31' : '09'
     const serie = guide.series || guide.number?.split('-')[0] || 'T001'
