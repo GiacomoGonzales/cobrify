@@ -197,6 +197,12 @@ export const enviarArchivoGuardado = async (conversationId, media, caption, idTo
       mediaUrl: media.url,
       mimeType: media.mimeType,
       filename: media.filename || null,
+      // La miniatura y las medidas ya se calcularon al subir el archivo a la
+      // biblioteca: se reenvian en vez de recalcularlas. Sin esto el mensaje
+      // se guardaba sin medidas y la conversacion daba un salto cada vez que
+      // cargaba la imagen.
+      ...(media.thumbUrl ? { thumbUrl: media.thumbUrl } : {}),
+      ...(media.ancho ? { ancho: media.ancho, alto: media.alto } : {}),
       caption: caption || '',
       ...(respondeA ? { respondeA } : {}),
     }),

@@ -14275,7 +14275,12 @@ export const sendWhatsappMediaMessage = onRequest(
       //  - mediaUrl: archivo YA guardado (respuestas rapidas), se manda por
       //    su direccion sin volver a subirlo. Guardar una vez y reusar es lo
       //    que hace que una respuesta rapida con video sea instantanea.
-      const { conversationId, base64, mediaUrl, mimeType, filename, caption, respondeA = null } = req.body || {}
+      const {
+        conversationId, base64, mediaUrl, mimeType, filename, caption, respondeA = null,
+        // Medidas y miniatura de un archivo YA guardado: se calcularon al
+        // subirlo a la biblioteca y viajan de vuelta para no recalcularlas.
+        thumbUrl: thumbGuardada = null, ancho: anchoGuardado = null, alto: altoGuardado = null,
+      } = req.body || {}
       if (!conversationId || (!base64 && !mediaUrl) || !mimeType) {
         res.status(400).json({ error: 'Faltan datos del archivo' }); return
       }
@@ -14352,7 +14357,19 @@ export const sendWhatsappMediaMessage = onRequest(
         waId: conv.waId,
         tipo,
         texto: caption ? String(caption).trim() : '',
-        media: { url, mimeType, filename: filename || null, ...(mini || {}) },
+        // Las medidas hacen que la burbuja reserve el espacio exacto y la
+        // conversacion no salte al cargar la imagen. Si el archivo es nuevo
+        // salen de la miniatura recien hecha; si se reenvia uno guardado,
+        // vienen del cliente. Antes, reenviar uno guardado no guardaba
+        // ninguna — y esa es la via mas usada, la de respuestas rapidas.
+        media: {
+          url,
+          mimeType,
+          filename: filename || null,
+          ...(mini || {}),
+          ...(!mini && thumbGuardada ? { thumbUrl: thumbGuardada } : {}),
+          ...(!mini && anchoGuardado ? { ancho: anchoGuardado, alto: altoGuardado } : {}),
+        },
         estado: 'enviado',
         ...(respondeA ? { respondeA } : {}),
         enviadoPor: decoded.uid,

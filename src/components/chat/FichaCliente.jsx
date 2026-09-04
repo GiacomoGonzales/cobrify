@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { Modal, Campo, Entrada, Selector, Boton, ListaDatos, Dato, Aviso } from '@/components/admin/ui'
 import {
   obtenerFichaCliente,
@@ -42,6 +43,7 @@ const ETIQUETA_EMISION = {
  */
 export default function FichaCliente({ conversacion, onCerrar }) {
   const toast = useToast()
+  const { isAdmin } = useAuth()
   const [ficha, setFicha] = useState(null)
   const [cargando, setCargando] = useState(false)
   const [buscando, setBuscando] = useState('')
@@ -297,6 +299,22 @@ export default function FichaCliente({ conversacion, onCerrar }) {
 
             {ficha.notasAdmin && (
               <Aviso titulo="Nota del equipo">{ficha.notasAdmin}</Aviso>
+            )}
+
+            {/* Lo que no cabe en 320 px: sucursales, sub-usuarios, historial,
+                funciones. Se abre en otra pestaña a proposito — quien lo mira
+                esta atendiendo una conversacion y no puede perderla de vista.
+                Solo para admins: la ruta del panel los exige, y un enlace que
+                lleva a un muro es peor que no tenerlo. */}
+            {isAdmin && (
+              <a
+                href={`/app/admin/users/${ficha.businessId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-center text-[12.5px] font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Ver ficha completa ↗
+              </a>
             )}
 
             <button

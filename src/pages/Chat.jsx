@@ -129,6 +129,9 @@ export default function Chat() {
   // Si el usuario esta mirando el final del hilo. Cuando esta leyendo mensajes
   // viejos NO hay que arrastrarlo abajo porque llego uno nuevo.
   const pegadoAlFondo = useRef(true)
+  // Para MOSTRAR el boton de bajar hace falta estado: `pegadoAlFondo` es una
+  // referencia y no vuelve a pintar nada al cambiar.
+  const [lejosDelFondo, setLejosDelFondo] = useState(false)
   // La primera bajada de una conversacion es un salto, no una animacion.
   const reciénAbierta = useRef(true)
   const selectorArchivo = useRef(null)
@@ -161,6 +164,38 @@ export default function Chat() {
   const [respondiendoA, setRespondiendoA] = useState(null)
   const [menuMensaje, setMenuMensaje] = useState(null)
   const [paletaAbierta, setPaletaAbierta] = useState(null)
+
+  // Las acciones flotantes de un mensaje —responder, reaccionar, la paleta de
+  // emojis— se cierran al tocar fuera y con Escape. Antes solo se iban
+  // eligiendo una opcion o abriendo las de otro mensaje, asi que si te
+  // arrepentias se quedaban puestas.
+  //
+  // "Dentro" son la BURBUJA y los BOTONES (marcados con data-mensaje), no la
+  // fila. La fila ocupa todo el ancho de la conversacion, asi que comparar
+  // contra ella dejaba fuera de juego a la mitad de la pantalla: en un mensaje
+  // propio, alineado a la derecha, todo el vacio de la izquierda contaba como
+  // "dentro" y el clic no cerraba nada.
+  //
+  // La burbuja entra a proposito: tocarla es lo que abre y cierra el menu, y
+  // tocar un emoji no debe cerrar la paleta antes de registrar la reaccion.
+  useEffect(() => {
+    const abiertoEn = menuMensaje || paletaAbierta
+    if (!abiertoEn) return undefined
+    const cerrar = () => { setMenuMensaje(null); setPaletaAbierta(null) }
+    const alTocar = (e) => {
+      if (e.target?.closest?.(`[data-mensaje="${abiertoEn}"]`)) return
+      cerrar()
+    }
+    const alTeclear = (e) => { if (e.key === 'Escape') cerrar() }
+    document.addEventListener('mousedown', alTocar, true)
+    document.addEventListener('touchstart', alTocar, true)
+    document.addEventListener('keydown', alTeclear)
+    return () => {
+      document.removeEventListener('mousedown', alTocar, true)
+      document.removeEventListener('touchstart', alTocar, true)
+      document.removeEventListener('keydown', alTeclear)
+    }
+  }, [menuMensaje, paletaAbierta])
   // Reacciones puestas por mi que todavia no volvieron del servidor. Sin esto
   // el emoji tarda medio segundo en aparecer y el toque se siente muerto.
   const [reaccionesOptimistas, setReaccionesOptimistas] = useState({})
@@ -655,18 +690,18 @@ export default function Chat() {
   if (!isAdmin) return <Navigate to="/app/dashboard" replace />
 
   return (
-    <div className={`chat-cobrify font-admin text-[13px] text-gray-900 antialiased h-screen flex bg-gray-50 overflow-hidden relative ${tema === 'oscuro' ? 'oscuro' : ''}`}>
+    <div className={`chat-cobrify font-admin text-[13px] text-gray-900 antialiased h-screen flex bg-gray-200 overflow-hidden relative ${tema === 'oscuro' ? 'oscuro' : ''}`}>
 
       {/* ---------- Lista de conversaciones ---------- */}
       <aside
-        className="w-full md:w-80 lg:w-96 border-r border-gray-200 bg-white flex flex-col"
+        className="w-full md:w-80 lg:w-96 xl:w-[420px] border-r border-gray-200 bg-white flex flex-col"
       >
         <div className="px-4 py-3 border-b border-gray-200">
           <div className="flex items-center gap-2 mb-3">
             {/* La marca del producto, no la del canal: el cliente contrata
                 Cobrify Chat, WhatsApp es por donde llegan los mensajes. El
                 icono es el mismo de la app de iOS. */}
-            <img src={MARCA_CHAT.icono} alt="" className="w-6 h-6 rounded-md flex-none" />
+            <img src={MARCA_CHAT.iconoChico} alt="" className="w-6 h-6 rounded-md flex-none" />
             <h1 className="font-semibold text-gray-900">{MARCA_CHAT.nombre}</h1>
             <BotonTema tema={tema} onCambiar={cambiarTema} className="ml-auto" />
             <button
@@ -934,7 +969,7 @@ export default function Chat() {
           En escritorio no cambia nada: `max-md:` solo aplica por debajo de md.
           Y con "reducir movimiento" activado en el sistema, no hay animación. */}
       <main
-        className={`flex-1 flex flex-col bg-gray-50
+        className={`flex-1 flex flex-col bg-gray-200
           max-md:absolute max-md:inset-0 max-md:z-20
           max-md:transition-transform max-md:duration-200 max-md:ease-out
           motion-reduce:transition-none
@@ -1179,13 +1214,18 @@ export default function Chat() {
               </button>
             )}
 
+            {/* El envoltorio existe para poder colgar el boton de bajar: dentro
+                del contenedor con scroll se iria con el contenido. */}
+            <div className="relative flex-1 min-h-0 flex flex-col">
             <div
               ref={contenedorHilo}
               onScroll={(e) => {
                 const c = e.currentTarget
                 // 150 px de margen: alcanza para considerar que esta "abajo"
                 // sin exigir el pixel exacto.
-                pegadoAlFondo.current = c.scrollHeight - c.scrollTop - c.clientHeight < 150
+                const abajo = c.scrollHeight - c.scrollTop - c.clientHeight < 150
+                pegadoAlFondo.current = abajo
+                setLejosDelFondo((antes) => (antes === !abajo ? antes : !abajo))
               }}
               className="flex-1 overflow-y-auto px-4 py-4 space-y-2"
             >
@@ -1213,7 +1253,10 @@ export default function Chat() {
                 const puedeActuar = Boolean(idDeWhatsapp(m))
                 const abierto = menuMensaje === m.id
                 const acciones = puedeActuar && (
-                  <div className={`${abierto ? 'flex' : 'hidden group-hover:flex'} items-center gap-0.5 shrink-0`}>
+                  <div
+                    data-mensaje={m.id}
+                    className={`${abierto ? 'flex' : 'hidden group-hover:flex'} items-center gap-0.5 shrink-0`}
+                  >
                     {paletaAbierta === m.id ? (
                       <div className="flex items-center gap-0.5 rounded-full bg-white border border-gray-200 shadow-sm px-1 py-0.5">
                         {EMOJIS_REACCION.map((e) => (
@@ -1267,7 +1310,10 @@ export default function Chat() {
                         enorme, y el texto salia en renglones larguisimos que
                         cuesta leer. 34rem deja la linea en la medida comoda de
                         lectura y hace que la imagen llene la burbuja. */}
-                    <div className={`relative ${m.linkPreview || m.tipo === 'document' ? 'w-72 max-w-[85%]' : 'max-w-[min(75%,34rem)]'}`}>
+                    <div
+                      data-mensaje={m.id}
+                      className={`relative ${m.linkPreview || m.tipo === 'document' ? 'w-72 max-w-[85%]' : 'max-w-[min(75%,34rem)]'}`}
+                    >
                     <div
                       onClick={(e) => {
                         // En el celular no hay mouse: tocar la burbuja saca las
@@ -1328,11 +1374,18 @@ export default function Chat() {
                             alt={m.texto || 'Imagen'}
                             loading="lazy"
                             decoding="async"
-                            // Medidas reales: reservan el espacio y evitan que
-                            // la conversacion salte cuando la imagen carga.
-                            width={m.media.ancho || undefined}
-                            height={m.media.alto || undefined}
-                            className={`rounded-lg mb-1 bg-black/5 ${m.tipo === 'sticker' ? 'w-28' : 'max-w-full max-h-72 object-contain'}`}
+                            // Con las medidas guardadas se pinta al tamaño exacto
+                            // y el espacio queda reservado antes de que la imagen
+                            // baje: sin salto y sin hueco al costado. Sin medidas
+                            // —mensajes viejos— se pinta como siempre.
+                            style={m.tipo === 'sticker' ? undefined : medidasDeImagen(m.media) || undefined}
+                            className={`rounded-lg mb-1 bg-black/5 ${
+                              m.tipo === 'sticker'
+                                ? 'w-28'
+                                : medidasDeImagen(m.media)
+                                  ? 'max-w-full h-auto'
+                                  : 'max-w-full max-h-72 object-contain'
+                            }`}
                           />
                         </button>
                       )}
@@ -1398,6 +1451,22 @@ export default function Chat() {
                   </div>
                 )
               })}
+            </div>
+
+            {/* Volver abajo. Aparece solo al subir; leer una conversacion vieja
+                y tener que arrastrar de vuelta es de las cosas que mas molestan
+                de un chat. */}
+            {lejosDelFondo && (
+              <button
+                type="button"
+                onClick={() => irAlFondo(true)}
+                className="absolute bottom-4 right-4 z-10 h-9 w-9 grid place-items-center rounded-full bg-white border border-gray-300 shadow-md text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                title="Ir al último mensaje"
+                aria-label="Ir al último mensaje"
+              >
+                <ArrowDown className="w-4 h-4" />
+              </button>
+            )}
             </div>
 
             {/* Cuadro para escribir, o el aviso de por qué no se puede */}
@@ -1857,6 +1926,28 @@ function BurbujaDocumento({ media, mio }) {
  * catalogo). Es barato, reversible —recrearla con el mismo nombre la revive— y
  * evita una escritura masiva por un clic.
  */
+/**
+ * El tamaño con el que se pinta una imagen del chat, sabiendo sus medidas.
+ *
+ * Se calcula el ANCHO de forma que el alto nunca llegue al tope. Asi no se
+ * activa ningun recorte y la caja mide exactamente lo que la foto: sin hueco a
+ * los costados y, sobre todo, sin salto — el navegador reserva el espacio antes
+ * de que la imagen baje.
+ *
+ * Sin medidas devuelve null y se pinta como siempre.
+ */
+const TOPE_ANCHO = 320
+const TOPE_ALTO = 288 // max-h-72
+
+const medidasDeImagen = (media) => {
+  const { ancho, alto } = media || {}
+  if (!ancho || !alto) return null
+  return {
+    width: Math.round(Math.min(TOPE_ANCHO, ancho, (TOPE_ALTO * ancho) / alto)),
+    aspectRatio: `${ancho} / ${alto}`,
+  }
+}
+
 const COLORES = ['#1B6E4A', '#A3352C', '#26456E', '#96690F', '#6B7280', '#7C3AED', '#0E7490', '#BE185D']
 
 function GestorDeEtiquetas({ etiquetas, onCerrar, onGuardar }) {
