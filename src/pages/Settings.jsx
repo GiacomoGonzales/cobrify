@@ -868,6 +868,7 @@ export default function Settings() {
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false)
   const [bulkDeleteType, setBulkDeleteType] = useState(null) // 'products' | 'customers' | 'suppliers'
   const [bulkDeleteConfirmText, setBulkDeleteConfirmText] = useState('')
+  const [bulkDeletePassword, setBulkDeletePassword] = useState('')
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
   const [bulkDeleteProgress, setBulkDeleteProgress] = useState({ deleted: 0, total: 0, percentage: 0 })
   const [bulkDeleteCounts, setBulkDeleteCounts] = useState({ products: 0, customers: 0, suppliers: 0, invoices: 0, purchases: 0, stockMovements: 0, dispatchGuides: 0, quotations: 0, ingredients: 0, productions: 0 })
@@ -2917,24 +2918,13 @@ export default function Settings() {
 
   // Cargar conteos cuando se abre la pestaña de limpieza
   useEffect(() => {
-    const loadCounts = async () => {
-      if (!((hasFeature && hasFeature('bulkDelete')) || import.meta.env.DEV)) return
-      const businessId = getBusinessId()
-      const [products, customers, suppliers, invoices, purchases, stockMovements, dispatchGuides, quotations] = await Promise.all([
-        countDocuments(businessId, 'products'),
-        countDocuments(businessId, 'customers'),
-        countDocuments(businessId, 'suppliers'),
-        countDocuments(businessId, 'invoices'),
-        countDocuments(businessId, 'purchases'),
-        countDocuments(businessId, 'stockMovements'),
-        countDocuments(businessId, 'dispatchGuides'),
-        countDocuments(businessId, 'quotations'),
-      ])
-      setBulkDeleteCounts({ products, customers, suppliers, invoices, purchases, stockMovements, dispatchGuides, quotations })
-    }
+    // La misma función que recuenta después de cada borrado. Había una copia
+    // acá que contaba 8 colecciones en vez de 10, así que "Limpiar stock de
+    // insumos" abría deshabilitado hasta que se ejecutara otro borrado.
     if (activeTab === 'limpieza') {
-      loadCounts()
+      loadBulkDeleteCounts()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, hasFeature])
 
   if (isLoading) {
@@ -2983,13 +2973,48 @@ export default function Settings() {
   const openBulkDeleteModal = (type) => {
     setBulkDeleteType(type)
     setBulkDeleteConfirmText('')
+    setBulkDeletePassword('')
     setBulkDeleteProgress({ deleted: 0, total: 0, percentage: 0 })
     setShowBulkDeleteModal(true)
   }
 
+  /** Los comprobantes y guías ya emitidos tienen valor tributario y el negocio
+   *  está obligado a conservarlos: no se borran desde el autoservicio. Solo el
+   *  administrador de Cobrify, para limpiar cuentas de prueba. */
+  const SOLO_ADMINISTRADOR = ['invoices', 'dispatchGuides']
+
   const executeBulkDelete = async () => {
+    // Se comprueba acá y no solo al mostrar la pestaña: la pestaña es
+    // presentación, esto es lo que borra.
+    if (!(isBusinessOwner || isAdmin)) {
+      toast.error('Solo el dueño del negocio puede eliminar datos en masa')
+      return
+    }
+    if (SOLO_ADMINISTRADOR.includes(bulkDeleteType) && !isAdmin) {
+      toast.error('Los comprobantes y guías emitidos no se pueden eliminar desde acá. Escríbenos a soporte.')
+      return
+    }
     if (bulkDeleteConfirmText !== 'ELIMINAR') {
       toast.error('Debes escribir ELIMINAR para confirmar')
+      return
+    }
+    if (!bulkDeletePassword) {
+      toast.error('Escribe tu contraseña para confirmar')
+      return
+    }
+
+    // Reautenticación, igual que para cambiar la contraseña: escribir ELIMINAR
+    // lo puede hacer cualquiera que encuentre la sesión abierta.
+    try {
+      const credential = EmailAuthProvider.credential(user.email, bulkDeletePassword)
+      await reauthenticateWithCredential(auth.currentUser, credential)
+    } catch (error) {
+      console.error('Reautenticación para borrado masivo:', error)
+      toast.error(
+        error?.code === 'auth/wrong-password' || error?.code === 'auth/invalid-credential'
+          ? 'La contraseña es incorrecta'
+          : 'No se pudo verificar tu contraseña. Cierra sesión, vuelve a entrar e inténtalo de nuevo.',
+      )
       return
     }
 
@@ -3106,7 +3131,11 @@ export default function Settings() {
     // Tab de Shopifree: solo visible cuando businessSettings.shopifreeEnabled === true
     ...(businessSettings?.shopifreeEnabled === true ? [{ id: 'shopifree', label: 'Tienda Online', icon: ShoppingBag }] : []),
     // Solo mostrar si tiene el feature bulkDelete (o en desarrollo)
-    ...((hasFeature && hasFeature('bulkDelete')) || import.meta.env.DEV ? [{ id: 'limpieza', label: 'Limpieza', icon: Trash2 }] : []),
+    // Y solo para el dueño o el administrador: un sub-usuario no tiene por
+    // qué ver siquiera la puerta de un borrado masivo.
+    ...(((hasFeature && hasFeature('bulkDelete')) || import.meta.env.DEV) && (isBusinessOwner || isAdmin)
+      ? [{ id: 'limpieza', label: 'Limpieza', icon: Trash2 }]
+      : []),
   ]
 
   // Modo "Mi Catálogo Online standalone": si llegamos a Configuración con
@@ -13584,7 +13613,8 @@ export default function Settings() {
                     variant="danger"
                     size="sm"
                     onClick={() => openBulkDeleteModal('invoices')}
-                    disabled={bulkDeleteCounts.invoices === 0}
+                    disabled={bulkDeleteCounts.invoices === 0 || !isAdmin}
+                    title={!isAdmin ? 'Los comprobantes emitidos se conservan. Escríbenos a soporte si necesitas limpiarlos.' : undefined}
                     className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
                   >
                     <Trash2 className="w-4 h-4 mr-1" />
@@ -13653,7 +13683,8 @@ export default function Settings() {
                     variant="danger"
                     size="sm"
                     onClick={() => openBulkDeleteModal('dispatchGuides')}
-                    disabled={bulkDeleteCounts.dispatchGuides === 0}
+                    disabled={bulkDeleteCounts.dispatchGuides === 0 || !isAdmin}
+                    title={!isAdmin ? 'Las guías emitidas se conservan. Escríbenos a soporte si necesitas limpiarlas.' : undefined}
                     className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
                   >
                     <Trash2 className="w-4 h-4 mr-1" />
@@ -13762,10 +13793,10 @@ export default function Settings() {
             <div className="flex items-start">
               <Info className="w-5 h-5 text-blue-600 mr-2 mt-0.5 flex-shrink-0" />
               <div>
-                <h4 className="text-sm font-semibold text-blue-900">Próximamente</h4>
+                <h4 className="text-sm font-semibold text-blue-900">Cada eliminación pide dos confirmaciones</h4>
                 <p className="text-sm text-blue-800 mt-1">
-                  Las funciones de limpieza se irán habilitando gradualmente.
-                  Cada una requerirá confirmación doble para evitar eliminaciones accidentales.
+                  Escribir ELIMINAR y tu contraseña. Los comprobantes y las guías de remisión
+                  ya emitidos no se eliminan desde acá: SUNAT obliga a conservarlos.
                 </p>
               </div>
             </div>
@@ -13825,6 +13856,16 @@ export default function Settings() {
                 placeholder="Escribe ELIMINAR"
                 className="text-center font-mono text-lg"
               />
+              <label className="block text-sm font-medium text-gray-700 mt-4 mb-2">
+                Y tu contraseña:
+              </label>
+              <Input
+                type="password"
+                autoComplete="current-password"
+                value={bulkDeletePassword}
+                onChange={(e) => setBulkDeletePassword(e.target.value)}
+                placeholder="Contraseña de tu cuenta"
+              />
             </div>
           ) : (
             <div className="space-y-3">
@@ -13858,7 +13899,7 @@ export default function Settings() {
             <Button
               type="button"
               onClick={executeBulkDelete}
-              disabled={bulkDeleteConfirmText !== 'ELIMINAR' || isBulkDeleting}
+              disabled={bulkDeleteConfirmText !== 'ELIMINAR' || !bulkDeletePassword || isBulkDeleting}
               className="flex-1 bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
             >
               {isBulkDeleting ? (
