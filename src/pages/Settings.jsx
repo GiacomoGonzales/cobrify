@@ -1,240 +1,14112 @@
-/**
- * CONFIGURACIÓN — la cáscara.
- *
- * Solo la barra de pestañas, el título y el enrutado. Cada pestaña vive en su
- * propio archivo bajo `src/pages/settings/`, carga bajo demanda, y guarda
- * SOLO sus propios campos con `useGuardado`.
- *
- * ── Por qué se partió ───────────────────────────────────────────────────────
- * Hasta setiembre de 2026 esto era un solo componente de 14.100 líneas con
- * 268 `useState` y 21 puntos de escritura sobre el mismo documento. Cada
- * botón "Guardar" escribía campos que no le pertenecían con el valor que
- * cargó al abrir la página, así que guardar el RUC podía revertir el color
- * del PDF que otra caja acababa de cambiar. Y el catálogo del menú lateral
- * estaba escrito ocho veces. La auditoría del 4-sep-2026 está en el manual
- * de decisiones; el resumen: no se desordenaba por cómo estaban agrupadas
- * las cajas, sino por cómo se guardaban.
- *
- * ── Las siete pestañas ──────────────────────────────────────────────────────
- * Cada una responde a una pregunta del usuario, y un ajuste vive donde
- * responde esa pregunta, no donde encaje en el código:
- *
- *   empresa        ¿Quién soy ante SUNAT?         identidad y datos legales
- *   series         ¿Cómo numero?                  correlativos, con riesgo fiscal propio
- *   ventas         ¿Cómo se comporta mi caja?     punto de venta
- *   impresion      ¿Cómo se ve mi comprobante?    ticket, PDF, impresora
- *   modulos        ¿Qué partes de la app tengo?   tipo de negocio, opcionales, menú
- *   integraciones  ¿Con qué me conecto?           Rappi, Tienda Online, Meta Ads
- *   cuenta         ¿Quién entra y qué ve?         usuario, sub-usuarios, avisos
- *
- * `catalogo` no va en la barra: se llega por su propio ítem del menú lateral
- * y se muestra como página aparte (modo standalone), como siempre.
- *
- * ── Enlaces viejos ──────────────────────────────────────────────────────────
- * El manual enlaza a `?tab=X&opcion=<flag>` con los nombres de antes. Se
- * traducen acá (`PESTANA_VIEJA` y `OPCION_A_PESTANA`) para que ningún enlace
- * de una guía se rompa por la reorganización.
- */
-import { useState, useEffect, useRef, lazy, Suspense } from 'react'
-import { useLocation } from 'react-router-dom'
-import { Loader2 } from 'lucide-react'
-import GuideLink from '@/components/guide/GuideLink'
-import { Nota } from '@/components/settings/kit'
+import { useState, useEffect, useRef } from 'react'
+import { filtrarVendibles } from '@/utils/productSale'
+import { buildProductHaystack } from '@/utils/productSearch'
+import { formatCurrency, matchesPrebuilt } from '@/lib/utils'
+import { Link, useLocation } from 'react-router-dom'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { Save, Building2, FileText, Loader2, CheckCircle, AlertCircle, Shield, Upload, Eye, EyeOff, Lock, X, Image, Info, Settings as SettingsIcon, Store, UtensilsCrossed, Printer, AlertTriangle, Search, Bluetooth, Wifi, Hash, Palette, ShoppingCart, Cog, Globe, ExternalLink, Copy, Check, QrCode, Download, Edit, MapPin, Plus, Bell, Bike, ShoppingBag, RefreshCw, Wrench, Monitor, Trash2, ChevronDown, ChevronUp, DollarSign, LayoutGrid, ArrowDown, Clock, ChevronsUpDown, CalendarDays, MessageCircle, Package, User } from 'lucide-react'
+import QRCode from 'qrcode'
+import { QRCodeSVG } from 'qrcode.react'
 import { useAppContext } from '@/hooks/useAppContext'
+import ScannerTester from '@/components/ScannerTester'
+import VersionApp from '@/components/VersionApp'
+import { useToast } from '@/contexts/ToastContext'
+import { invalidateLogoCache } from '@/utils/pdfGenerator'
+import { downloadDataUrl, saveFilesToDevice } from '@/utils/nativeDownload'
+import { uploadImage } from '@/services/imageUploadService'
+import BranchInfoSettings from '@/components/settings/BranchInfoSettings'
+import ImageDropZone from '@/components/settings/ImageDropZone'
+import ThemeThumb, { THUMB_W, THUMB_H } from '@/components/settings/ThemeThumb'
+import { CATALOG_THEMES, getCatalogThemesList } from '@/themes/catalogThemes'
+import CatalogThemePreview from '@/components/CatalogThemePreview'
+import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore'
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
+import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth'
+import { httpsCallable } from 'firebase/functions'
+import { db, storage, auth, functions } from '@/lib/firebase'
+import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import { DEFAULT_NOTA_VENTA_LEGEND, NOTA_VENTA_LEGEND_MAX } from '@/utils/documentLegends'
+import Button from '@/components/ui/Button'
+import Input from '@/components/ui/Input'
+import Select from '@/components/ui/Select'
+import Modal from '@/components/ui/Modal'
+import { companySettingsSchema } from '@/utils/schemas'
+import { getSubscription } from '@/services/subscriptionService'
+import {
+  compressForLogoSquare,
+  compressForLogoLandscape,
+  compressForCoverDesktop,
+  compressForCoverMobile,
+} from '@/services/productImageService'
+import { consultarRUC, consultarEstablecimientos } from '@/services/documentLookupService'
+import { codigosDeUbigeo, ubigeoDeCodigos } from '@/utils/ubigeoDesdeConsulta'
+import { ESCALAS, leerEscala, aplicarEscala } from '@/utils/escalaInterfaz'
+import {
+  scanPrinters,
+  connectPrinter,
+  savePrinterConfig,
+  getPrinterConfig,
+  testPrinter,
+  isIminDevice,
+  saveDocumentPrinterConfig,
+  getDocumentPrinterConfig,
+  setBusinessCajaPrinter
+} from '@/services/thermalPrinterService'
+import { getWarehouses } from '@/services/warehouseService'
+import { getAllWarehouseSeries, updateWarehouseSeries, getAllBranchSeriesFS, updateBranchSeriesFS, getProductCategories, getProducts, updateProduct } from '@/services/firestoreService'
+import { getActiveBranches } from '@/services/branchService'
+import { DOCUMENT_TYPES, DOCUMENT_TYPE_LABELS } from '@/utils/documentTypes'
+import { getYapeConfig } from '@/services/yapeService'
+import { getEmissionSecrets, saveEmissionSecrets } from '@/services/emissionSecretsService'
+import { getTables } from '@/services/tableService'
+import { validateShopifreeApiKey, connectShopifree, disconnectShopifree, pingShopifree, getShopifreeStoreUrl, getShopifreeIntegrationLogs, computeShopifreeStats, getLogActionLabel } from '@/services/shopifreeService'
+import RenumberInvoicesModal from '@/components/RenumberInvoicesModal'
+import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
+import { getBuiltinPaymentMethodsForMode, getVisiblePaymentMethods } from '@/utils/paymentMethods'
+import { BUILTIN_ORDER_SOURCES } from '@/utils/orderSources'
+import GuideLink from '@/components/guide/GuideLink'
+import {
+  deleteAllProducts,
+  deleteAllCustomers,
+  deleteAllSuppliers,
+  deleteAllInvoices,
+  deleteAllPurchases,
+  deleteAllStockMovements,
+  deleteAllDispatchGuides,
+  deleteAllQuotations,
+  resetAllStock,
+  resetAllIngredientStock,
+  deleteIngredientStockMovements,
+  deleteAllProductions,
+  countDocuments
+} from '@/services/bulkDeleteService'
+import { DIAS_RECORDATORIO_POR_DEFECTO, diasPorDefectoDelNegocio } from '@/utils/vetReminders'
 
-const MiEmpresa = lazy(() => import('./settings/MiEmpresa'))
-const Series = lazy(() => import('./settings/Series'))
-const PuntoDeVenta = lazy(() => import('./settings/PuntoDeVenta'))
-const Impresion = lazy(() => import('./settings/Impresion'))
-const Modulos = lazy(() => import('./settings/Modulos'))
-const Integraciones = lazy(() => import('./settings/Integraciones'))
-const Cuenta = lazy(() => import('./settings/Cuenta'))
-const Catalogo = lazy(() => import('./settings/Catalogo'))
+// URL base de producción para el catálogo público
+const PRODUCTION_URL = 'https://cobrifyperu.com'
 
-const PESTANAS = [
-  { id: 'empresa', label: 'Mi Empresa', Componente: MiEmpresa },
-  { id: 'series', label: 'Series', Componente: Series },
-  { id: 'ventas', label: 'Punto de venta', Componente: PuntoDeVenta },
-  { id: 'impresion', label: 'Impresión', Componente: Impresion },
-  { id: 'modulos', label: 'Módulos', Componente: Modulos },
-  { id: 'integraciones', label: 'Integraciones', Componente: Integraciones },
-  { id: 'cuenta', label: 'Cuenta y seguridad', Componente: Cuenta },
-]
-
-/** Los ids de antes de la reorganización → a dónde fue a parar cada pestaña. */
-const PESTANA_VIEJA = {
-  informacion: 'empresa',
-  preferencias: 'modulos',
-  documentos: 'impresion',
-  impresora: 'impresion',
-  seguridad: 'cuenta',
-  notificaciones: 'cuenta',
-  limpieza: 'cuenta',
-  rappi: 'integraciones',
-  shopifree: 'integraciones',
+// Toggle de configuración con estilo unificado (checkbox a la izquierda).
+// `id` (opcional): ancla para los enlaces profundos del manual de uso
+// (/app/configuracion?tab=X&opcion=Y hace scroll y resalta esta opción).
+// Por convención el id es `opcion-<flag>` con el mismo nombre del flag en
+// businessSettings. El scroll-mt evita que el header pegajoso la tape.
+function SettingToggle({ checked, onChange, title, description, disabled = false, children, id }) {
+  return (
+    <label id={id} className={`flex items-start gap-3 cursor-pointer p-3 border rounded-lg transition-colors scroll-mt-24 ${
+      checked ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 hover:border-gray-300'
+    } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        disabled={disabled}
+        className="mt-0.5 w-5 h-5 shrink-0 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+      />
+      <div className="flex-1 min-w-0">
+        <span className="text-sm font-medium text-gray-900 block">{title}</span>
+        {description && <span className="text-xs text-gray-500 block mt-0.5 leading-relaxed">{description}</span>}
+        {children}
+      </div>
+    </label>
+  )
 }
 
-/**
- * Los ajustes que cambiaron de pestaña. Cuando el enlace trae `opcion`, esto
- * manda por encima del `tab`: la guía puede decir `tab=documentos`, pero si
- * el ajuste ahora vive en Cuenta, se abre Cuenta.
- */
-const OPCION_A_PESTANA = {
-  // Ventas → Impresión
-  autoPrintTicket: 'impresion',
-  hideCompanyDataInNotaVenta: 'impresion',
-  hideRucIgvInNotaVenta: 'impresion',
-  hideOnlyIgvInNotaVenta: 'impresion',
-  // Ventas → Módulos
-  branchPricingEnabled: 'modulos',
-  branchCatalogEnabled: 'modulos',
-  multiplePricesEnabled: 'modulos',
-  multiCurrencyEnabled: 'modulos',
-  reportsCurrency: 'modulos',
-  defaultCurrency: 'modulos',
-  stockDischargeEnabled: 'modulos',
-  // Preferencias → Punto de venta
-  enableManualStockEdit: 'ventas',
-  defaultTaxAffectation: 'ventas',
-  enableProductLocation: 'ventas',
-  allowManualTaxAffectation: 'ventas',
-  showBatchExpiryInPurchase: 'ventas',
-  defaultDeliveryFee: 'ventas',
-  // Preferencias → Impresión
-  enableCustomerDisplay: 'impresion',
-  showCustomerDataOnKitchenTicket: 'impresion',
-  // Preferencias → Integraciones
-  metaAdsEnabled: 'integraciones',
-  rappiEnabled: 'integraciones',
-  shopifreeEnabled: 'integraciones',
-  // Documentos → Cuenta
-  hideDashboardDataFromSecondary: 'cuenta',
-  hideCashExpectedFromCashier: 'cuenta',
-  showOnlyOwnSalesToSecondary: 'cuenta',
-  // Documentos → Punto de venta
-  autoSendToSunat: 'ventas',
-  allowDeleteInvoices: 'ventas',
-  purchaseOrderDefaultNotes: 'ventas',
-  // Documentos → Módulos
-  dispatchGuidesEnabled: 'modulos',
-  exitNoteEnabled: 'modulos',
-  // Mi Empresa → Impresión
-  logoPrintScale: 'impresion',
-  companySlogan: 'impresion',
-}
-
-const IDS_VALIDOS = new Set([...PESTANAS.map(p => p.id), 'catalogo'])
-
-/** Resuelve `?tab=` y `?opcion=` a una pestaña de las de ahora. */
-function pestanaDesde(search) {
-  let params
-  try { params = new URLSearchParams(search) } catch { return 'empresa' }
-  const opcion = params.get('opcion')
-  const tab = params.get('tab')
-  if (opcion && OPCION_A_PESTANA[opcion]) return OPCION_A_PESTANA[opcion]
-  if (tab && PESTANA_VIEJA[tab]) return PESTANA_VIEJA[tab]
-  if (tab && IDS_VALIDOS.has(tab)) return tab
-  return 'empresa'
+// Regulador de tamaño de las imágenes de producto en los PDF (50%–150%).
+// Va DENTRO de un SettingToggle (que es un <label>): el preventDefault evita que
+// hacer clic sobre los textos del regulador marque/desmarque el checkbox del toggle.
+function PdfImageSizeSlider({ value, onChange }) {
+  return (
+    <div className="mt-3" onClick={(e) => e.preventDefault()}>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs font-medium text-gray-700">Tamaño de las imágenes en el PDF</span>
+        <span className="text-xs font-semibold text-primary-700">{value}%{value === 100 ? ' (normal)' : ''}</span>
+      </div>
+      <input
+        type="range"
+        min="50"
+        max="150"
+        step="10"
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full accent-primary-600 cursor-pointer"
+      />
+      <div className="flex justify-between text-[10px] text-gray-400 mt-0.5">
+        <span>Más pequeñas</span>
+        <span>Más grandes</span>
+      </div>
+      <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
+        Las filas del PDF se ajustan solas. Si el diseño tiene poco espacio (p. ej. farmacia o filas con descuento), se usa el máximo que entra sin aplastar la descripción.
+      </p>
+    </div>
+  )
 }
 
 export default function Settings() {
-  const location = useLocation()
-  const { isDemoMode } = useAppContext()
-  const [activa, setActiva] = useState(() => pestanaDesde(location.search))
-
-  // La URL manda: el menú lateral y el manual entran por `?tab=`.
+  const { user, isDemoMode, getBusinessId, refreshBusinessSettings, hasFeature, businessSettings, updateDisplayName, isBusinessOwner, isAdmin, branchScope } = useAppContext()
+  // Preview de tema del catálogo
+  const [previewThemeId, setPreviewThemeId] = useState(null)
+  // Galeria de temas: se muestran los primeros y el resto tras "Ver mas".
+  const [temasExpandidos, setTemasExpandidos] = useState(false)
+  const toast = useToast()
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  // Nombre de la cuenta (displayName de Firebase Auth) — es el que se ve en la cabecera
+  const [displayNameInput, setDisplayNameInput] = useState('')
+  const [savingDisplayName, setSavingDisplayName] = useState(false)
   useEffect(() => {
-    setActiva(pestanaDesde(location.search))
-  }, [location.search])
+    if (user?.displayName) setDisplayNameInput(user.displayName)
+  }, [user?.displayName])
+  const handleSaveDisplayName = async () => {
+    const name = displayNameInput.trim()
+    if (!name) { toast.error('Ingresa un nombre'); return }
+    if (isDemoMode || !updateDisplayName) { toast.error('No disponible en este modo'); return }
+    setSavingDisplayName(true)
+    try {
+      const res = await updateDisplayName(name)
+      if (res?.success) toast.success('Nombre actualizado correctamente')
+      else toast.error(res?.error || 'No se pudo actualizar el nombre')
+    } catch (e) {
+      toast.error('No se pudo actualizar el nombre')
+    } finally {
+      setSavingDisplayName(false)
+    }
+  }
+  // Tab inicial: si la URL trae ?tab=xxx (ej: desde el sidebar "Mi Catálogo"
+  // que apunta a /configuracion?tab=catalogo) lo respetamos. Si no, default.
+  const _location = useLocation()
+  // Pestañas direccionables por URL (?tab=...). Solo las SIEMPRE visibles:
+  // las condicionales (rappi, shopifree, limpieza) no entran porque llegar por
+  // enlace a una pestaña que no se renderiza dejaría la pantalla vacía.
+  const DEEP_LINK_TABS = ['informacion', 'preferencias', 'ventas', 'documentos', 'series', 'impresora', 'seguridad', 'notificaciones', 'catalogo']
+  const _initialTab = (() => {
+    try {
+      const params = new URLSearchParams(_location.search)
+      const t = params.get('tab')
+      if (t && DEEP_LINK_TABS.includes(t)) return t
+    } catch {}
+    return 'informacion'
+  })()
+  const [activeTab, setActiveTab] = useState(_initialTab)
+  // Si la URL cambia (navegación entre items del sidebar), respetar el tab
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(_location.search)
+      const t = params.get('tab')
+      if (t && DEEP_LINK_TABS.includes(t) && t !== activeTab) {
+        setActiveTab(t)
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [_location.search])
 
-  // Enlace profundo del manual: `?opcion=<flag>` hace scroll hasta el ancla
-  // `opcion-<flag>` y la resalta unos segundos. El reintento cubre el tiempo
-  // que tarda en cargar la pestaña bajo demanda.
-  const ultimaOpcionRef = useRef(null)
+  // Enlace profundo del manual de uso: ?tab=X&opcion=<flag> hace scroll hasta
+  // la opción (ancla `opcion-<flag>`, ver SettingToggle) y la resalta unos
+  // segundos para que el usuario la ubique de un vistazo. El pequeño reintento
+  // cubre el tiempo de render del contenido de la pestaña.
+  const _lastOpcionRef = useRef(null)
   useEffect(() => {
     let opcion = null
-    try { opcion = new URLSearchParams(location.search).get('opcion') } catch { /* sin query */ }
+    try {
+      opcion = new URLSearchParams(_location.search).get('opcion')
+    } catch {}
     if (!opcion) return
-    if (ultimaOpcionRef.current === location.search) return
+    const key = `${_location.search}`
+    if (_lastOpcionRef.current === key) return
 
-    let intentos = 0
+    let attempts = 0
     let timer = null
-    const intentar = () => {
+    const tryScroll = () => {
       const el = document.getElementById(`opcion-${opcion}`)
       if (el) {
-        ultimaOpcionRef.current = location.search
+        _lastOpcionRef.current = key
         el.scrollIntoView({ behavior: 'smooth', block: 'center' })
         el.classList.add('ring-2', 'ring-primary-500', 'ring-offset-2')
-        setTimeout(() => el.classList.remove('ring-2', 'ring-primary-500', 'ring-offset-2'), 2500)
+        setTimeout(() => {
+          el.classList.remove('ring-2', 'ring-primary-500', 'ring-offset-2')
+        }, 2500)
         return
       }
-      if (intentos++ < 15) timer = setTimeout(intentar, 250)
+      if (attempts++ < 10) timer = setTimeout(tryScroll, 200)
     }
-    timer = setTimeout(intentar, 250)
+    timer = setTimeout(tryScroll, 200)
     return () => clearTimeout(timer)
-  }, [location.search, activa])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [_location.search, activeTab])
 
-  // "Mi Catálogo Online" entra por su propio ítem del menú y se ve como una
-  // página aparte: sin la barra de pestañas y con su propio título.
-  const esCatalogo = activa === 'catalogo'
-  const pestana = PESTANAS.find(p => p.id === activa)
-  const Componente = esCatalogo ? Catalogo : (pestana?.Componente || MiEmpresa)
+  // Auto-cargar logs de integración Shopifree cuando se entra al tab.
+  // También se refresca tras hacer resync/poll exitosos (ver handlers).
+  useEffect(() => {
+    if (activeTab !== 'shopifree') return
+    if (!user?.uid) return
+    if (isDemoMode) return
+    let cancelled = false
+    setShopifreeLogsLoading(true)
+    getShopifreeIntegrationLogs(getBusinessId(), 50).then(logs => {
+      if (!cancelled) setShopifreeLogs(logs)
+    }).finally(() => {
+      if (!cancelled) setShopifreeLogsLoading(false)
+    })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, user?.uid])
+
+  const refreshShopifreeLogs = async () => {
+    if (!user?.uid || isDemoMode) return
+    setShopifreeLogsLoading(true)
+    try {
+      const logs = await getShopifreeIntegrationLogs(getBusinessId(), 50)
+      setShopifreeLogs(logs)
+    } finally {
+      setShopifreeLogsLoading(false)
+    }
+  }
+
+  const [subscription, setSubscription] = useState(null)
+  const [series, setSeries] = useState({
+    factura: { serie: 'F001', lastNumber: 0 },
+    boleta: { serie: 'B001', lastNumber: 0 },
+    nota_venta: { serie: 'N001', lastNumber: 0 },
+    cotizacion: { serie: 'C001', lastNumber: 0 },
+    nota_credito_factura: { serie: 'FN01', lastNumber: 0 },
+    nota_credito_boleta: { serie: 'BN01', lastNumber: 0 },
+    nota_debito_factura: { serie: 'FD01', lastNumber: 0 },
+    nota_debito_boleta: { serie: 'BD01', lastNumber: 0 },
+    guia_remision: { serie: 'T001', lastNumber: 0 },
+  })
+  const [editingSeries, setEditingSeries] = useState(false)
+
+  // Estados para series por almacén (legacy - para compatibilidad)
+  const [warehouses, setWarehouses] = useState([])
+  const [warehouseSeries, setWarehouseSeries] = useState({})
+  const [editingWarehouseId, setEditingWarehouseId] = useState(null)
+  const [loadingWarehouses, setLoadingWarehouses] = useState(false)
+
+  // Estados para series por sucursal (nuevo sistema)
+  const [branches, setBranches] = useState([])
+  const [branchSeries, setBranchSeries] = useState({})
+  const [editingBranchId, setEditingBranchId] = useState(null)
+  const [loadingBranches, setLoadingBranches] = useState(false)
+
+  // Series por defecto para nuevos almacenes
+  const defaultSeries = {
+    factura: { serie: 'F001', lastNumber: 0 },
+    boleta: { serie: 'B001', lastNumber: 0 },
+    nota_venta: { serie: 'N001', lastNumber: 0 },
+    cotizacion: { serie: 'C001', lastNumber: 0 },
+    nota_credito_factura: { serie: 'FN01', lastNumber: 0 },
+    nota_credito_boleta: { serie: 'BN01', lastNumber: 0 },
+    nota_debito_factura: { serie: 'FD01', lastNumber: 0 },
+    nota_debito_boleta: { serie: 'BD01', lastNumber: 0 },
+    guia_remision: { serie: 'T001', lastNumber: 0 },
+    guia_transportista: { serie: 'V001', lastNumber: 0 },
+  }
+
+  // Estados para SUNAT
+  const [sunatConfig, setSunatConfig] = useState({
+    enabled: false,
+    environment: 'beta',
+    solUser: '',
+    solPassword: '',
+    clientId: '',
+    clientSecret: '',
+    certificateName: '',
+    certificatePassword: '',
+    homologated: false,
+  })
+  const [editingSunat, setEditingSunat] = useState(false)
+  const [showSolPassword, setShowSolPassword] = useState(false)
+  const [showCertPassword, setShowCertPassword] = useState(false)
+  const [showRenumberModal, setShowRenumberModal] = useState(false)
+  const [adminToolsEnabled, setAdminToolsEnabled] = useState(false)
+
+  // Estados para selector de ubicación con ubigeo
+  const [locationDeptCode, setLocationDeptCode] = useState('')
+  const [locationProvCode, setLocationProvCode] = useState('')
+  const [locationDistCode, setLocationDistCode] = useState('')
+  const [certificateFile, setCertificateFile] = useState(null)
+
+  // Estados para QPse
+  const [qpseConfig, setQpseConfig] = useState({
+    enabled: false,
+    environment: 'demo',
+    usuario: '',
+    password: '',
+    firmasDisponibles: 0,
+    firmasUsadas: 0,
+  })
+  const [editingQpse, setEditingQpse] = useState(false)
+  const [showQpsePassword, setShowQpsePassword] = useState(false)
+
+  // Estados para logo
+  const [logoUrl, setLogoUrl] = useState('')
+  const [logoFile, setLogoFile] = useState(null)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  // Escala del logo en el ticket térmico (porcentaje, 100 = tamaño actual)
+  const [logoPrintScale, setLogoPrintScale] = useState(100)
+
+  // Estado para color de PDF
+  const [pdfAccentColor, setPdfAccentColor] = useState('#464646') // Gris oscuro por defecto
+  const [ticketFooterMessage, setTicketFooterMessage] = useState('') // Mensaje personalizado al pie del ticket térmico
+  // Leyenda al pie de las NOTAS DE VENTA. Vacío = se usa la de por defecto.
+  const [notaVentaLegend, setNotaVentaLegend] = useState('')
+  const [invoiceFooterTerms, setInvoiceFooterTerms] = useState('') // Términos y condiciones libres al pie del comprobante PDF (solo PDF, no SUNAT)
+  // ¿Esos mismos términos se imprimen TAMBIÉN en el ticket térmico? Apagado por
+  // defecto: son largos y gastan papel en cada venta.
+  const [showTermsOnTicket, setShowTermsOnTicket] = useState(false)
+  // Observaciones que se precargan al crear una orden de compra nueva
+  const [purchaseOrderDefaultNotes, setPurchaseOrderDefaultNotes] = useState('')
+  // QR personalizado al pie del ticket térmico (URL, texto libre, datos de pago, etc.)
+  const [ticketQrEnabled, setTicketQrEnabled] = useState(false)
+  const [ticketQrContent, setTicketQrContent] = useState('')
+  const [ticketQrCaption, setTicketQrCaption] = useState('')
+  // Modo del QR: 'auto' (genera QR desde el contenido) o 'image' (sube
+  // una imagen del QR ya hecho). Útil para QR Yape/Plin que da el banco.
+  const [ticketQrMode, setTicketQrMode] = useState('auto')
+  const [ticketQrImageUrl, setTicketQrImageUrl] = useState('')
+  const [ticketQrImageFile, setTicketQrImageFile] = useState(null)
+  const [uploadingQrImage, setUploadingQrImage] = useState(false)
+
+  // Estado para eslogan de empresa (aparece en el PDF debajo del logo)
+  const [companySlogan, setCompanySlogan] = useState('')
+
+  // Estado para mostrar códigos de producto en cotizaciones PDF
+  const [showProductCodeInQuotation, setShowProductCodeInQuotation] = useState(false)
+
+  // Estado para mostrar códigos de producto en comprobantes (boletas/facturas/notas)
+  const [showProductCodeInInvoices, setShowProductCodeInInvoices] = useState(true)
+
+  // Estado para mostrar descripción de producto en cotizaciones PDF
+  const [showProductDescriptionInQuotation, setShowProductDescriptionInQuotation] = useState(true)
+  const [showProductDescriptionInInvoice, setShowProductDescriptionInInvoice] = useState(false)
+
+  // Estado para mostrar imágenes de producto en cotizaciones PDF
+  const [showImagesInQuotations, setShowImagesInQuotations] = useState(false)
+
+  // Estado para mostrar imágenes de producto en comprobantes de venta PDF
+  const [showImagesInInvoices, setShowImagesInInvoices] = useState(false)
+  // Columna MARCA en el PDF. En farmacia sale siempre; el resto la activa aca.
+  const [showBrandInInvoices, setShowBrandInInvoices] = useState(false)
+
+  // Tamaño de las imágenes de producto en los PDF (50–150%; 100 = tamaño actual)
+  const [quotationImageScale, setQuotationImageScale] = useState(100)
+  const [invoiceImageScale, setInvoiceImageScale] = useState(100)
+
+  // Estado para espaciado amplio en PDF
+  const [pdfSpacious, setPdfSpacious] = useState(false)
+  const [pdfA5, setPdfA5] = useState(false)
+
+  // Estado para ocultar lote y vencimiento en comprobantes (PDF/ticket/impresora)
+  const [hideBatchAndExpiryInDocuments, setHideBatchAndExpiryInDocuments] = useState(false)
+
+  // Ocultar el monto "Efectivo Esperado" del cierre de caja a sub-usuarios (cajeros).
+  // El dueño/admin siempre lo ve para poder comparar después.
+  const [hideCashExpectedFromCashier, setHideCashExpectedFromCashier] = useState(false)
+  const [showProductsInCashClosure, setShowProductsInCashClosure] = useState(false)
+
+  // Estados para exportación a Meta Ads (Facebook Conversions API)
+  const [metaAdsEnabled, setMetaAdsEnabled] = useState(false)
+  const [metaAdsPhonePrefix, setMetaAdsPhonePrefix] = useState('+51')
+  const [metaAdsOrderIdPrefix, setMetaAdsOrderIdPrefix] = useState('')
+
+  // Estados para integración Rappi (modo restaurante, gated por businessSettings.rappiEnabled)
+  const [rappiClientId, setRappiClientId] = useState('')
+  const [rappiClientSecret, setRappiClientSecret] = useState('')
+  const [rappiStoreId, setRappiStoreId] = useState('')
+  const [rappiStoreName, setRappiStoreName] = useState('')
+  const [rappiPollingEnabled, setRappiPollingEnabled] = useState(false)
+  const [rappiAutoAccept, setRappiAutoAccept] = useState(true)
+  const [showRappiSecret, setShowRappiSecret] = useState(false)
+  const [isSavingRappi, setIsSavingRappi] = useState(false)
+  const [isTestingRappi, setIsTestingRappi] = useState(false)
+  const [rappiTestResult, setRappiTestResult] = useState(null)
+  const [isEnablingRappiOrders, setIsEnablingRappiOrders] = useState(false)
+  // Self-Onboarding (OAuth merchant + provisioning)
+  const [isConnectingRappiOAuth, setIsConnectingRappiOAuth] = useState(false)
+  const [isProvisioningRappiStore, setIsProvisioningRappiStore] = useState(false)
+  const [isCheckingRappiStatus, setIsCheckingRappiStatus] = useState(false)
+  const [rappiProvisioningResult, setRappiProvisioningResult] = useState(null)
+
+  // Estados para integración Shopifree (tienda online externa)
+  const [shopifreeApiKeyInput, setShopifreeApiKeyInput] = useState('')
+  const [showShopifreeKey, setShowShopifreeKey] = useState(false)
+  const [isConnectingShopifree, setIsConnectingShopifree] = useState(false)
+  const [isPingingShopifree, setIsPingingShopifree] = useState(false)
+  const [shopifreeConnectionResult, setShopifreeConnectionResult] = useState(null)
+  const [isResyncingShopifree, setIsResyncingShopifree] = useState(false)
+  const [shopifreeResyncResult, setShopifreeResyncResult] = useState(null)
+  const [isTogglingShopifreePolling, setIsTogglingShopifreePolling] = useState(false)
+  const [isPollingShopifreeNow, setIsPollingShopifreeNow] = useState(false)
+  const [shopifreePollResult, setShopifreePollResult] = useState(null)
+  const [shopifreeLogs, setShopifreeLogs] = useState([])
+  const [shopifreeLogsLoading, setShopifreeLogsLoading] = useState(false)
+  const [shopifreeLogFilter, setShopifreeLogFilter] = useState('all') // all|orders|products|errors
+
+  // Estados para configuración de inventario
+  // Guardar en el catalogo lo que se vende como producto personalizado.
+  const [autoSaveCustomProducts, setAutoSaveCustomProducts] = useState(false)
+  const [allowNegativeStock, setAllowNegativeStock] = useState(false)
+  // Ver (solo ver) el stock de las demás sucursales desde el POS.
+  const [showOtherBranchesStock, setShowOtherBranchesStock] = useState(false)
+  // Vender sin stock PERO preguntando antes (pedido de un usuario que escanea
+  // productos chicos en serie y no alcanzaba a leer el aviso rojo)
+  const [confirmSaleWithoutStock, setConfirmSaleWithoutStock] = useState(false)
+  const [allowCustomProducts, setAllowCustomProducts] = useState(false)
+  const [allowPriceEdit, setAllowPriceEdit] = useState(false)
+  const [allowNameEdit, setAllowNameEdit] = useState(false)
+  const [posClearSearchOnAdd, setPosClearSearchOnAdd] = useState(true)
+  const [autoSku, setAutoSku] = useState(false)
+  const [enableProductImages, setEnableProductImages] = useState(false)
+  const [enableProductLocation, setEnableProductLocation] = useState(false)
+  const [appointmentsEnabled, setAppointmentsEnabled] = useState(false)
+  const [enableManualStockEdit, setEnableManualStockEdit] = useState(false)
+  const [stockDischargeEnabled, setStockDischargeEnabled] = useState(false)
+  const [notaVentaCreditTerms, setNotaVentaCreditTerms] = useState(false)
+  const [dispatchGuidesEnabled, setDispatchGuidesEnabled] = useState(false)
+  const [exitNoteEnabled, setExitNoteEnabled] = useState(false)
+  // Modal para crear un metodo de pago propio (antes era un formulario
+  // siempre desplegado que ocupaba media seccion).
+  const [showNewPaymentModal, setShowNewPaymentModal] = useState(false)
+  const [defaultDocumentType, setDefaultDocumentType] = useState('boleta') // boleta, factura, nota_venta
+  // Comprobantes que el negocio emite. Vacio = todos (los negocios que nunca
+  // tocaron la opcion siguen igual). Un negocio en el RUS desactiva Factura.
+  const [enabledDocumentTypes, setEnabledDocumentTypes] = useState([])
+  const [defaultPaymentMethod, setDefaultPaymentMethod] = useState('') // '' = ninguno; o CASH/CARD/TRANSFER/YAPE/PLIN
+  // Métodos de pago del negocio: cuáles se ocultan y cuáles agregó el usuario.
+  const [hiddenPaymentMethods, setHiddenPaymentMethods] = useState([])
+  const [customPaymentMethods, setCustomPaymentMethods] = useState([])
+  // Fuentes de orden (restaurante): cuales de fabrica se ocultan y cuales
+  // propias agrego el negocio.
+  const [hiddenOrderSources, setHiddenOrderSources] = useState([])
+  const [customOrderSources, setCustomOrderSources] = useState([])
+  const [showNewOrderSourceModal, setShowNewOrderSourceModal] = useState(false)
+  const [newOrderSourceName, setNewOrderSourceName] = useState('')
+  const [newPaymentName, setNewPaymentName] = useState('')
+  const [newPaymentBehavior, setNewPaymentBehavior] = useState('transfer')
+  const [autoResetPOS, setAutoResetPOS] = useState(false)
+  const [autoPrintTicket, setAutoPrintTicket] = useState(false)
+  const [showChangeReminder, setShowChangeReminder] = useState(false)
+  // Días que se recuerda un producto/servicio cuando su ficha no dice otra cosa.
+  const [vetReminderDefaultDays, setVetReminderDefaultDays] = useState(DIAS_RECORDATORIO_POR_DEFECTO)
+  const [lockCashRegisterHistory, setLockCashRegisterHistory] = useState(false)
+  const [allowEditNotaVenta, setAllowEditNotaVenta] = useState(false)
+  const [showAllProductsInPOS, setShowAllProductsInPOS] = useState(false)
+  const [enableCustomerDisplay, setEnableCustomerDisplay] = useState(false)
+
+  // Estados para configuración de notas de venta
+  const [hideRucIgvInNotaVenta, setHideRucIgvInNotaVenta] = useState(false)
+  const [hideOnlyIgvInNotaVenta, setHideOnlyIgvInNotaVenta] = useState(false)
+  // Ocultar TODOS los datos de la empresa en el PDF de notas de venta (pedido de usuaria, 14-ago-2026)
+  const [hideCompanyDataInNotaVenta, setHideCompanyDataInNotaVenta] = useState(false)
+  const [requireOpenCashRegister, setRequireOpenCashRegister] = useState(false)
+  // Comisión por pago con tarjeta (solo notas de venta): activación + porcentaje.
+  const [cardCommissionEnabled, setCardCommissionEnabled] = useState(false)
+  const [cardCommissionRate, setCardCommissionRate] = useState(5)
+
+  // Estados para configuración de comprobantes
+  const [allowDeleteInvoices, setAllowDeleteInvoices] = useState(false)
+
+  // Estados para configuración de SUNAT
+  const [autoSendToSunat, setAutoSendToSunat] = useState(false)
+
+  // Estados para fecha de emisión
+  const [allowCustomEmissionDate, setAllowCustomEmissionDate] = useState(false)
+
+  // Estados para múltiples precios
+  // Precios de venta por sucursal (overrides por producto; ver src/utils/branchPricing.js)
+  const [branchPricingEnabled, setBranchPricingEnabled] = useState(false)
+  const [branchCatalogEnabled, setBranchCatalogEnabled] = useState(false)
+  // Obras y proyectos en modo General: reusa las paginas del modo Logistica
+  // sin obligar al negocio a migrar de modo. Apagado por defecto.
+  // Tamaño de la interfaz. Va por DISPOSITIVO (localStorage), no por negocio:
+  // es la vista de una persona, no una preferencia de la empresa. Por eso no
+  // entra en ningún payload de guardado — se aplica y se guarda al elegirlo.
+  const [escalaUi, setEscalaUi] = useState(leerEscala)
+  const [obrasEnabled, setObrasEnabled] = useState(false)
+  // Prestamos en modo Restaurante: misma idea, con la cartera del modo
+  // Prestamos. Apagado por defecto.
+  const [lendingEnabled, setLendingEnabled] = useState(false)
+  const [serviciosEnabled, setServiciosEnabled] = useState(false)
+  // Lo que sale impreso en el recibo de servicio (titulo, firma, lema).
+  const [servicioTituloRecibo, setServicioTituloRecibo] = useState('')
+  const [servicioFirma, setServicioFirma] = useState('')
+  const [servicioLema, setServicioLema] = useState('')
+  // Aca vive lo que NOMBRA los niveles de precio. El CALCULO (base, formula y
+  // porcentajes) se configura en Productos > Ajuste de precios, junto al ajuste
+  // masivo: las dos cosas responden a de donde sale el numero de un precio.
+  // Arrancan en TRUE, igual que el default de AuthContext. Con  inicial,
+  // guardar Config > Ventas ANTES de que cargaran los datos del negocio persistia
+  // un  que nadie eligio — asi 403 negocios quedaron con las
+  // presentaciones "apagadas" sin saberlo.
+  const [multiplePricesEnabled, setMultiplePricesEnabled] = useState(true)
+  const [priceLabels, setPriceLabels] = useState({
+    price1: 'Público',
+    price2: 'Mayorista',
+    price3: 'VIP',
+    price4: 'Especial'
+  })
+  // Fórmula del margen cuando priceCalculationBase === 'cost':
+  //   'markup' → Precio = Costo × (1 + %)   (% sobre costo, default histórico)
+  //   'margin' → Precio = Costo ÷ (1 − %)   (% como utilidad sobre el precio final)
+
+  // Multi-divisa (USD) — opt-in por negocio. Off por default: 99% solo
+  // trabaja con PEN. Cuando se activa, las fases siguientes habilitan
+  // selectores de moneda en compras, facturas y cotizaciones.
+  const [multiCurrencyEnabled, setMultiCurrencyEnabled] = useState(false)
+  const [defaultCurrency, setDefaultCurrency] = useState('PEN')
+  const [reportsCurrency, setReportsCurrency] = useState('PEN') // moneda de visualización de reportes
+
+
+  // Presentaciones de venta: SIEMPRE activas para todos. No hay interruptor y
+  // esta pantalla ya no escribe el campo — lo escribia sin UI que lo controlara
+  // y persistia un "apagado" fantasma que dejo a 403 negocios sin la opcion.
+  const [showDescriptionInPOS, setShowDescriptionInPOS] = useState(false)
+
+  // Afectación IGV por defecto al CREAR productos e items personalizados
+  // ('10' gravado — comportamiento histórico, '20' exonerado, '30' inafecto).
+  // Útil para negocios de zona de selva con taxConfig estándar que venden
+  // mayormente exonerado y solo gravan algunos productos puntuales.
+  const [defaultTaxAffectation, setDefaultTaxAffectation] = useState('10')
+  // Selector de afectación por VENTA en el POS (caso Amazonía: exonerado en la
+  // región, gravado cuando vende fuera). Apagado por defecto.
+  const [allowManualTaxAffectation, setAllowManualTaxAffectation] = useState(false)
+
+  // Estados para privacidad
+  const [hideDashboardDataFromSecondary, setHideDashboardDataFromSecondary] = useState(false)
+  const [showOnlyOwnSalesToSecondary, setShowOnlyOwnSalesToSecondary] = useState(false)
+
+  // Estados para menú personalizado
+  const [hiddenMenuItems, setHiddenMenuItems] = useState([])
+
+  // Preferencias de notificaciones push
+  const [notificationPreferences, setNotificationPreferences] = useState({
+    new_sale: true,
+    yape_payment: true,
+    low_stock: true,
+    out_of_stock: true,
+    new_order: true,
+    items_added: true,
+  })
+
+  // Estados para plantillas de términos y condiciones
+  const [termsTemplates, setTermsTemplates] = useState([])
+  const [showTermsTemplateModal, setShowTermsTemplateModal] = useState(false)
+  const [editingTemplate, setEditingTemplate] = useState(null)
+  const [templateName, setTemplateName] = useState('')
+  const [templateContent, setTemplateContent] = useState('')
+
+  // Estados para catálogo público
+  const [catalogEnabled, setCatalogEnabled] = useState(false)
+  // Reservas de citas desde el catalogo publico (veterinaria / General con agenda)
+  const [appointmentsBooking, setAppointmentsBooking] = useState({
+    enabled: false, days: [1, 2, 3, 4, 5, 6], startHour: 9, endHour: 19, stepMinutes: 30,
+    // staff: quien atiende (OPCIONAL). Vacio = el catalogo no pregunta por
+    // profesional y la agenda es una sola, como hasta ahora.
+    staff: [], staffLabel: '',
+  })
+  // Solicitudes de reserva de habitaciones desde el catalogo (modo hotel)
+  const [hotelBooking, setHotelBooking] = useState({ enabled: false })
+  // Picker de servicios reservables: productos del negocio, cargados recien
+  // cuando la seccion se abre (Settings no necesita el catalogo para nada mas).
+  const [productosReservables, setProductosReservables] = useState(null) // null = sin cargar
+  const [busquedaServicio, setBusquedaServicio] = useState('')
+
+  useEffect(() => {
+    if (!appointmentsBooking.enabled || productosReservables !== null || isDemoMode) return
+    getProducts(getBusinessId()).then(r => {
+      setProductosReservables(r?.success ? filtrarVendibles(r.data) : [])
+    }).catch(() => setProductosReservables([]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appointmentsBooking.enabled])
+  // Modo estacion de servicio (grifo): vender combustible por monto.
+  // `fuelIds` son los productos que salen como botones grandes en el POS,
+  // en el orden en que se eligieron.
+  const [serviceStationConfig, setServiceStationConfig] = useState({ enabled: false, fuelIds: [] })
+  const [productosCombustible, setProductosCombustible] = useState(null) // null = sin cargar
+  const [busquedaCombustible, setBusquedaCombustible] = useState('')
+
+  // Igual que el picker de servicios reservables: el catalogo se trae recien
+  // cuando la seccion se abre, porque Settings no lo necesita para nada mas.
+  useEffect(() => {
+    if (!serviceStationConfig.enabled || productosCombustible !== null || isDemoMode) return
+    getProducts(getBusinessId()).then(r => {
+      setProductosCombustible(r?.success ? filtrarVendibles(r.data) : [])
+    }).catch(() => setProductosCombustible([]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serviceStationConfig.enabled])
+
+  const [catalogSlug, setCatalogSlug] = useState('')
+  const [catalogCustomDomain, setCatalogCustomDomain] = useState('')
+
+  const [catalogColor, setCatalogColor] = useState('#10B981')
+  const [catalogTheme, setCatalogTheme] = useState('light')
+  const [catalogCoverImage, setCatalogCoverImage] = useState('')          // hero desktop
+  const [catalogCoverImageMobile, setCatalogCoverImageMobile] = useState('') // hero móvil (opcional)
+  const [uploadingCover, setUploadingCover] = useState(false)
+  const [uploadingCoverMobile, setUploadingCoverMobile] = useState(false)
+  const [catalogWelcome, setCatalogWelcome] = useState('')
+  const [catalogTagline, setCatalogTagline] = useState('')
+  const [catalogShowPrices, setCatalogShowPrices] = useState(true)
+  const [catalogIgnoreStock, setCatalogIgnoreStock] = useState(false)
+  const [catalogHideOutOfStock, setCatalogHideOutOfStock] = useState(false)
+  const [catalogShowStock, setCatalogShowStock] = useState(false)
+  // Cuentas de comprador en el catálogo. Default ON: solo agrega comodidades
+  // (historial y direcciones) y nunca obliga a registrarse para comprar.
+  const [catalogCustomerAccounts, setCatalogCustomerAccounts] = useState(true)
+  const [catalogWhatsapp, setCatalogWhatsapp] = useState('')
+  // Redes sociales del catalogo (footer "Siguenos"): usuario o URL completa
+  const [catalogSocial, setCatalogSocial] = useState({ instagram: '', facebook: '', tiktok: '' })
+  const [catalogObservations, setCatalogObservations] = useState('')
+  // Tira publicitaria del catálogo (F2.1): banner superior activable
+  const [catalogAnnouncement, setCatalogAnnouncement] = useState({
+    enabled: false, text: '', mode: 'static', backgroundColor: '#111827', textColor: '#FFFFFF',
+  })
+  // Carrusel de portada del catálogo (F2.2): slides con imagen/texto/enlace
+  const [catalogHero, setCatalogHero] = useState({ enabled: false, slides: [] })
+  const [uploadingHeroSlide, setUploadingHeroSlide] = useState(null) // índice del slide subiendo
+  // Diseño de la grilla de productos (F2.3): masonry | grid | list
+  const [catalogLayout, setCatalogLayout] = useState('masonry')
+  // Paginacion del catalogo (port shopifree): none | load-more | infinite | pages
+  const [catalogPagination, setCatalogPagination] = useState('infinite')
+  // Recepcion de pedidos online (el carrito ya lo respeta; faltaba el interruptor)
+  const [catalogOnlineOrders, setCatalogOnlineOrders] = useState(true)
+  // Pestana interna de Mi Catalogo Online: tienda | contenido | avanzado
+  const [catalogTab, setCatalogTab] = useState('configuracion')
+  // Fotos del negocio para las miniaturas de tema: sin imagenes propias, las
+  // tarjetas son bloques grises y no dejan comparar nada. Se cargan una sola
+  // vez, recien cuando se abre Apariencia.
+  const [fotosMiniatura, setFotosMiniatura] = useState(null)
+  useEffect(() => {
+    if (catalogTab !== 'apariencia' || fotosMiniatura !== null || isDemoMode) return
+    setFotosMiniatura([])
+    getProducts(getBusinessId()).then(r => {
+      const urls = (r?.success ? (r.data || []) : [])
+        .map(pr => pr?.imageUrl)
+        .filter(Boolean)
+        .slice(0, 4)
+      setFotosMiniatura(urls)
+    }).catch(() => setFotosMiniatura([]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalogTab])
+  // Navegación en escritorio del catálogo: 'top' (barra arriba) | 'sidebar'
+  const [catalogDesktopNav, setCatalogDesktopNav] = useState('top')
+  // Oferta con countdown (F2.5)
+  const [catalogFlashSale, setCatalogFlashSale] = useState({
+    enabled: false, text: '', endDate: '', backgroundColor: '#DC2626', textColor: '#FFFFFF',
+  })
+  // Sellos de confianza (F2.6)
+  const [catalogTrustBadges, setCatalogTrustBadges] = useState({ enabled: false, badges: [] })
+  // Efectos del catálogo (F2.7)
+  const [catalogEffects, setCatalogEffects] = useState({ scrollReveal: false, imageSwapOnHover: false })
+  // Buscador del catalogo: lupa (por defecto) o barra siempre a la vista.
+  const [catalogSearchBar, setCatalogSearchBar] = useState(false)
+  const [catalogLogoUrl, setCatalogLogoUrl] = useState('')                // logo cuadrado
+  const [catalogLogoLandscape, setCatalogLogoLandscape] = useState('')    // logo horizontal (opcional, reemplaza cuadrado+nombre)
+  const [uploadingCatalogLogo, setUploadingCatalogLogo] = useState(false)
+  const [uploadingCatalogLogoLandscape, setUploadingCatalogLogoLandscape] = useState(false)
+  const [businessHours, setBusinessHours] = useState({
+    enabled: false,
+    days: {
+      1: { open: true, from: '09:00', to: '18:00' }, // Lunes
+      2: { open: true, from: '09:00', to: '18:00' },
+      3: { open: true, from: '09:00', to: '18:00' },
+      4: { open: true, from: '09:00', to: '18:00' },
+      5: { open: true, from: '09:00', to: '18:00' },
+      6: { open: true, from: '09:00', to: '14:00' }, // Sábado
+      0: { open: false, from: '09:00', to: '14:00' }, // Domingo
+    }
+  })
+  const [catalogShowAllPrices, setCatalogShowAllPrices] = useState(true)
+  const [catalogAllowTakeaway, setCatalogAllowTakeaway] = useState(true)
+  const [catalogAllowDelivery, setCatalogAllowDelivery] = useState(true)
+  const [catalogGroupByCategory, setCatalogGroupByCategory] = useState(false)
+  const [catalogOnlyCarousels, setCatalogOnlyCarousels] = useState(false)
+  const [catalogQrDataUrl, setCatalogQrDataUrl] = useState('')
+  const [resellerCustomDomain, setResellerCustomDomain] = useState(null) // Dominio personalizado del reseller
+  const qrCanvasRef = useRef(null)
+
+  // Estados para QR de mesas (carta digital restaurante)
+  const [tableQrCodes, setTableQrCodes] = useState([])
+  // Nombre de sucursal -> parte de nombre de archivo (sin tildes ni espacios).
+  const slugSede = (nombre) => String(nombre || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+  const [generatingTableQrs, setGeneratingTableQrs] = useState(false)
+
+  // Estados para modo de negocio
+  const [businessMode, setBusinessMode] = useState('retail') // 'retail' | 'restaurant'
+  const [restaurantConfig, setRestaurantConfig] = useState({
+    tablesEnabled: true,
+    waitersEnabled: true,
+    kitchenEnabled: true,
+    deliveryEnabled: false,
+    itemStatusTracking: false, // Seguimiento de estado por item (false = por orden completa)
+    enableKitchenStations: false, // Modo multi-estación de cocina
+    kitchenStations: [], // Configuración de estaciones de cocina
+    requirePaymentBeforeKitchen: false, // Requerir pago antes de enviar a cocina
+    deliveryPersons: [], // Lista de repartidores
+    brands: [], // Lista de marcas (para dark kitchens / multi-marca)
+    autoPrintByStation: false, // Impresión automática por estación al enviar a cocina
+    autoPrintKitchenComanda: true, // Imprimir la comanda sola al tomar el pedido
+    posCreatesKitchenOrder: false, // La venta directa del POS crea la orden en Cocina e imprime comanda (patio de comidas / dark kitchen)
+    // Recargo al Consumo (Decreto Ley N° 25988)
+    recargoConsumoEnabled: false, // Habilitar recargo al consumo
+    recargoConsumoRate: 10, // Porcentaje del recargo (1-13%)
+    // POR CONSUMO: el comprobante sale con una sola línea en vez del detalle
+    // de platos. Adentro no cambia nada (ver comprobantePorConsumo.js).
+    porConsumoEnabled: false,
+    porConsumoTexto: 'POR CONSUMO',
+  })
+
+  // Categorías de productos (para asignar a estaciones)
+  const [productCategories, setProductCategories] = useState([])
+
+  // Campos personalizados del POS
+  const [posCustomFields, setPosCustomFields] = useState({
+    showStudentField: false, // Mostrar campo "Alumno" en el POS
+    showVehiclePlateField: false, // Mostrar campo "Placa de Vehículo" en el POS
+    showLicenseNumberField: false, // Mostrar campo "Licencia / Resolución" en el POS
+    showPropertyCardField: false, // Mostrar campo "Tarjeta de Propiedad" en el POS
+    // Ficha de atención en el CLIENTE (no en el POS): último procedimiento,
+    // fecha de la última atención, tratamiento y quién lo recomendó.
+    showServiceCardFields: false,
+    // Campos para transporte de carga
+    showOriginAddressField: false, // Dirección de origen
+    showDestinationAddressField: false, // Dirección de destino
+    showTripDetailField: false, // Detalle del viaje
+    showServiceReferenceValueField: false, // Valor referencial del servicio
+    showEffectiveLoadValueField: false, // Valor referencial carga efectiva
+    showUsefulLoadValueField: false, // Valor referencial carga útil
+    showBankAccountField: false, // Cta. Cte. Banco de la Nación
+    showDetractionField: false, // Detracción
+    showGoodsServiceCodeField: false, // Bien o Servicio (código SUNAT)
+    // Control de lotes y vencimientos en compras
+    showBatchExpiryInPurchase: false, // Mostrar campos de lote y fecha de vencimiento en Nueva Compra
+    hideOutOfStockInPOS: false, // Ocultar productos con stock 0 en el POS
+  })
+
+  // Estados para cambio de contraseña
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
+
+  // Estados para configuración de Yape
+  const [yapeConfig, setYapeConfig] = useState({
+    enabled: false,
+    notifyAllUsers: true,
+    notifyUsers: [],
+    autoStartListening: true
+  })
+  const [businessUsers, setBusinessUsers] = useState([])
+  const [isSavingYape, setIsSavingYape] = useState(false)
+  const [isLoadingYape, setIsLoadingYape] = useState(false)
+
+  // Estados para impresora térmica
+  const [printerConfig, setPrinterConfig] = useState({
+    enabled: false,
+    address: '',
+    name: '',
+    type: 'bluetooth', // bluetooth o wifi
+    // Default 80mm para coincidir con el POS (ticketPaperWidth || 80) y con savePrinterConfig
+    // (paperWidth || 80). Antes era 58: si el usuario nunca elegía ancho, al activar un toggle
+    // web se persistía 58 en localStorage y el POS pasaba a imprimir en 58mm sin querer.
+    paperWidth: 80, // 58mm o 80mm
+    webPrintLegible: false, // Modo legible para impresión web (legacy; derivado de ticketFontSize)
+    ticketFontSize: 'small', // Tamaño de letra del ticket web: 'small' | 'medium' | 'large'
+  })
+  const [availablePrinters, setAvailablePrinters] = useState([])
+  const [isScanning, setIsScanning] = useState(false)
+  const [isConnecting, setIsConnecting] = useState(false)
+  const [isTesting, setIsTesting] = useState(false)
+  const [showManualConnect, setShowManualConnect] = useState(false)
+  const [showWifiConnect, setShowWifiConnect] = useState(false) // Para mostrar formulario WiFi
+  const [wifiIp, setWifiIp] = useState('')
+  const [wifiPort, setWifiPort] = useState('9100')
+  const [wifiName, setWifiName] = useState('')
+  const [isImin, setIsImin] = useState(false) // Dispositivo iMin con impresora interna
+
+  // Estados para impresora de documentos (precuentas y boletas)
+  const [documentPrinterConfig, setDocumentPrinterConfig] = useState({ enabled: false, ip: '', port: 9100, name: '', paperWidth: 58 })
+  const [docPrinterIp, setDocPrinterIp] = useState('')
+  const [docPrinterPort, setDocPrinterPort] = useState('9100')
+  const [docPrinterName, setDocPrinterName] = useState('')
+  const [showDocPrinterForm, setShowDocPrinterForm] = useState(false)
+  const [isConnectingDocPrinter, setIsConnectingDocPrinter] = useState(false)
+  const [isTestingDocPrinter, setIsTestingDocPrinter] = useState(false)
+
+  // Estado para búsqueda de RUC
+  const [isLookingUpRuc, setIsLookingUpRuc] = useState(false)
+  const [manualAddress, setManualAddress] = useState('')
+  const [manualName, setManualName] = useState('')
+
+  // Establecimientos (locales anexos) del emisor en SUNAT. Se llenan al buscar el RUC
+  // con la lupa y se usan como punto de partida al emitir guías de remisión.
+  const [establishments, setEstablishments] = useState([])
+
+  // Estado para cuentas bancarias estructuradas
+  const [bankAccounts, setBankAccounts] = useState([])
+  // Estructura: [{ bank: 'BCP', currency: 'PEN', accountNumber: '123-456789-0-12', cci: '00212345678901234567' }]
+
+  // Estado para billeteras digitales (Yape / Plin) con QR
+  const [digitalWallets, setDigitalWallets] = useState([])
+  // Estructura: [{ provider: 'Yape'|'Plin', holderName, phoneNumber, qrImageUrl, _qrFile?, _qrPreview? }]
+  const [newWalletQrFile, setNewWalletQrFile] = useState(null)
+  const [newWalletQrPreview, setNewWalletQrPreview] = useState('')
+  // Edición inline de cuentas bancarias y billeteras (fila en modo editable)
+  const [editingBankIndex, setEditingBankIndex] = useState(null)
+  const [editingWalletIndex, setEditingWalletIndex] = useState(null)
+  const updateBankAccount = (i, patch) => setBankAccounts(prev => prev.map((a, idx) => idx === i ? { ...a, ...patch } : a))
+  const updateWallet = (i, patch) => setDigitalWallets(prev => prev.map((w, idx) => idx === i ? { ...w, ...patch } : w))
+
+  // Estados para eliminación masiva de datos
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false)
+  const [bulkDeleteType, setBulkDeleteType] = useState(null) // 'products' | 'customers' | 'suppliers'
+  const [bulkDeleteConfirmText, setBulkDeleteConfirmText] = useState('')
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false)
+  const [bulkDeleteProgress, setBulkDeleteProgress] = useState({ deleted: 0, total: 0, percentage: 0 })
+  const [bulkDeleteCounts, setBulkDeleteCounts] = useState({ products: 0, customers: 0, suppliers: 0, invoices: 0, purchases: 0, stockMovements: 0, dispatchGuides: 0, quotations: 0, ingredients: 0, productions: 0 })
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset,
+    setValue,
+    watch,
+  } = useForm({
+    resolver: zodResolver(companySettingsSchema),
+  })
+
+  // Helper functions para ubicación
+  const getProvincias = (deptCode) => {
+    return PROVINCIAS[deptCode] || []
+  }
+
+  const getDistritos = (deptCode, provCode) => {
+    const key = `${deptCode}${provCode}`
+    return DISTRITOS[key] || []
+  }
+
+  const getLocationUbigeo = () => {
+    if (locationDeptCode && locationProvCode && locationDistCode) {
+      return `${locationDeptCode}${locationProvCode}${locationDistCode}`
+    }
+    return ''
+  }
+
+  const getLocationNames = () => {
+    const dept = DEPARTAMENTOS.find(d => d.code === locationDeptCode)
+    const prov = getProvincias(locationDeptCode).find(p => p.code === locationProvCode)
+    const dist = getDistritos(locationDeptCode, locationProvCode).find(d => d.code === locationDistCode)
+    return {
+      department: dept?.name || '',
+      province: prov?.name || '',
+      district: dist?.name || ''
+    }
+  }
+
+
+  // Actualizar form values cuando cambian los códigos de ubicación
+  const handleLocationChange = (type, value) => {
+    if (type === 'department') {
+      setLocationDeptCode(value)
+      setLocationProvCode('')
+      setLocationDistCode('')
+      // Actualizar nombres en el form
+      const dept = DEPARTAMENTOS.find(d => d.code === value)
+      setValue('department', dept?.name || '')
+      setValue('province', '')
+      setValue('district', '')
+      setValue('ubigeo', '')
+    } else if (type === 'province') {
+      setLocationProvCode(value)
+      setLocationDistCode('')
+      const prov = getProvincias(locationDeptCode).find(p => p.code === value)
+      setValue('province', prov?.name || '')
+      setValue('district', '')
+      setValue('ubigeo', '')
+    } else if (type === 'district') {
+      setLocationDistCode(value)
+      const dist = getDistritos(locationDeptCode, locationProvCode).find(d => d.code === value)
+      setValue('district', dist?.name || '')
+      // Calcular ubigeo
+      const ubigeo = `${locationDeptCode}${locationProvCode}${value}`
+      setValue('ubigeo', ubigeo)
+    }
+  }
+
+  // Cargar configuración al montar
+  useEffect(() => {
+    loadSettings()
+  }, [user])
+
+  // Generar QR del catálogo cuando cambie el slug
+  useEffect(() => {
+    if (catalogSlug && catalogEnabled) {
+      // Usar dominio personalizado del reseller si está disponible
+      const baseUrl = resellerCustomDomain
+        ? `https://${resellerCustomDomain}`
+        : PRODUCTION_URL
+      const catalogUrl = businessMode === 'restaurant'
+        ? `${baseUrl}/menu/${catalogSlug}`
+        : `${baseUrl}/catalogo/${catalogSlug}`
+      QRCode.toDataURL(catalogUrl, {
+        width: 300,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#ffffff'
+        }
+      }).then(url => {
+        setCatalogQrDataUrl(url)
+      }).catch(err => {
+        console.error('Error generating QR:', err)
+      })
+    } else {
+      setCatalogQrDataUrl('')
+    }
+  }, [catalogSlug, catalogEnabled, resellerCustomDomain])
+
+  // Auto-generar QRs de mesas cuando el catálogo esté habilitado y sea restaurante
+  useEffect(() => {
+    if (!catalogSlug || !catalogEnabled || businessMode !== 'restaurant') {
+      setTableQrCodes([])
+      return
+    }
+    const generateTableQrs = async () => {
+      setGeneratingTableQrs(true)
+      try {
+        const result = await getTables(getBusinessId())
+        if (!result.success || !result.data || result.data.length === 0) {
+          setTableQrCodes([])
+          return
+        }
+        const baseUrl = resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL
+        const qrs = []
+        for (const mesa of result.data) {
+          // `t` = ID del documento de la mesa, unico en todo el negocio. Sin el,
+          // dos sucursales con "Mesa 5" generaban el MISMO QR y el pedido caia
+          // en la que apareciera primero. `mesa` se mantiene para mostrar el
+          // numero y para que los QR ya impresos sigan funcionando.
+          const url = `${baseUrl}/menu/${catalogSlug}?mesa=${mesa.number}&t=${mesa.id}`
+          const dataUrl = await QRCode.toDataURL(url, {
+            width: 300,
+            margin: 2,
+            color: { dark: '#000000', light: '#ffffff' }
+          })
+          const sede = mesa.branchId
+            ? (branches.find(b => b.id === mesa.branchId)?.name || 'Sucursal')
+            : (businessSettings?.mainBranchName || 'Sucursal Principal')
+          qrs.push({
+            id: mesa.id,
+            table: mesa.number,
+            zone: mesa.zone || '',
+            branchId: mesa.branchId || null,
+            branchName: sede,
+            url,
+            dataUrl,
+          })
+        }
+        setTableQrCodes(qrs)
+      } catch (error) {
+        console.error('Error generating table QR codes:', error)
+      } finally {
+        setGeneratingTableQrs(false)
+      }
+    }
+    generateTableQrs()
+  }, [catalogSlug, catalogEnabled, businessMode, resellerCustomDomain, branches])
+
+  // Obtener dominio personalizado del reseller cuando hay suscripción
+  useEffect(() => {
+    const fetchResellerDomain = async () => {
+      if (!subscription?.resellerId) {
+        setResellerCustomDomain(null)
+        return
+      }
+
+      try {
+        const resellerDoc = await getDoc(doc(db, 'resellers', subscription.resellerId))
+        if (resellerDoc.exists()) {
+          const resellerData = resellerDoc.data()
+          if (resellerData.customDomain) {
+            setResellerCustomDomain(resellerData.customDomain)
+            console.log('✅ Reseller custom domain loaded:', resellerData.customDomain)
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching reseller domain:', error)
+      }
+    }
+
+    fetchResellerDomain()
+  }, [subscription?.resellerId])
+
+  // Cargar configuración de Yape cuando se activa el tab
+  useEffect(() => {
+    const loadYapeSettings = async () => {
+      if (activeTab !== 'notificaciones' || !user?.uid || isDemoMode) return
+
+      setIsLoadingYape(true)
+      try {
+        const businessId = getBusinessId()
+        if (!businessId) return
+
+        // Cargar configuración de Yape
+        const configResult = await getYapeConfig(businessId)
+        if (configResult.success) {
+          setYapeConfig(configResult.data)
+        }
+
+        // Cargar usuarios del negocio desde múltiples fuentes
+        let users = []
+        const userIds = new Set()
+
+        // 1. Buscar usuarios con businessId igual
+        const usersSnapshot = await getDocs(
+          query(
+            collection(db, 'users'),
+            where('businessId', '==', businessId)
+          )
+        )
+        usersSnapshot.docs.forEach(d => {
+          if (!userIds.has(d.id)) {
+            userIds.add(d.id)
+            users.push({ id: d.id, ...d.data() })
+          }
+        })
+
+        // 2. También buscar en businesses/{businessId}/users (colección anidada)
+        try {
+          const nestedUsersSnapshot = await getDocs(
+            collection(db, 'businesses', businessId, 'users')
+          )
+          for (const userDoc of nestedUsersSnapshot.docs) {
+            const userId = userDoc.data().userId || userDoc.id
+            if (!userIds.has(userId)) {
+              userIds.add(userId)
+              // Obtener datos completos del usuario
+              const fullUserDoc = await getDoc(doc(db, 'users', userId))
+              if (fullUserDoc.exists()) {
+                users.push({ id: userId, ...fullUserDoc.data() })
+              } else {
+                users.push({ id: userId, ...userDoc.data() })
+              }
+            }
+          }
+        } catch (e) {
+          console.log('No hay colección anidada de usuarios:', e.message)
+        }
+
+        // 3. Agregar al dueño del negocio
+        const businessDoc = await getDoc(doc(db, 'businesses', businessId))
+        if (businessDoc.exists()) {
+          const business = businessDoc.data()
+          const ownerId = business.ownerId || businessId
+
+          if (!userIds.has(ownerId)) {
+            userIds.add(ownerId)
+            const ownerDoc = await getDoc(doc(db, 'users', ownerId))
+            if (ownerDoc.exists()) {
+              users.unshift({
+                id: ownerId,
+                ...ownerDoc.data(),
+                isOwner: true
+              })
+            }
+          } else {
+            // Marcar al dueño como tal
+            const ownerIndex = users.findIndex(u => u.id === ownerId)
+            if (ownerIndex >= 0) {
+              users[ownerIndex].isOwner = true
+            }
+          }
+        }
+
+        // 4. Si el usuario actual no está en la lista, agregarlo
+        if (user?.uid && !userIds.has(user.uid)) {
+          const currentUserDoc = await getDoc(doc(db, 'users', user.uid))
+          if (currentUserDoc.exists()) {
+            users.push({ id: user.uid, ...currentUserDoc.data(), isCurrent: true })
+          }
+        }
+
+        console.log('Usuarios encontrados para Yape:', users.length, users.map(u => ({ id: u.id, name: u.displayName || u.name || u.email })))
+        setBusinessUsers(users)
+      } catch (error) {
+        console.error('Error al cargar config Yape:', error)
+      } finally {
+        setIsLoadingYape(false)
+      }
+    }
+
+    loadYapeSettings()
+  }, [activeTab, user, isDemoMode, getBusinessId])
+
+  const loadSettings = async () => {
+    if (!user?.uid) return
+
+    setIsLoading(true)
+
+    // MODO DEMO: No cargar datos de Firebase
+    if (isDemoMode) {
+      // Establecer datos por defecto para demo
+      reset({
+        ruc: '20123456789',
+        businessName: 'EMPRESA DEMO SAC',
+        tradeName: 'Demo Store',
+        phone: '01-2345678',
+        email: 'demo@empresa.com',
+        website: 'www.empresademo.com',
+        socialMedia: '@empresademo',
+        address: 'Av. Demo 123',
+        urbanization: '',
+        district: 'Miraflores',
+        province: 'Lima',
+        department: 'Lima',
+        ubigeo: '150101',
+      })
+      setIsLoading(false)
+      return
+    }
+
+    try {
+      // Cargar suscripción del usuario
+      const subResult = await getSubscription(getBusinessId())
+      if (subResult) {
+        setSubscription(subResult)
+      }
+
+      // Cargar datos de la empresa usando userId como businessId
+      const businessRef = doc(db, 'businesses', getBusinessId())
+      const businessDoc = await getDoc(businessRef)
+
+      if (businessDoc.exists()) {
+        const businessData = businessDoc.data()
+
+        reset({
+          ruc: businessData.ruc || '',
+          businessName: businessData.businessName || '',
+          tradeName: businessData.name || '',
+          phone: businessData.phone || '',
+          email: businessData.email || '',
+          website: businessData.website || '',
+          socialMedia: businessData.socialMedia || '',
+          bankAccounts: businessData.bankAccounts || '',
+          address: businessData.address || '',
+          urbanization: businessData.urbanization || '',
+          district: businessData.district || '',
+          province: businessData.province || '',
+          department: businessData.department || '',
+          ubigeo: businessData.ubigeo || '',
+          mtcRegistration: businessData.mtcRegistration || '',
+        })
+
+        // Extraer códigos de ubigeo para los selects
+        if (businessData.ubigeo && businessData.ubigeo.length === 6) {
+          setLocationDeptCode(businessData.ubigeo.substring(0, 2))
+          setLocationProvCode(businessData.ubigeo.substring(2, 4))
+          setLocationDistCode(businessData.ubigeo.substring(4, 6))
+        }
+
+        // Establecimientos (anexos) guardados del emisor
+        setEstablishments(Array.isArray(businessData.establishments) ? businessData.establishments : [])
+
+        // Cargar series de documentos
+        if (businessData.series) {
+          setSeries({
+            factura: businessData.series.factura || { serie: 'F001', lastNumber: 0 },
+            boleta: businessData.series.boleta || { serie: 'B001', lastNumber: 0 },
+            cotizacion: businessData.series.cotizacion || { serie: 'C001', lastNumber: 0 },
+            nota_venta: businessData.series.nota_venta || { serie: 'N001', lastNumber: 0 },
+            nota_credito_factura: businessData.series.nota_credito_factura || { serie: 'FN01', lastNumber: 0 },
+            nota_credito_boleta: businessData.series.nota_credito_boleta || { serie: 'BN01', lastNumber: 0 },
+            nota_debito_factura: businessData.series.nota_debito_factura || { serie: 'FD01', lastNumber: 0 },
+            nota_debito_boleta: businessData.series.nota_debito_boleta || { serie: 'BD01', lastNumber: 0 },
+            guia_remision: businessData.series.guia_remision || { serie: 'T001', lastNumber: 0 },
+            guia_transportista: businessData.series.guia_transportista || { serie: 'V001', lastNumber: 0 },
+          })
+        }
+
+        // Cargar configuración SUNAT/QPse desde la subcolección PROTEGIDA de secretos
+        // (con fallback al doc top-level durante la migración del certificado).
+        const { sunat: sunatSecret, qpse: qpseSecret } = await getEmissionSecrets(getBusinessId(), businessData)
+        if (sunatSecret) {
+          setSunatConfig({
+            enabled: sunatSecret.enabled || false,
+            environment: sunatSecret.environment || 'beta',
+            solUser: sunatSecret.solUser || '',
+            solPassword: sunatSecret.solPassword || '',
+            clientId: sunatSecret.clientId || '',
+            clientSecret: sunatSecret.clientSecret || '',
+            certificateName: sunatSecret.certificateName || '',
+            certificatePassword: sunatSecret.certificatePassword || '',
+            homologated: sunatSecret.homologated || false,
+          })
+        }
+
+        if (qpseSecret) {
+          setQpseConfig({
+            enabled: qpseSecret.enabled || false,
+            environment: qpseSecret.environment || 'demo',
+            usuario: qpseSecret.usuario || '',
+            password: qpseSecret.password || '',
+            firmasDisponibles: qpseSecret.firmasDisponibles || 0,
+            firmasUsadas: qpseSecret.firmasUsadas || 0,
+          })
+        }
+
+        // Cargar logo
+        if (businessData.logoUrl) {
+          setLogoUrl(businessData.logoUrl)
+        }
+
+        // Cargar color de PDF
+        setTicketFooterMessage(businessData.ticketFooterMessage || '')
+        setNotaVentaLegend(businessData.notaVentaLegend || '')
+        setInvoiceFooterTerms(businessData.invoiceFooterTerms || '')
+        setShowTermsOnTicket(businessData.showTermsOnTicket === true)
+        setPurchaseOrderDefaultNotes(businessData.purchaseOrderDefaultNotes || '')
+        setTicketQrEnabled(businessData.ticketQrEnabled === true)
+        setTicketQrContent(businessData.ticketQrContent || '')
+        setTicketQrCaption(businessData.ticketQrCaption || '')
+        // Modo del QR: por defecto 'auto' para retrocompatibilidad
+        // (negocios existentes ya tienen ticketQrContent escrito).
+        setTicketQrMode(businessData.ticketQrMode === 'image' ? 'image' : 'auto')
+        setTicketQrImageUrl(businessData.ticketQrImageUrl || '')
+        if (businessData.pdfAccentColor) {
+          setPdfAccentColor(businessData.pdfAccentColor)
+        }
+
+        // Cargar eslogan de empresa
+        if (businessData.companySlogan) {
+          setCompanySlogan(businessData.companySlogan)
+        }
+
+        // Cargar escala del logo en el ticket térmico
+        if (businessData.logoPrintScale) {
+          setLogoPrintScale(businessData.logoPrintScale)
+        }
+
+        // Cargar flag de códigos de producto en cotizaciones
+        if (businessData.showProductCodeInQuotation !== undefined) {
+          setShowProductCodeInQuotation(businessData.showProductCodeInQuotation)
+        }
+
+        // Cargar flag de códigos de producto en comprobantes (default true: retrocompatibilidad)
+        if (businessData.showProductCodeInInvoices !== undefined) {
+          setShowProductCodeInInvoices(businessData.showProductCodeInInvoices)
+        }
+
+        // Cargar flag de descripción de producto en cotizaciones (default true: retrocompatibilidad)
+        if (businessData.showProductDescriptionInQuotation !== undefined) {
+          setShowProductDescriptionInQuotation(businessData.showProductDescriptionInQuotation)
+        }
+        // Descripción de producto en comprobantes (default false: comprobantes no la mostraban)
+        if (businessData.showProductDescriptionInInvoice !== undefined) {
+          setShowProductDescriptionInInvoice(businessData.showProductDescriptionInInvoice)
+        }
+
+        // Cargar flag de imágenes en cotizaciones (default false)
+        if (businessData.showImagesInQuotations !== undefined) {
+          setShowImagesInQuotations(businessData.showImagesInQuotations)
+        }
+
+        // Cargar flag de imágenes en comprobantes de venta (default false)
+        setShowBrandInInvoices(businessData.showBrandInInvoices === true)
+        if (businessData.showImagesInInvoices !== undefined) {
+          setShowImagesInInvoices(businessData.showImagesInInvoices)
+        }
+
+        // Tamaño de imágenes en los PDF (default 100%)
+        if (businessData.quotationImageScale) {
+          setQuotationImageScale(Number(businessData.quotationImageScale) || 100)
+        }
+        if (businessData.invoiceImageScale) {
+          setInvoiceImageScale(Number(businessData.invoiceImageScale) || 100)
+        }
+
+        // Cargar flag de espaciado amplio en PDF
+        if (businessData.pdfSpacious !== undefined) {
+          setPdfSpacious(businessData.pdfSpacious)
+        }
+        if (businessData.pdfA5 !== undefined) {
+          setPdfA5(businessData.pdfA5)
+        }
+
+        // Cargar flag para ocultar lote y vencimiento en comprobantes
+        if (businessData.hideBatchAndExpiryInDocuments !== undefined) {
+          setHideBatchAndExpiryInDocuments(businessData.hideBatchAndExpiryInDocuments)
+        }
+
+        // Cargar flag para ocultar efectivo esperado a cajeros
+        if (businessData.showProductsInCashClosure !== undefined) {
+          setShowProductsInCashClosure(businessData.showProductsInCashClosure)
+        }
+        if (businessData.hideCashExpectedFromCashier !== undefined) {
+          setHideCashExpectedFromCashier(businessData.hideCashExpectedFromCashier)
+        }
+
+        // Cargar configuración de Meta Ads
+        if (businessData.metaAdsEnabled !== undefined) {
+          setMetaAdsEnabled(businessData.metaAdsEnabled)
+        }
+        if (businessData.metaAdsPhonePrefix !== undefined) {
+          setMetaAdsPhonePrefix(businessData.metaAdsPhonePrefix)
+        }
+        if (businessData.metaAdsOrderIdPrefix !== undefined) {
+          setMetaAdsOrderIdPrefix(businessData.metaAdsOrderIdPrefix)
+        }
+
+        // Cargar configuración de Rappi
+        if (businessData.rappiConfig) {
+          setRappiClientId(businessData.rappiConfig.clientId || '')
+          setRappiClientSecret(businessData.rappiConfig.clientSecret || '')
+          setRappiStoreId(businessData.rappiConfig.storeId || '')
+          setRappiStoreName(businessData.rappiConfig.storeName || '')
+          setRappiPollingEnabled(businessData.rappiConfig.pollingEnabled === true)
+          setRappiAutoAccept(businessData.rappiConfig.autoAccept !== false)
+        }
+
+        // Cargar cuentas bancarias estructuradas
+        if (businessData.bankAccountsList && Array.isArray(businessData.bankAccountsList)) {
+          setBankAccounts(businessData.bankAccountsList)
+        }
+
+        // Cargar billeteras digitales (Yape / Plin)
+        if (businessData.digitalWalletsList && Array.isArray(businessData.digitalWalletsList)) {
+          setDigitalWallets(businessData.digitalWalletsList)
+        }
+
+        // Cargar configuración de inventario
+        setAllowNegativeStock(businessData.allowNegativeStock || false)
+        setAutoSaveCustomProducts(businessData.autoSaveCustomProducts === true)
+        setShowOtherBranchesStock(businessData.showOtherBranchesStock === true)
+        setConfirmSaleWithoutStock(businessData.confirmSaleWithoutStock || false)
+        setAllowCustomProducts(businessData.allowCustomProducts || false)
+        setAllowPriceEdit(businessData.allowPriceEdit || false)
+        setAllowNameEdit(businessData.allowNameEdit || false)
+        // Default true (comportamiento histórico): la búsqueda se limpia al agregar producto
+        setPosClearSearchOnAdd(businessData.posClearSearchOnAdd !== false)
+        setAutoSku(businessData.autoSku || false)
+        setEnableProductImages(businessData.enableProductImages || false)
+        setEnableProductLocation(businessData.enableProductLocation || false)
+        setAppointmentsEnabled(businessData.appointmentsEnabled || false)
+        setEnableManualStockEdit(businessData.enableManualStockEdit || false)
+        setStockDischargeEnabled(businessData.stockDischargeEnabled || false)
+        setNotaVentaCreditTerms(businessData.notaVentaCreditTerms || false)
+        setEnableCustomerDisplay(businessData.enableCustomerDisplay || false)
+        setDispatchGuidesEnabled(businessData.dispatchGuidesEnabled || false)
+        setExitNoteEnabled(businessData.exitNoteEnabled || false)
+
+        // Cargar flag de herramientas de administrador (solo habilitado manualmente en Firebase)
+        setAdminToolsEnabled(businessData.adminTools?.enabled || false)
+        setDefaultDocumentType(businessData.defaultDocumentType || 'boleta')
+        setEnabledDocumentTypes(businessData.enabledDocumentTypes || [])
+        setDefaultPaymentMethod(businessData.defaultPaymentMethod || '')
+        setHiddenPaymentMethods(businessData.hiddenPaymentMethods || [])
+        setCustomPaymentMethods(businessData.customPaymentMethods || [])
+        setHiddenOrderSources(businessData.hiddenOrderSources || [])
+        setCustomOrderSources(businessData.customOrderSources || [])
+        setAutoResetPOS(businessData.autoResetPOS || false)
+        setAutoPrintTicket(businessData.autoPrintTicket || false)
+        setShowChangeReminder(businessData.showChangeReminder || false)
+        setVetReminderDefaultDays(diasPorDefectoDelNegocio(businessData))
+        setLockCashRegisterHistory(businessData.lockCashRegisterHistory || false)
+        setAllowEditNotaVenta(businessData.allowEditNotaVenta || false)
+        setShowAllProductsInPOS(businessData.showAllProductsInPOS || false)
+
+        // Cargar configuración de notas de venta
+        setHideRucIgvInNotaVenta(businessData.hideRucIgvInNotaVenta || false)
+        setHideOnlyIgvInNotaVenta(businessData.hideOnlyIgvInNotaVenta || false)
+        setHideCompanyDataInNotaVenta(businessData.hideCompanyDataInNotaVenta || false)
+        setRequireOpenCashRegister(businessData.requireOpenCashRegister || false)
+        setCardCommissionEnabled(businessData.cardCommissionEnabled || false)
+        setCardCommissionRate(Number(businessData.cardCommissionRate) || 5)
+
+        // Cargar configuración de comprobantes
+        setAllowDeleteInvoices(businessData.allowDeleteInvoices || false)
+
+        // Cargar configuración de SUNAT
+        setAutoSendToSunat(businessData.autoSendToSunat || false)
+
+        // Cargar configuración de fecha de emisión
+        setAllowCustomEmissionDate(businessData.allowCustomEmissionDate || false)
+
+        // Cargar configuración de múltiples precios
+        setBranchPricingEnabled(businessData.branchPricingEnabled || false)
+        setBranchCatalogEnabled(businessData.branchCatalogEnabled || false)
+        setObrasEnabled(businessData.obrasEnabled === true)
+        setLendingEnabled(businessData.lendingEnabled === true)
+        setServiciosEnabled(businessData.serviciosEnabled === true)
+        setServicioTituloRecibo(businessData.servicioTituloRecibo || '')
+        setServicioFirma(businessData.servicioFirma || '')
+        setServicioLema(businessData.servicioLema || '')
+        // Presentaciones y niveles de precio: `?? true` para reflejar el mismo
+        // default que aplica AuthContext (encendidas si nunca se configuraron).
+        // Con `|| false` el interruptor salía apagado mientras la función estaba
+        // activa en el modal de productos.
+        setShowDescriptionInPOS(businessData.showDescriptionInPOS || false)
+        setMultiplePricesEnabled(businessData.multiplePricesEnabled ?? true)
+        if (businessData.priceLabels) {
+          setPriceLabels({
+            price1: businessData.priceLabels.price1 || 'Público',
+            price2: businessData.priceLabels.price2 || 'Mayorista',
+            price3: businessData.priceLabels.price3 || 'VIP',
+            price4: businessData.priceLabels.price4 || 'Especial'
+          })
+        }
+        // Afectación IGV por defecto al crear productos
+        setDefaultTaxAffectation(businessData.defaultTaxAffectation || '10')
+        setAllowManualTaxAffectation(businessData.allowManualTaxAffectation === true)
+
+        // Multi-divisa (USD) — opt-in
+        setMultiCurrencyEnabled(businessData.multiCurrencyEnabled === true)
+        setDefaultCurrency(businessData.defaultCurrency === 'USD' ? 'USD' : 'PEN')
+        setReportsCurrency(businessData.reportsCurrency === 'USD' ? 'USD' : 'PEN')
+
+        // Cargar configuración de privacidad
+        setHideDashboardDataFromSecondary(businessData.hideDashboardDataFromSecondary || false)
+        setShowOnlyOwnSalesToSecondary(businessData.showOnlyOwnSalesToSecondary || false)
+
+        // Cargar menú personalizado
+        if (businessData.hiddenMenuItems && Array.isArray(businessData.hiddenMenuItems)) {
+          setHiddenMenuItems(businessData.hiddenMenuItems)
+        }
+
+        // Cargar plantillas de términos
+        if (businessData.termsTemplates && Array.isArray(businessData.termsTemplates)) {
+          setTermsTemplates(businessData.termsTemplates)
+        }
+
+        // Cargar configuración de catálogo
+        setCatalogEnabled(businessData.catalogEnabled || false)
+        if (businessData.appointmentsBooking) {
+          setAppointmentsBooking(prev => ({ ...prev, ...businessData.appointmentsBooking }))
+        }
+        if (businessData.hotelBooking) {
+          setHotelBooking(prev => ({ ...prev, ...businessData.hotelBooking }))
+        }
+        setCatalogSlug(businessData.catalogSlug || '')
+        setCatalogCustomDomain(businessData.customDomain || '')
+        setCatalogColor(businessData.catalogColor || '#10B981')
+        setCatalogTheme(businessData.catalogTheme || 'light')
+        setCatalogCoverImage(businessData.catalogCoverImage || '')
+        setCatalogCoverImageMobile(businessData.catalogCoverImageMobile || '')
+        setCatalogWelcome(businessData.catalogWelcome || '')
+        setCatalogTagline(businessData.catalogTagline || '')
+        setCatalogShowPrices(businessData.catalogShowPrices !== false) // Por defecto true
+        setCatalogIgnoreStock(businessData.catalogIgnoreStock || false)
+        setCatalogHideOutOfStock(businessData.catalogHideOutOfStock || false)
+        setCatalogShowStock(businessData.catalogShowStock || false)
+        setCatalogCustomerAccounts(businessData.catalogCustomerAccounts !== false)
+        setCatalogWhatsapp(businessData.catalogWhatsapp || '')
+        setCatalogPagination(businessData.catalogPagination || 'infinite')
+        setCatalogOnlineOrders(businessData.catalogOnlineOrders !== false)
+        setCatalogSocial({ instagram: '', facebook: '', tiktok: '', ...(businessData.catalogSocial || {}) })
+        setCatalogObservations(businessData.catalogObservations || '')
+        setCatalogAnnouncement({
+          enabled: false, text: '', mode: 'static', backgroundColor: '#111827', textColor: '#FFFFFF',
+          ...(businessData.catalogAnnouncement || {}),
+        })
+        setCatalogHero({
+          enabled: businessData.catalogHero?.enabled === true,
+          slides: Array.isArray(businessData.catalogHero?.slides) ? businessData.catalogHero.slides : [],
+        })
+        // Las tiendas que agrupaban por categoria con el flag viejo se ven
+        // en el selector como 'Secciones por categoria'.
+        setCatalogLayout(
+          businessData.catalogLayout
+          || (businessData.catalogGroupByCategory === true
+            ? 'sections'
+            : 'masonry')
+        )
+        setCatalogDesktopNav(businessData.catalogDesktopNav || 'top')
+        setCatalogFlashSale({
+          enabled: false, text: '', endDate: '', backgroundColor: '#DC2626', textColor: '#FFFFFF',
+          ...(businessData.catalogFlashSale || {}),
+        })
+        setCatalogTrustBadges({
+          enabled: businessData.catalogTrustBadges?.enabled === true,
+          badges: Array.isArray(businessData.catalogTrustBadges?.badges) ? businessData.catalogTrustBadges.badges : [],
+        })
+        setCatalogEffects({
+          scrollReveal: businessData.catalogEffects?.scrollReveal === true,
+          imageSwapOnHover: businessData.catalogEffects?.imageSwapOnHover === true,
+        })
+        setCatalogSearchBar(businessData.catalogSearchBar === true)
+        setCatalogLogoUrl(businessData.catalogLogoUrl || '')
+        setCatalogLogoLandscape(businessData.catalogLogoLandscape || '')
+        setCatalogShowAllPrices(businessData.catalogShowAllPrices !== false)
+        setCatalogAllowTakeaway(businessData.catalogAllowTakeaway !== false)
+        setCatalogAllowDelivery(businessData.catalogAllowDelivery !== false)
+        setCatalogGroupByCategory(businessData.catalogGroupByCategory || false)
+        setCatalogOnlyCarousels(businessData.catalogOnlyCarousels || false)
+        if (businessData.businessHours) {
+          setBusinessHours(prev => ({ ...prev, ...businessData.businessHours }))
+        }
+
+        // Cargar modo de negocio
+        setBusinessMode(businessData.businessMode || 'retail')
+        if (businessData.restaurantConfig) {
+          setRestaurantConfig(prev => ({
+            ...prev,
+            ...businessData.restaurantConfig
+          }))
+        }
+        if (businessData.posCustomFields) {
+          setPosCustomFields(businessData.posCustomFields)
+        }
+        if (businessData.serviceStationConfig) {
+          setServiceStationConfig(prev => ({
+            ...prev,
+            ...businessData.serviceStationConfig,
+          }))
+        }
+        if (businessData.notificationPreferences) {
+          setNotificationPreferences(prev => ({ ...prev, ...businessData.notificationPreferences }))
+        }
+
+        // Cargar categorías de productos (para estaciones de cocina)
+        if (businessData.businessMode === 'restaurant') {
+          const categoriesResult = await getProductCategories(getBusinessId())
+          if (categoriesResult.success) {
+            setProductCategories(categoriesResult.data || [])
+          }
+        }
+
+        // Cargar configuración de impresora desde localStorage (por dispositivo)
+        const localPrinterConfig = await getPrinterConfig(getBusinessId())
+        if (localPrinterConfig.success && localPrinterConfig.config) {
+          // Merge con valores por defecto para asegurar que todos los campos existan
+          setPrinterConfig(prev => ({
+            ...prev,
+            ...localPrinterConfig.config
+          }))
+        }
+
+        // Cargar configuración de la Impresora de Caja.
+        // Prioridad: la COMPARTIDA del negocio (Firestore); si no, la local del dispositivo.
+        if (businessData.cajaPrinter) {
+          setDocumentPrinterConfig(businessData.cajaPrinter)
+          setBusinessCajaPrinter(businessData.cajaPrinter.enabled ? businessData.cajaPrinter : null)
+          // CRÍTICO: espejar en localStorage. El servicio de impresión
+          // (getDocumentPrinterConfig, usado al imprimir desde Ventas/POS) lee de
+          // localStorage, NO del estado de React. Sin esto, un dispositivo que solo
+          // CARGA la config compartida (no la configuró él) tenía el "Probar" OK
+          // (lee estado) pero Ventas no imprimía nada (localStorage vacío → cae en
+          // "Printer not connected" sin error visible).
+          saveDocumentPrinterConfig(businessData.cajaPrinter)
+        } else {
+          const savedDocPrinter = getDocumentPrinterConfig()
+          if (savedDocPrinter) {
+            setDocumentPrinterConfig(savedDocPrinter)
+          }
+        }
+
+        // Detectar si es dispositivo iMin
+        try {
+          const iminResult = await isIminDevice()
+          setIsImin(iminResult)
+        } catch (e) {
+          console.warn('Error detecting iMin device:', e)
+        }
+      }
+    } catch (error) {
+      console.error('Error al cargar configuración:', error)
+      toast.error('Error al cargar la configuración. Por favor, recarga la página.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Cargar almacenes y sus series
+  const loadWarehousesAndSeries = async () => {
+    if (!user?.uid || isDemoMode) return
+
+    setLoadingWarehouses(true)
+    try {
+      // Cargar almacenes
+      const warehousesResult = await getWarehouses(getBusinessId())
+      if (warehousesResult.success) {
+        setWarehouses(warehousesResult.data || [])
+      }
+
+      // Cargar series por almacén
+      const seriesResult = await getAllWarehouseSeries(getBusinessId())
+      if (seriesResult.success) {
+        setWarehouseSeries(seriesResult.data || {})
+      }
+    } catch (error) {
+      console.error('Error al cargar almacenes y series:', error)
+    } finally {
+      setLoadingWarehouses(false)
+    }
+  }
+
+  // Cargar almacenes cuando se abre el tab de series
+  useEffect(() => {
+    if (activeTab === 'series' && user?.uid && !isDemoMode) {
+      loadWarehousesAndSeries()
+    }
+  }, [activeTab, user?.uid])
+
+  // Manejar cambio de serie de almacén
+  const handleWarehouseSeriesChange = (warehouseId, docType, field, value) => {
+    setWarehouseSeries(prev => ({
+      ...prev,
+      [warehouseId]: {
+        ...defaultSeries,
+        ...(prev[warehouseId] || {}),
+        [docType]: {
+          ...(prev[warehouseId]?.[docType] || defaultSeries[docType]),
+          [field]: field === 'lastNumber' ? parseInt(value) || 0 : value.toUpperCase()
+        }
+      }
+    }))
+  }
+
+  // Guardar series de un almacén
+  const handleSaveWarehouseSeries = async (warehouseId) => {
+    if (!user?.uid) return
+
+    setIsSaving(true)
+    try {
+      const seriesToSave = warehouseSeries[warehouseId] || defaultSeries
+      const result = await updateWarehouseSeries(getBusinessId(), warehouseId, seriesToSave)
+
+      if (result.success) {
+        toast.success('Series del almacén actualizadas')
+        setEditingWarehouseId(null)
+      } else {
+        toast.error(result.error || 'Error al guardar series')
+      }
+    } catch (error) {
+      console.error('Error al guardar series:', error)
+      toast.error('Error al guardar series')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Inicializar series de un almacén si no existen
+  const initializeWarehouseSeries = (warehouseId, warehouseIndex) => {
+    if (!warehouseSeries[warehouseId]) {
+      // Generar series únicas basadas en el índice del almacén
+      const suffix = String(warehouseIndex + 1).padStart(2, '0')
+      const newSeries = {
+        factura: { serie: `F0${suffix}`, lastNumber: 0 },
+        boleta: { serie: `B0${suffix}`, lastNumber: 0 },
+        nota_venta: { serie: `N0${suffix}`, lastNumber: 0 },
+        cotizacion: { serie: `C0${suffix}`, lastNumber: 0 },
+        nota_credito_factura: { serie: `FN${suffix}`, lastNumber: 0 },
+        nota_credito_boleta: { serie: `BN${suffix}`, lastNumber: 0 },
+        nota_debito_factura: { serie: `FD${suffix}`, lastNumber: 0 },
+        nota_debito_boleta: { serie: `BD${suffix}`, lastNumber: 0 },
+        guia_remision: { serie: `T0${suffix}`, lastNumber: 0 },
+        guia_transportista: { serie: `V0${suffix}`, lastNumber: 0 },
+      }
+      setWarehouseSeries(prev => ({
+        ...prev,
+        [warehouseId]: newSeries
+      }))
+    }
+    setEditingWarehouseId(warehouseId)
+  }
+
+  // ====== FUNCIONES PARA SUCURSALES ======
+
+  // Cargar sucursales y sus series
+  const loadBranchesAndSeries = async () => {
+    if (!user?.uid || isDemoMode) return
+
+    setLoadingBranches(true)
+    try {
+      // Cargar sucursales activas
+      const branchesResult = await getActiveBranches(getBusinessId())
+      if (branchesResult.success) {
+        setBranches(branchesResult.data || [])
+      }
+
+      // Cargar series por sucursal
+      const seriesResult = await getAllBranchSeriesFS(getBusinessId())
+      if (seriesResult.success) {
+        setBranchSeries(seriesResult.data || {})
+      }
+    } catch (error) {
+      console.error('Error al cargar sucursales y series:', error)
+    } finally {
+      setLoadingBranches(false)
+    }
+  }
+
+  // Cargar sucursales cuando se abre el tab de series
+  useEffect(() => {
+    if (activeTab === 'series' && user?.uid && !isDemoMode) {
+      loadBranchesAndSeries()
+    }
+  }, [activeTab, user?.uid])
+
+  // Manejar cambio de serie de sucursal
+  const handleBranchSeriesChange = (branchId, docType, field, value) => {
+    setBranchSeries(prev => ({
+      ...prev,
+      [branchId]: {
+        ...defaultSeries,
+        ...(prev[branchId] || {}),
+        [docType]: {
+          ...(prev[branchId]?.[docType] || defaultSeries[docType]),
+          [field]: field === 'lastNumber' ? parseInt(value) || 0 : value.toUpperCase()
+        }
+      }
+    }))
+  }
+
+  // Guardar series de una sucursal
+  const handleSaveBranchSeries = async (branchId) => {
+    if (!user?.uid) return
+
+    setIsSaving(true)
+    try {
+      const seriesToSave = branchSeries[branchId] || defaultSeries
+      const result = await updateBranchSeriesFS(getBusinessId(), branchId, seriesToSave)
+
+      if (result.success) {
+        toast.success('Series de la sucursal actualizadas')
+        setEditingBranchId(null)
+      } else {
+        toast.error(result.error || 'Error al guardar series')
+      }
+    } catch (error) {
+      console.error('Error al guardar series:', error)
+      toast.error('Error al guardar series')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Inicializar series de una sucursal si no existen
+  const initializeBranchSeries = (branchId, branchIndex) => {
+    if (!branchSeries[branchId]) {
+      // Generar series únicas basadas en el índice de la sucursal
+      const suffix = String(branchIndex + 1).padStart(3, '0')
+      const newSeries = {
+        factura: { serie: `F${suffix}`, lastNumber: 0 },
+        boleta: { serie: `B${suffix}`, lastNumber: 0 },
+        nota_venta: { serie: `N${suffix}`, lastNumber: 0 },
+        cotizacion: { serie: `C${suffix}`, lastNumber: 0 },
+        nota_credito_factura: { serie: `FC${suffix}`, lastNumber: 0 },
+        nota_credito_boleta: { serie: `BC${suffix}`, lastNumber: 0 },
+        nota_debito_factura: { serie: `FD${suffix}`, lastNumber: 0 },
+        nota_debito_boleta: { serie: `BD${suffix}`, lastNumber: 0 },
+        guia_remision: { serie: `T${suffix}`, lastNumber: 0 },
+        guia_transportista: { serie: `V${suffix}`, lastNumber: 0 },
+      }
+      setBranchSeries(prev => ({
+        ...prev,
+        [branchId]: newSeries
+      }))
+    }
+    setEditingBranchId(branchId)
+  }
+
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    // Validar tipo de archivo
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      toast.error('El archivo debe ser una imagen (JPG, PNG o WEBP)')
+      return
+    }
+
+    // Validar tamaño (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('La imagen no debe superar los 2MB')
+      return
+    }
+
+    setLogoFile(file)
+
+    // Mostrar preview
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setLogoUrl(e.target.result)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleRemoveLogo = async () => {
+    if (!user?.uid) return
+
+    try {
+      // Si hay un logo en storage, eliminarlo
+      if (logoUrl && logoUrl.includes('firebase')) {
+        try {
+          const logoRef = ref(storage, `businesses/${getBusinessId()}/logo`)
+          await deleteObject(logoRef)
+        } catch (error) {
+          console.log('No se pudo eliminar el logo anterior:', error)
+        }
+      }
+
+      // Actualizar Firestore
+      const businessRef = doc(db, 'businesses', getBusinessId())
+      await setDoc(businessRef, {
+        logoUrl: null,
+        updatedAt: serverTimestamp(),
+      }, { merge: true })
+
+      setLogoUrl('')
+      setLogoFile(null)
+      // Invalidar caché del logo
+      invalidateLogoCache()
+      toast.success('Logo eliminado exitosamente')
+    } catch (error) {
+      console.error('Error al eliminar logo:', error)
+      toast.error('Error al eliminar el logo')
+    }
+  }
+
+  // Subir imagen del QR para el ticket. Mismo flujo que el logo: valida
+  // tipo/tamaño, muestra preview con FileReader, y deja el File en
+  // ticketQrImageFile para subirlo a Storage al hacer "Guardar".
+  const handleQrImageUpload = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      toast.error('El archivo debe ser una imagen (JPG, PNG o WEBP)')
+      return
+    }
+
+    // Max 2MB (mismo límite que el logo). QR es una imagen simple, no
+    // necesita más.
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('La imagen no debe superar los 2MB')
+      return
+    }
+
+    setTicketQrImageFile(file)
+
+    // Preview con data URL (no se sube hasta Guardar).
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      setTicketQrImageUrl(ev.target.result)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // Quita la imagen del QR (storage + Firestore) y limpia el preview.
+  const handleRemoveQrImage = async () => {
+    if (!user?.uid) return
+
+    try {
+      // Si la URL apunta a Firebase Storage, intentar eliminar el blob.
+      if (ticketQrImageUrl && ticketQrImageUrl.includes('firebase')) {
+        try {
+          const qrRef = ref(storage, `businesses/${getBusinessId()}/ticket-qr`)
+          await deleteObject(qrRef)
+        } catch (error) {
+          console.log('No se pudo eliminar la imagen del QR anterior:', error)
+        }
+      }
+
+      // Limpiar campos en Firestore (no toca el resto de la config).
+      const businessRef = doc(db, 'businesses', getBusinessId())
+      await setDoc(businessRef, {
+        ticketQrImageUrl: null,
+        updatedAt: serverTimestamp(),
+      }, { merge: true })
+
+      setTicketQrImageUrl('')
+      setTicketQrImageFile(null)
+      toast.success('Imagen del QR eliminada')
+    } catch (error) {
+      console.error('Error al eliminar imagen del QR:', error)
+      toast.error('Error al eliminar la imagen del QR')
+    }
+  }
+
+  // Buscar datos de RUC automáticamente
+  const handleLookupRuc = async () => {
+    const rucNumber = (watch('ruc') || '').replace(/\D/g, '')
+
+    if (!rucNumber) {
+      toast.error('Ingrese un número de RUC para buscar')
+      return
+    }
+
+    if (rucNumber.length !== 11) {
+      toast.error('El RUC debe tener 11 dígitos')
+      return
+    }
+
+    setIsLookingUpRuc(true)
+
+    try {
+      const result = await consultarRUC(rucNumber)
+
+      if (result.success) {
+        // Autocompletar datos
+        setValue('businessName', result.data.razonSocial || '')
+        setValue('tradeName', result.data.nombreComercial || '')
+        setValue('address', result.data.direccion || '')
+
+        // La UBICACIÓN también. Antes había que ponerla a mano SIEMPRE, y es el
+        // dato que SUNAT lee en el comprobante y en la guía de remisión.
+        // Solo se pisa lo que la consulta pudo resolver: si trae el departamento
+        // pero no el distrito, no se inventa uno.
+        const ubi = codigosDeUbigeo(result.data)
+        if (ubi.departamento) {
+          setLocationDeptCode(ubi.departamento)
+          setValue('department', DEPARTAMENTOS.find(d => d.code === ubi.departamento)?.name || '')
+          setLocationProvCode(ubi.provincia)
+          setValue('province', ubi.provincia
+            ? (getProvincias(ubi.departamento).find(p => p.code === ubi.provincia)?.name || '')
+            : '')
+          setLocationDistCode(ubi.distrito)
+          setValue('district', ubi.distrito
+            ? (getDistritos(ubi.departamento, ubi.provincia).find(d => d.code === ubi.distrito)?.name || '')
+            : '')
+          setValue('ubigeo', ubigeoDeCodigos(ubi))
+        }
+
+        toast.success(`Datos encontrados: ${result.data.razonSocial}`)
+
+        // Además, traer los locales/establecimientos del RUC (si tiene más de uno)
+        // para poder elegirlos como punto de partida en las guías de remisión.
+        // Es complementario al domicilio fiscal; no bloquea ni avisa si falla.
+        try {
+          const estResult = await consultarEstablecimientos(rucNumber)
+          if (estResult.success) {
+            setEstablishments(estResult.data || [])
+          }
+        } catch (estError) {
+          console.error('Error al traer establecimientos:', estError)
+        }
+      } else {
+        toast.error(result.error || 'No se encontraron datos para este RUC', 5000)
+      }
+    } catch (error) {
+      console.error('Error al buscar RUC:', error)
+      toast.error('Error al consultar el RUC. Verifique su conexión.', 5000)
+    } finally {
+      setIsLookingUpRuc(false)
+    }
+  }
+
+  const onSubmit = async data => {
+    if (!user?.uid) return
+
+    // MODO DEMO: No permitir cambios
+    if (isDemoMode) {
+      toast.error('No se pueden guardar cambios en modo demo. Crea una cuenta para configurar tu empresa.')
+      return
+    }
+
+    setIsSaving(true)
+
+    try {
+      let uploadedLogoUrl = logoUrl
+
+      // Si hay un nuevo archivo de logo, subirlo a Storage
+      if (logoFile) {
+        setUploadingLogo(true)
+        try {
+          const logoRef = ref(storage, `businesses/${getBusinessId()}/logo`)
+          await uploadBytes(logoRef, logoFile)
+          uploadedLogoUrl = await getDownloadURL(logoRef)
+          // Invalidar caché del logo para que se descargue el nuevo
+          invalidateLogoCache()
+          console.log('✅ Logo subido exitosamente')
+        } catch (logoError) {
+          console.error('Error al subir logo:', logoError)
+          toast.error('Error al subir el logo. Se guardará el resto de la configuración.')
+        } finally {
+          setUploadingLogo(false)
+        }
+      }
+
+      // Si hay una imagen del QR pendiente y el modo es 'image', subirla.
+      // (Mismo patrón que el logo. Se invalida la caché de imágenes para
+      // que la próxima impresión la re-descargue con el dithering nuevo.)
+      let uploadedQrImageUrl = ticketQrImageUrl
+      if (ticketQrImageFile && ticketQrMode === 'image') {
+        setUploadingQrImage(true)
+        try {
+          const qrRef = ref(storage, `businesses/${getBusinessId()}/ticket-qr`)
+          await uploadBytes(qrRef, ticketQrImageFile)
+          uploadedQrImageUrl = await getDownloadURL(qrRef)
+          // Invalida caché de imágenes (logo + QR comparten la misma).
+          invalidateLogoCache()
+          console.log('✅ Imagen del QR subida exitosamente')
+        } catch (qrError) {
+          console.error('Error al subir imagen del QR:', qrError)
+          toast.error('Error al subir la imagen del QR. Se guardará el resto de la configuración.')
+        } finally {
+          setUploadingQrImage(false)
+        }
+      }
+
+      // Subir los QR pendientes de las billeteras digitales (Yape/Plin). Mismo patrón que
+      // el logo/QR del ticket: el archivo se sube a Storage al guardar y se reemplaza por su URL.
+      let walletsToSave = digitalWallets.map(w => ({
+        provider: w.provider,
+        holderName: w.holderName || '',
+        phoneNumber: w.phoneNumber || '',
+        qrImageUrl: w.qrImageUrl || null,
+      }))
+      if (digitalWallets.some(w => w._qrFile)) {
+        try {
+          walletsToSave = await Promise.all(digitalWallets.map(async (w, i) => {
+            let qrUrl = w.qrImageUrl || null
+            if (w._qrFile) {
+              const wRef = ref(storage, `businesses/${getBusinessId()}/wallet-qr/${w.provider}_${Date.now()}_${i}`)
+              await uploadBytes(wRef, w._qrFile)
+              qrUrl = await getDownloadURL(wRef)
+            }
+            return { provider: w.provider, holderName: w.holderName || '', phoneNumber: w.phoneNumber || '', qrImageUrl: qrUrl }
+          }))
+          invalidateLogoCache()
+        } catch (e) {
+          console.error('Error al subir QR de billetera:', e)
+          toast.error('Error al subir el QR de Yape/Plin. Se guardará el resto de la configuración.')
+        }
+      }
+
+      // Crear o actualizar datos de la empresa usando userId como businessId
+      const businessRef = doc(db, 'businesses', getBusinessId())
+
+      await setDoc(businessRef, {
+        ruc: data.ruc,
+        businessName: data.businessName,
+        name: data.tradeName || data.businessName,
+        phone: data.phone,
+        email: data.email,
+        website: data.website,
+        socialMedia: data.socialMedia || '',
+        bankAccounts: data.bankAccounts || '', // Campo legacy (texto libre)
+        bankAccountsList: bankAccounts, // Cuentas estructuradas
+        digitalWalletsList: walletsToSave, // Billeteras digitales (Yape/Plin) con QR
+        address: data.address,
+        urbanization: data.urbanization,
+        district: data.district,
+        province: data.province,
+        department: data.department,
+        ubigeo: data.ubigeo,
+        logoUrl: uploadedLogoUrl || null,
+        logoPrintScale: Number(logoPrintScale) || 100,
+        pdfAccentColor: pdfAccentColor,
+        ticketFooterMessage: ticketFooterMessage || '',
+        notaVentaLegend: notaVentaLegend.trim() || '',
+        invoiceFooterTerms: invoiceFooterTerms || '',
+        showTermsOnTicket: showTermsOnTicket === true,
+        purchaseOrderDefaultNotes: purchaseOrderDefaultNotes || "",
+        ticketQrEnabled: ticketQrEnabled === true,
+        ticketQrContent: ticketQrContent || '',
+        ticketQrCaption: ticketQrCaption || '',
+        companySlogan: companySlogan || '',
+        showProductCodeInQuotation: showProductCodeInQuotation,
+        showProductCodeInInvoices: showProductCodeInInvoices,
+        showProductDescriptionInQuotation: showProductDescriptionInQuotation,
+        showProductDescriptionInInvoice: showProductDescriptionInInvoice,
+        showImagesInQuotations: showImagesInQuotations,
+        showImagesInInvoices: showImagesInInvoices,
+        quotationImageScale: Number(quotationImageScale) || 100,
+        invoiceImageScale: Number(invoiceImageScale) || 100,
+        pdfSpacious: pdfSpacious,
+        pdfA5: pdfA5,
+        hideBatchAndExpiryInDocuments: hideBatchAndExpiryInDocuments,
+        hideCashExpectedFromCashier: hideCashExpectedFromCashier,
+        showProductsInCashClosure: showProductsInCashClosure,
+        businessMode: businessMode,
+        restaurantConfig: restaurantConfig,
+        posCustomFields: posCustomFields,
+        serviceStationConfig: serviceStationConfig,
+        mtcRegistration: data.mtcRegistration || '',
+        establishments: establishments,
+        updatedAt: serverTimestamp(),
+      }, { merge: true })
+
+      setLogoFile(null) // Limpiar archivo temporal
+      setTicketQrImageFile(null) // Limpiar archivo temporal del QR
+      setDigitalWallets(walletsToSave) // Reflejar las URLs subidas (quita los archivos/preview temporales)
+      setNewWalletQrFile(null)
+      setNewWalletQrPreview('')
+      if (refreshBusinessSettings) await refreshBusinessSettings()
+      toast.success('Configuración guardada exitosamente')
+    } catch (error) {
+      console.error('Error al guardar:', error)
+      toast.error('Error al guardar la configuración. Inténtalo nuevamente.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleSaveSeries = async () => {
+    if (!user?.uid) return
+
+    // MODO DEMO: No permitir cambios
+    if (isDemoMode) {
+      toast.error('No se pueden guardar cambios en modo demo. Crea una cuenta para configurar tu empresa.')
+      return
+    }
+
+    setIsSaving(true)
+
+    try {
+      // Crear o actualizar series usando userId como businessId
+      const businessRef = doc(db, 'businesses', getBusinessId())
+
+      await setDoc(businessRef, {
+        series: series,
+        updatedAt: serverTimestamp(),
+      }, { merge: true })
+
+      toast.success('Series actualizadas exitosamente')
+      setEditingSeries(false)
+    } catch (error) {
+      console.error('Error al guardar series:', error)
+      toast.error('Error al actualizar las series. Inténtalo nuevamente.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleSeriesChange = (type, field, value) => {
+    setSeries(prev => ({
+      ...prev,
+      [type]: {
+        ...prev[type],
+        [field]: field === 'lastNumber' ? parseInt(value) || 0 : value,
+      },
+    }))
+  }
+
+  const getNextNumber = (serie, lastNumber) => {
+    return `${serie}-${String(lastNumber + 1).padStart(8, '0')}`
+  }
+
+  // Funciones para SUNAT
+  const handleSunatConfigChange = (field, value) => {
+    setSunatConfig(prev => ({
+      ...prev,
+      [field]: value,
+    }))
+  }
+
+  const handleCertificateUpload = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      if (file.name.endsWith('.pfx') || file.name.endsWith('.p12')) {
+        setCertificateFile(file)
+        setSunatConfig(prev => ({
+          ...prev,
+          certificateName: file.name,
+        }))
+      } else {
+        toast.error('El archivo debe ser un certificado .pfx o .p12')
+      }
+    }
+  }
+
+  const handleRemoveCertificate = () => {
+    setCertificateFile(null)
+    setSunatConfig(prev => ({
+      ...prev,
+      certificateName: '',
+      certificatePassword: '',
+    }))
+  }
+
+  const handleSaveSunat = async () => {
+    if (!user?.uid) return
+
+    // MODO DEMO: No permitir cambios
+    if (isDemoMode) {
+      toast.error('No se pueden guardar cambios en modo demo. Crea una cuenta para configurar tu empresa.')
+      return
+    }
+
+    setIsSaving(true)
+
+    try {
+      const businessRef = doc(db, 'businesses', getBusinessId())
+
+      // Preparar datos de SUNAT
+      const sunatData = {
+        enabled: sunatConfig.enabled,
+        environment: sunatConfig.environment,
+        solUser: sunatConfig.solUser,
+        solPassword: sunatConfig.solPassword, // TODO: Encriptar
+        clientId: sunatConfig.clientId,
+        clientSecret: sunatConfig.clientSecret, // TODO: Encriptar
+        certificateName: sunatConfig.certificateName,
+        certificatePassword: sunatConfig.certificatePassword, // TODO: Encriptar
+        homologated: sunatConfig.homologated,
+      }
+
+      // Si hay un nuevo archivo de certificado, convertirlo a base64
+      if (certificateFile) {
+        try {
+          const certificateBase64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => {
+              // Extraer solo la parte base64 (sin el prefijo data:...)
+              const base64 = reader.result.split(',')[1]
+              resolve(base64)
+            }
+            reader.onerror = reject
+            reader.readAsDataURL(certificateFile)
+          })
+
+          sunatData.certificateData = certificateBase64
+          console.log('✅ Certificado convertido a base64 (' + certificateBase64.length + ' caracteres)')
+        } catch (certError) {
+          console.error('Error al leer certificado:', certError)
+          throw new Error('Error al procesar el certificado digital')
+        }
+      } else if (!sunatConfig.certificateName) {
+        // Si no hay nombre de certificado, eliminar el certificateData
+        sunatData.certificateData = null
+      }
+
+      // Guardar el certificado/credenciales SUNAT en la subcolección PROTEGIDA
+      // (ya NO en el doc top-level, que es de lectura pública cuando el catálogo/libro
+      // está activo). El servidor las lee con Admin SDK.
+      await saveEmissionSecrets(getBusinessId(), { sunat: sunatData })
+      await setDoc(businessRef, {
+        updatedAt: serverTimestamp(),
+        ...(sunatConfig.enabled ? { emissionMethod: 'sunat_direct' } : {}),
+      }, { merge: true })
+
+      toast.success('Configuración SUNAT guardada exitosamente')
+      setEditingSunat(false)
+      setCertificateFile(null) // Limpiar archivo temporal
+    } catch (error) {
+      console.error('Error al guardar configuración SUNAT:', error)
+      toast.error(error.message || 'Error al guardar la configuración SUNAT. Inténtalo nuevamente.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Funciones para QPse
+  const handleQpseConfigChange = (field, value) => {
+    setQpseConfig(prev => ({
+      ...prev,
+      [field]: value,
+    }))
+  }
+
+  const handleSaveQpse = async () => {
+    if (!user?.uid) return
+
+    // MODO DEMO: No permitir cambios
+    if (isDemoMode) {
+      toast.error('No se pueden guardar cambios en modo demo. Crea una cuenta para configurar tu empresa.')
+      return
+    }
+
+    // Validar campos requeridos si está habilitado
+    if (qpseConfig.enabled) {
+      if (!qpseConfig.usuario || !qpseConfig.password) {
+        toast.error('Debes completar el Usuario y Password de QPse')
+        return
+      }
+    }
+
+    setIsSaving(true)
+
+    try {
+      const businessRef = doc(db, 'businesses', getBusinessId())
+
+      // Preparar datos de QPse (credenciales globales)
+      const qpseData = {
+        enabled: qpseConfig.enabled,
+        environment: qpseConfig.environment,
+        usuario: qpseConfig.usuario,
+        password: qpseConfig.password, // TODO: Encriptar en producción
+        firmasDisponibles: qpseConfig.firmasDisponibles || 0,
+        firmasUsadas: qpseConfig.firmasUsadas || 0,
+        updatedAt: new Date().toISOString(),
+      }
+
+      // Guardar QPse en la subcolección PROTEGIDA (ya no en el doc top-level público).
+      await saveEmissionSecrets(getBusinessId(), { qpse: qpseData })
+      await setDoc(businessRef, {
+        updatedAt: serverTimestamp(),
+        ...(qpseConfig.enabled ? { emissionMethod: 'qpse' } : {}),
+      }, { merge: true })
+
+      toast.success('Configuración de QPse guardada exitosamente')
+      setEditingQpse(false)
+    } catch (error) {
+      console.error('Error al guardar configuración QPse:', error)
+      toast.error(error.message || 'Error al guardar la configuración de QPse. Inténtalo nuevamente.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Función para guardar configuración de Yape
+  const handleSaveYapeConfig = async () => {
+    if (isDemoMode) {
+      toast.error('No se puede modificar en modo demo')
+      return
+    }
+
+    const businessId = getBusinessId()
+    if (!businessId) {
+      toast.error('No se encontró el ID del negocio')
+      return
+    }
+
+    setIsSavingYape(true)
+    try {
+      // Guardar directamente en Firestore
+      const configRef = doc(db, 'businesses', businessId, 'settings', 'yapeNotifications')
+
+      await setDoc(configRef, {
+        enabled: yapeConfig.enabled ?? false,
+        notifyUsers: yapeConfig.notifyUsers || [],
+        notifyAllUsers: yapeConfig.notifyAllUsers ?? true,
+        autoStartListening: yapeConfig.autoStartListening ?? true,
+        updatedAt: serverTimestamp()
+      }, { merge: true })
+
+      toast.success('Configuración de Yape guardada')
+    } catch (error) {
+      console.error('Error al guardar config Yape:', error)
+      toast.error(`Error: ${error.message}`)
+    } finally {
+      setIsSavingYape(false)
+    }
+  }
+
+  // Función para cambiar contraseña
+  const handleChangePassword = async (e) => {
+    e.preventDefault()
+
+    // MODO DEMO: No permitir cambios
+    if (isDemoMode) {
+      toast.error('No se pueden cambiar contraseñas en modo demo. Crea una cuenta para gestionar tu seguridad.')
+      return
+    }
+
+    if (!user) return
+
+    // Validaciones
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast.error('Todos los campos son requeridos')
+      return
+    }
+
+    if (newPassword.length < 6) {
+      toast.error('La nueva contraseña debe tener al menos 6 caracteres')
+      return
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast.error('Las contraseñas no coinciden')
+      return
+    }
+
+    if (currentPassword === newPassword) {
+      toast.error('La nueva contraseña debe ser diferente a la actual')
+      return
+    }
+
+    setIsChangingPassword(true)
+
+    try {
+      // Reautenticar al usuario con su contraseña actual
+      const credential = EmailAuthProvider.credential(user.email, currentPassword)
+      await reauthenticateWithCredential(auth.currentUser, credential)
+
+      // Actualizar la contraseña
+      await updatePassword(auth.currentUser, newPassword)
+
+      // Limpiar campos
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+
+      toast.success('Contraseña actualizada exitosamente')
+    } catch (error) {
+      console.error('Error al cambiar contraseña:', error)
+
+      // Mensajes de error específicos
+      if (error.code === 'auth/wrong-password') {
+        toast.error('La contraseña actual es incorrecta')
+      } else if (error.code === 'auth/weak-password') {
+        toast.error('La nueva contraseña es muy débil')
+      } else if (error.code === 'auth/requires-recent-login') {
+        toast.error('Por seguridad, debes cerrar sesión y volver a iniciar para cambiar tu contraseña')
+      } else {
+        toast.error('Error al cambiar la contraseña. Inténtalo nuevamente.')
+      }
+    } finally {
+      setIsChangingPassword(false)
+    }
+  }
+
+  // Funciones para impresora térmica
+  const handleScanPrinters = async () => {
+    setIsScanning(true)
+    try {
+      const result = await scanPrinters()
+      if (result.success) {
+        setAvailablePrinters(result.devices)
+        toast.success(`${result.devices.length} impresoras encontradas`)
+      } else {
+        toast.error(result.error || 'Error al escanear impresoras')
+      }
+    } catch (error) {
+      console.error('Error scanning printers:', error)
+      toast.error('Error al escanear impresoras')
+    } finally {
+      setIsScanning(false)
+    }
+  }
+
+  const handleConnectPrinter = async (printerAddress, printerName) => {
+    setIsConnecting(true)
+    try {
+      const result = await connectPrinter(printerAddress)
+      if (result.success) {
+        const newConfig = {
+          enabled: true,
+          address: printerAddress,
+          name: printerName,
+          type: 'bluetooth',
+          // El ancho SOLO se manda si se sabe. Con `|| 58` acá, conectar la
+          // impresora con el estado todavía sin cargar forzaba 58mm y lo dejaba
+          // guardado — el ancho "se cambiaba solo" (reporte de JC&AN,
+          // 02-sep-2026). Sin el campo, savePrinterConfig conserva el guardado.
+          ...(printerConfig.paperWidth ? { paperWidth: printerConfig.paperWidth } : {}),
+        }
+        setPrinterConfig(newConfig)
+
+        // Guardar en Firestore
+        await savePrinterConfig(getBusinessId(), newConfig)
+
+        toast.success('Impresora conectada exitosamente')
+      } else {
+        toast.error(result.error || 'Error al conectar impresora')
+      }
+    } catch (error) {
+      console.error('Error connecting printer:', error)
+      toast.error('Error al conectar impresora')
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+
+  const handleChangePaperWidth = async (newWidth) => {
+    try {
+      const newConfig = { ...printerConfig, paperWidth: parseInt(newWidth) }
+      setPrinterConfig(newConfig)
+      await savePrinterConfig(getBusinessId(), newConfig)
+      toast.success(`Ancho de papel actualizado a ${newWidth}mm`)
+    } catch (error) {
+      console.error('Error updating paper width:', error)
+      toast.error('Error al actualizar ancho de papel')
+    }
+  }
+
+  const handleTestPrinter = async () => {
+    setIsTesting(true)
+    try {
+      // Primero reconectar a la impresora guardada
+      console.log('🔄 Reconectando a impresora:', printerConfig.address)
+      if (printerConfig.address) {
+        const connectResult = await connectPrinter(printerConfig.address)
+        console.log('Resultado de conexión:', connectResult)
+
+        if (!connectResult.success) {
+          toast.error('No se pudo conectar a la impresora: ' + (connectResult.error || 'Error desconocido'))
+          setIsTesting(false)
+          return
+        }
+      }
+
+      // El ancho de la PRUEBA tiene que ser el mismo con el que va a salir un
+      // ticket de verdad, o la prueba no prueba nada. El POS lo lee FRESCO de la
+      // configuración guardada y cae a 80 (POS.jsx ~8974); acá se usaba el
+      // estado de React con `|| 58`, así que con el estado sin cargar la prueba
+      // salía a 58 mientras las ventas salían a 80 — y el usuario diagnosticaba
+      // un problema de impresora que no existía.
+      const guardada = await getPrinterConfig(getBusinessId())
+      const anchoDePrueba = guardada?.config?.paperWidth || printerConfig.paperWidth || 80
+      console.log('🖨️ Llamando a testPrinter con ancho:', anchoDePrueba)
+
+      // Agregar timeout de 30 segundos
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout: La impresión tardó demasiado')), 30000)
+      )
+
+      const result = await Promise.race([
+        testPrinter(anchoDePrueba),
+        timeoutPromise
+      ])
+
+      console.log('Resultado de testPrinter:', result)
+
+      if (result.success) {
+        toast.success('Impresión de prueba enviada')
+      } else {
+        toast.error(result.error || 'Error al imprimir prueba')
+      }
+    } catch (error) {
+      console.error('❌ Error en handleTestPrinter:', error)
+      toast.error(error.message || 'Error al imprimir prueba')
+    } finally {
+      setIsTesting(false)
+    }
+  }
+
+  const handleDisablePrinter = async () => {
+    try {
+      const newConfig = { ...printerConfig, enabled: false }
+      setPrinterConfig(newConfig)
+      await savePrinterConfig(getBusinessId(), newConfig)
+      toast.success('Impresora deshabilitada')
+    } catch (error) {
+      console.error('Error disabling printer:', error)
+      toast.error('Error al deshabilitar impresora')
+    }
+  }
+
+  const handleManualConnect = async () => {
+    if (!manualAddress.trim()) {
+      toast.error('Ingresa la dirección MAC de la impresora')
+      return
+    }
+
+    // Validar formato de dirección MAC (XX:XX:XX:XX:XX:XX)
+    const macRegex = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/
+    if (!macRegex.test(manualAddress.trim())) {
+      toast.error('Formato de dirección MAC inválido. Usa el formato XX:XX:XX:XX:XX:XX')
+      return
+    }
+
+    await handleConnectPrinter(manualAddress.trim(), manualName.trim() || 'Impresora Manual')
+    setShowManualConnect(false)
+    setManualAddress('')
+    setManualName('')
+  }
+
+  // Conectar impresora WiFi/LAN
+  const handleWifiConnect = async () => {
+    if (!wifiIp.trim()) {
+      toast.error('Ingresa la dirección IP de la impresora')
+      return
+    }
+
+    // Validar formato de IP
+    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/
+    if (!ipRegex.test(wifiIp.trim())) {
+      toast.error('Formato de IP inválido. Usa el formato XXX.XXX.XXX.XXX')
+      return
+    }
+
+    // Validar puerto
+    const port = parseInt(wifiPort, 10)
+    if (isNaN(port) || port < 1 || port > 65535) {
+      toast.error('Puerto inválido. Debe ser un número entre 1 y 65535')
+      return
+    }
+
+    setIsConnecting(true)
+    try {
+      // Construir dirección con puerto
+      const address = `${wifiIp.trim()}:${port}`
+      const result = await connectPrinter(address)
+
+      if (result.success) {
+        // Guardar configuración
+        const newConfig = {
+          enabled: true,
+          address: address,
+          name: wifiName.trim() || 'Impresora WiFi',
+          type: 'wifi',
+          // El ancho SOLO se manda si se sabe. Con `|| 58` acá, conectar la
+          // impresora con el estado todavía sin cargar forzaba 58mm y lo dejaba
+          // guardado — el ancho "se cambiaba solo" (reporte de JC&AN,
+          // 02-sep-2026). Sin el campo, savePrinterConfig conserva el guardado.
+          ...(printerConfig.paperWidth ? { paperWidth: printerConfig.paperWidth } : {}),
+        }
+        setPrinterConfig(newConfig)
+
+        // Guardar en Firestore
+        await savePrinterConfig(getBusinessId(), newConfig)
+
+        toast.success('Impresora WiFi conectada exitosamente')
+        setShowWifiConnect(false)
+        setWifiIp('')
+        setWifiPort('9100')
+        setWifiName('')
+      } else {
+        toast.error(result.error || 'Error al conectar impresora WiFi')
+      }
+    } catch (error) {
+      console.error('Error connecting WiFi printer:', error)
+      toast.error('Error al conectar impresora WiFi')
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+
+  // Persiste la Impresora de Caja COMPARTIDA por negocio (Firestore) + cache del servicio,
+  // para que TODOS los dispositivos impriman los comprobantes en la misma caja.
+  const persistSharedCajaPrinter = async (config) => {
+    try {
+      await setDoc(doc(db, 'businesses', getBusinessId()), { cajaPrinter: config }, { merge: true })
+    } catch (e) {
+      console.warn('No se pudo guardar la impresora de caja compartida:', e)
+    }
+    try { setBusinessCajaPrinter(config?.enabled ? config : null) } catch (e) { void e }
+  }
+
+  // Conectar impresora de documentos (precuentas y boletas)
+  const handleDocPrinterConnect = async () => {
+    if (!docPrinterIp.trim()) {
+      toast.error('Ingresa la dirección IP de la impresora de documentos')
+      return
+    }
+
+    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/
+    if (!ipRegex.test(docPrinterIp.trim())) {
+      toast.error('Formato de IP inválido. Usa el formato XXX.XXX.XXX.XXX')
+      return
+    }
+
+    const port = parseInt(docPrinterPort, 10)
+    if (isNaN(port) || port < 1 || port > 65535) {
+      toast.error('Puerto inválido. Debe ser un número entre 1 y 65535')
+      return
+    }
+
+    setIsConnectingDocPrinter(true)
+    try {
+      // Probar conexión temporal
+      const { registerPlugin } = await import('@capacitor/core')
+      const TcpPrinter = registerPlugin('TcpPrinter')
+
+      const connectResult = await TcpPrinter.connect({ ip: docPrinterIp.trim(), port })
+      if (!connectResult?.success) {
+        toast.error('No se pudo conectar a la impresora de documentos')
+        return
+      }
+
+      // Desconectar después de probar
+      try { await TcpPrinter.disconnect() } catch (e) { /* ignore */ }
+
+      // Reconectar impresora principal si estaba conectada
+      if (printerConfig.enabled && printerConfig.address && printerConfig.type === 'wifi') {
+        try {
+          await connectPrinter(printerConfig.address)
+        } catch (e) {
+          console.warn('Error al reconectar impresora principal:', e)
+        }
+      }
+
+      // Guardar configuración
+      const newConfig = {
+        enabled: true,
+        ip: docPrinterIp.trim(),
+        port,
+        name: docPrinterName.trim() || 'Impresora de Documentos',
+        // Mismo criterio que la impresora principal: el ancho solo se manda si
+        // se sabe. Con `|| 58`, conectar con el estado sin cargar lo forzaba.
+        ...(documentPrinterConfig.paperWidth ? { paperWidth: documentPrinterConfig.paperWidth } : {}),
+      }
+      setDocumentPrinterConfig(newConfig)
+      saveDocumentPrinterConfig(newConfig)
+      await persistSharedCajaPrinter(newConfig)
+
+      toast.success('Impresora de Caja configurada (compartida con todos los dispositivos)')
+      setShowDocPrinterForm(false)
+      setDocPrinterIp('')
+      setDocPrinterPort('9100')
+      setDocPrinterName('')
+    } catch (error) {
+      console.error('Error connecting document printer:', error)
+      toast.error('Error al conectar impresora de documentos: ' + (error.message || ''))
+    } finally {
+      setIsConnectingDocPrinter(false)
+    }
+  }
+
+  // Probar impresora de documentos
+  const handleTestDocPrinter = async () => {
+    if (!documentPrinterConfig.enabled || !documentPrinterConfig.ip) {
+      toast.error('No hay impresora de documentos configurada')
+      return
+    }
+
+    setIsTestingDocPrinter(true)
+    try {
+      const { registerPlugin } = await import('@capacitor/core')
+      const TcpPrinter = registerPlugin('TcpPrinter')
+
+      const ip = documentPrinterConfig.ip
+      const port = documentPrinterConfig.port || 9100
+
+      const connectResult = await TcpPrinter.connect({ ip, port })
+      if (!connectResult?.success) {
+        toast.error('No se pudo conectar a la impresora de documentos')
+        return
+      }
+
+      // Construir ticket de prueba con ESC/POS
+      // Usar un array de bytes simple para la prueba
+      const ESC = 0x1B
+      const GS = 0x1D
+      const bytes = [
+        ESC, 0x40, // Init
+        ESC, 0x61, 0x01, // Center
+        ESC, 0x45, 0x01, // Bold ON
+      ]
+      const title = 'PRUEBA IMPRESORA DOCUMENTOS'
+      for (let i = 0; i < title.length; i++) bytes.push(title.charCodeAt(i))
+      bytes.push(0x0A) // newline
+      bytes.push(ESC, 0x45, 0x00) // Bold OFF
+      const line = '------------------------'
+      for (let i = 0; i < line.length; i++) bytes.push(line.charCodeAt(i))
+      bytes.push(0x0A)
+      const msg = 'Impresora de documentos'
+      for (let i = 0; i < msg.length; i++) bytes.push(msg.charCodeAt(i))
+      bytes.push(0x0A)
+      const msg2 = 'configurada correctamente'
+      for (let i = 0; i < msg2.length; i++) bytes.push(msg2.charCodeAt(i))
+      bytes.push(0x0A)
+      const msg3 = `IP: ${ip}:${port}`
+      for (let i = 0; i < msg3.length; i++) bytes.push(msg3.charCodeAt(i))
+      bytes.push(0x0A)
+      for (let i = 0; i < line.length; i++) bytes.push(line.charCodeAt(i))
+      bytes.push(0x0A)
+      bytes.push(ESC, 0x64, 0x03) // Feed 3
+      bytes.push(GS, 0x56, 0x00) // Cut
+
+      let binary = ''
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i])
+      }
+      const base64Data = btoa(binary)
+
+      await TcpPrinter.print({ data: base64Data })
+
+      try { await TcpPrinter.disconnect() } catch (e) { /* ignore */ }
+
+      // Reconectar impresora principal si estaba conectada
+      if (printerConfig.enabled && printerConfig.address && printerConfig.type === 'wifi') {
+        try {
+          await connectPrinter(printerConfig.address)
+        } catch (e) {
+          console.warn('Error al reconectar impresora principal:', e)
+        }
+      }
+
+      toast.success('Prueba enviada a impresora de documentos')
+    } catch (error) {
+      console.error('Error testing document printer:', error)
+      toast.error('Error al probar impresora de documentos: ' + (error.message || ''))
+    } finally {
+      setIsTestingDocPrinter(false)
+    }
+  }
+
+  // Deshabilitar impresora de caja
+  const handleDisableDocPrinter = async () => {
+    const newConfig = { enabled: false, ip: '', port: 9100, name: '', paperWidth: 58 }
+    setDocumentPrinterConfig(newConfig)
+    saveDocumentPrinterConfig(newConfig)
+    await persistSharedCajaPrinter(newConfig)
+    setShowDocPrinterForm(false)
+    toast.success('Impresora de Caja deshabilitada')
+  }
+
+  // Cambiar ancho de papel de la impresora de caja
+  const handleDocPaperWidth = async (newWidth) => {
+    const newConfig = { ...documentPrinterConfig, paperWidth: parseInt(newWidth) }
+    setDocumentPrinterConfig(newConfig)
+    saveDocumentPrinterConfig(newConfig)
+    await persistSharedCajaPrinter(newConfig)
+    toast.success(`Ancho de papel de la Impresora de Caja actualizado a ${newWidth}mm`)
+  }
+
+  // Conectar impresora interna iMin
+  const handleInternalConnect = async () => {
+    setIsConnecting(true)
+    try {
+      // Primero verificar si es dispositivo iMin y mostrar info
+      let deviceInfo = null
+      try {
+        const { IminPrinter } = await import('@capacitor/core').then(m => ({ IminPrinter: m.registerPlugin('IminPrinter') }))
+        deviceInfo = await IminPrinter.isIminDevice()
+        console.log('📱 Device info:', JSON.stringify(deviceInfo))
+      } catch (e) {
+        console.warn('Error checking device:', e)
+      }
+
+      if (deviceInfo && !deviceInfo.isImin) {
+        toast.error(
+          `No es dispositivo iMin. Marca: ${deviceInfo.manufacturer}, Modelo: ${deviceInfo.model}`,
+          { duration: 6000 }
+        )
+        // Intentar conectar igual para ver los logs
+        console.log('⚠️ No es iMin pero intentando conectar para debug...')
+      }
+
+      const result = await connectPrinter('internal')
+
+      if (result.success) {
+        const newConfig = {
+          enabled: true,
+          address: 'internal',
+          name: 'Impresora Interna iMin',
+          type: 'internal',
+          // El ancho SOLO se manda si se sabe. Con `|| 58` acá, conectar la
+          // impresora con el estado todavía sin cargar forzaba 58mm y lo dejaba
+          // guardado — el ancho "se cambiaba solo" (reporte de JC&AN,
+          // 02-sep-2026). Sin el campo, savePrinterConfig conserva el guardado.
+          ...(printerConfig.paperWidth ? { paperWidth: printerConfig.paperWidth } : {}),
+        }
+        setPrinterConfig(newConfig)
+        await savePrinterConfig(getBusinessId(), newConfig)
+        toast.success('Impresora interna conectada exitosamente')
+      } else {
+        toast.error(result.error || 'Error al conectar impresora interna')
+      }
+    } catch (error) {
+      console.error('Error connecting internal printer:', error)
+      toast.error(`Error: ${error.message || 'Error al conectar impresora interna'}`, { duration: 6000 })
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+
+  // Cargar conteos cuando se abre la pestaña de limpieza
+  useEffect(() => {
+    const loadCounts = async () => {
+      if (!((hasFeature && hasFeature('bulkDelete')) || import.meta.env.DEV)) return
+      const businessId = getBusinessId()
+      const [products, customers, suppliers, invoices, purchases, stockMovements, dispatchGuides, quotations] = await Promise.all([
+        countDocuments(businessId, 'products'),
+        countDocuments(businessId, 'customers'),
+        countDocuments(businessId, 'suppliers'),
+        countDocuments(businessId, 'invoices'),
+        countDocuments(businessId, 'purchases'),
+        countDocuments(businessId, 'stockMovements'),
+        countDocuments(businessId, 'dispatchGuides'),
+        countDocuments(businessId, 'quotations'),
+      ])
+      setBulkDeleteCounts({ products, customers, suppliers, invoices, purchases, stockMovements, dispatchGuides, quotations })
+    }
+    if (activeTab === 'limpieza') {
+      loadCounts()
+    }
+  }, [activeTab, hasFeature])
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary-600 mx-auto mb-2" />
+          <p className="text-gray-600">Cargando configuración...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Funciones para eliminación masiva
+  const bulkDeleteLabels = {
+    products: { name: 'Productos', collection: 'products' },
+    customers: { name: 'Clientes', collection: 'customers' },
+    suppliers: { name: 'Proveedores', collection: 'suppliers' },
+    invoices: { name: 'Ventas/Comprobantes', collection: 'invoices' },
+    purchases: { name: 'Compras', collection: 'purchases' },
+    stockMovements: { name: 'Movimientos de Stock', collection: 'stockMovements' },
+    dispatchGuides: { name: 'Guías de Remisión', collection: 'dispatchGuides' },
+    quotations: { name: 'Cotizaciones', collection: 'quotations' },
+    resetStock: { name: 'Stock e Inventario', collection: 'products', actionVerb: 'limpiar', successMessage: 'Stock reseteado en {count} productos y movimientos eliminados' },
+    resetIngredientStock: { name: 'Stock de Insumos', collection: 'ingredients', actionVerb: 'limpiar', successMessage: 'Stock reseteado en {count} insumos; movimientos y producciones eliminados' },
+  }
+
+  const loadBulkDeleteCounts = async () => {
+    if (!((hasFeature && hasFeature('bulkDelete')) || import.meta.env.DEV)) return
+    const businessId = getBusinessId()
+    const [products, customers, suppliers, invoices, purchases, stockMovements, dispatchGuides, quotations, ingredients, productions] = await Promise.all([
+      countDocuments(businessId, 'products'),
+      countDocuments(businessId, 'customers'),
+      countDocuments(businessId, 'suppliers'),
+      countDocuments(businessId, 'invoices'),
+      countDocuments(businessId, 'purchases'),
+      countDocuments(businessId, 'stockMovements'),
+      countDocuments(businessId, 'dispatchGuides'),
+      countDocuments(businessId, 'quotations'),
+      countDocuments(businessId, 'ingredients'),
+      countDocuments(businessId, 'productions'),
+    ])
+    setBulkDeleteCounts({ products, customers, suppliers, invoices, purchases, stockMovements, dispatchGuides, quotations, ingredients, productions })
+  }
+
+  const openBulkDeleteModal = (type) => {
+    setBulkDeleteType(type)
+    setBulkDeleteConfirmText('')
+    setBulkDeleteProgress({ deleted: 0, total: 0, percentage: 0 })
+    setShowBulkDeleteModal(true)
+  }
+
+  const executeBulkDelete = async () => {
+    if (bulkDeleteConfirmText !== 'ELIMINAR') {
+      toast.error('Debes escribir ELIMINAR para confirmar')
+      return
+    }
+
+    setIsBulkDeleting(true)
+    const businessId = getBusinessId()
+
+    try {
+      let result
+      const onProgress = (progress) => setBulkDeleteProgress(progress)
+
+      switch (bulkDeleteType) {
+        case 'products':
+          result = await deleteAllProducts(businessId, onProgress)
+          break
+        case 'customers':
+          result = await deleteAllCustomers(businessId, onProgress)
+          break
+        case 'suppliers':
+          result = await deleteAllSuppliers(businessId, onProgress)
+          break
+        case 'invoices':
+          result = await deleteAllInvoices(businessId, onProgress)
+          break
+        case 'purchases':
+          result = await deleteAllPurchases(businessId, onProgress)
+          break
+        case 'stockMovements':
+          result = await deleteAllStockMovements(businessId, onProgress)
+          break
+        case 'dispatchGuides':
+          result = await deleteAllDispatchGuides(businessId, onProgress)
+          break
+        case 'quotations':
+          result = await deleteAllQuotations(businessId, onProgress)
+          break
+        case 'resetStock': {
+          // Paso 1: Resetear stock, lotes y vencimientos en todos los productos
+          const resetResult = await resetAllStock(businessId, onProgress)
+          if (!resetResult.success) {
+            result = resetResult
+            break
+          }
+          // Paso 2: Eliminar todos los movimientos de stock
+          const movementsResult = await deleteAllStockMovements(businessId, onProgress)
+          result = {
+            success: movementsResult.success,
+            deleted: resetResult.deleted,
+            error: movementsResult.error,
+            movementsDeleted: movementsResult.deleted,
+          }
+          break
+        }
+        case 'resetIngredientStock': {
+          // Paso 1: Resetear stock de todos los insumos (sin eliminarlos)
+          const resetResult = await resetAllIngredientStock(businessId, onProgress)
+          if (!resetResult.success) {
+            result = resetResult
+            break
+          }
+          // Paso 2: Eliminar SOLO los movimientos de insumos (isIngredient == true)
+          const movementsResult = await deleteIngredientStockMovements(businessId, onProgress)
+          // Paso 3: Eliminar todas las producciones
+          const productionsResult = await deleteAllProductions(businessId, onProgress)
+          result = {
+            success: movementsResult.success && productionsResult.success,
+            deleted: resetResult.deleted,
+            error: movementsResult.error || productionsResult.error,
+            movementsDeleted: movementsResult.deleted,
+            productionsDeleted: productionsResult.deleted,
+          }
+          break
+        }
+        default:
+          throw new Error('Tipo de eliminación no válido')
+      }
+
+      if (result.success) {
+        const label = bulkDeleteLabels[bulkDeleteType]
+        if (label.successMessage) {
+          toast.success(label.successMessage.replace('{count}', result.deleted))
+        } else {
+          toast.success(`${result.deleted} ${label.name.toLowerCase()} eliminados correctamente`)
+        }
+        setShowBulkDeleteModal(false)
+        loadBulkDeleteCounts() // Recargar conteos
+      } else {
+        toast.error(`Error: ${result.error}`)
+      }
+    } catch (error) {
+      console.error('Error en eliminación masiva:', error)
+      toast.error(`Error: ${error.message}`)
+    } finally {
+      setIsBulkDeleting(false)
+    }
+  }
+
+  // Check if user is on trial plan
+  const isTrialUser = subscription?.plan === 'trial'
+
+  // Tabs configuration
+  // Nota: el tab "Catálogo" se accede desde el sidebar (Mi Catálogo Online → /configuracion?tab=catalogo)
+  // y por eso ya no aparece en esta barra.
+  const tabs = [
+    { id: 'informacion', label: 'Mi Empresa', icon: Building2 },
+    { id: 'preferencias', label: 'Preferencias', icon: SettingsIcon },
+    { id: 'ventas', label: 'Ventas', icon: ShoppingCart },
+    { id: 'documentos', label: 'Documentos', icon: FileText },
+    { id: 'series', label: 'Series', icon: Hash },
+    { id: 'impresora', label: 'Impresora', icon: Printer },
+    { id: 'seguridad', label: 'Seguridad', icon: Shield },
+    { id: 'notificaciones', label: 'Notificaciones', icon: Bell },
+    // Tab de Rappi: solo visible cuando businessSettings.rappiEnabled === true (modo restaurante)
+    ...(businessSettings?.rappiEnabled === true ? [{ id: 'rappi', label: 'Rappi', icon: Bike }] : []),
+    // Tab de Shopifree: solo visible cuando businessSettings.shopifreeEnabled === true
+    ...(businessSettings?.shopifreeEnabled === true ? [{ id: 'shopifree', label: 'Tienda Online', icon: ShoppingBag }] : []),
+    // Solo mostrar si tiene el feature bulkDelete (o en desarrollo)
+    ...((hasFeature && hasFeature('bulkDelete')) || import.meta.env.DEV ? [{ id: 'limpieza', label: 'Limpieza', icon: Trash2 }] : []),
+  ]
+
+  // Modo "Mi Catálogo Online standalone": si llegamos a Configuración con
+  // ?tab=catalogo (vía sidebar dedicado), ocultamos las pestañas y el título
+  // genérico de Configuración para que se sienta como una página propia.
+  const isStandaloneCatalog = (() => {
+    try {
+      const params = new URLSearchParams(_location.search)
+      return params.get('tab') === 'catalogo' && activeTab === 'catalogo'
+    } catch {
+      return false
+    }
+  })()
 
   return (
+    /* zoom: 0.8 = todo el contenido de Configuración 20% más chico (no afecta sidebar/topbar) */
     <div className="space-y-6 animate-fade-in" style={{ zoom: 0.8 }}>
+      {/* Header */}
       <div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-            {esCatalogo ? 'Mi Catálogo Online' : 'Configuración'}
-          </h1>
-          <GuideLink />
-        </div>
-        <p className="text-sm sm:text-base text-gray-600 mt-1">
-          {esCatalogo
-            ? 'Comparte tu catálogo digital con tus clientes y recibe pedidos por WhatsApp'
-            : 'Tu empresa, tu punto de venta y cómo se ven tus comprobantes'}
-        </p>
+        {isStandaloneCatalog ? (
+          <>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Mi Catálogo Online</h1>
+            <p className="text-sm sm:text-base text-gray-600 mt-1">
+              Comparte tu catálogo digital con tus clientes y recibe pedidos por WhatsApp
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Configuración</h1>
+              <GuideLink />
+            </div>
+            <p className="text-sm sm:text-base text-gray-600 mt-1">
+              Configura la información de tu empresa
+            </p>
+          </>
+        )}
       </div>
 
+      {/* Demo Mode Alert */}
       {isDemoMode && (
-        <Nota titulo="Modo demo">
-          Estás explorando Cobrify en modo demostración. Para configurar tu empresa y
-          personalizar tus comprobantes necesitas{' '}
-          <a href="/register" className="font-semibold underline">crear una cuenta</a>.
-        </Nota>
-      )}
-
-      {!esCatalogo && (
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex gap-6 overflow-x-auto">
-            {PESTANAS.map(p => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setActiva(p.id)}
-                className={`py-3 px-1 border-b-2 text-sm font-medium whitespace-nowrap transition-colors ${
-                  activa === p.id
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </nav>
+        <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-lg">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <Info className="h-5 w-5 text-blue-400" />
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-blue-800">Modo Demo</h3>
+              <div className="mt-2 text-sm text-blue-700">
+                <p>
+                  Estás explorando Cobrify en modo demostración. Para configurar la información de tu empresa
+                  y personalizar tus comprobantes, necesitas{' '}
+                  <a href="/register" className="font-semibold underline hover:text-blue-900">
+                    crear una cuenta
+                  </a>
+                  {' '}y elegir un plan de suscripción.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
-      <Suspense
-        fallback={(
-          <div className="flex items-center justify-center py-24 text-gray-500">
-            <Loader2 className="w-6 h-6 animate-spin mr-2" />
-            Cargando...
-          </div>
+      {/* Tabs (ocultas cuando entramos en modo Catálogo standalone) */}
+      {!isStandaloneCatalog && (
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8 overflow-x-auto">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => !tab.disabled && setActiveTab(tab.id)}
+              disabled={tab.disabled}
+              title={tab.tooltip || ''}
+              className={`
+                group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap
+                ${tab.disabled
+                  ? 'border-transparent text-gray-400 cursor-not-allowed opacity-60'
+                  : activeTab === tab.id
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }
+              `}
+            >
+              <tab.icon
+                className={`
+                  -ml-0.5 mr-2 h-5 w-5
+                  ${tab.disabled
+                    ? 'text-gray-400'
+                    : activeTab === tab.id
+                    ? 'text-primary-500'
+                    : 'text-gray-400 group-hover:text-gray-500'
+                  }
+                `}
+              />
+              {tab.label}
+              {tab.disabled && (
+                <Lock className="ml-1.5 h-4 w-4 text-gray-400" />
+              )}
+            </button>
+          ))}
+        </nav>
+      </div>
+      )}
+
+      {/* Tab Content - Información */}
+      {activeTab === 'informacion' && (
+        <>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        {/* Nombre de la cuenta (el que se ve en la cabecera) — discreto */}
+        <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500 px-1">
+          <span className="whitespace-nowrap">Nombre en la cabecera:</span>
+          <input
+            type="text"
+            value={displayNameInput}
+            onChange={(e) => setDisplayNameInput(e.target.value)}
+            placeholder={user?.email?.split('@')[0] || 'Tu nombre'}
+            disabled={isDemoMode}
+            className="w-48 px-2 py-1 text-sm text-gray-800 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-400 bg-white disabled:bg-gray-100"
+          />
+          <button
+            type="button"
+            onClick={handleSaveDisplayName}
+            disabled={savingDisplayName || isDemoMode || !displayNameInput.trim() || displayNameInput.trim() === (user?.displayName || '')}
+            className="text-primary-600 hover:text-primary-700 disabled:text-gray-300 disabled:cursor-not-allowed font-medium whitespace-nowrap"
+          >
+            {savingDisplayName ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
+
+        {/* Company Info */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center space-x-2">
+              <Building2 className="w-5 h-5 text-primary-600" />
+              <CardTitle>Información de la Empresa</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {/* Logo Upload Section */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Logo de la Empresa
+                </label>
+                <div className="flex items-start gap-4">
+                  {/* Logo Preview */}
+                  {logoUrl ? (
+                    <div className="relative group">
+                      <img
+                        src={logoUrl}
+                        alt="Logo"
+                        className="w-32 h-32 object-contain border-2 border-gray-200 rounded-lg p-2 bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRemoveLogo}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Eliminar logo"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-32 h-32 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50">
+                      <Image className="w-12 h-12 text-gray-400" />
+                    </div>
+                  )}
+
+                  {/* Upload Button */}
+                  <div className="flex-1">
+                    <label className="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                      <Upload className="w-4 h-4 mr-2 text-gray-600" />
+                      <span className="text-sm text-gray-700">
+                        {logoUrl ? 'Cambiar logo' : 'Subir logo'}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/jpg,image/png,image/webp"
+                        onChange={handleLogoUpload}
+                        className="hidden"
+                      />
+                    </label>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Formatos: JPG, PNG, WEBP. Tamaño máximo: 2MB
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      El logo aparecerá en tus facturas y boletas impresas
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tamaño del logo en el ticket térmico */}
+              {logoUrl && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tamaño del logo en el ticket
+                  </label>
+                  <select
+                    value={logoPrintScale}
+                    onChange={(e) => setLogoPrintScale(Number(e.target.value))}
+                    className="w-full sm:w-56 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm bg-white"
+                  >
+                    {[50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150].map(v => (
+                      <option key={v} value={v}>{v}%{v === 100 ? ' (normal)' : ''}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Regula qué tan grande sale el logo en los tickets térmicos (PC y app). 100% = tamaño actual. Reducir funciona siempre; agrandar depende de la resolución del logo.
+                  </p>
+                </div>
+              )}
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Company Info Fields */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Campo RUC con botón de búsqueda */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    RUC <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="20123456789"
+                      {...register('ruc')}
+                      className={`flex-1 px-3 py-2 border ${
+                        errors.ruc ? 'border-red-500' : 'border-gray-300'
+                      } rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent`}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleLookupRuc}
+                      disabled={isLookingUpRuc}
+                      className="px-4 py-2 bg-white border border-gray-300 text-gray-500 rounded-lg hover:bg-gray-50 hover:text-primary-600 hover:border-primary-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors shadow-sm"
+                      title="Buscar datos del RUC"
+                    >
+                      {isLookingUpRuc ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Search className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                  {errors.ruc && (
+                    <p className="text-red-500 text-sm mt-1">{errors.ruc.message}</p>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Ingrese el RUC y haga clic en el botón de búsqueda para autocompletar los datos
+                  </p>
+                </div>
+
+              <Input
+                label="Razón Social"
+                required
+                placeholder="MI EMPRESA SAC"
+                error={errors.businessName?.message}
+                {...register('businessName')}
+              />
+
+              <Input
+                label="Nombre Comercial"
+                placeholder="Mi Empresa"
+                error={errors.tradeName?.message}
+                {...register('tradeName')}
+              />
+
+              <Input
+                label="Teléfono"
+                type="tel"
+                placeholder="01-2345678"
+                error={errors.phone?.message}
+                {...register('phone')}
+              />
+
+              <Input
+                label="Correo Electrónico"
+                type="email"
+                placeholder="contacto@miempresa.com"
+                error={errors.email?.message}
+                {...register('email')}
+              />
+
+              <Input
+                label="Sitio Web"
+                type="url"
+                placeholder="https://miempresa.com"
+                error={errors.website?.message}
+                {...register('website')}
+              />
+
+              <Input
+                label="N° Registro MTC"
+                placeholder="Ej: 0001234"
+                error={errors.mtcRegistration?.message}
+                {...register('mtcRegistration')}
+                helperText="Para guías de remisión transportista (opcional)"
+              />
+
+              <div className="md:col-span-2">
+                <Input
+                  label="Eslogan / Descripción"
+                  placeholder="Tu frase comercial o descripción breve"
+                  value={companySlogan}
+                  onChange={(e) => setCompanySlogan(e.target.value.toUpperCase())}
+                  maxLength={120}
+                  helperText="Aparecerá debajo del logo en el PDF (máx. 120 caracteres, hasta 2 líneas)"
+                />
+              </div>
+
+              <Input
+                label="Redes Sociales"
+                type="text"
+                placeholder="@miempresa o facebook.com/miempresa"
+                error={errors.socialMedia?.message}
+                {...register('socialMedia')}
+                helperText="Usuario de Facebook, Instagram u otra red social"
+              />
+
+              <div className="md:col-span-2">
+                <Input
+                  label="Dirección"
+                  required
+                  placeholder="Av. Principal 123"
+                  error={errors.address?.message}
+                  {...register('address')}
+                  helperText="Dirección completa (calle, avenida, número)"
+                />
+              </div>
+
+              <Input
+                label="Urbanización"
+                placeholder="Las Flores"
+                error={errors.urbanization?.message}
+                {...register('urbanization')}
+                helperText="Opcional"
+              />
+
+              {/* Selector de ubicación con ubigeo automático */}
+              <div className="md:col-span-2 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <MapPin className="w-4 h-4" />
+                  <span>Ubicación del negocio</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <Select
+                    label="Departamento"
+                    value={locationDeptCode}
+                    onChange={(e) => handleLocationChange('department', e.target.value)}
+                  >
+                    <option value="">Seleccione</option>
+                    {DEPARTAMENTOS.map(dept => (
+                      <option key={dept.code} value={dept.code}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  </Select>
+
+                  <Select
+                    label="Provincia"
+                    value={locationProvCode}
+                    onChange={(e) => handleLocationChange('province', e.target.value)}
+                    disabled={!locationDeptCode}
+                  >
+                    <option value="">Seleccione</option>
+                    {getProvincias(locationDeptCode).map(prov => (
+                      <option key={prov.code} value={prov.code}>
+                        {prov.name}
+                      </option>
+                    ))}
+                  </Select>
+
+                  <Select
+                    label="Distrito"
+                    value={locationDistCode}
+                    onChange={(e) => handleLocationChange('district', e.target.value)}
+                    disabled={!locationProvCode}
+                  >
+                    <option value="">Seleccione</option>
+                    {getDistritos(locationDeptCode, locationProvCode).map(dist => (
+                      <option key={dist.code} value={dist.code}>
+                        {dist.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                {/* Mostrar ubigeo calculado */}
+                {locationDeptCode && locationProvCode && locationDistCode && (
+                  <div className="flex items-center justify-between px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+                    <span className="text-sm text-green-700">
+                      Ubigeo: <span className="font-mono font-semibold">{getLocationUbigeo()}</span>
+                    </span>
+                    <span className="text-xs text-green-600">Calculado automáticamente</span>
+                  </div>
+                )}
+
+                {/* Campos ocultos para el form */}
+                <input type="hidden" {...register('district')} />
+                <input type="hidden" {...register('province')} />
+                <input type="hidden" {...register('department')} />
+                <input type="hidden" {...register('ubigeo')} />
+              </div>
+
+              {/* Establecimientos / locales anexos (SUNAT) — se llenan al buscar el RUC con la lupa */}
+              {establishments.length > 0 && (
+                <div className="md:col-span-2 space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <Store className="w-4 h-4" />
+                    <span>Establecimientos (SUNAT)</span>
+                  </div>
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600 w-16">Código</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Dirección</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600 w-24">Ubigeo</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {establishments.map((est, index) => (
+                          <tr key={est.codigo || index} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 font-mono text-xs">{est.codigo || '-'}</td>
+                            <td className="px-3 py-2">{est.direccionCompleta || est.direccion || '-'}</td>
+                            <td className="px-3 py-2 font-mono text-xs">{est.ubigeo || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Cuentas Bancarias */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Cuentas Bancarias
+                </label>
+                <p className="text-xs text-gray-500 mb-3">
+                  Estas cuentas aparecerán en tus facturas, boletas y cotizaciones.
+                </p>
+
+                {/* Lista de cuentas bancarias */}
+                {bankAccounts.length > 0 && (
+                  <div className="mb-3 border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Banco</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Tipo</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Moneda</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Nº Cuenta</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">CCI</th>
+                          <th className="px-3 py-2 w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {bankAccounts.map((account, index) => {
+                          const editing = editingBankIndex === index
+                          const inputCls = "w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
+                          return (
+                          <tr key={index} className="hover:bg-gray-50">
+                            {editing ? (
+                              <>
+                                <td className="px-2 py-1.5">
+                                  <select value={account.bank} onChange={e => updateBankAccount(index, { bank: e.target.value })} className={inputCls}>
+                                    <option value="BCP">BCP</option>
+                                    <option value="BBVA">BBVA</option>
+                                    <option value="Interbank">Interbank</option>
+                                    <option value="Scotiabank">Scotiabank</option>
+                                    <option value="BanBif">BanBif</option>
+                                    <option value="Pichincha">Pichincha</option>
+                                    <option value="Banco de la Nación">Banco de la Nación</option>
+                                    <option value="Otro">Otro</option>
+                                  </select>
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  <select value={account.accountType} onChange={e => updateBankAccount(index, { accountType: e.target.value })} className={inputCls}>
+                                    <option value="corriente">Corriente</option>
+                                    <option value="ahorros">Ahorros</option>
+                                    <option value="detracciones">Detracciones</option>
+                                  </select>
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  <select value={account.currency} onChange={e => updateBankAccount(index, { currency: e.target.value })} className={inputCls}>
+                                    <option value="PEN">Soles</option>
+                                    <option value="USD">Dólares</option>
+                                  </select>
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  <input value={account.accountNumber || ''} onChange={e => updateBankAccount(index, { accountNumber: e.target.value })} className={`${inputCls} font-mono`} placeholder="Nº Cuenta" />
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  <input value={account.cci || ''} onChange={e => updateBankAccount(index, { cci: e.target.value })} className={`${inputCls} font-mono`} placeholder="CCI" />
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="px-3 py-2">{account.bank}</td>
+                                <td className="px-3 py-2 text-xs">
+                                  {account.accountType === 'detracciones' ? (
+                                    <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">Detracciones</span>
+                                  ) : account.accountType === 'ahorros' ? (
+                                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">Ahorros</span>
+                                  ) : (
+                                    <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded">Corriente</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">{account.currency === 'PEN' ? 'Soles' : 'Dólares'}</td>
+                                <td className="px-3 py-2 font-mono text-xs">{account.accountNumber}</td>
+                                <td className="px-3 py-2 font-mono text-xs">{account.cci || '-'}</td>
+                              </>
+                            )}
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                {editing ? (
+                                  <button type="button" onClick={() => setEditingBankIndex(null)} className="text-green-600 hover:text-green-700" title="Listo">
+                                    <Check className="w-4 h-4" />
+                                  </button>
+                                ) : (
+                                  <button type="button" onClick={() => setEditingBankIndex(index)} className="text-gray-400 hover:text-primary-600" title="Editar">
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => { setBankAccounts(bankAccounts.filter((_, i) => i !== index)); setEditingBankIndex(null) }}
+                                  className="text-red-500 hover:text-red-700"
+                                  title="Eliminar"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Formulario para agregar nueva cuenta */}
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-2 p-3 bg-gray-50 rounded-lg">
+                  <select
+                    id="newBankName"
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Banco</option>
+                    <option value="BCP">BCP</option>
+                    <option value="BBVA">BBVA</option>
+                    <option value="Interbank">Interbank</option>
+                    <option value="Scotiabank">Scotiabank</option>
+                    <option value="BanBif">BanBif</option>
+                    <option value="Pichincha">Pichincha</option>
+                    <option value="Banco de la Nación">Banco de la Nación</option>
+                    <option value="Otro">Otro</option>
+                  </select>
+                  <select
+                    id="newAccountType"
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    defaultValue="corriente"
+                  >
+                    <option value="corriente">Cta. Corriente</option>
+                    <option value="ahorros">Cta. Ahorros</option>
+                    <option value="detracciones">Detracciones</option>
+                  </select>
+                  <select
+                    id="newBankCurrency"
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    defaultValue="PEN"
+                  >
+                    <option value="PEN">Soles</option>
+                    <option value="USD">Dólares</option>
+                  </select>
+                  <input
+                    id="newBankAccount"
+                    type="text"
+                    placeholder="Nº Cuenta"
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  />
+                  <input
+                    id="newBankCci"
+                    type="text"
+                    placeholder="CCI (opcional)"
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const bank = document.getElementById('newBankName').value
+                      const accountType = document.getElementById('newAccountType').value
+                      const currency = document.getElementById('newBankCurrency').value
+                      const accountNumber = document.getElementById('newBankAccount').value
+                      const cci = document.getElementById('newBankCci').value
+
+                      if (!bank || !accountNumber) {
+                        toast.error('Ingresa el banco y número de cuenta')
+                        return
+                      }
+
+                      setBankAccounts([...bankAccounts, { bank, accountType, currency, accountNumber, cci }])
+
+                      // Limpiar campos
+                      document.getElementById('newBankName').value = ''
+                      document.getElementById('newAccountType').value = 'corriente'
+                      document.getElementById('newBankCurrency').value = 'PEN'
+                      document.getElementById('newBankAccount').value = ''
+                      document.getElementById('newBankCci').value = ''
+                    }}
+                    className="px-3 py-1.5 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors"
+                  >
+                    Agregar
+                  </button>
+                </div>
+              </div>
+
+              {/* Yape / Plin (billeteras digitales) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Yape / Plin
+                </label>
+                <p className="text-xs text-gray-500 mb-3">
+                  Número, titular y QR de tus billeteras Yape/Plin para que tus clientes te paguen.
+                </p>
+
+                {/* Lista de billeteras */}
+                {digitalWallets.length > 0 && (
+                  <div className="mb-3 border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Billetera</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Titular</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">Número</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-600">QR</th>
+                          <th className="px-3 py-2 w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {digitalWallets.map((w, index) => {
+                          const editing = editingWalletIndex === index
+                          const inputCls = "w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
+                          return (
+                          <tr key={index} className="hover:bg-gray-50">
+                            {editing ? (
+                              <>
+                                <td className="px-2 py-1.5">
+                                  <select value={w.provider} onChange={e => updateWallet(index, { provider: e.target.value })} className={inputCls}>
+                                    <option value="Yape">Yape</option>
+                                    <option value="Plin">Plin</option>
+                                  </select>
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  <input value={w.holderName || ''} onChange={e => updateWallet(index, { holderName: e.target.value })} className={inputCls} placeholder="Titular" />
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  <input value={w.phoneNumber || ''} onChange={e => updateWallet(index, { phoneNumber: e.target.value })} className={`${inputCls} font-mono`} placeholder="Número" />
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="px-3 py-2">
+                                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${w.provider === 'Yape' ? 'bg-purple-100 text-purple-700' : 'bg-cyan-100 text-cyan-700'}`}>{w.provider}</span>
+                                </td>
+                                <td className="px-3 py-2">{w.holderName || '-'}</td>
+                                <td className="px-3 py-2 font-mono text-xs">{w.phoneNumber}</td>
+                              </>
+                            )}
+                            <td className="px-3 py-2">
+                              {(w._qrPreview || w.qrImageUrl) ? (
+                                <img src={w._qrPreview || w.qrImageUrl} alt="QR" className="w-10 h-10 object-contain border rounded" />
+                              ) : (
+                                <span className="text-xs text-gray-400">Sin QR</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                {editing ? (
+                                  <button type="button" onClick={() => setEditingWalletIndex(null)} className="text-green-600 hover:text-green-700" title="Listo">
+                                    <Check className="w-4 h-4" />
+                                  </button>
+                                ) : (
+                                  <button type="button" onClick={() => setEditingWalletIndex(index)} className="text-gray-400 hover:text-primary-600" title="Editar">
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => { setDigitalWallets(digitalWallets.filter((_, i) => i !== index)); setEditingWalletIndex(null) }}
+                                  className="text-red-500 hover:text-red-700"
+                                  title="Eliminar"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Formulario para agregar billetera */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 p-3 bg-gray-50 rounded-lg items-stretch">
+                  <select
+                    id="newWalletProvider"
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Yape / Plin</option>
+                    <option value="Yape">Yape</option>
+                    <option value="Plin">Plin</option>
+                  </select>
+                  <input
+                    id="newWalletHolder"
+                    type="text"
+                    placeholder="Titular (opcional)"
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  />
+                  <input
+                    id="newWalletPhone"
+                    type="text"
+                    placeholder="Número (celular)"
+                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  />
+                  <label className="cursor-pointer">
+                    <input
+                      id="newWalletQrInput"
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files[0]
+                        if (!file) return
+                        const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+                        if (!validTypes.includes(file.type)) { toast.error('El QR debe ser una imagen (JPG, PNG o WEBP)'); return }
+                        if (file.size > 2 * 1024 * 1024) { toast.error('La imagen no debe superar los 2MB'); return }
+                        setNewWalletQrFile(file)
+                        const reader = new FileReader()
+                        reader.onload = (ev) => setNewWalletQrPreview(ev.target.result)
+                        reader.readAsDataURL(file)
+                      }}
+                    />
+                    <div className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg text-center hover:border-primary-400 hover:bg-primary-50 transition-colors text-gray-600 truncate h-full flex items-center justify-center">
+                      {newWalletQrPreview ? 'QR listo ✓' : 'Subir QR (opcional)'}
+                    </div>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const provider = document.getElementById('newWalletProvider').value
+                      const holderName = document.getElementById('newWalletHolder').value
+                      const phoneNumber = document.getElementById('newWalletPhone').value
+
+                      if (!provider || !phoneNumber) {
+                        toast.error('Elige Yape o Plin e ingresa el número')
+                        return
+                      }
+
+                      setDigitalWallets([...digitalWallets, { provider, holderName, phoneNumber, qrImageUrl: null, _qrFile: newWalletQrFile, _qrPreview: newWalletQrPreview }])
+
+                      // Limpiar campos
+                      document.getElementById('newWalletProvider').value = ''
+                      document.getElementById('newWalletHolder').value = ''
+                      document.getElementById('newWalletPhone').value = ''
+                      setNewWalletQrFile(null)
+                      setNewWalletQrPreview('')
+                      const fi = document.getElementById('newWalletQrInput'); if (fi) fi.value = ''
+                    }}
+                    className="px-3 py-1.5 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors"
+                  >
+                    Agregar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Actions for Company Info */}
+        <div className="flex justify-end">
+          <Button type="submit" disabled={isSaving || uploadingLogo}>
+            {isSaving || uploadingLogo ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                {uploadingLogo ? 'Subiendo logo...' : 'Guardando...'}
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                Guardar Configuración
+              </>
+            )}
+          </Button>
+        </div>
+        </form>
+        {/* Datos personalizables por sucursal (logo, nombre comercial, dirección, teléfono).
+            Solo el dueño/admin puede editar sucursales (las reglas de Firestore restringen
+            la escritura al owner). Los sub-usuarios no ven esta sección. */}
+        {!isDemoMode && (isBusinessOwner || isAdmin) && (
+          <BranchInfoSettings
+            businessId={getBusinessId()}
+            mainBranchName={businessSettings?.mainBranchName || 'Sucursal Principal'}
+          />
         )}
+        </>
+      )}
+
+      {/* Tab Content - Preferencias (Tipo de negocio + Personalización) */}
+      {activeTab === 'preferencias' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center space-x-2">
+              <SettingsIcon className="w-5 h-5 text-primary-600" />
+              <CardTitle>Preferencias Generales</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {/* Tamaño de la interfaz. Va PRIMERO a propósito: quien la necesita
+                  es justamente quien más le cuesta encontrarla. Se aplica al
+                  instante y no necesita "Guardar" — es de este dispositivo. */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Tamaño de la interfaz</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Agranda el texto y todo lo demás si te cuesta leer la pantalla. Solo afecta a
+                  este dispositivo y se aplica al momento.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {ESCALAS.map(escala => (
+                    <button
+                      key={escala.id}
+                      type="button"
+                      onClick={() => setEscalaUi(aplicarEscala(escala.id))}
+                      className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                        escalaUi === escala.id
+                          ? 'border-primary-500 bg-primary-50 text-primary-700'
+                          : 'border-gray-300 text-gray-700 hover:border-gray-400'
+                      }`}
+                      style={{ fontSize: `${escala.factor}rem` }}
+                    >
+                      {escala.nombre}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200"></div>
+
+              {/* Business Mode Section */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Tipo de Negocio</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Selecciona el modo que mejor se adapte a tu negocio. Esto cambiará las opciones del menú lateral.
+                </p>
+                <select
+                  value={businessMode}
+                  onChange={(e) => setBusinessMode(e.target.value)}
+                  className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+                >
+                  <option value="retail">General (todo tipo de negocio) — POS, productos, inventario, almacenes, compras</option>
+                  <option value="restaurant">Restaurante — Mesas, mozos, órdenes, cocina, menú, caja</option>
+                  <option value="pharmacy">Farmacia — Medicamentos, laboratorios, lotes, alertas de vencimiento</option>
+                  <option value="veterinary">Veterinaria — Pacientes, servicios, medicamentos, control de lotes</option>
+                  <option value="lending">Préstamos — Cartera de préstamos a clientes, cuotas e intereses</option>
+                  <option value="hotel">Hotelería — Habitaciones, reservas, check-in/out, housekeeping</option>
+                  <option value="transport">Transporte — Vehículos, rutas, servicios de transporte</option>
+                  <option value="logistics">Logística — Proyectos/obras, salidas y retornos de almacén, reportes</option>
+                </select>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Catálogo y productos */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Catálogo y productos</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Controla qué información se gestiona en el catálogo y cómo se edita el stock.
+                </p>
+                <div className="space-y-3">
+                  {/* Ubicación de productos */}
+                  <SettingToggle
+                    id="opcion-enableProductLocation"
+                    checked={enableProductLocation}
+                    onChange={(e) => setEnableProductLocation(e.target.checked)}
+                    title="Habilitar ubicación de productos"
+                    description={enableProductLocation
+                      ? '✓ Habilitado: Podrás asignar una ubicación física a cada producto (ej: P1-3A-4R para Pasillo 1, Estante 3A, Fila 4). La ubicación se mostrará en productos, inventario y punto de venta.'
+                      : '✗ Deshabilitado: Los productos no mostrarán información de ubicación física.'}
+                  />
+
+                  {/* Edición manual de stock desde el modal de productos e insumos */}
+                  <SettingToggle
+                    id="opcion-enableManualStockEdit"
+                    checked={enableManualStockEdit}
+                    onChange={(e) => setEnableManualStockEdit(e.target.checked)}
+                    title="Permitir editar stock manualmente (productos e insumos)"
+                    description={enableManualStockEdit
+                      ? '✓ Habilitado: Al editar un producto o insumo podrás ajustar su stock por almacén (y por variante si tiene). Cada ajuste queda registrado como movimiento auditable. Los productos con control de lotes se siguen modificando desde Control de Lotes para preservar la trazabilidad.'
+                      : '✗ Deshabilitado: El stock de productos e insumos solo se modifica vía ventas, compras, transferencias y movimientos en su página específica. Recomendado para mantener historial limpio.'}
+                  />
+
+                  {/* Control de Lotes y Vencimientos - solo para modos que no son farmacia */}
+                  {businessMode !== 'pharmacy' && (
+                    <SettingToggle
+                      checked={posCustomFields.showBatchExpiryInPurchase}
+                      onChange={(e) => setPosCustomFields({ ...posCustomFields, showBatchExpiryInPurchase: e.target.checked })}
+                      title="Control de Lotes y Vencimientos"
+                      description="Habilita control de lotes, fechas de vencimiento, alertas y selección de lotes en ventas, compras e inventario"
+                    />
+                  )}
+
+                  {/* Afectación IGV por defecto al crear productos */}
+                  <div
+                    id="opcion-defaultTaxAffectation"
+                    className="flex items-start justify-between gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200 scroll-mt-24"
+                  >
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900">Afectación IGV por defecto</p>
+                      <p className="text-sm text-gray-600 mt-0.5">
+                        Afectación con la que nacen los productos nuevos (creación, importación, compras) y los productos personalizados del punto de venta.
+                        Útil si vendes mayormente exonerado (ej. zona de selva) y solo gravas algunos productos.
+                        Cada producto se puede cambiar individualmente después.
+                      </p>
+                      {defaultTaxAffectation !== '10' && (
+                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mt-2 inline-block">
+                          Los productos ya creados no cambian: usa la acción masiva &quot;Afectación IGV&quot; en Productos para convertirlos.
+                        </p>
+                      )}
+                    </div>
+                    <select
+                      value={defaultTaxAffectation}
+                      onChange={(e) => setDefaultTaxAffectation(e.target.value)}
+                      className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 flex-shrink-0"
+                    >
+                      <option value="10">Gravado (IGV)</option>
+                      <option value="20">Exonerado</option>
+                      <option value="30">Inafecto</option>
+                    </select>
+                  </div>
+
+                  {/* Elegir la afectación en cada venta. Va junto a la afectación
+                      por defecto porque resuelve el caso que esa NO cubre: no que
+                      unos productos sean gravados y otros exonerados, sino que el
+                      MISMO producto cambie según a quién se le venda. */}
+                  <SettingToggle
+                    id="opcion-allowManualTaxAffectation"
+                    checked={allowManualTaxAffectation}
+                    onChange={(e) => setAllowManualTaxAffectation(e.target.checked)}
+                    title="Elegir el IGV en cada venta"
+                    description={allowManualTaxAffectation
+                      ? 'Habilitado: en el punto de venta aparece un selector para emitir esa venta como gravada o exonerada. La elección manda sobre lo que diga cada producto: si eliges Gravado, va gravado todo el comprobante aunque haya productos marcados exonerados. El total no cambia — solo cambia cómo se declara a SUNAT. No aplica al Nuevo RUS, que por su régimen no cobra IGV.'
+                      : 'Agrega un selector en el punto de venta para decidir, venta por venta, si el comprobante sale gravado o exonerado, sin importar cómo esté configurado cada producto. Pensado para negocios de la Amazonía (Ley 27037): están exonerados por lo que se consume en la región, pero cuando venden fuera la operación sí lleva IGV.'}
+                  />
+
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Dispositivo */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Dispositivo</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Opciones específicas del hardware donde usas la aplicación.
+                </p>
+                <div className="space-y-3">
+                  {/* Pantalla de cliente (segunda pantalla) */}
+                  <SettingToggle
+                    id="opcion-enableCustomerDisplay"
+                    checked={enableCustomerDisplay}
+                    onChange={(e) => setEnableCustomerDisplay(e.target.checked)}
+                    title="Pantalla de cliente (segunda pantalla)"
+                    description={enableCustomerDisplay
+                      ? '✓ Habilitado: En dispositivos con doble pantalla (iMin Swan 2), se mostrará al cliente el detalle de su compra en tiempo real, con el logo y colores de tu negocio.'
+                      : '✗ Deshabilitado: No se usará la segunda pantalla del dispositivo. Activa esta opción solo si tienes un dispositivo con doble pantalla.'}
+                  />
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Exportación Meta Ads */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Exportación para Meta Ads</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Habilita una página dedicada para exportar tus ventas en el formato del Administrador de Eventos de Meta (Facebook Conversions).
+                </p>
+
+                <SettingToggle
+                  checked={metaAdsEnabled}
+                  onChange={(e) => setMetaAdsEnabled(e.target.checked)}
+                  title="Habilitar exportación para Meta Ads"
+                  description={metaAdsEnabled
+                    ? '✓ Habilitado: Se muestra una sección "Meta Ads" en el menú donde puedes ingresar manualmente la hora real de cada venta y exportar en el formato exacto de Meta (event_name, event_time, phone, value, currency, Order_id).'
+                    : '✗ Deshabilitado: No se mostrará la sección de exportación a Meta Ads.'}
+                />
+
+                {metaAdsEnabled && (
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-blue-50/50 border border-blue-200 rounded-lg">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Prefijo de país (teléfono)
+                      </label>
+                      <Input
+                        value={metaAdsPhonePrefix}
+                        onChange={(e) => setMetaAdsPhonePrefix(e.target.value)}
+                        placeholder="+51"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Se antepone al teléfono del cliente (si no lo tiene ya). Ej: <code>+51</code>
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Prefijo del Order ID (opcional)
+                      </label>
+                      <Input
+                        value={metaAdsOrderIdPrefix}
+                        onChange={(e) => setMetaAdsOrderIdPrefix(e.target.value.toUpperCase())}
+                        placeholder="HDT"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        El Order ID se formará así: <code>{(metaAdsOrderIdPrefix || 'PREFIJO') + '_YYYYMMDD_NN'}</code>
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Préstamos a clientes. Es la cartera del modo Préstamos
+                  ofrecida como módulo: cambiar de modo le apagaría al
+                  restaurante Mesas, Órdenes y Cocina. */}
+              {businessMode === 'restaurant' && (
+                <>
+                  <div className="border-t border-gray-200"></div>
+                  <div>
+                    <SettingToggle
+                      id="opcion-lendingEnabled"
+                      checked={lendingEnabled}
+                      onChange={(e) => setLendingEnabled(e.target.checked)}
+                      title="Préstamos a clientes"
+                      description={lendingEnabled
+                        ? '✓ Habilitado: en Reportes & Finanzas aparece "Préstamos", para prestar dinero a tus clientes y cobrar en cuotas con intereses y mora. No cambia tu modo de negocio: Mesas, Órdenes y Cocina siguen igual.'
+                        : '✗ Deshabilitado: no se muestra la página de Préstamos. Actívalo si le prestas dinero a tus clientes y quieres llevar las cuotas, los intereses y la mora.'}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Obras y proyectos. Son las páginas del modo Logística
+                  ofrecidas como módulo: migrar de modo haría perder GRE
+                  Transportista, Cotizaciones y Emisión Masiva. */}
+              {businessMode === 'retail' && (
+                <>
+                  <div className="border-t border-gray-200"></div>
+                  <div>
+                    <SettingToggle
+                      id="opcion-obrasEnabled"
+                      checked={obrasEnabled}
+                      onChange={(e) => setObrasEnabled(e.target.checked)}
+                      title="Obras y proyectos"
+                      description={obrasEnabled
+                        ? '✓ Habilitado: en el menú aparece el grupo "Obras", con Proyectos / Obras, Salidas de Almacén, Retornos a Almacén y Reportes de Obra. Sirve para controlar qué material sale a cada obra, qué vuelve y cuánto costó — sin cambiar tu modo de negocio.'
+                        : '✗ Deshabilitado: no se muestran las páginas de obras. Actívalo si envías materiales o herramientas a obras, proyectos o sedes de tus clientes.'}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Cobranza de servicios por medidor. Para el negocio que compra un
+                  recibo mayorista de luz o agua y lo reparte entre los vecinos de
+                  un centro poblado: sigue siendo un negocio General, solo suma
+                  las páginas de la cobranza. */}
+              {businessMode === 'retail' && (
+                <>
+                  <div className="border-t border-gray-200"></div>
+                  <div>
+                    <SettingToggle
+                      id="opcion-serviciosEnabled"
+                      checked={serviciosEnabled}
+                      onChange={(e) => setServiciosEnabled(e.target.checked)}
+                      title="Cobranza de servicios (luz, agua)"
+                      description={serviciosEnabled
+                        ? '✓ Habilitado: en el menú aparecen Suministros, Lecturas del mes y Recibos de servicio. La tarifa sale del recibo que te llega a ti, así que se actualiza sola cada mes.'
+                        : '✗ Deshabilitado: no se muestran las páginas de cobranza de servicios. Actívalo si compras un recibo de luz o agua y lo repartes entre los vecinos, por medidor o por cuota fija.'}
+                    />
+                  </div>
+                  {serviciosEnabled && (
+                    <div className="space-y-3 pl-1">
+                      <p className="text-sm font-medium text-gray-700">Lo que sale impreso en el recibo</p>
+                      <label className="block">
+                        <span className="block text-sm text-gray-600 mb-1">Título del recibo</span>
+                        <input
+                          type="text"
+                          value={servicioTituloRecibo}
+                          onChange={(e) => setServicioTituloRecibo(e.target.value)}
+                          placeholder="RECIBO POR CONSUMO DE ENERGÍA ELÉCTRICA"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="block text-sm text-gray-600 mb-1">Firma autorizada</span>
+                        <input
+                          type="text"
+                          value={servicioFirma}
+                          onChange={(e) => setServicioFirma(e.target.value)}
+                          placeholder="PROF. VICTOR"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        />
+                        <span className="block text-xs text-gray-500 mt-1">
+                          Sale al pie, sobre una línea. Es el nombre del responsable, no una firma electrónica.
+                        </span>
+                      </label>
+                      <label className="block">
+                        <span className="block text-sm text-gray-600 mb-1">Frase del pie</span>
+                        <input
+                          type="text"
+                          value={servicioLema}
+                          onChange={(e) => setServicioLema(e.target.value)}
+                          placeholder="Mi negocio es pequeño, pero tu recomendación lo hace grande"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        />
+                      </label>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Personalización del Menú Lateral */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Personalizar Menú Lateral</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Elige qué módulos mostrar en tu menú lateral. Desmarca los que no uses para simplificar tu navegación.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Módulos según el modo de negocio */}
+                  {businessMode === 'retail' && (
+                    <>
+                      {[
+                        { title: 'Ventas y cobro', items: [
+                          { id: 'public-catalog', label: 'Mi Catálogo Online', description: 'Catálogo digital para compartir con tus clientes y recibir pedidos' },
+                          { id: 'online-orders', label: 'Pedidos Online', description: 'Bandeja de pedidos que llegan desde tu catálogo digital' },
+                          { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja diario' },
+                          { id: 'vet-agenda', label: 'Agenda de Citas', description: 'Programa citas por fecha y hora y cóbralas desde el Punto de Venta. Para consultorios, podología, estética, talleres.' },
+                          { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos y proformas' },
+                          { id: 'sellers', label: 'Vendedores', description: 'Gestión de vendedores y comisiones' },
+                        { id: 'fleet', label: 'Conductores y vehículos', description: 'Guarda conductores y vehículos para elegirlos al emitir guías de remisión' },
+                        { id: 'promotions', label: 'Promociones', description: 'Tarjeta de sellos, combos y cupones de descuento' },
+                        ] },
+                        { title: 'Inventario y almacenes', items: [
+                          { id: 'inventory', label: 'Inventario', description: 'Control de stock por producto' },
+                          { id: 'warehouses', label: 'Almacenes', description: 'Múltiples ubicaciones de stock' },
+                          { id: 'stock-movements', label: 'Movimientos', description: 'Historial de entradas y salidas' },
+                        ] },
+                        { title: 'Compras y proveedores', items: [
+                          { id: 'suppliers', label: 'Proveedores', description: 'Listado de proveedores' },
+                          { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
+                          { id: 'purchase-history', label: 'Historial de Compras', description: 'Registro de compras de insumos' },
+                          { id: 'purchase-orders', label: 'Órdenes de Compra', description: 'Pedidos a proveedores' },
+                          { id: 'requirements', label: 'Requerimientos', description: 'Solicitudes de insumos y materiales' },
+                        ] },
+                        { title: 'Producción', items: [
+                          { id: 'ingredients', label: 'Insumos', description: 'Materia prima y componentes' },
+                          { id: 'recipes', label: 'Composición', description: 'Productos compuestos' },
+                          { id: 'production', label: 'Producción', description: 'Producción y transformación de productos' },
+                        ] },
+                        { title: 'Guías y envíos', items: [
+                          { id: 'dispatch-guides', label: 'GRE Remitente', description: 'Guías de remisión como remitente' },
+                          { id: 'carrier-dispatch-guides', label: 'GRE Transportista', description: 'Guías de remisión como transportista' },
+                          { id: 'bulk-emission', label: 'Emisión Masiva', description: 'Crear muchos comprobantes o guías de una vez desde un Excel' },
+                          { id: 'envios', label: 'Envíos', description: 'Gestión de repartidores y entregas' },
+                        ] },
+                        ...(obrasEnabled ? [{ title: 'Obras y proyectos', items: [
+                          { id: 'projects', label: 'Proyectos / Obras', description: 'Obras y proyectos activos' },
+                          { id: 'warehouse-exits', label: 'Salidas de Almacén', description: 'Material que sale hacia una obra' },
+                          { id: 'warehouse-returns', label: 'Retornos a Almacén', description: 'Material que vuelve de la obra' },
+                          { id: 'logistics-reports', label: 'Reportes de Obra', description: 'Consumo y costo por obra' },
+                        ] }] : []),
+                        { title: 'Finanzas', items: [
+                          { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
+                          { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
+                          { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
+                          { id: 'accounting', label: 'Contabilidad', description: 'Control de comprobantes electrónicos SUNAT' },
+                          { id: 'loans', label: 'Préstamos', description: 'Préstamos a clientes' },
+                        ] },
+                        { title: 'Operación y otros', items: [
+                          { id: 'student-payments', label: 'Control de Alumnos', description: 'Control de pagos de alumnos' },
+                          // Solo con el módulo encendido, como las de Obras: si no,
+                          // el catálogo ofrece marcar tres páginas que el menú va a
+                          // filtrar igual, y parece que la opción no funciona.
+                          ...(serviciosEnabled ? [
+                            { id: 'service-supplies', label: 'Suministros', description: 'Padrón de medidores y cuotas fijas' },
+                            { id: 'service-readings', label: 'Lecturas del mes', description: 'Cobranza de luz o agua por medidor' },
+                            { id: 'service-receipts', label: 'Recibos de servicio', description: 'Emitir, imprimir y cobrar los recibos del mes' },
+                          ] : []),
+                          { id: 'certificates', label: 'Certificados', description: 'Emisión de certificados' },
+                          { id: 'attendance', label: 'Personal', description: 'Directorio, asistencia y datos de los empleados' },
+                          { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
+                        ] },
+                      ].flatMap((group) => [
+                        <div key={`hdr-${group.title}`} className="sm:col-span-2">
+                          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide pt-2">{group.title}</h4>
+                        </div>,
+                        ...group.items.map((item) => (
+                          <label
+                            key={item.id}
+                            className={`flex items-start space-x-3 cursor-pointer p-3 border rounded-lg transition-colors ${
+                              (item.id === 'vet-agenda' ? appointmentsEnabled : !hiddenMenuItems.includes(item.id))
+                                ? 'border-primary-200 bg-primary-50/50'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            {/* La Agenda de Citas es el unico item que NACE apagado:
+                                esta lista funciona por exclusion (todo visible salvo
+                                lo desmarcado), asi que sin este caso especial la
+                                agenda se encenderia para todos los negocios General.
+                                Su checkbox maneja el flag `appointmentsEnabled` en
+                                vez de hiddenMenuItems — un solo control, que es lo
+                                que el usuario espera al ver una sola casilla. */}
+                            <input
+                              type="checkbox"
+                              checked={item.id === 'vet-agenda'
+                                ? appointmentsEnabled
+                                : !hiddenMenuItems.includes(item.id)}
+                              onChange={(e) => {
+                                if (item.id === 'vet-agenda') {
+                                  setAppointmentsEnabled(e.target.checked)
+                                  return
+                                }
+                                if (e.target.checked) {
+                                  setHiddenMenuItems(hiddenMenuItems.filter(i => i !== item.id))
+                                } else {
+                                  setHiddenMenuItems([...hiddenMenuItems, item.id])
+                                }
+                              }}
+                              className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm font-medium text-gray-900 block">{item.label}</span>
+                              <span className="text-xs text-gray-500">{item.description}</span>
+                            </div>
+                          </label>
+                        ))
+                      ])}
+                    </>
+                  )}
+                  {businessMode === 'restaurant' && (
+                    <>
+                      {[
+                        { id: 'public-catalog', label: 'Mi Carta Digital', description: 'Carta digital para compartir con tus clientes y recibir pedidos' },
+                        { id: 'cash-register', label: 'Caja', description: 'Apertura y cierre de caja' },
+                        { id: 'orders', label: 'Órdenes', description: 'Listado de órdenes activas' },
+                        { id: 'tables', label: 'Mesas', description: 'Gestión de mesas del local' },
+                        { id: 'kitchen', label: 'Cocina', description: 'Vista de cocina para preparación' },
+                        { id: 'promotions', label: 'Promociones', description: 'Tarjeta de sellos, combos y cupones de descuento' },
+                        { id: 'ingredients', label: 'Ingredientes', description: 'Inventario de ingredientes' },
+                        { id: 'recipes', label: 'Recetas', description: 'Recetas y composición de platos' },
+                        { id: 'production', label: 'Producción', description: 'Producción y transformación de platos' },
+                        { id: 'inventory', label: 'Inventario', description: 'Control de stock de productos e ingredientes' },
+                        { id: 'warehouses', label: 'Almacenes', description: 'Múltiples ubicaciones de stock' },
+                        { id: 'purchases', label: 'Compras', description: 'Registro de compras a proveedores' },
+                        { id: 'purchase-history', label: 'Historial de Compras', description: 'Registro de compras de insumos' },
+                        { id: 'requirements', label: 'Requerimientos', description: 'Solicitudes de insumos y materiales' },
+                        { id: 'suppliers', label: 'Proveedores', description: 'Listado de proveedores' },
+                        { id: 'sellers', label: 'Vendedores', description: 'Gestión de vendedores y comisiones' },
+                        { id: 'fleet', label: 'Conductores y vehículos', description: 'Guarda conductores y vehículos para elegirlos al emitir guías de remisión' },
+                        { id: 'waiters', label: 'Mozos', description: 'Gestión de personal de atención' },
+                        { id: 'envios', label: 'Envíos', description: 'Gestión de repartidores y entregas' },
+                        { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
+                        { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
+                        { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
+                        { id: 'accounting', label: 'Contabilidad', description: 'Control de comprobantes electrónicos SUNAT' },
+
+                        { id: 'attendance', label: 'Personal', description: 'Directorio, asistencia y datos de los empleados' },
+
+                        { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
+                      ].map((item) => (
+                        <label
+                          key={item.id}
+                          className={`flex items-start space-x-3 cursor-pointer p-3 border rounded-lg transition-colors ${
+                            !hiddenMenuItems.includes(item.id)
+                              ? 'border-primary-200 bg-primary-50/50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!hiddenMenuItems.includes(item.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setHiddenMenuItems(hiddenMenuItems.filter(i => i !== item.id))
+                              } else {
+                                setHiddenMenuItems([...hiddenMenuItems, item.id])
+                              }
+                            }}
+                            className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-gray-900 block">{item.label}</span>
+                            <span className="text-xs text-gray-500">{item.description}</span>
+                          </div>
+                        </label>
+                      ))}
+                    </>
+                  )}
+                  {businessMode === 'pharmacy' && (
+                    <>
+                      {[
+                        { id: 'public-catalog', label: 'Mi Catálogo Online', description: 'Catálogo digital para compartir con tus clientes y recibir pedidos' },
+                        { id: 'online-orders', label: 'Pedidos Online', description: 'Bandeja de pedidos que llegan desde tu catálogo digital' },
+                        { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja' },
+                        { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos y proformas' },
+                        { id: 'sellers', label: 'Vendedores', description: 'Gestión de vendedores y comisiones' },
+                        { id: 'fleet', label: 'Conductores y vehículos', description: 'Guarda conductores y vehículos para elegirlos al emitir guías de remisión' },
+                        { id: 'promotions', label: 'Promociones', description: 'Tarjeta de sellos, combos y cupones de descuento' },
+                        { id: 'laboratories', label: 'Laboratorios', description: 'Fabricantes de medicamentos' },
+                        { id: 'inventory', label: 'Inventario', description: 'Control de stock' },
+                        { id: 'warehouses', label: 'Almacenes', description: 'Múltiples ubicaciones de stock' },
+                        { id: 'stock-movements', label: 'Movimientos', description: 'Historial de entradas y salidas' },
+                        { id: 'batch-control', label: 'Control de Lotes', description: 'Gestión de lotes y vencimientos' },
+                        { id: 'expiry-alerts', label: 'Alertas de Vencimiento', description: 'Productos próximos a vencer' },
+                        { id: 'suppliers', label: 'Proveedores', description: 'Droguerías y distribuidores' },
+                        { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
+                        { id: 'dispatch-guides', label: 'GRE Remitente', description: 'Guías de remisión como remitente' },
+                        { id: 'bulk-emission', label: 'Emisión Masiva', description: 'Crear muchos comprobantes o guías de una vez desde un Excel' },
+                        { id: 'purchase-orders', label: 'Órdenes de Compra', description: 'Pedidos a proveedores' },
+                        { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
+                        { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
+                        { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
+                        { id: 'accounting', label: 'Contabilidad', description: 'Control de comprobantes electrónicos SUNAT' },
+                        { id: 'loans', label: 'Préstamos', description: 'Préstamos a clientes' },
+                        { id: 'attendance', label: 'Personal', description: 'Directorio, asistencia y datos de los empleados' },
+
+                        { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
+                      ].map((item) => (
+                        <label
+                          key={item.id}
+                          className={`flex items-start space-x-3 cursor-pointer p-3 border rounded-lg transition-colors ${
+                            !hiddenMenuItems.includes(item.id)
+                              ? 'border-primary-200 bg-primary-50/50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!hiddenMenuItems.includes(item.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setHiddenMenuItems(hiddenMenuItems.filter(i => i !== item.id))
+                              } else {
+                                setHiddenMenuItems([...hiddenMenuItems, item.id])
+                              }
+                            }}
+                            className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-gray-900 block">{item.label}</span>
+                            <span className="text-xs text-gray-500">{item.description}</span>
+                          </div>
+                        </label>
+                      ))}
+                    </>
+                  )}
+                  {businessMode === 'hotel' && (
+                    <>
+                      {[
+                        { id: 'public-catalog', label: 'Mi Catálogo Online', description: 'Catálogo digital para compartir con tus clientes y recibir pedidos' },
+                        { id: 'hotel-rooms', label: 'Habitaciones', description: 'Gestión de habitaciones y estados' },
+                        { id: 'hotel-reservations', label: 'Reservas', description: 'Reservas, check-in y check-out' },
+                        { id: 'online-orders', label: 'Pedidos Online', description: 'Bandeja de pedidos que llegan desde tu carta digital' },
+                        { id: 'hotel-services', label: 'Servicios', description: 'Piscina, juegos, eventos y áreas' },
+                        { id: 'hotel-housekeeping', label: 'Housekeeping', description: 'Limpieza y mantenimiento de habitaciones' },
+                        { id: 'hotel-audit', label: 'Auditoría y Tarifas', description: 'Auditoría nocturna y tarifas por temporada' },
+                        { id: 'cash-register', label: 'Caja', description: 'Apertura y cierre de caja' },
+                        { id: 'products', label: 'Productos', description: 'Catálogo de productos y servicios' },
+                        { id: 'inventory', label: 'Inventario', description: 'Control de stock' },
+                        { id: 'warehouses', label: 'Almacenes', description: 'Múltiples ubicaciones de stock' },
+                        { id: 'suppliers', label: 'Proveedores', description: 'Listado de proveedores' },
+                        { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
+                        { id: 'expenses', label: 'Gastos', description: 'Control de gastos del hotel' },
+                        { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
+                        { id: 'accounting', label: 'Contabilidad', description: 'Control de comprobantes electrónicos SUNAT' },
+
+                        { id: 'attendance', label: 'Personal', description: 'Directorio, asistencia y datos de los empleados' },
+
+                        { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones' },
+                      ].map((item) => (
+                        <label
+                          key={item.id}
+                          className={`flex items-start space-x-3 cursor-pointer p-3 border rounded-lg transition-colors ${
+                            !hiddenMenuItems.includes(item.id)
+                              ? 'border-primary-200 bg-primary-50/50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!hiddenMenuItems.includes(item.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setHiddenMenuItems(hiddenMenuItems.filter(i => i !== item.id))
+                              } else {
+                                setHiddenMenuItems([...hiddenMenuItems, item.id])
+                              }
+                            }}
+                            className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-gray-900 block">{item.label}</span>
+                            <span className="text-xs text-gray-500">{item.description}</span>
+                          </div>
+                        </label>
+                      ))}
+                    </>
+                  )}
+                  {businessMode === 'transport' && (
+                    <>
+                      {[
+                        { id: 'public-catalog', label: 'Mi Catálogo Online', description: 'Catálogo digital para compartir con tus clientes y recibir pedidos' },
+                        { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja diario' },
+                        { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos y proformas' },
+                        { id: 'dispatch-guides', label: 'GRE Remitente', description: 'Guías de remisión como remitente' },
+                        { id: 'carrier-dispatch-guides', label: 'GRE Transportista', description: 'Guías de remisión como transportista' },
+                        { id: 'bulk-emission', label: 'Emisión Masiva', description: 'Crear muchos comprobantes o guías de una vez desde un Excel' },
+                        { id: 'sellers', label: 'Vendedores', description: 'Gestión de vendedores y comisiones' },
+                        { id: 'fleet', label: 'Conductores y vehículos', description: 'Guarda conductores y vehículos para elegirlos al emitir guías de remisión' },
+                        { id: 'inventory', label: 'Inventario', description: 'Control de stock por producto' },
+                        { id: 'warehouses', label: 'Almacenes', description: 'Múltiples ubicaciones de stock' },
+                        { id: 'stock-movements', label: 'Movimientos', description: 'Historial de entradas y salidas' },
+                        { id: 'suppliers', label: 'Proveedores', description: 'Listado de proveedores' },
+                        { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
+                        { id: 'purchase-history', label: 'Historial de Compras', description: 'Registro de compras de insumos' },
+                        { id: 'purchase-orders', label: 'Órdenes de Compra', description: 'Pedidos a proveedores' },
+                        { id: 'requirements', label: 'Requerimientos', description: 'Solicitudes de insumos y materiales' },
+                        { id: 'ingredients', label: 'Insumos', description: 'Materia prima y componentes' },
+                        { id: 'recipes', label: 'Composición', description: 'Productos compuestos' },
+                        { id: 'production', label: 'Producción', description: 'Producción y transformación de productos' },
+                        { id: 'envios', label: 'Envíos', description: 'Gestión de repartidores y entregas' },
+                        { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
+                        { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
+                        { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
+                        { id: 'accounting', label: 'Contabilidad', description: 'Control de comprobantes electrónicos SUNAT' },
+                        { id: 'loans', label: 'Préstamos', description: 'Préstamos a clientes' },
+                        { id: 'attendance', label: 'Personal', description: 'Directorio, asistencia y datos de los empleados' },
+
+                        { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
+                      ].map((item) => (
+                        <label
+                          key={item.id}
+                          className={`flex items-start space-x-3 cursor-pointer p-3 border rounded-lg transition-colors ${
+                            !hiddenMenuItems.includes(item.id)
+                              ? 'border-amber-200 bg-amber-50/50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!hiddenMenuItems.includes(item.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setHiddenMenuItems(hiddenMenuItems.filter(i => i !== item.id))
+                              } else {
+                                setHiddenMenuItems([...hiddenMenuItems, item.id])
+                              }
+                            }}
+                            className="mt-0.5 w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-gray-900 block">{item.label}</span>
+                            <span className="text-xs text-gray-500">{item.description}</span>
+                          </div>
+                        </label>
+                      ))}
+                    </>
+                  )}
+                  {businessMode === 'logistics' && (
+                    <>
+                      {[
+                        { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja diario' },
+                        { id: 'projects', label: 'Proyectos / Obras', description: 'Gestión de proyectos y obras activas' },
+                        { id: 'warehouse-exits', label: 'Salidas de Almacén', description: 'Registro de salidas de materiales a obras' },
+                        { id: 'warehouse-returns', label: 'Retornos a Almacén', description: 'Registro de retornos desde obras' },
+                        { id: 'logistics-reports', label: 'Reportes Logísticos', description: 'Historial y estado de inventario por obra' },
+                        { id: 'inventory', label: 'Inventario', description: 'Control de stock por producto' },
+                        { id: 'warehouses', label: 'Almacenes', description: 'Múltiples ubicaciones de stock' },
+                        { id: 'stock-movements', label: 'Movimientos', description: 'Historial de entradas y salidas' },
+                        { id: 'dispatch-guides', label: 'Guías de Remisión', description: 'Guías de remisión SUNAT' },
+                        { id: 'suppliers', label: 'Proveedores', description: 'Listado de proveedores' },
+                        { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
+                        { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
+                        { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
+                        { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
+                        { id: 'accounting', label: 'Contabilidad', description: 'Control de comprobantes electrónicos SUNAT' },
+
+                        { id: 'attendance', label: 'Personal', description: 'Directorio, asistencia y datos de los empleados' },
+
+                        { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
+                      ].map((item) => (
+                        <label
+                          key={item.id}
+                          className={`flex items-start space-x-3 cursor-pointer p-3 border rounded-lg transition-colors ${
+                            !hiddenMenuItems.includes(item.id)
+                              ? 'border-indigo-200 bg-indigo-50/50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!hiddenMenuItems.includes(item.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setHiddenMenuItems(hiddenMenuItems.filter(i => i !== item.id))
+                              } else {
+                                setHiddenMenuItems([...hiddenMenuItems, item.id])
+                              }
+                            }}
+                            className="mt-0.5 w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-gray-900 block">{item.label}</span>
+                            <span className="text-xs text-gray-500">{item.description}</span>
+                          </div>
+                        </label>
+                      ))}
+                    </>
+                  )}
+                  {businessMode === 'veterinary' && (
+                    <>
+                      {[
+                        { id: 'public-catalog', label: 'Mi Catálogo Online', description: 'Catálogo digital para compartir con tus clientes y recibir pedidos' },
+                        { id: 'online-orders', label: 'Pedidos Online', description: 'Bandeja de pedidos que llegan desde tu catálogo digital' },
+                        { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja diario' },
+                        { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos y proformas' },
+                        { id: 'sellers', label: 'Veterinarios', description: 'Gestión de veterinarios' },
+                        { id: 'promotions', label: 'Promociones', description: 'Tarjeta de sellos, combos y cupones de descuento' },
+                        { id: 'inventory', label: 'Inventario', description: 'Control de stock de productos' },
+                        { id: 'warehouses', label: 'Almacenes', description: 'Múltiples ubicaciones de stock' },
+                        { id: 'stock-movements', label: 'Movimientos', description: 'Historial de entradas y salidas' },
+                        { id: 'batch-control', label: 'Control de Lotes', description: 'Gestión de lotes y vencimientos' },
+                        { id: 'expiry-alerts', label: 'Alertas de Vencimiento', description: 'Productos próximos a vencer' },
+                        { id: 'suppliers', label: 'Proveedores', description: 'Listado de proveedores' },
+                        { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
+                        { id: 'purchase-history', label: 'Historial de Compras', description: 'Registro de compras de insumos' },
+                        { id: 'purchase-orders', label: 'Órdenes de Compra', description: 'Pedidos a proveedores' },
+                        { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
+                        { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
+                        { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
+                        { id: 'accounting', label: 'Contabilidad', description: 'Control de comprobantes electrónicos SUNAT' },
+                        { id: 'vet-agenda', label: 'Agenda de Citas', description: 'Calendario de citas programadas' },
+                        { id: 'vet-alerts', label: 'Recordatorios', description: 'Alertas de vacunas y servicios pendientes' },
+                        { id: 'attendance', label: 'Personal', description: 'Directorio, asistencia y datos de los empleados' },
+
+                        { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
+                      ].map((item) => (
+                        <label
+                          key={item.id}
+                          className={`flex items-start space-x-3 cursor-pointer p-3 border rounded-lg transition-colors ${
+                            !hiddenMenuItems.includes(item.id)
+                              ? 'border-teal-200 bg-teal-50/50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!hiddenMenuItems.includes(item.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setHiddenMenuItems(hiddenMenuItems.filter(i => i !== item.id))
+                              } else {
+                                setHiddenMenuItems([...hiddenMenuItems, item.id])
+                              }
+                            }}
+                            className="mt-0.5 w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-gray-900 block">{item.label}</span>
+                            <span className="text-xs text-gray-500">{item.description}</span>
+                          </div>
+                        </label>
+                      ))}
+                    </>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-3">
+                  Los módulos principales (Dashboard, POS, Ventas, Clientes, Productos, Configuración) siempre estarán visibles.
+                </p>
+              </div>
+
+              {/* Comandas (solo restaurante): qué se imprime en el ticket de cocina */}
+              {businessMode === 'restaurant' && (
+                <>
+                  <div className="border-t border-gray-200"></div>
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900 mb-1">Fuentes de pedido</h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      De dónde llega cada pedido. Es lo que se elige al crear una orden y lo que
+                      después separa las ventas por canal en los reportes.
+                    </p>
+                    <div className="p-4 border border-gray-200 rounded-lg">
+                      <p className="text-xs text-gray-600 mb-3 leading-relaxed">
+                        Desmarca las que no uses para que no aparezcan al crear una orden. Mostrador
+                        no se puede quitar. Con <strong>Agregar fuente</strong> creas la tuya —Instagram,
+                        TikTok, un convenio—. Esto no afecta a los pedidos ya registrados.
+                      </p>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {BUILTIN_ORDER_SOURCES.map(s => {
+                          const visible = s.fixed || !hiddenOrderSources.includes(s.key)
+                          return (
+                            <label
+                              key={s.key}
+                              className={`flex items-center gap-2 p-2 rounded-md border border-gray-200 text-sm transition-colors ${
+                                s.fixed
+                                  ? 'cursor-default bg-gray-50 text-gray-500'
+                                  : 'cursor-pointer hover:bg-gray-50 text-gray-700'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={visible}
+                                disabled={s.fixed}
+                                onChange={() => setHiddenOrderSources(prev =>
+                                  prev.includes(s.key)
+                                    ? prev.filter(x => x !== s.key)
+                                    : [...prev, s.key]
+                                )}
+                                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                              />
+                              <span className="truncate">{s.label}</span>
+                            </label>
+                          )
+                        })}
+
+                        {/* Las propias, en la MISMA grilla que las de fabrica:
+                            son fuentes igual. Se quitan con la x; no llevan
+                            casilla porque quitarlas ES desactivarlas. */}
+                        {customOrderSources.map(s => (
+                          <div
+                            key={s.id}
+                            className="flex items-center gap-2 p-2 rounded-md border border-gray-200 text-sm text-gray-700"
+                          >
+                            <span className="w-4 h-4 rounded bg-primary-600 flex items-center justify-center flex-shrink-0">
+                              <Check className="w-3 h-3 text-white" />
+                            </span>
+                            <span className="truncate flex-1">{s.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => setCustomOrderSources(prev => prev.filter(x => x.id !== s.id))}
+                              className="text-gray-400 hover:text-red-600 flex-shrink-0"
+                              aria-label={`Quitar ${s.name}`}
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+
+                        <button
+                          type="button"
+                          onClick={() => setShowNewOrderSourceModal(true)}
+                          className="flex items-center justify-center gap-1.5 p-2 rounded-md border border-dashed border-gray-300 text-sm text-gray-600 hover:border-primary-400 hover:text-primary-700 transition-colors"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Agregar fuente
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-gray-200"></div>
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900 mb-1">Comandas</h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Qué información se imprime en las comandas (tickets de cocina).
+                    </p>
+                    <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={businessSettings?.showCustomerDataOnKitchenTicket === true}
+                        onChange={async (e) => {
+                          if (isDemoMode) {
+                            toast.error('No disponible en modo demo')
+                            return
+                          }
+                          const enabled = e.target.checked
+                          try {
+                            const businessRef = doc(db, 'businesses', getBusinessId())
+                            await setDoc(businessRef, {
+                              showCustomerDataOnKitchenTicket: enabled,
+                              updatedAt: serverTimestamp(),
+                            }, { merge: true })
+                            if (refreshBusinessSettings) await refreshBusinessSettings()
+                            toast.success(enabled
+                              ? 'Las comandas mostrarán datos del cliente y cobro'
+                              : 'Las comandas mostrarán solo los productos (cocina)')
+                          } catch (error) {
+                            console.error('Error toggle comandas:', error)
+                            toast.error('No se pudo actualizar')
+                          }
+                        }}
+                        className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                          <Bike className="w-4 h-4 text-primary-600" />
+                          Mostrar datos del cliente y cobro en comandas
+                        </span>
+                        <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                          Al activarlo, las comandas de delivery y para llevar incluyen nombre,
+                          teléfono, dirección y el estado de pago (★ POR COBRAR ★ con el monto, o
+                          ✓ PAGADO). Si está desactivado, la comanda muestra solo los productos para
+                          la cocina, como siempre.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="border-t border-gray-200"></div>
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900 mb-1">Delivery</h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      El costo del envío se pone en cada pedido y se cobra como una línea más.
+                    </p>
+                    <div className="p-4 border border-gray-200 rounded-lg">
+                      <label className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                        <Bike className="w-4 h-4 text-primary-600" />
+                        Costo de envío sugerido
+                      </label>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        Viene precargado al crear un pedido de delivery, para no volver a
+                        escribirlo cada vez. Se puede cambiar en cada pedido, o borrar si esa
+                        entrega no cobra envío. Déjalo en 0 si prefieres escribirlo siempre a mano.
+                      </p>
+                      <div className="relative mt-3 max-w-[180px]">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">S/</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.10"
+                          inputMode="decimal"
+                          defaultValue={Number(businessSettings?.defaultDeliveryFee) || ''}
+                          placeholder="0.00"
+                          onBlur={async (e) => {
+                            if (isDemoMode) {
+                              toast.error('No disponible en modo demo')
+                              return
+                            }
+                            const monto = Math.max(0, Math.round((Number(e.target.value) || 0) * 100) / 100)
+                            if (monto === (Number(businessSettings?.defaultDeliveryFee) || 0)) return
+                            try {
+                              const businessRef = doc(db, 'businesses', getBusinessId())
+                              await setDoc(businessRef, {
+                                defaultDeliveryFee: monto,
+                                updatedAt: serverTimestamp(),
+                              }, { merge: true })
+                              if (refreshBusinessSettings) await refreshBusinessSettings()
+                              toast.success(monto > 0
+                                ? `Costo de envío sugerido: S/ ${monto.toFixed(2)}`
+                                : 'Sin costo de envío sugerido')
+                            } catch (error) {
+                              console.error('Error al guardar el costo de envío:', error)
+                              toast.error('No se pudo guardar')
+                            }
+                          }}
+                          className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Integraciones — visibles para TODOS los modos de negocio.
+                  Cada toggle individual decide si aplica al modo (ej. Rappi solo restaurant). */}
+              <div className="border-t border-gray-200"></div>
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Integraciones</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Conecta servicios externos a Cobrify.
+                </p>
+
+                {/* Toggle Rappi: solo restaurant */}
+                {businessMode === 'restaurant' && (
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-orange-300 hover:bg-orange-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={businessSettings?.rappiEnabled === true}
+                      onChange={async (e) => {
+                        if (isDemoMode) {
+                          toast.error('No disponible en modo demo')
+                          return
+                        }
+                        const enabled = e.target.checked
+                        try {
+                          const businessRef = doc(db, 'businesses', getBusinessId())
+                          await setDoc(businessRef, {
+                            rappiEnabled: enabled,
+                            updatedAt: serverTimestamp(),
+                          }, { merge: true })
+                          if (refreshBusinessSettings) await refreshBusinessSettings()
+                          toast.success(enabled
+                            ? 'Integración con Rappi activada'
+                            : 'Integración con Rappi desactivada')
+                        } catch (error) {
+                          console.error('Error toggle Rappi:', error)
+                          toast.error('No se pudo actualizar')
+                        }
+                      }}
+                      className="mt-1 w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-orange-900 flex items-center gap-2">
+                        <Bike className="w-4 h-4 text-orange-600" />
+                        Habilitar integración con Rappi
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        Activa la captación de pedidos desde Rappi. Se mostrará el módulo
+                        "Pedidos Rappi" en el menú lateral y un nuevo tab "Rappi" en esta
+                        configuración para cargar tus credenciales.
+                      </p>
+                    </div>
+                  </label>
+                )}
+
+                {/* Toggle Shopifree: aplica a TODOS los modos (retail, restaurant, farmacia, etc.) */}
+                <label className={`flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50/30 transition-colors ${businessMode === 'restaurant' ? 'mt-3' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={businessSettings?.shopifreeEnabled === true}
+                    onChange={async (e) => {
+                      if (isDemoMode) {
+                        toast.error('No disponible en modo demo')
+                        return
+                      }
+                      const enabled = e.target.checked
+                      try {
+                        const businessRef = doc(db, 'businesses', getBusinessId())
+                        await setDoc(businessRef, {
+                          shopifreeEnabled: enabled,
+                          updatedAt: serverTimestamp(),
+                        }, { merge: true })
+                        if (refreshBusinessSettings) await refreshBusinessSettings()
+                        toast.success(enabled
+                          ? 'Integración con Shopifree activada'
+                          : 'Integración con Shopifree desactivada')
+                      } catch (error) {
+                        console.error('Error toggle Shopifree:', error)
+                        toast.error('No se pudo actualizar')
+                      }
+                    }}
+                    className="mt-1 w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-900 group-hover:text-emerald-900 flex items-center gap-2">
+                      <ShoppingBag className="w-4 h-4 text-emerald-600" />
+                      Habilitar integración con Shopifree (Tienda Online)
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                      Conecta tu catálogo Cobrify con tu tienda online en Shopifree.
+                      Aparecerá un nuevo tab "Tienda Online" en esta configuración
+                      para pegar tu API key y sincronizar productos y pedidos automáticamente.
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </CardContent>
+
+          {/* Save Button for Preferences */}
+          <div className="px-6 pb-6">
+            <div className="flex justify-end">
+              <Button
+                onClick={async () => {
+                  if (isDemoMode) {
+                    toast.error('No se pueden guardar cambios en modo demo. Crea una cuenta para configurar tu empresa.')
+                    return
+                  }
+
+                  setIsSaving(true)
+                  try {
+                    const businessRef = doc(db, 'businesses', getBusinessId())
+                    await setDoc(businessRef, {
+                      businessMode: businessMode,
+                      restaurantConfig: restaurantConfig,
+                      posCustomFields: posCustomFields,
+                      enableProductImages: enableProductImages,
+                      enableProductLocation: enableProductLocation,
+                      appointmentsEnabled: appointmentsEnabled,
+                      enableManualStockEdit: enableManualStockEdit,
+                      defaultTaxAffectation: defaultTaxAffectation,
+                      allowManualTaxAffectation: allowManualTaxAffectation,
+                      enableCustomerDisplay: enableCustomerDisplay,
+                      hiddenMenuItems: hiddenMenuItems,
+                      // Los tres se EDITAN en esta pestaña. Estaban solo en el
+                      // payload del botón de Ventas, así que "Guardar
+                      // Preferencias" decía que sí y no guardaba nada de esto.
+                      obrasEnabled: obrasEnabled,
+                      lendingEnabled: lendingEnabled,
+                      serviciosEnabled: serviciosEnabled,
+                      servicioTituloRecibo: servicioTituloRecibo,
+                      servicioFirma: servicioFirma,
+                      servicioLema: servicioLema,
+                      hiddenOrderSources: hiddenOrderSources,
+                      customOrderSources: customOrderSources,
+                      metaAdsEnabled: metaAdsEnabled,
+                      metaAdsPhonePrefix: metaAdsPhonePrefix,
+                      metaAdsOrderIdPrefix: metaAdsOrderIdPrefix,
+                      updatedAt: serverTimestamp(),
+                    }, { merge: true })
+                    if (refreshBusinessSettings) await refreshBusinessSettings()
+                    toast.success('Preferencias guardadas exitosamente.')
+                  } catch (error) {
+                    console.error('Error al guardar preferencias:', error)
+                    toast.error('Error al guardar las preferencias')
+                  } finally {
+                    setIsSaving(false)
+                  }
+                }}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Guardar Preferencias
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Qué versión está corriendo. Va acá porque es donde la busca
+                quien tiene que decírsela a soporte. */}
+            <div className="mt-6 border-t border-gray-200 pt-4">
+              <VersionApp />
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Tab Content - Ventas (Inventario y POS) */}
+      {activeTab === 'ventas' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center space-x-2">
+              <ShoppingCart className="w-5 h-5 text-primary-600" />
+              <CardTitle>Ventas e Inventario</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {/* Restaurant Operations Section - Only show in restaurant mode */}
+              {businessMode === 'restaurant' && (
+                <>
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900 mb-1">Operaciones de Restaurante</h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Configura cómo funciona el flujo de órdenes y cocina en tu restaurante
+                    </p>
+                    <div className="space-y-4">
+                      <SettingToggle
+                        checked={restaurantConfig.itemStatusTracking}
+                        onChange={(e) => setRestaurantConfig({...restaurantConfig, itemStatusTracking: e.target.checked})}
+                        title="Seguimiento de estado por item individual"
+                        description={restaurantConfig.itemStatusTracking
+                          ? '✓ Habilitado: Cada plato/item de la orden se marca individualmente (Pendiente → Preparando → Listo → Entregado). Los platos pueden estar listos en diferentes momentos. Ideal para restaurantes con múltiples estaciones de cocina o menús extensos.'
+                          : '✗ Deshabilitado: La orden completa se marca como un todo (Pendiente → En preparación → Lista → Entregada). Más simple y rápido para operaciones pequeñas, cafeterías o negocios con preparación rápida.'}
+                      />
+
+                      {/* Omitir mozos a usuarios secundarios */}
+                      <SettingToggle
+                        checked={restaurantConfig.skipWaiterForSecondary || false}
+                        onChange={(e) => setRestaurantConfig({...restaurantConfig, skipWaiterForSecondary: e.target.checked})}
+                        title="Omitir mozos a usuarios secundarios"
+                        description={restaurantConfig.skipWaiterForSecondary
+                          ? '✓ Habilitado: Los usuarios secundarios ocupan la mesa directamente, sin seleccionar un mozo. Útil cuando cada usuario secundario ES el mozo. El dueño y administradores siguen seleccionando mozo normalmente.'
+                          : '✗ Deshabilitado: Todos los usuarios deben seleccionar un mozo al ocupar una mesa.'}
+                      />
+
+                      {/* Usuarios secundarios siempre con comprobante */}
+                      <SettingToggle
+                        checked={restaurantConfig.requireReceiptForSecondary || false}
+                        onChange={(e) => setRestaurantConfig({...restaurantConfig, requireReceiptForSecondary: e.target.checked})}
+                        title="Usuarios secundarios siempre con comprobante"
+                        description={restaurantConfig.requireReceiptForSecondary
+                          ? '✓ Habilitado: Los usuarios secundarios no pueden cerrar una mesa u orden sin emitir comprobante (se oculta la opción "Cerrar sin comprobante"). El dueño y administradores sí pueden.'
+                          : '✗ Deshabilitado: Los usuarios secundarios pueden cerrar mesas u órdenes sin comprobante (con motivo registrado).'}
+                      />
+
+                      {/* Pago obligatorio antes de cocina */}
+                      <SettingToggle
+                        checked={restaurantConfig.requirePaymentBeforeKitchen || false}
+                        onChange={(e) => setRestaurantConfig({...restaurantConfig, requirePaymentBeforeKitchen: e.target.checked})}
+                        title="Requerir pago antes de enviar a cocina"
+                        description={restaurantConfig.requirePaymentBeforeKitchen
+                          ? '✓ Habilitado: Las órdenes no se pueden enviar a cocina hasta que estén pagadas. Ideal para restaurantes de comida rápida, food courts o delivery donde el pago es por adelantado.'
+                          : '✗ Deshabilitado: Las órdenes se pueden enviar a cocina sin necesidad de pago previo. El cliente puede pagar después de recibir su pedido.'}
+                      />
+
+                      {/* Recargo al Consumo (Decreto Ley N° 25988) */}
+                      <SettingToggle
+                        checked={restaurantConfig.recargoConsumoEnabled || false}
+                        onChange={(e) => setRestaurantConfig({...restaurantConfig, recargoConsumoEnabled: e.target.checked})}
+                        title="Recargo al Consumo"
+                        description={restaurantConfig.recargoConsumoEnabled
+                          ? `✓ Habilitado: Se aplica ${restaurantConfig.recargoConsumoRate}% adicional sobre el subtotal. Este recargo se distribuye entre los trabajadores según Decreto Ley N° 25988.`
+                          : '✗ Deshabilitado: No se aplica recargo al consumo en las ventas.'}
+                      />
+
+                      {/* Configuración del porcentaje (solo si está habilitado) */}
+                      {restaurantConfig.recargoConsumoEnabled && (
+                        <div className="mt-3 ml-7 flex items-center gap-3">
+                          <label className="text-sm text-gray-700">Porcentaje:</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min="1"
+                              max="13"
+                              step="1"
+                              value={restaurantConfig.recargoConsumoRate || 10}
+                              onChange={(e) => {
+                                const value = Math.min(13, Math.max(1, parseInt(e.target.value) || 10))
+                                setRestaurantConfig({...restaurantConfig, recargoConsumoRate: value})
+                              }}
+                              className="w-16 px-2 py-1.5 text-center text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            />
+                            <span className="text-sm text-gray-600">%</span>
+                          </div>
+                          <span className="text-xs text-gray-500">(máximo 13% por ley)</span>
+                        </div>
+                      )}
+
+                      {/* POR CONSUMO: el comprobante con una sola línea */}
+                      <SettingToggle
+                        id="opcion-porConsumo"
+                        checked={restaurantConfig.porConsumoEnabled === true}
+                        onChange={(e) => setRestaurantConfig({...restaurantConfig, porConsumoEnabled: e.target.checked})}
+                        title="Emitir POR CONSUMO"
+                        description={restaurantConfig.porConsumoEnabled
+                          ? `✓ Habilitado: al cobrar aparece una casilla para emitir el comprobante con una sola línea que dice "${(restaurantConfig.porConsumoTexto || '').trim() || 'POR CONSUMO'}", en vez del detalle de platos. Viene DESMARCADA: se marca solo en las ventas donde el cliente lo pide. Adentro del sistema no cambia nada — el stock, los insumos y los reportes siguen viendo cada plato.`
+                          : '✗ Deshabilitado: el comprobante sale con el detalle de cada plato.'}
+                      />
+
+                      {restaurantConfig.porConsumoEnabled && (
+                        <div className="mt-3 ml-7">
+                          <label className="block text-sm text-gray-700 mb-1">Qué dice la línea:</label>
+                          <input
+                            type="text"
+                            maxLength={80}
+                            value={restaurantConfig.porConsumoTexto ?? 'POR CONSUMO'}
+                            onChange={(e) => setRestaurantConfig({...restaurantConfig, porConsumoTexto: e.target.value.toUpperCase()})}
+                            placeholder="POR CONSUMO"
+                            className="w-full max-w-xs px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Algunos negocios usan &quot;CONSUMO DE ALIMENTOS Y BEBIDAS&quot;. Si lo dejas vacío se emite como POR CONSUMO.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Impresión automática de comandas */}
+                      <SettingToggle
+                        checked={restaurantConfig.autoPrintKitchenComanda !== false}
+                        onChange={(e) => setRestaurantConfig({...restaurantConfig, autoPrintKitchenComanda: e.target.checked})}
+                        title="Imprimir la comanda automáticamente"
+                        description={restaurantConfig.autoPrintKitchenComanda !== false
+                          ? '✓ Habilitado: Al tomar un pedido (desde Mesas u Órdenes) la comanda se envía sola a la cocina.'
+                          : '✗ Deshabilitado: La comanda no se imprime sola. El mozo la envía con el botón "Imprimir Comanda" cuando lo necesite.'}
+                      />
+
+                      {/* Venta directa del POS -> orden + comanda (patio de comidas, dark kitchen) */}
+                      <SettingToggle
+                        id="opcion-posCreatesKitchenOrder"
+                        checked={restaurantConfig.posCreatesKitchenOrder === true}
+                        onChange={(e) => setRestaurantConfig({...restaurantConfig, posCreatesKitchenOrder: e.target.checked})}
+                        title="La venta del POS genera la orden en Cocina"
+                        description={restaurantConfig.posCreatesKitchenOrder === true
+                          ? '✓ Habilitado: Al cobrar una venta directa en el POS se crea la orden en Cocina (ya pagada) y se imprime la comanda junto con el comprobante. Ideal para patio de comidas o mostrador: un solo paso. Las ventas que vienen de una mesa o de una orden existente no se duplican.'
+                          : '✗ Deshabilitado: La venta directa del POS no pasa por Cocina. Los pedidos a cocina se toman desde Mesas u Órdenes.'}
+                      />
+
+                      {/* Modo Multi-Estación de Cocina */}
+                      <SettingToggle
+                        checked={restaurantConfig.enableKitchenStations || false}
+                        onChange={(e) => setRestaurantConfig({...restaurantConfig, enableKitchenStations: e.target.checked})}
+                        title="Modo Multi-Estación de Cocina"
+                        description={restaurantConfig.enableKitchenStations
+                          ? '✓ Habilitado: Los pedidos se dividen automáticamente por estaciones (Cocina caliente, Cocina fría, Bebidas, etc.). Cada estación ve solo los items que le corresponden.'
+                          : '✗ Deshabilitado: Todos los items del pedido se muestran juntos en una sola vista de cocina.'}
+                      />
+
+                      {/* Configuración de Estaciones (solo si está habilitado) */}
+                      {restaurantConfig.enableKitchenStations && (
+                        <div className="ml-7 mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                          <div className="flex items-center justify-between mb-4">
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900">Estaciones de Cocina</h4>
+                              <p className="text-xs text-gray-600">Define las estaciones y asigna categorías de productos a cada una</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newStation = {
+                                  id: `station_${Date.now()}`,
+                                  name: '',
+                                  categories: [],
+                                  color: '#EF4444',
+                                  order: (restaurantConfig.kitchenStations?.length || 0) + 1,
+                                  isPase: false,
+                                  printerIp: '',
+                                  // Sede: hereda la del header. null = imprime en TODAS
+                                  // (valor de las estaciones anteriores al campo).
+                                  branchId: (branchScope && branchScope !== 'all') ? branchScope : null,
+                                }
+                                setRestaurantConfig({
+                                  ...restaurantConfig,
+                                  kitchenStations: [...(restaurantConfig.kitchenStations || []), newStation]
+                                })
+                              }}
+                              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              Agregar Estación
+                            </button>
+                          </div>
+
+                          {/* Nota cruzada hacia la config de impresora */}
+                          <div className="flex items-start gap-2 p-3 mb-4 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
+                            <Info className="w-4 h-4 mt-0.5 flex-shrink-0 text-blue-600" />
+                            <span>Aquí van las impresoras de <strong>Cocina y Bar</strong> (comandas), cada una con su IP. La <strong>Impresora de Caja</strong> (comprobantes y precuentas) y la principal se configuran en <strong>Configuración → Impresora</strong>.</span>
+                          </div>
+
+                          {/* Checkbox para impresión automática */}
+                          <label className="flex items-center gap-2 cursor-pointer p-3 bg-white border border-gray-200 rounded-lg mb-4">
+                            <input
+                              type="checkbox"
+                              checked={restaurantConfig.autoPrintByStation || false}
+                              onChange={(e) => setRestaurantConfig({...restaurantConfig, autoPrintByStation: e.target.checked})}
+                              className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                            />
+                            <div>
+                              <span className="text-sm font-medium text-gray-900">
+                                Impresión automática por estación
+                              </span>
+                              <p className="text-xs text-gray-500">
+                                {restaurantConfig.autoPrintByStation
+                                  ? '✓ Habilitado: Al enviar una orden a cocina, se imprimirán automáticamente las comandas en cada estación según las categorías asignadas.'
+                                  : 'Al enviar a cocina, imprime automáticamente en la impresora de cada estación.'}
+                              </p>
+                            </div>
+                          </label>
+
+                          {/* Checkbox: imprimir comanda junta desde PC/navegador */}
+                          <label className="flex items-center gap-2 cursor-pointer p-3 bg-white border border-gray-200 rounded-lg mb-4">
+                            <input
+                              type="checkbox"
+                              checked={restaurantConfig.combineStationsOnWebPrint || false}
+                              onChange={(e) => setRestaurantConfig({...restaurantConfig, combineStationsOnWebPrint: e.target.checked})}
+                              className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                            />
+                            <div>
+                              <span className="text-sm font-medium text-gray-900">
+                                Imprimir comanda junta desde PC/navegador
+                              </span>
+                              <p className="text-xs text-gray-500">
+                                {restaurantConfig.combineStationsOnWebPrint
+                                  ? '✓ Habilitado: Al imprimir la comanda desde la computadora (Chrome), sale TODO en una sola comanda, sin separar por estación.'
+                                  : 'Al imprimir desde PC, la comanda se separa en una hoja por estación (Cocina, Bar…). Actívalo para que salga todo junto en una sola.'}
+                              </p>
+                            </div>
+                          </label>
+
+                          {/* Lista de estaciones */}
+                          <div className="space-y-3">
+                            {(restaurantConfig.kitchenStations || []).length === 0 ? (
+                              <div className="text-center py-6 text-gray-500 text-sm">
+                                <UtensilsCrossed className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                                <p>No hay estaciones configuradas</p>
+                                <p className="text-xs">Agrega estaciones como "Cocina Caliente", "Bebidas", etc.</p>
+                              </div>
+                            ) : (
+                              (restaurantConfig.kitchenStations || []).map((station, index) => (
+                                <div key={station.id} className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                                  <div className="flex items-start gap-3">
+                                    {/* Color picker */}
+                                    <input
+                                      type="color"
+                                      value={station.color || '#EF4444'}
+                                      onChange={(e) => {
+                                        const updated = [...restaurantConfig.kitchenStations]
+                                        updated[index] = { ...station, color: e.target.value }
+                                        setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
+                                      }}
+                                      className="w-8 h-8 rounded cursor-pointer border-0"
+                                      title="Color de la estación"
+                                    />
+
+                                    <div className="flex-1 space-y-3">
+                                      {/* Nombre de la estación */}
+                                      <input
+                                        type="text"
+                                        value={station.name}
+                                        onChange={(e) => {
+                                          const updated = [...restaurantConfig.kitchenStations]
+                                          updated[index] = { ...station, name: e.target.value }
+                                          setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
+                                        }}
+                                        placeholder="Nombre de la estación (ej: Cocina Caliente)"
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                      />
+
+                                      {/* Selector de categorías */}
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                                          Categorías asignadas:
+                                        </label>
+                                        {productCategories.length === 0 ? (
+                                          <p className="text-xs text-gray-500 italic">
+                                            No hay categorías de productos. Crea categorías en la sección de Productos.
+                                          </p>
+                                        ) : (
+                                          <div className="flex flex-wrap gap-2">
+                                            {productCategories.map((category) => {
+                                              // Soportar tanto strings como objetos {id, name, parentId}
+                                              const categoryId = typeof category === 'string' ? category : category.id
+                                              const categoryName = typeof category === 'string' ? category : category.name
+                                              // Verificar si está seleccionada por nombre O por ID (para compatibilidad)
+                                              const isSelected = (station.categories || []).some(c =>
+                                                c === categoryName || c === categoryId
+                                              )
+                                              return (
+                                                <button
+                                                  key={categoryId}
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const updated = [...restaurantConfig.kitchenStations]
+                                                    const currentCategories = station.categories || []
+                                                    if (isSelected) {
+                                                      updated[index] = {
+                                                        ...station,
+                                                        // Filtrar tanto por nombre como por ID para compatibilidad
+                                                        categories: currentCategories.filter(c =>
+                                                          c !== categoryName && c !== categoryId
+                                                        )
+                                                      }
+                                                    } else {
+                                                      // Guardar el NOMBRE de la categoría para que coincida con item.category
+                                                      updated[index] = {
+                                                        ...station,
+                                                        categories: [...currentCategories, categoryName]
+                                                      }
+                                                    }
+                                                    setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
+                                                  }}
+                                                  className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
+                                                    isSelected
+                                                      ? 'bg-primary-600 text-white'
+                                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                  }`}
+                                                >
+                                                  {categoryName}
+                                                </button>
+                                              )
+                                            })}
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Checkbox para estación de pase */}
+                                      <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={station.isPase || false}
+                                          onChange={(e) => {
+                                            const updated = [...restaurantConfig.kitchenStations]
+                                            updated[index] = { ...station, isPase: e.target.checked }
+                                            setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
+                                          }}
+                                          className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                        />
+                                        <span className="text-xs text-gray-700">
+                                          Estación de Pase/Despacho (ve todos los items para consolidar)
+                                        </span>
+                                      </label>
+
+                                      {/* Impresora asignada a la estación */}
+                                      <div>
+                                        <label className="flex items-center gap-2 cursor-pointer mb-1">
+                                          <input
+                                            type="checkbox"
+                                            checked={station.useBuiltInPrinter || false}
+                                            onChange={(e) => {
+                                              const updated = [...restaurantConfig.kitchenStations]
+                                              updated[index] = { ...station, useBuiltInPrinter: e.target.checked, ...(e.target.checked ? { printerIp: '' } : {}) }
+                                              setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
+                                            }}
+                                            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                          />
+                                          <span className="text-xs text-gray-700">
+                                            Usar impresora integrada del dispositivo (iMin)
+                                          </span>
+                                        </label>
+                                        {!station.useBuiltInPrinter && (
+                                          <>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                                              Impresora WiFi (IP):
+                                            </label>
+                                            <input
+                                              type="text"
+                                              value={station.printerIp || ''}
+                                              onChange={(e) => {
+                                                const updated = [...restaurantConfig.kitchenStations]
+                                                updated[index] = { ...station, printerIp: e.target.value }
+                                                setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
+                                              }}
+                                              placeholder="Ej: 192.168.1.100"
+                                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                            />
+                                          </>
+                                        )}
+                                        <p className="text-xs text-gray-500 mt-0.5">
+                                          Imprime automáticamente comandas al enviar a cocina
+                                        </p>
+                                      </div>
+
+                                      {/* Sede de la estación (solo con sucursales configuradas) */}
+                                      {branches.length > 0 && (
+                                        <div>
+                                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                                            Sucursal:
+                                          </label>
+                                          <select
+                                            value={station.branchId || ''}
+                                            onChange={(e) => {
+                                              const updated = [...restaurantConfig.kitchenStations]
+                                              updated[index] = { ...station, branchId: e.target.value || null }
+                                              setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
+                                            }}
+                                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+                                          >
+                                            <option value="">Todas las sucursales</option>
+                                            <option value="main">{businessSettings?.mainBranchName || 'Sucursal Principal'}</option>
+                                            {branches.map(b => (
+                                              <option key={b.id} value={b.id}>{b.name}</option>
+                                            ))}
+                                          </select>
+                                          <p className="text-xs text-gray-500 mt-0.5">
+                                            Solo recibirá las comandas de esta sede. Con "Todas" imprime
+                                            los pedidos de cualquier local.
+                                          </p>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Botón eliminar */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const updated = restaurantConfig.kitchenStations.filter((_, i) => i !== index)
+                                        setRestaurantConfig({ ...restaurantConfig, kitchenStations: updated })
+                                      }}
+                                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                      title="Eliminar estación"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+
+                          {/* Ayuda */}
+                          {(restaurantConfig.kitchenStations || []).length > 0 && (
+                            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                              <div className="flex items-start gap-2">
+                                <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                                <div className="text-xs text-blue-800">
+                                  <p className="font-medium mb-1">¿Cómo funciona?</p>
+                                  <ul className="list-disc list-inside space-y-0.5 text-blue-700">
+                                    <li>Cada estación verá solo los items de las categorías asignadas</li>
+                                    <li>En la pantalla de Cocina podrás filtrar por estación</li>
+                                    <li>La estación de "Pase" ve todos los items para coordinar la entrega</li>
+                                  </ul>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Gestión de Marcas (Multi-marca / Dark Kitchen) */}
+                    <div className={`mt-4 p-4 border rounded-lg transition-colors ${
+                      (restaurantConfig.brands || []).length > 0
+                        ? 'border-gray-300 bg-gray-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}>
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <span className="text-sm font-medium text-gray-900">
+                            Marcas / Dark Kitchen
+                          </span>
+                          <p className="text-xs text-gray-600 mt-0.5">
+                            Gestiona múltiples marcas desde la misma cocina
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newBrand = {
+                              id: `brand_${Date.now()}`,
+                              name: '',
+                              color: '#8B5CF6',
+                              active: true
+                            }
+                            setRestaurantConfig({
+                              ...restaurantConfig,
+                              brands: [...(restaurantConfig.brands || []), newBrand]
+                            })
+                          }}
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Agregar
+                        </button>
+                      </div>
+
+                      {/* Lista de marcas */}
+                      {(restaurantConfig.brands || []).length === 0 ? (
+                        <div className="text-center py-4 text-gray-500 text-sm">
+                          <ShoppingBag className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                          <p>No hay marcas configuradas</p>
+                          <p className="text-xs">Agrega marcas si operas varias desde la misma cocina</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {(restaurantConfig.brands || []).map((brand, index) => (
+                            <div key={brand.id} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-gray-200">
+                              <input
+                                type="color"
+                                value={brand.color || '#8B5CF6'}
+                                onChange={(e) => {
+                                  const updated = [...restaurantConfig.brands]
+                                  updated[index] = { ...brand, color: e.target.value }
+                                  setRestaurantConfig({ ...restaurantConfig, brands: updated })
+                                }}
+                                className="w-8 h-8 rounded cursor-pointer border-0"
+                                title="Color de la marca"
+                              />
+                              <input
+                                type="text"
+                                value={brand.name}
+                                onChange={(e) => {
+                                  const updated = [...restaurantConfig.brands]
+                                  updated[index] = { ...brand, name: e.target.value }
+                                  setRestaurantConfig({ ...restaurantConfig, brands: updated })
+                                }}
+                                placeholder="Nombre de la marca"
+                                className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              />
+                              <label className="flex items-center gap-1 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={brand.active !== false}
+                                  onChange={(e) => {
+                                    const updated = [...restaurantConfig.brands]
+                                    updated[index] = { ...brand, active: e.target.checked }
+                                    setRestaurantConfig({ ...restaurantConfig, brands: updated })
+                                  }}
+                                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                />
+                                <span className="text-xs text-gray-600">Activa</span>
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = restaurantConfig.brands.filter((_, i) => i !== index)
+                                  setRestaurantConfig({ ...restaurantConfig, brands: updated })
+                                }}
+                                className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Eliminar marca"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="border-t border-gray-200"></div>
+                </>
+              )}
+
+              {/* Inventory Settings Section */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Control de Inventario</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Configura el comportamiento del control de stock
+                </p>
+                <div className="space-y-4">
+                  {/* Producto personalizado -> catalogo. Va en este bloque porque
+                      lo que crea es un producto, aunque se dispare desde el POS. */}
+                  <SettingToggle
+                    id="opcion-autoSaveCustomProducts"
+                    checked={autoSaveCustomProducts}
+                    onChange={(e) => setAutoSaveCustomProducts(e.target.checked)}
+                    title="Guardar los productos personalizados en el catálogo"
+                    description={autoSaveCustomProducts
+                      ? '✓ Habilitado: cuando en el Punto de Venta agregas un producto escrito a mano, queda guardado en tu catálogo para la próxima vez, con su precio y su costo. Nace sin control de stock (suele ser un servicio) y no se guarda dos veces el mismo nombre. La venta en curso no cambia.'
+                      : '✗ Deshabilitado: los productos escritos a mano valen solo para esa venta y hay que volver a escribirlos la próxima vez.'}
+                  />
+
+                  <SettingToggle
+                    id="opcion-allowNegativeStock"
+                    checked={allowNegativeStock}
+                    onChange={(e) => setAllowNegativeStock(e.target.checked)}
+                    title="Permitir vender productos sin stock"
+                    description={allowNegativeStock
+                      ? '✓ Habilitado: Los productos se pueden vender incluso si el stock está en 0 o negativo. El stock puede quedar en números negativos. Útil para negocios bajo pedido o dropshipping.'
+                      : '✗ Deshabilitado: Los productos con stock en 0 aparecerán deshabilitados en el punto de venta y no se podrán agregar al carrito. Recomendado para control estricto de inventario.'}
+                  />
+
+                  {/* Consulta pura: el cajero ve dónde más hay, pero la venta
+                      sigue saliendo del almacén seleccionado. */}
+                  <SettingToggle
+                    id="opcion-showOtherBranchesStock"
+                    checked={showOtherBranchesStock}
+                    onChange={(e) => setShowOtherBranchesStock(e.target.checked)}
+                    title="Ver el stock de otras sucursales en el punto de venta"
+                    description={showOtherBranchesStock
+                      ? '✓ Habilitado: al tocar el stock de un producto en el POS se abre el detalle de cuánto hay en cada sucursal. Sirve para responderle al cliente "acá no me queda, pero en la otra tienda sí". Es solo consulta: la venta sigue descontando del almacén seleccionado.'
+                      : '✗ Deshabilitado: en el POS cada usuario solo ve el stock del almacén con el que está trabajando.'}
+                  />
+
+                  {/* Punto medio entre bloquear y dejar pasar: se puede vender sin
+                      stock, pero el sistema PREGUNTA antes de agregarlo. Nace de un
+                      caso real: escanea productos pequeños en serie y el aviso rojo
+                      pasaba desapercibido, asi que terminaba cobrando sin ese item. */}
+                  <SettingToggle
+                    id="opcion-confirmSaleWithoutStock"
+                    checked={confirmSaleWithoutStock}
+                    onChange={(e) => setConfirmSaleWithoutStock(e.target.checked)}
+                    title="Preguntar antes de vender un producto sin stock"
+                    description={confirmSaleWithoutStock
+                      ? '✓ Habilitado: Al escanear o tocar un producto sin stock, el punto de venta muestra un aviso que debes confirmar para agregarlo. Ideal si escaneas rápido y no quieres que se te pase por alto.'
+                      : '✗ Deshabilitado: Los productos sin stock muestran solo un aviso pasajero y no se agregan (salvo que actives la opción de arriba).'}
+                  />
+
+                  {/* Descarga de stock en el traslado masivo del inventario */}
+                  <SettingToggle
+                    checked={stockDischargeEnabled}
+                    onChange={(e) => setStockDischargeEnabled(e.target.checked)}
+                    title="Permitir descarga de stock (traslado masivo)"
+                    description={stockDischargeEnabled
+                      ? '✓ Habilitado: En Inventario > Traslado Masivo aparecerá la opción "Descarga de stock", que descuenta el stock de un almacén SIN enviarlo a otro (para descartar mercadería). Queda registrado como movimiento auditable.'
+                      : '✗ Deshabilitado: El traslado masivo solo mueve stock de un almacén a otro.'}
+                  />
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* POS Settings */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Punto de Venta</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Configura el comportamiento del punto de venta
+                </p>
+                <div className="space-y-4">
+                  {/* Vencimiento y cuotas en notas de venta al crédito */}
+                  <SettingToggle
+                    id="opcion-notaVentaCreditTerms"
+                    checked={notaVentaCreditTerms}
+                    onChange={(e) => setNotaVentaCreditTerms(e.target.checked)}
+                    title="Vencimiento y cuotas en notas de venta al crédito"
+                    description={notaVentaCreditTerms
+                      ? '✓ Habilitado: Al marcar "Pago parcial o al crédito" en una nota de venta podrás fijar una fecha de vencimiento y dividir el saldo en cuotas, igual que en las facturas. Se imprimen en el PDF y el ticket, y aparecen en el reporte de Pagos Pendientes.'
+                      : '✗ Deshabilitado: Las notas de venta al crédito solo registran el saldo pendiente, sin fecha de compromiso ni cuotas.'}
+                  />
+
+                  <SettingToggle
+                    id="opcion-allowCustomProducts"
+                    checked={allowCustomProducts}
+                    onChange={(e) => setAllowCustomProducts(e.target.checked)}
+                    title="Permitir agregar productos personalizados en el POS"
+                    description={allowCustomProducts
+                      ? '✓ Habilitado: Aparecerá un botón "Producto Personalizado" en el punto de venta que permite agregar productos con nombre y precio personalizado sin necesidad de crearlos previamente. Ideal para servicios variables, trabajos por encargo o productos únicos.'
+                      : '✗ Deshabilitado: Solo se pueden vender productos previamente creados en el catálogo. Recomendado para negocios con inventario fijo y control estricto de productos.'}
+                  />
+
+                  <SettingToggle
+                    id="opcion-allowPriceEdit"
+                    checked={allowPriceEdit}
+                    onChange={(e) => setAllowPriceEdit(e.target.checked)}
+                    title="Permitir modificar precio de productos en el POS"
+                    description={allowPriceEdit
+                      ? '✓ Habilitado: Podrás editar el precio de venta de cualquier producto directamente desde el carrito del punto de venta. Útil para aplicar descuentos personalizados, promociones especiales o ajustar precios según el cliente.'
+                      : '✗ Deshabilitado: Los productos se venderán siempre al precio registrado en el catálogo sin posibilidad de modificarlo. Recomendado para mantener precios fijos y evitar errores de digitación.'}
+                  />
+
+                  <SettingToggle
+                    id="opcion-posClearSearchOnAdd"
+                    checked={posClearSearchOnAdd}
+                    onChange={(e) => setPosClearSearchOnAdd(e.target.checked)}
+                    title="Reiniciar búsqueda al agregar un producto al carrito"
+                    description={posClearSearchOnAdd
+                      ? '✓ Habilitado: Cuando agregues un producto al carrito, el campo de búsqueda se limpia automáticamente. Recomendado para flujos con pistola lectora o cuando agregas productos diferentes uno por uno.'
+                      : '✗ Deshabilitado: El término de búsqueda se mantiene después de agregar un producto. Útil cuando agregas varias unidades del mismo producto o varios productos similares (ej. "coca cola", "coca cola light").'}
+                  />
+
+                  <SettingToggle
+                    id="opcion-allowNameEdit"
+                    checked={allowNameEdit}
+                    onChange={(e) => setAllowNameEdit(e.target.checked)}
+                    title="Permitir modificar nombre de productos en el POS"
+                    description={allowNameEdit
+                      ? '✓ Habilitado: Podrás editar el nombre de cualquier producto directamente desde el carrito del punto de venta. Útil para personalizar la descripción según el cliente o agregar detalles específicos al comprobante.'
+                      : '✗ Deshabilitado: Los productos se mostrarán siempre con el nombre registrado en el catálogo sin posibilidad de modificarlo. Recomendado para mantener consistencia en los comprobantes.'}
+                  />
+
+                  {/* Ocultar productos sin stock en POS */}
+                  <SettingToggle
+                    checked={posCustomFields.hideOutOfStockInPOS}
+                    onChange={(e) => setPosCustomFields({ ...posCustomFields, hideOutOfStockInPOS: e.target.checked })}
+                    title="Ocultar productos sin stock"
+                    description="No mostrar productos con stock 0 en el Punto de Venta"
+                  />
+
+                  {/* Auto-reset POS después de acción post-venta */}
+                  <SettingToggle
+                    id="opcion-autoResetPOS"
+                    checked={autoResetPOS}
+                    onChange={(e) => setAutoResetPOS(e.target.checked)}
+                    title="Reiniciar POS automáticamente después de imprimir/descargar"
+                    description={autoResetPOS
+                      ? '✓ Habilitado: Al imprimir ticket, descargar PDF, ver vista previa o enviar por WhatsApp, el POS se reiniciará automáticamente para una nueva venta.'
+                      : '✗ Deshabilitado: Después de emitir una venta, deberás presionar "Nueva Venta" manualmente para continuar.'}
+                  />
+
+                  {/* Auto-imprimir ticket al completar venta */}
+                  <SettingToggle
+                    id="opcion-autoPrintTicket"
+                    checked={autoPrintTicket}
+                    onChange={(e) => setAutoPrintTicket(e.target.checked)}
+                    title="Imprimir ticket automáticamente al completar venta"
+                    description={autoPrintTicket
+                      ? '✓ Habilitado: Al completar una venta, el ticket se imprimirá automáticamente sin necesidad de presionar el botón.'
+                      : '✗ Deshabilitado: Después de emitir una venta, deberás presionar "Imprimir Ticket" manualmente.'}
+                  />
+
+                  {/* Recordatorio de vuelto en efectivo */}
+                  <SettingToggle
+                    id="opcion-showChangeReminder"
+                    checked={showChangeReminder}
+                    onChange={(e) => setShowChangeReminder(e.target.checked)}
+                    title="Recordatorio de vuelto en efectivo"
+                    description={showChangeReminder
+                      ? '✓ Habilitado: Cuando una venta se pague en efectivo y haya vuelto, aparecerá un aviso indicando cuánto entregar al cliente (con qué pagó, total y vuelto).'
+                      : '✗ Deshabilitado: No se mostrará ningún aviso de vuelto al completar la venta.'}
+                  />
+
+                  {/* Recordatorios de servicios. Solo donde hay pacientes: el
+                      recordatorio se guarda en la ficha del cliente. */}
+                  {businessMode === 'veterinary' && (
+                    <div id="opcion-vetReminderDefaultDays" className="p-3 rounded-lg border border-gray-200">
+                      <div className="text-sm font-medium text-gray-900">Recordar cada venta a los</div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <input
+                          type="number"
+                          min="0"
+                          value={vetReminderDefaultDays}
+                          onChange={(e) => setVetReminderDefaultDays(e.target.value)}
+                          className="w-20 text-center px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                        <span className="text-sm text-gray-600">días</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Todo lo que cobres a un cliente registrado aparecerá en Recordatorios pasados
+                        esos días. Si un producto necesita otro plazo, ponle el suyo en su ficha
+                        (Productos y Servicios); si no debe recordarse nunca, ponle 0 ahí.
+                        Las ventas sin cliente no generan recordatorio.
+                        Con 0 acá, solo se recuerdan los productos que tengan su plazo configurado.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Programa de fidelización: se administra COMPLETO desde
+                      Clientes (programa + diseño de la tarjeta de Wallet +
+                      tarjetas de cada cliente). Acá solo queda el puntero
+                      para quien lo venga a buscar donde estaba antes. */}
+                  <div id="opcion-loyaltyEnabled" className="p-3 rounded-lg bg-gray-50 border border-gray-100">
+                    <p className="text-sm font-medium text-gray-900">Programa de fidelización (tarjeta de sellos)</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Se configura desde <strong>Clientes → Fidelización</strong>: ahí activas el programa,
+                      eliges el diseño de la tarjeta de Google Wallet y ves las tarjetas de tus clientes.
+                    </p>
+                  </div>
+
+                  {/* Bloquear edición del cuadre de caja en el historial */}
+                  <SettingToggle
+                    checked={lockCashRegisterHistory}
+                    onChange={(e) => setLockCashRegisterHistory(e.target.checked)}
+                    title="Bloquear edición del cuadre de caja"
+                    description={lockCashRegisterHistory
+                      ? '✓ Habilitado: En el historial de caja diario NO se puede editar el monto inicial, el efectivo contado ni los movimientos de una sesión cerrada. Protege la integridad del cierre.'
+                      : '✗ Deshabilitado: Se puede editar el cuadre de una sesión cerrada desde el historial de caja.'}
+                  />
+
+                  {/* Permitir editar notas de venta */}
+                  <SettingToggle
+                    id="opcion-allowEditNotaVenta"
+                    checked={allowEditNotaVenta}
+                    onChange={(e) => setAllowEditNotaVenta(e.target.checked)}
+                    title="Permitir editar notas de venta"
+                    description={allowEditNotaVenta
+                      ? '✓ Habilitado: Aparece la opción "Editar documento" en las notas de venta. Al cambiar cantidades el inventario se ajusta solo por la diferencia y queda un movimiento de ajuste como rastro. No se pueden editar las ya convertidas ni las anuladas.'
+                      : '✗ Deshabilitado: Las notas de venta no se pueden editar. Para corregir una, anúlala y emite otra.'}
+                  />
+
+                  {/* Mostrar todos los productos en el POS (sin botón "Ver más") */}
+                  <SettingToggle
+                    id="opcion-showAllProductsInPOS"
+                    checked={showAllProductsInPOS}
+                    onChange={(e) => setShowAllProductsInPOS(e.target.checked)}
+                    title="Mostrar todos los productos en el POS"
+                    description={showAllProductsInPOS
+                      ? '✓ Habilitado: El catálogo del POS muestra todos los productos de una vez, sin botón "Ver más". Recomendado para catálogos de hasta ~300 productos; con muchos más, la pantalla puede sentirse lenta.'
+                      : '✗ Deshabilitado: El POS muestra los productos por partes y carga el resto con el botón "Ver más".'}
+                  />
+
+                  {/* Modo estacion de servicio (grifo). No es un modo de negocio:
+                      es un atajo ENCIMA del POS normal, porque el grifo tambien
+                      tiene minimarket y necesita el catalogo de siempre. */}
+                  <SettingToggle
+                    id="opcion-serviceStation"
+                    checked={serviceStationConfig.enabled}
+                    onChange={(e) => setServiceStationConfig({ ...serviceStationConfig, enabled: e.target.checked })}
+                    title="Modo estación de servicio (grifo)"
+                    description={serviceStationConfig.enabled
+                      ? '✓ Habilitado: Arriba del catálogo del POS aparecen los combustibles como botones grandes. Al tocar uno se abre un teclado para cobrar por monto ("50 soles") y los galones se calculan solos. El resto del POS no cambia: el minimarket, el cobro y la impresión siguen igual.'
+                      : '✗ Deshabilitado: El POS funciona normal, vendiendo por cantidad.'}
+                  />
+
+                  {/* Que productos son combustible */}
+                  {serviceStationConfig.enabled && (
+                    <div className="p-4 border border-gray-200 rounded-lg">
+                      <span className="text-sm font-medium text-gray-900">
+                        Combustibles que vendes
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
+                        Elige los productos que aparecen como botones en el POS. Salen en el
+                        <strong> orden en que los marcas</strong>, y el precio del galón es el del producto:
+                        cuando lo cambies en Productos, el botón cambia solo.
+                      </p>
+
+                      {/* Los elegidos, en orden */}
+                      {serviceStationConfig.fuelIds.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {serviceStationConfig.fuelIds.map((id, i) => {
+                            const p = (productosCombustible || []).find(x => x.id === id)
+                            return (
+                              <span
+                                key={id}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-primary-50 border border-primary-200 rounded-md text-sm text-primary-800"
+                              >
+                                <span className="text-xs font-bold text-primary-500">{i + 1}</span>
+                                {p?.name || 'Producto eliminado'}
+                                <button
+                                  type="button"
+                                  onClick={() => setServiceStationConfig({
+                                    ...serviceStationConfig,
+                                    fuelIds: serviceStationConfig.fuelIds.filter(x => x !== id),
+                                  })}
+                                  className="text-primary-400 hover:text-red-600"
+                                  aria-label={'Quitar ' + (p?.name || '')}
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </span>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      <Input
+                        placeholder="Buscar producto..."
+                        value={busquedaCombustible}
+                        onChange={(e) => setBusquedaCombustible(e.target.value)}
+                        className="mb-2"
+                      />
+
+                      {productosCombustible === null ? (
+                        <p className="text-sm text-gray-500 py-3">Cargando productos...</p>
+                      ) : productosCombustible.length === 0 ? (
+                        <p className="text-sm text-gray-500 py-3">
+                          No hay productos todavía. Crea uno por cada combustible en Productos,
+                          con unidad <strong>Galón</strong> y su precio por galón.
+                        </p>
+                      ) : (
+                        <div className="max-h-56 overflow-y-auto border border-gray-200 rounded-md divide-y divide-gray-100">
+                          {productosCombustible
+                            .filter(p => matchesPrebuilt(busquedaCombustible, buildProductHaystack(p)))
+                            .slice(0, 50)
+                            .map(p => {
+                            const marcado = serviceStationConfig.fuelIds.includes(p.id)
+                            return (
+                              <label
+                                key={p.id}
+                                className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={marcado}
+                                  onChange={() => setServiceStationConfig({
+                                    ...serviceStationConfig,
+                                    fuelIds: marcado
+                                      ? serviceStationConfig.fuelIds.filter(x => x !== p.id)
+                                      : [...serviceStationConfig.fuelIds, p.id],
+                                  })}
+                                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                />
+                                <span className="flex-1 min-w-0 truncate text-gray-800">{p.name}</span>
+                                <span className="text-xs text-gray-500 flex-shrink-0">
+                                  {formatCurrency(p.price)}
+                                </span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Comprobantes: cuales estan disponibles y cual viene por
+                      defecto. Sin el tinte azul del hover — el color queda solo
+                      en el check y en el boton elegido. El id es el ancla del
+                      enlace profundo del manual (?opcion=enabledDocumentTypes). */}
+                  <div id="opcion-enabledDocumentTypes" className="p-4 border border-gray-200 rounded-lg scroll-mt-24">
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900">
+                        Comprobantes disponibles en el POS
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
+                        Desmarca los que tu negocio no emite y dejarán de aparecer en el Punto de Venta.
+                        Por ejemplo, en el <strong>RUS</strong> no se emiten facturas.
+                      </p>
+                      {/* Casillas neutras: el color va solo en el check, no de
+                          fondo. Mismo patron que "Metodos de pago disponibles". */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
+                        {DOCUMENT_TYPES.map(tipo => {
+                          // Vacio = todos habilitados, asi que "marcado" es
+                          // estar en la lista O que la lista este vacia.
+                          const marcado = enabledDocumentTypes.length === 0 || enabledDocumentTypes.includes(tipo)
+                          const esElUltimo = marcado && enabledDocumentTypes.length === 1
+                          return (
+                            <label
+                              key={tipo}
+                              title={esElUltimo ? 'Debe quedar al menos un comprobante disponible' : ''}
+                              className={`flex items-center gap-2 p-2 rounded-md border border-gray-200 text-sm transition-colors ${
+                                esElUltimo
+                                  ? 'cursor-default bg-gray-50 text-gray-500'
+                                  : 'cursor-pointer hover:bg-gray-50 text-gray-700'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={marcado}
+                                disabled={esElUltimo}
+                                onChange={() => {
+                                  // Al desmarcar el primero hay que materializar la
+                                  // lista completa: hasta ahora estaba vacia ("todos").
+                                  const actuales = enabledDocumentTypes.length === 0 ? [...DOCUMENT_TYPES] : enabledDocumentTypes
+                                  const nuevos = actuales.includes(tipo)
+                                    ? actuales.filter(t => t !== tipo)
+                                    : [...actuales, tipo]
+                                  if (nuevos.length === 0) return
+                                  // Si quedaron todos, volver a "vacio = todos".
+                                  setEnabledDocumentTypes(nuevos.length === DOCUMENT_TYPES.length ? [] : nuevos)
+                                  // El default no puede apuntar a uno desactivado.
+                                  if (!nuevos.includes(defaultDocumentType) && defaultDocumentType !== 'none') {
+                                    setDefaultDocumentType(nuevos[0])
+                                  }
+                                }}
+                                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                              />
+                              <span className="truncate">{DOCUMENT_TYPE_LABELS[tipo]}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                      {enabledDocumentTypes.length > 0 && !enabledDocumentTypes.includes('factura') && (
+                        <p className="text-xs text-amber-700 bg-amber-50 px-2 py-1.5 rounded mb-3">
+                          La Factura no aparecerá en el Punto de Venta. Las ya emitidas no se ven afectadas.
+                        </p>
+                      )}
+
+                      <div className="border-t border-gray-100 pt-3 mt-3" />
+                      <span className="text-sm font-medium text-gray-900">
+                        Tipo de comprobante por defecto en POS
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
+                        Cuál aparecerá seleccionado al abrir el Punto de Venta.
+                        Elige <strong>Ninguno</strong> para que el cajero deba escogerlo cada venta (evita emitir el tipo equivocado por descuido).
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDefaultDocumentType('none')}
+                          className={`px-3 py-2 border-2 rounded-lg transition-colors ${
+                            defaultDocumentType === 'none'
+                              ? 'border-primary-500 bg-primary-50 text-primary-700'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <span className="text-sm font-medium">Ninguno</span>
+                        </button>
+                        {(enabledDocumentTypes.length === 0 || enabledDocumentTypes.includes('boleta')) && (
+                        <button
+                          type="button"
+                          onClick={() => setDefaultDocumentType('boleta')}
+                          className={`px-3 py-2 border-2 rounded-lg transition-colors ${
+                            defaultDocumentType === 'boleta'
+                              ? 'border-primary-500 bg-primary-50 text-primary-700'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <span className="text-sm font-medium">Boleta</span>
+                        </button>
+                        )}
+                        {(enabledDocumentTypes.length === 0 || enabledDocumentTypes.includes('factura')) && (
+                        <button
+                          type="button"
+                          onClick={() => setDefaultDocumentType('factura')}
+                          className={`px-3 py-2 border-2 rounded-lg transition-colors ${
+                            defaultDocumentType === 'factura'
+                              ? 'border-primary-500 bg-primary-50 text-primary-700'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <span className="text-sm font-medium">Factura</span>
+                        </button>
+                        )}
+                        {(enabledDocumentTypes.length === 0 || enabledDocumentTypes.includes('nota_venta')) && (
+                        <button
+                          type="button"
+                          onClick={() => setDefaultDocumentType('nota_venta')}
+                          className={`px-3 py-2 border-2 rounded-lg transition-colors ${
+                            defaultDocumentType === 'nota_venta'
+                              ? 'border-primary-500 bg-primary-50 text-primary-700'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <span className="text-sm font-medium">Nota de Venta</span>
+                        </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Métodos de pago: cuales estan disponibles, los propios y
+                      cual viene por defecto — todo en una tarjeta, igual que
+                      los comprobantes. Antes "por defecto" era una tarjeta
+                      aparte, arriba, y habia que ir y volver para cuadrarlos. */}
+                  <div className="p-4 border border-gray-200 rounded-lg">
+                    <span className="text-sm font-medium text-gray-900">
+                      Métodos de pago disponibles
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
+                      Desmarca los que no uses para que no aparezcan en el Punto de Venta. Efectivo no
+                      se puede quitar. Con <strong>Agregar método</strong> creas uno propio —un vale, un
+                      convenio— con su propio nombre. Esto no afecta a las ventas ya registradas.
+                    </p>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-5">
+                      {getBuiltinPaymentMethodsForMode(businessMode).map(m => {
+                        const visible = m.fixed || !hiddenPaymentMethods.includes(m.permKey)
+                        return (
+                          <label
+                            key={m.permKey}
+                            className={`flex items-center gap-2 p-2 rounded-md border border-gray-200 text-sm transition-colors ${
+                              m.fixed
+                                ? 'cursor-default bg-gray-50 text-gray-500'
+                                : 'cursor-pointer hover:bg-gray-50 text-gray-700'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={visible}
+                              disabled={m.fixed}
+                              onChange={() => setHiddenPaymentMethods(prev =>
+                                prev.includes(m.permKey)
+                                  ? prev.filter(x => x !== m.permKey)
+                                  : [...prev, m.permKey]
+                              )}
+                              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                            />
+                            <span className="truncate">{m.label}</span>
+                          </label>
+                        )
+                      })}
+
+                      {/* Los metodos propios van en la MISMA grilla que los de
+                          fabrica: son metodos de pago igual, y tenerlos en una
+                          lista aparte con su propio titulo y explicacion hacia
+                          que la seccion ocupara el doble. Se quitan con la ×;
+                          no llevan casilla porque quitarlos ES desactivarlos. */}
+                      {customPaymentMethods.map(m => (
+                        <div
+                          key={m.id}
+                          className="flex items-center gap-2 p-2 rounded-md border border-gray-200 text-sm text-gray-700"
+                          title={m.behavesLike === 'cash'
+                            ? 'Efectivo físico: entra al cajón y suma al arqueo'
+                            : 'No entra al cajón (se cuadra aparte)'}
+                        >
+                          <span className="w-4 h-4 rounded bg-primary-600 flex items-center justify-center flex-shrink-0">
+                            <Check className="w-3 h-3 text-white" />
+                          </span>
+                          <span className="truncate flex-1">{m.name}</span>
+                          {m.behavesLike === 'cash' && (
+                            <span className="text-xs text-gray-400 flex-shrink-0">cajón</span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setCustomPaymentMethods(prev => prev.filter(x => x.id !== m.id))}
+                            className="text-gray-400 hover:text-red-600 flex-shrink-0"
+                            aria-label={`Quitar ${m.name}`}
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPaymentModal(true)}
+                        className="flex items-center justify-center gap-1.5 p-2 rounded-md border border-dashed border-gray-300 text-sm text-gray-600 hover:border-primary-400 hover:text-primary-700 transition-colors"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Agregar método
+                      </button>
+                    </div>
+
+
+                    {/* Por defecto: al final, cuando ya se sabe cuales estan
+                        disponibles (incluidos los propios). Mismo orden que en
+                        comprobantes: primero cuales hay, despues cual arranca. */}
+                    <div className="border-t border-gray-100 pt-3 mt-4" />
+                    {/* Ancla del enlace profundo de la guía del POS. No es un
+                        SettingToggle (es un grupo de botones), así que el id y
+                        el scroll-mt van acá a mano. */}
+                    <span
+                      id="opcion-defaultPaymentMethod"
+                      className="text-sm font-medium text-gray-900 scroll-mt-24"
+                    >
+                      Método de pago por defecto en POS
+                    </span>
+                    <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
+                      Aparecerá seleccionado al abrir el Punto de Venta. El cajero puede cambiarlo en cualquier momento.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { key: '', label: 'Ninguno' },
+                        ...getVisiblePaymentMethods(
+                          { hiddenPaymentMethods, customPaymentMethods },
+                          businessMode
+                        ).map(m => ({ key: m.key, label: m.label })),
+                      ].map(opt => (
+                        <button
+                          key={opt.key || 'none'}
+                          type="button"
+                          onClick={() => setDefaultPaymentMethod(opt.key)}
+                          className={`px-3 py-2 border-2 rounded-lg transition-colors ${
+                            defaultPaymentMethod === opt.key
+                              ? 'border-primary-500 bg-primary-50 text-primary-700'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <span className="text-sm font-medium">{opt.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Campos del cliente: no aplica a restaurante (alumno/vehiculo/suscripciones) */}
+              {businessMode !== 'restaurant' && (<>
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Campos del cliente */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Campos del cliente</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Activa campos adicionales para capturar información del cliente en el POS y comprobantes.
+                </p>
+                <div className="space-y-3">
+                  <SettingToggle
+                    id="opcion-showStudentField"
+                    checked={posCustomFields.showStudentField}
+                    onChange={(e) => setPosCustomFields({ ...posCustomFields, showStudentField: e.target.checked })}
+                    title={'Campo "Alumno"'}
+                    description="Muestra un campo para ingresar el nombre del alumno en el POS y comprobantes"
+                  />
+                  <SettingToggle
+                    id="opcion-showVehiclePlateField"
+                    checked={posCustomFields.showVehiclePlateField}
+                    onChange={(e) => setPosCustomFields({ ...posCustomFields, showVehiclePlateField: e.target.checked })}
+                    title={'Campo "Placa de Vehículo"'}
+                    description="Muestra un campo para ingresar la placa del vehículo en el POS y comprobantes"
+                  />
+                  <SettingToggle
+                    checked={posCustomFields.showVehicleModelField}
+                    onChange={(e) => setPosCustomFields({ ...posCustomFields, showVehicleModelField: e.target.checked })}
+                    title={'Campo "Modelo de Vehículo"'}
+                    description="Muestra un campo para ingresar el modelo del vehículo en el POS y comprobantes"
+                  />
+                  <SettingToggle
+                    checked={posCustomFields.showVehicleYearField}
+                    onChange={(e) => setPosCustomFields({ ...posCustomFields, showVehicleYearField: e.target.checked })}
+                    title={'Campo "Año de Vehículo"'}
+                    description="Muestra un campo para ingresar el año del vehículo en el POS y comprobantes"
+                  />
+                  <SettingToggle
+                    checked={posCustomFields.showLicenseNumberField}
+                    onChange={(e) => setPosCustomFields({ ...posCustomFields, showLicenseNumberField: e.target.checked })}
+                    title={'Campo "Licencia / Resolución"'}
+                    description="Muestra un campo para el número de licencia (persona natural) o de resolución (empresa) del cliente en el POS y comprobantes"
+                  />
+                  <SettingToggle
+                    checked={posCustomFields.showPropertyCardField}
+                    onChange={(e) => setPosCustomFields({ ...posCustomFields, showPropertyCardField: e.target.checked })}
+                    title={'Campo "Tarjeta de Propiedad"'}
+                    description="Muestra un campo para ingresar la tarjeta de propiedad del vehículo en el POS y comprobantes"
+                  />
+                  <SettingToggle
+                    id="opcion-showServiceCardFields"
+                    checked={posCustomFields.showServiceCardFields}
+                    onChange={(e) => setPosCustomFields({ ...posCustomFields, showServiceCardFields: e.target.checked })}
+                    title="Ficha de atención en el cliente"
+                    description={posCustomFields.showServiceCardFields
+                      ? '✓ Habilitado: La ficha del cliente suma último procedimiento, fecha de la última atención, tratamiento y quién lo recomendó. Para consultorios, clínicas, salones y todo el que atienda a la misma persona cada tanto.'
+                      : '✗ Deshabilitado: La ficha del cliente muestra solo los datos básicos.'}
+                  />
+
+                  <SettingToggle
+                    checked={posCustomFields.showSubscriptionFields}
+                    onChange={(e) => setPosCustomFields({ ...posCustomFields, showSubscriptionFields: e.target.checked })}
+                    title="Gestión de Suscripciones"
+                    description="Agrega campos de plan, precio y fecha de vencimiento en la página de Clientes para controlar suscripciones"
+                  />
+                </div>
+              </div>
+              </>)}
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Precios de venta por sucursal */}
+              <div>
+                <SettingToggle
+                  id="opcion-branchPricingEnabled"
+                  checked={branchPricingEnabled}
+                  onChange={(e) => setBranchPricingEnabled(e.target.checked)}
+                  title="Precios de venta por sucursal"
+                  description={branchPricingEnabled
+                    ? '✓ Habilitado: al editar un producto verás la sección "Precios por sucursal". El POS usará el precio de la sucursal en la que estás vendiendo; si el producto no tiene precio para esa sucursal, usa el precio general. La Sucursal Principal siempre usa el precio general.'
+                    : '✗ Deshabilitado: todos los locales venden con el mismo precio (el precio general del producto).'}
+                />
+              </div>
+
+              {/* Catálogo por sucursal */}
+              <div>
+                <SettingToggle
+                  id="opcion-branchCatalogEnabled"
+                  checked={branchCatalogEnabled}
+                  onChange={(e) => setBranchCatalogEnabled(e.target.checked)}
+                  title="Catálogo de productos por sucursal"
+                  description={branchCatalogEnabled
+                    ? '✓ Habilitado: al crear o editar un producto podrás elegir en qué sucursales está disponible. El Punto de Venta mostrará solo los productos de la sucursal activa. Los productos que ya tienes siguen disponibles en todas hasta que los cambies, y una sucursal nueva hereda todo el catálogo.'
+                    : '✗ Deshabilitado: todas las sucursales venden el mismo catálogo completo.'}
+                />
+              </div>
+
+              {/* Niveles de precio: activarlos y como se llaman. El CALCULO
+                  automatico (base, formula y porcentajes) se movio a Productos >
+                  Ajuste de precios, junto al ajuste masivo. */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Niveles de precio</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Vende el mismo producto a distintos precios según el cliente.
+                </p>
+                <div className="space-y-4">
+                  <SettingToggle
+                    id="opcion-multiplePricesEnabled"
+                    checked={multiplePricesEnabled}
+                    onChange={(e) => setMultiplePricesEnabled(e.target.checked)}
+                    title="Usar varios precios por producto"
+                    description={multiplePricesEnabled
+                      ? '✓ Habilitado: además del precio principal, cada producto puede tener hasta 3 precios más (mayorista, cliente frecuente…). El cajero elige cuál usar al vender.'
+                      : '✗ Deshabilitado: cada producto tiene un solo precio de venta.'}
+                  />
+
+                  {multiplePricesEnabled && (
+                    <div className="p-4 border border-gray-200 rounded-lg">
+                      <span className="text-sm font-medium text-gray-900">Nombre de cada nivel</span>
+                      <p className="text-xs text-gray-600 mt-1.5 mb-3 leading-relaxed">
+                        Así los verás en el punto de venta, en el formulario del producto y en
+                        Productos → Actualizar precios.
+                      </p>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {[
+                          { key: 'price1', n: 1, ph: 'Público' },
+                          { key: 'price2', n: 2, ph: 'Mayorista' },
+                          { key: 'price3', n: 3, ph: 'VIP' },
+                          { key: 'price4', n: 4, ph: 'Especial' },
+                        ].map(({ key, n, ph }) => (
+                          <div key={key}>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Precio {n}</label>
+                            <input
+                              type="text"
+                              value={priceLabels[key] || ''}
+                              onChange={(e) => setPriceLabels(prev => ({ ...prev, [key]: e.target.value }))}
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              placeholder={ph}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-3">
+                        El <strong>cálculo automático</strong> por porcentaje se configura en
+                        Productos → Actualizar precios → <strong>Ajuste de precios</strong>.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Visualización POS */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Visualización del Punto de Venta</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Configura qué información se muestra en las tarjetas de productos del POS
+                </p>
+                <div className="space-y-4">
+                  <SettingToggle
+                    id="opcion-showDescriptionInPOS"
+                    checked={showDescriptionInPOS}
+                    onChange={(e) => setShowDescriptionInPOS(e.target.checked)}
+                    title="Mostrar descripción del producto en el POS"
+                    description={showDescriptionInPOS
+                      ? '✓ Habilitado: Se mostrará la descripción completa del producto en la tarjeta del punto de venta.'
+                      : '✗ Deshabilitado: Solo se muestra el nombre, precio y stock en la tarjeta del POS.'}
+                  />
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Notas de Venta */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Notas de Venta</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Configura opciones específicas para notas de venta
+                </p>
+                <div className="space-y-4">
+                  <SettingToggle
+                    checked={hideRucIgvInNotaVenta}
+                    onChange={(e) => {
+                      setHideRucIgvInNotaVenta(e.target.checked)
+                      if (e.target.checked) setHideOnlyIgvInNotaVenta(false)
+                    }}
+                    title="Ocultar RUC e IGV en Notas de Venta"
+                    description={hideRucIgvInNotaVenta
+                      ? '✓ Habilitado: Las notas de venta no mostrarán el RUC de la empresa ni el desglose del IGV en la impresión. Solo se mostrará el total final.'
+                      : '✗ Deshabilitado: Las notas de venta mostrarán el RUC de la empresa y el desglose de subtotal e IGV (18%) como es usual.'}
+                  />
+
+                  <SettingToggle
+                    checked={hideOnlyIgvInNotaVenta}
+                    onChange={(e) => {
+                      setHideOnlyIgvInNotaVenta(e.target.checked)
+                      if (e.target.checked) setHideRucIgvInNotaVenta(false)
+                    }}
+                    title="Ocultar solo IGV en Notas de Venta"
+                    description={hideOnlyIgvInNotaVenta
+                      ? '✓ Habilitado: Las notas de venta no mostrarán el desglose de subtotal e IGV, pero sí mostrarán el RUC de la empresa.'
+                      : '✗ Deshabilitado: Las notas de venta mostrarán el desglose completo de subtotal e IGV (18%).'}
+                  />
+
+                  <SettingToggle
+                    id="opcion-hideCompanyDataInNotaVenta"
+                    checked={hideCompanyDataInNotaVenta}
+                    onChange={(e) => setHideCompanyDataInNotaVenta(e.target.checked)}
+                    title="Ocultar datos de la empresa en Notas de Venta (PDF)"
+                    description={hideCompanyDataInNotaVenta
+                      ? '✓ Habilitado: El PDF de las notas de venta no mostrará logo, nombre, razón social, RUC, dirección, teléfono, email ni eslogan. Solo saldrá "NOTA DE VENTA" con su número, el cliente y los productos. No afecta a facturas ni boletas, ni al ticket térmico.'
+                      : '✗ Deshabilitado: El PDF de las notas de venta muestra los datos de la empresa como es usual.'}
+                  />
+
+                  <SettingToggle
+                    id="opcion-requireOpenCashRegister"
+                    checked={requireOpenCashRegister}
+                    onChange={(e) => setRequireOpenCashRegister(e.target.checked)}
+                    title="Requerir caja diaria abierta para vender"
+                    description={requireOpenCashRegister
+                      ? '✓ Habilitado: No se podrán emitir ventas en el POS si la caja diaria no está aperturada. El usuario deberá abrir caja antes de realizar ventas.'
+                      : '✗ Deshabilitado: Se pueden emitir ventas sin necesidad de tener la caja diaria abierta.'}
+                  >
+                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-amber-50 rounded-md border border-amber-200">
+                      <Info className="w-4 h-4 text-amber-600" />
+                      <span className="text-xs text-amber-700 font-medium">
+                        {requireOpenCashRegister
+                          ? 'Caja diaria obligatoria para emitir ventas'
+                          : 'Ventas sin restricción de caja'}
+                      </span>
+                    </div>
+                  </SettingToggle>
+
+                  {/* Comisión por pago con tarjeta (solo notas de venta) */}
+                  <div className={`p-4 border rounded-lg transition-colors ${
+                    cardCommissionEnabled
+                      ? 'border-indigo-500 bg-indigo-50'
+                      : 'border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/30'
+                  }`}>
+                    <SettingToggle
+                      checked={cardCommissionEnabled}
+                      onChange={(e) => setCardCommissionEnabled(e.target.checked)}
+                      title="Cobrar comisión por pago con tarjeta"
+                      description={cardCommissionEnabled
+                        ? `✓ Habilitado: cuando el pago sea 100% con tarjeta, se sube el precio ${cardCommissionRate || 0}% (queda incluido en boletas, facturas y notas de venta). El cliente paga el total con el recargo ya incluido, sin una línea aparte.`
+                        : '✗ Deshabilitado: no se agrega recargo por pagos con tarjeta.'}
+                    />
+
+                    {/* Porcentaje (solo si está habilitado) */}
+                    {cardCommissionEnabled && (
+                      <div className="mt-3 ml-7 flex items-center gap-3">
+                        <label className="text-sm text-gray-700">Porcentaje:</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            max="20"
+                            step="0.1"
+                            value={cardCommissionRate}
+                            onChange={(e) => {
+                              const value = Math.min(20, Math.max(0, parseFloat(e.target.value) || 0))
+                              setCardCommissionRate(value)
+                            }}
+                            className="w-20 px-2 py-1.5 text-center text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          />
+                          <span className="text-sm text-gray-600">%</span>
+                        </div>
+                        <span className="text-xs text-gray-500">se suma al total al pagar con tarjeta</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* === MULTI-DIVISA (USD) — opt-in ============================ */}
+              {/* Off por default. La mayoría de negocios solo opera en PEN.   */}
+              {/* Al activarse expone selector de moneda en compras/facturas   */}
+              {/* (se irá habilitando por fases en próximas versiones).        */}
+              <div className="space-y-3 mt-6 pt-6 border-t border-gray-200">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-emerald-600" />
+                  <h3 className="text-base font-semibold text-gray-900">
+                    Moneda extranjera (USD)
+                  </h3>
+                  <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                    Beta
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 leading-relaxed -mt-1">
+                  Para negocios que compran o venden en <strong>dólares</strong>. Al activarlo:
+                  cada producto puede tener su precio en <strong>S/ o en $</strong> (selector en el
+                  formulario del producto), las compras se registran en la moneda de la factura
+                  del proveedor (guardando el costo también en dólares), y las ventas, cotizaciones
+                  y facturas pueden emitirse en $. <strong>La contabilidad y SUNAT siguen en Soles</strong>:
+                  cada documento en dólares guarda su tipo de cambio del día y se convierte solo.
+                </p>
+
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <SettingToggle
+                    id="opcion-multiCurrencyEnabled"
+                    checked={multiCurrencyEnabled}
+                    onChange={(e) => setMultiCurrencyEnabled(e.target.checked)}
+                    title="Activar soporte multi-divisa"
+                    description={multiCurrencyEnabled
+                      ? '✓ Activado: verás el selector S/ | $ en el precio de los productos, la moneda en compras/cotizaciones/facturas, y el inventario mostrará su equivalente en dólares.'
+                      : '✗ Desactivado: todo el sistema opera 100% en Soles (PEN), como hasta ahora.'}
+                  >
+                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
+                      <Info className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
+                      <span className="text-xs text-blue-700 font-medium">
+                        Puedes emitir en Soles o Dólares. SUNAT admite ambas monedas en boletas y facturas.
+                      </span>
+                    </div>
+                  </SettingToggle>
+
+                  {multiCurrencyEnabled && (
+                    <div className="mt-4 pl-7 space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                          Moneda por defecto al emitir documentos
+                        </label>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setDefaultCurrency('PEN')}
+                            className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                              defaultCurrency === 'PEN'
+                                ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            S/ &nbsp;Soles (PEN)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDefaultCurrency('USD')}
+                            className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                              defaultCurrency === 'USD'
+                                ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            $ &nbsp;Dólares (USD)
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-gray-500 mt-1.5">
+                          Esta es la moneda preseleccionada al abrir el formulario.
+                          El usuario podrá cambiarla por documento.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label
+                          id="opcion-reportsCurrency"
+                          className="block text-xs font-medium text-gray-700 mb-1.5 scroll-mt-24"
+                        >
+                          Moneda de reportes y dashboard
+                        </label>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setReportsCurrency('PEN')}
+                            className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                              reportsCurrency === 'PEN'
+                                ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            S/ &nbsp;Soles (PEN)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setReportsCurrency('USD')}
+                            className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                              reportsCurrency === 'USD'
+                                ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            $ &nbsp;Dólares (USD)
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-gray-500 mt-1.5">
+                          En qué moneda se muestran el Dashboard, Reportes y la tarjeta de
+                          totales de Ventas. Es solo visualización: la base contable, los
+                          exports y los comprobantes a SUNAT siguen en Soles. Si eliges
+                          Dólares, los montos se convierten usando el tipo de cambio de
+                          referencia de tus ventas USD recientes.
+                        </p>
+                      </div>
+
+                      <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-xs text-amber-900 leading-relaxed">
+                        <strong>¿Cómo funciona?</strong> Cuando emitas una factura o
+                        compra en USD, el sistema obtiene el tipo de cambio del día
+                        (SBS) y lo congela en el documento. Reportes y agregaciones
+                        siempre se calculan en Soles usando ese TC congelado, así
+                        que tus reportes históricos nunca cambian aunque suba el dólar.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+
+          {/* Save Button for Ventas */}
+          <div className="px-6 pb-6">
+            <div className="flex justify-end">
+              <Button
+                onClick={async () => {
+                  if (isDemoMode) {
+                    toast.error('No se pueden guardar cambios en modo demo. Crea una cuenta para configurar tu empresa.')
+                    return
+                  }
+
+                  setIsSaving(true)
+                  try {
+                    const businessRef = doc(db, 'businesses', getBusinessId())
+                    await setDoc(businessRef, {
+                      restaurantConfig: restaurantConfig,
+                      posCustomFields: posCustomFields,
+                      serviceStationConfig: serviceStationConfig,
+                      allowNegativeStock: allowNegativeStock,
+                      autoSaveCustomProducts: autoSaveCustomProducts,
+                      showOtherBranchesStock: showOtherBranchesStock,
+                      confirmSaleWithoutStock: confirmSaleWithoutStock,
+                      stockDischargeEnabled: stockDischargeEnabled,
+                      notaVentaCreditTerms: notaVentaCreditTerms,
+                      allowCustomProducts: allowCustomProducts,
+                      allowPriceEdit: allowPriceEdit,
+                      allowNameEdit: allowNameEdit,
+                      posClearSearchOnAdd: posClearSearchOnAdd,
+                      autoSku: autoSku,
+                      autoResetPOS: autoResetPOS,
+                      autoPrintTicket: autoPrintTicket,
+                      showChangeReminder: showChangeReminder,
+                      vetReminderDefaultDays: Number(vetReminderDefaultDays) || 0,
+                      lockCashRegisterHistory: lockCashRegisterHistory,
+                      allowEditNotaVenta: allowEditNotaVenta,
+                      showAllProductsInPOS: showAllProductsInPOS,
+                      defaultDocumentType: defaultDocumentType,
+                      enabledDocumentTypes: enabledDocumentTypes,
+                      defaultPaymentMethod: defaultPaymentMethod || '',
+                      hiddenPaymentMethods: hiddenPaymentMethods,
+                      customPaymentMethods: customPaymentMethods,
+        hiddenOrderSources: hiddenOrderSources,
+        customOrderSources: customOrderSources,
+                      hideRucIgvInNotaVenta: hideRucIgvInNotaVenta,
+                      hideOnlyIgvInNotaVenta: hideOnlyIgvInNotaVenta,
+                      hideCompanyDataInNotaVenta: hideCompanyDataInNotaVenta,
+                      // OJO: loyaltyConfig NO se guarda acá — lo administra
+                      // Clientes → Fidelización. Si esta pantalla lo escribiera
+                      // desde su estado en memoria, guardar cualquier otra
+                      // opción pisaría el tema de la tarjeta elegido allá
+                      // (mismo caso que pricePercentages, más abajo).
+                      requireOpenCashRegister: requireOpenCashRegister,
+                      cardCommissionEnabled: cardCommissionEnabled,
+                      cardCommissionRate: Number(cardCommissionRate) || 0,
+                      branchPricingEnabled: branchPricingEnabled,
+                      branchCatalogEnabled: branchCatalogEnabled,
+                      obrasEnabled: obrasEnabled,
+                      lendingEnabled: lendingEnabled,
+                      serviciosEnabled: serviciosEnabled,
+                      servicioTituloRecibo: servicioTituloRecibo,
+                      servicioFirma: servicioFirma,
+                      servicioLema: servicioLema,
+                      multiplePricesEnabled: multiplePricesEnabled,
+                      priceLabels: priceLabels,
+                      // OJO: pricePercentages, priceCalculationBase y marginFormula
+                      // NO se guardan aca — los edita Productos > Ajuste de precios.
+                      // Si esta pantalla los escribiera desde su estado en memoria,
+                      // guardar cualquier otra opcion pisaria lo configurado alla.
+                      // Multi-divisa (USD) — Fase 0: solo flag + moneda por default.
+                      multiCurrencyEnabled: multiCurrencyEnabled,
+                      defaultCurrency: defaultCurrency,
+                      reportsCurrency: reportsCurrency,
+                      showDescriptionInPOS: showDescriptionInPOS,
+                      updatedAt: serverTimestamp(),
+                    }, { merge: true })
+                    // Refrescar businessSettings en el contexto para que otros componentes vean los cambios
+                    if (refreshBusinessSettings) await refreshBusinessSettings()
+                    toast.success('Configuración de ventas guardada exitosamente.')
+                  } catch (error) {
+                    console.error('Error al guardar configuración:', error)
+                    toast.error('Error al guardar la configuración')
+                  } finally {
+                    setIsSaving(false)
+                  }
+                }}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Guardar Configuración
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Tab Content - Documentos */}
+      {activeTab === 'documentos' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center space-x-2">
+              <FileText className="w-5 h-5 text-primary-600" />
+              <CardTitle>Documentos y Comprobantes</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {/* Apariencia del PDF */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Apariencia del PDF</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Personaliza la apariencia de tus comprobantes en PDF
+                </p>
+
+                {/* Color de Acento del PDF */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Color de Acento del PDF
+                  </label>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Este color se usará en los encabezados de tablas y secciones de tus facturas, boletas y cotizaciones.
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    {[
+                      { color: '#464646', name: 'Gris Oscuro' },
+                      { color: '#1E40AF', name: 'Azul' },
+                      { color: '#065F46', name: 'Verde' },
+                      { color: '#7C2D12', name: 'Marrón' },
+                      { color: '#581C87', name: 'Púrpura' },
+                      { color: '#0F172A', name: 'Negro' },
+                      { color: '#B91C1C', name: 'Rojo' },
+                      { color: '#0E7490', name: 'Cyan' },
+                    ].map((option) => (
+                      <button
+                        key={option.color}
+                        type="button"
+                        onClick={() => setPdfAccentColor(option.color)}
+                        className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all ${
+                          pdfAccentColor === option.color
+                            ? 'border-primary-500 bg-primary-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                        title={option.name}
+                      >
+                        <div
+                          className="w-10 h-10 rounded-md shadow-sm"
+                          style={{ backgroundColor: option.color }}
+                        />
+                        <span className="text-xs text-gray-600">{option.name}</span>
+                      </button>
+                    ))}
+                    <div className="flex flex-col items-center gap-1 p-2">
+                      <input
+                        type="color"
+                        value={pdfAccentColor}
+                        onChange={(e) => setPdfAccentColor(e.target.value)}
+                        onInput={(e) => setPdfAccentColor(e.target.value)}
+                        onBlur={(e) => setPdfAccentColor(e.target.value)}
+                        className="w-10 h-10 rounded-md cursor-pointer border border-gray-300 shadow-sm"
+                        title="Elegir color personalizado"
+                      />
+                      <span className="text-xs text-gray-600">Otro</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Espaciado amplio en PDF */}
+                <SettingToggle
+                  checked={pdfSpacious}
+                  onChange={(e) => setPdfSpacious(e.target.checked)}
+                  title="Espaciado amplio en PDF"
+                  description={pdfSpacious
+                    ? 'Activado: Los comprobantes PDF tendrán mayor separación vertical entre secciones, filas más altas y mejor legibilidad.'
+                    : 'Desactivado: Los comprobantes PDF usan el diseño compacto estándar.'}
+                />
+
+                {/* PDF en formato A5 */}
+                <SettingToggle
+                  checked={pdfA5}
+                  onChange={(e) => setPdfA5(e.target.checked)}
+                  title="PDF en formato A5"
+                  description={pdfA5
+                    ? 'Activado: Las boletas, facturas y notas de venta se generarán en tamaño A5 (media hoja). Ideal para imprimir 2 por hoja A4.'
+                    : 'Desactivado: Los comprobantes se generan en tamaño A4 estándar.'}
+                />
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Contenido de comprobantes y cotizaciones */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Contenido de comprobantes y cotizaciones</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Define qué datos de tus productos se muestran en los PDF
+                </p>
+
+                {/* Códigos de producto en cotizaciones */}
+                <div className="mb-3">
+                  <SettingToggle
+                    checked={showProductCodeInQuotation}
+                    onChange={(e) => setShowProductCodeInQuotation(e.target.checked)}
+                    title="Mostrar códigos de producto en cotizaciones"
+                    description={showProductCodeInQuotation
+                      ? 'Habilitado: Los códigos/SKU de productos se mostrarán en el PDF de cotizaciones junto al nombre del producto.'
+                      : 'Deshabilitado: Solo se mostrará el nombre del producto en las cotizaciones, sin códigos internos.'}
+                  />
+                </div>
+
+                {/* Códigos de producto en comprobantes (boletas/facturas/notas) */}
+                <div className="mb-3">
+                  <SettingToggle
+                    checked={showProductCodeInInvoices}
+                    onChange={(e) => setShowProductCodeInInvoices(e.target.checked)}
+                    title="Mostrar códigos de producto en comprobantes"
+                    description={showProductCodeInInvoices
+                      ? 'Habilitado: Los códigos/SKU de productos se mostrarán en boletas, facturas y notas (crédito/débito/venta).'
+                      : 'Deshabilitado: Solo se mostrará el nombre del producto en los comprobantes, sin códigos internos.'}
+                  />
+                </div>
+
+                {/* Descripción de producto en cotizaciones */}
+                <div className="mb-3">
+                  <SettingToggle
+                    checked={showProductDescriptionInQuotation}
+                    onChange={(e) => setShowProductDescriptionInQuotation(e.target.checked)}
+                    title="Mostrar descripción del producto en cotizaciones"
+                    description={showProductDescriptionInQuotation
+                      ? 'Habilitado: La descripción detallada del producto se incluirá debajo del nombre en el PDF de cotizaciones.'
+                      : 'Deshabilitado: Solo se mostrará el nombre del producto, sin la descripción adicional. Útil para cotizaciones con muchos productos.'}
+                  />
+                </div>
+
+                {/* Descripción de producto en comprobantes */}
+                <div className="mb-3">
+                  <SettingToggle
+                    checked={showProductDescriptionInInvoice}
+                    onChange={(e) => setShowProductDescriptionInInvoice(e.target.checked)}
+                    title="Mostrar descripción del producto en comprobantes"
+                    description={showProductDescriptionInInvoice
+                      ? 'Habilitado: La descripción detallada del producto se incluirá debajo del nombre en el PDF de facturas, boletas y notas de venta.'
+                      : 'Deshabilitado: Solo se mostrará el nombre del producto, sin la descripción adicional.'}
+                  />
+                </div>
+
+                {/* Imágenes de producto en cotizaciones */}
+                <div className="mb-3">
+                  <SettingToggle
+                    checked={showImagesInQuotations}
+                    onChange={(e) => setShowImagesInQuotations(e.target.checked)}
+                    title="Habilitar imágenes en cotizaciones"
+                    description={showImagesInQuotations
+                      ? 'Habilitado: Cada producto cotizado mostrará una miniatura de su imagen en el PDF (las filas serán un poco más altas).'
+                      : 'Deshabilitado: El PDF de cotizaciones no muestra imágenes. Útil para cotizaciones más compactas.'}
+                  >
+                    {showImagesInQuotations && (
+                      <PdfImageSizeSlider value={quotationImageScale} onChange={setQuotationImageScale} />
+                    )}
+                  </SettingToggle>
+                </div>
+
+                {/* Imágenes de producto en comprobantes de venta */}
+                <div className="mb-3">
+                  <SettingToggle
+                    checked={showImagesInInvoices}
+                    onChange={(e) => setShowImagesInInvoices(e.target.checked)}
+                    title="Habilitar imágenes en comprobantes de venta"
+                    description={showImagesInInvoices
+                      ? 'Habilitado: Cada producto del comprobante (factura, boleta o nota de venta) mostrará una miniatura de su imagen en el PDF, igual que en las cotizaciones (las filas serán un poco más altas).'
+                      : 'Deshabilitado: El PDF de comprobantes no muestra imágenes.'}
+                  >
+                    {showImagesInInvoices && (
+                      <PdfImageSizeSlider value={invoiceImageScale} onChange={setInvoiceImageScale} />
+                    )}
+                  </SettingToggle>
+                </div>
+
+                {/* Columna MARCA en comprobantes */}
+                <div className="mb-3">
+                  <SettingToggle
+                    checked={showBrandInInvoices}
+                    onChange={(e) => setShowBrandInInvoices(e.target.checked)}
+                    title="Mostrar la marca en comprobantes de venta"
+                    description={showBrandInInvoices
+                      ? 'Habilitado: El PDF agrega una columna MARCA con la marca de cada producto. El espacio sale de la columna DESCRIPCIÓN.'
+                      : 'Deshabilitado: El PDF no muestra la marca. Útil cuando la marca importa para identificar el producto (municiones, repuestos, herramientas).'}
+                  />
+                </div>
+
+                {/* Ocultar lote y vencimiento en comprobantes */}
+                <SettingToggle
+                  checked={hideBatchAndExpiryInDocuments}
+                  onChange={(e) => setHideBatchAndExpiryInDocuments(e.target.checked)}
+                  title="Ocultar lote y vencimiento en comprobantes"
+                  description={hideBatchAndExpiryInDocuments
+                    ? '✓ Activado: El lote y la fecha de vencimiento NO aparecerán en PDF, tickets ni impresiones térmicas. El control interno de lotes/vencimientos sigue funcionando normalmente (stock, FIFO, alertas).'
+                    : '✗ Desactivado: Cuando un producto se vende con lote asignado, este se imprimirá en los comprobantes junto con su fecha de vencimiento.'}
+                >
+                  <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
+                    <Info className="w-4 h-4 text-blue-600" />
+                    <span className="text-xs text-blue-700 font-medium">
+                      Ideal para pastelerías, perfumerías u otros negocios que controlan lotes solo internamente
+                    </span>
+                  </div>
+                </SettingToggle>
+
+                {/* Términos y condiciones libres al pie del comprobante (solo PDF) */}
+                <div className="mt-4">
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">
+                    Términos y condiciones (al pie del comprobante)
+                  </label>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Texto libre que aparece automáticamente al pie de las facturas, boletas y notas de venta en PDF (ej: garantías, políticas de devolución). También se usa como Términos y Condiciones por defecto en cotizaciones nuevas (editable). Solo se muestra en el PDF, no se envía a SUNAT. Dejalo vacío para no mostrar nada.
+                  </p>
+                  <textarea
+                    value={invoiceFooterTerms}
+                    onChange={(e) => setInvoiceFooterTerms(e.target.value.slice(0, 1000))}
+                    rows={5}
+                    maxLength={1000}
+                    placeholder="Ej: - La garantía por reparación dura 7 días calendario desde la fecha de reparación.
+- No se aceptan devoluciones de dinero una vez realizado el servicio."
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                  <div className="flex justify-between items-center mt-1">
+                    <span className="text-xs text-gray-400">
+                      {showTermsOnTicket ? 'Aparece en el PDF y en el ticket térmico (no en SUNAT)' : 'Solo aparece en el PDF (no en SUNAT)'}
+                    </span>
+                    <span className="text-xs text-gray-400">{invoiceFooterTerms.length}/1000</span>
+                  </div>
+
+                  {/* Imprimir estos mismos términos en el ticket térmico.
+                      Evita tener que copiarlos al "Mensaje al pie del ticket",
+                      que está topado a 300 caracteres. */}
+                  <div className="mt-3">
+                    <SettingToggle
+                      id="opcion-showTermsOnTicket"
+                      checked={showTermsOnTicket}
+                      onChange={(e) => setShowTermsOnTicket(e.target.checked)}
+                      title="Imprimir también en el ticket térmico"
+                      description={showTermsOnTicket
+                        ? '✓ Activado: estos términos se imprimen al pie de cada ticket, después del mensaje del ticket. Ojo: si son largos, cada venta gasta más papel.'
+                        : '✗ Desactivado: los términos salen solo en el PDF. Actívalo si quieres que también se impriman en la ticketera.'}
+                    />
+                  </div>
+                </div>
+
+                {/* Observaciones fijas de las órdenes de compra. Mismo problema
+                    que resolvían los términos: un texto que se repite en cada
+                    documento y que había que copiar a mano de una orden a otra. */}
+                <div id="opcion-purchaseOrderDefaultNotes" className="mt-6 scroll-mt-24">
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">
+                    Observaciones por defecto en Órdenes de Compra
+                  </label>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Texto que aparece ya escrito al crear una orden de compra nueva: tus
+                    requisitos al proveedor, horarios de atención, condiciones. Lo escribes una
+                    vez acá y en cada orden puedes editarlo o borrarlo. Déjalo vacío si no lo
+                    necesitas.
+                  </p>
+                  <textarea
+                    value={purchaseOrderDefaultNotes}
+                    onChange={(e) => setPurchaseOrderDefaultNotes(e.target.value.slice(0, 1000))}
+                    rows={5}
+                    maxLength={1000}
+                    placeholder={'Ej: TODO PRODUCTO DEBE CUMPLIR CON:\n*FECHA MÍNIMA DE VENCIMIENTO MAYOR A 18 MESES.\n*ADJUNTAR PROTOCOLO Y REGISTRO SANITARIO VIGENTE.\n*HORARIO DE ATENCIÓN: LUNES A VIERNES DE 8:30 A 17:00'}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                  <div className="flex justify-between items-center mt-1">
+                    <span className="text-xs text-gray-400">
+                      El lugar de entrega ya no va acá: se elige en la orden desde tus almacenes
+                    </span>
+                    <span className="text-xs text-gray-400">{purchaseOrderDefaultNotes.length}/1000</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Ticket térmico */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Ticket térmico</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Personaliza el pie de tus tickets impresos en impresoras térmicas
+                </p>
+
+                {/* Leyenda de las notas de venta */}
+                <div className="mb-6">
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">
+                    Leyenda al pie de las Notas de Venta
+                  </label>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Advertencia que se imprime al final de cada nota de venta, en el ticket y en el PDF.
+                    Solo aplica a notas de venta: las boletas y facturas llevan la leyenda que exige SUNAT.
+                  </p>
+                  <input
+                    type="text"
+                    value={notaVentaLegend}
+                    onChange={(e) => setNotaVentaLegend(e.target.value.slice(0, NOTA_VENTA_LEGEND_MAX))}
+                    maxLength={NOTA_VENTA_LEGEND_MAX}
+                    placeholder={DEFAULT_NOTA_VENTA_LEGEND}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                  <div className="flex justify-between items-center mt-1">
+                    <span className="text-xs text-gray-400">
+                      Si lo dejas vacío se imprime «{DEFAULT_NOTA_VENTA_LEGEND}»
+                    </span>
+                    <span className="text-xs text-gray-400">{notaVentaLegend.length}/{NOTA_VENTA_LEGEND_MAX}</span>
+                  </div>
+                </div>
+
+                {/* Mensaje personalizado al pie del ticket térmico */}
+                <div className="mb-6">
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">
+                    Mensaje al pie del ticket térmico
+                  </label>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Texto que se imprime después de "¡Gracias por su preferencia!" en los tickets de boletas, facturas y notas de venta. Útil para políticas de devolución o mensajes personalizados.
+                  </p>
+                  <textarea
+                    value={ticketFooterMessage}
+                    onChange={(e) => setTicketFooterMessage(e.target.value.slice(0, 300))}
+                    rows={3}
+                    maxLength={300}
+                    placeholder="Ej: Verifique el estado de su producto antes de retirarse de nuestra tienda. Una vez salida la mercadería no hay lugar a cambio ni devoluciones."
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                  <div className="flex justify-between items-center mt-1">
+                    <span className="text-xs text-gray-400">Máx. 300 caracteres · Se imprime centrado en el ticket</span>
+                    <span className="text-xs text-gray-400">{ticketFooterMessage.length}/300</span>
+                  </div>
+                </div>
+
+                {/* QR personalizado al pie del ticket térmico */}
+                <div>
+                  <SettingToggle
+                    checked={ticketQrEnabled}
+                    onChange={(e) => setTicketQrEnabled(e.target.checked)}
+                    title="Imprimir código QR al pie del ticket"
+                    description="Generá el QR a partir de un enlace, o subí tu propia imagen (por ejemplo, el QR oficial de Yape o Plin)."
+                  />
+
+                  {ticketQrEnabled && (
+                    <div className="mt-3 ml-7">
+                      {/* Selector de modo: generar automáticamente desde una
+                          URL, o subir una imagen ya hecha (ej. QR Yape/Plin). */}
+                      <div className="flex gap-2 mb-4">
+                        <button
+                          type="button"
+                          onClick={() => setTicketQrMode('auto')}
+                          className={`flex-1 px-3 py-2 text-xs font-semibold rounded-lg border transition-colors ${
+                            ticketQrMode === 'auto'
+                              ? 'bg-primary-50 border-primary-500 text-primary-700'
+                              : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400'
+                          }`}
+                        >
+                          Generar desde un enlace
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTicketQrMode('image')}
+                          className={`flex-1 px-3 py-2 text-xs font-semibold rounded-lg border transition-colors ${
+                            ticketQrMode === 'image'
+                              ? 'bg-primary-50 border-primary-500 text-primary-700'
+                              : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400'
+                          }`}
+                        >
+                          Subir imagen del QR
+                        </button>
+                      </div>
+
+                      {/* Banner explicativo según el modo */}
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-900 flex gap-2">
+                        <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                        {ticketQrMode === 'auto' ? (
+                          <div>
+                            <strong>Cómo funciona:</strong> escribí a dónde querés que lleve el QR (por ejemplo, tu página web o un link de pago). Cuando tus clientes escaneen el QR impreso con la cámara del celular, se abrirá ese contenido. <strong>No hace falta subir una imagen</strong> — el ticket térmico imprime el QR solo.
+                          </div>
+                        ) : (
+                          <div>
+                            <strong>Modo imagen:</strong> ideal si ya tenés un QR generado (por ejemplo, el QR oficial de Yape o Plin que te dio el banco). Subí la imagen y se imprimirá tal cual en cada ticket. Recomendado: imagen PNG cuadrada con fondo blanco.
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-start">
+                        {/* Inputs / Upload según modo */}
+                        <div className="space-y-3 min-w-0">
+                          {ticketQrMode === 'auto' ? (
+                            <>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                  ¿A dónde debe llevar el QR cuando lo escaneen?
+                                </label>
+                                <textarea
+                                  value={ticketQrContent}
+                                  onChange={(e) => setTicketQrContent(e.target.value.slice(0, 500))}
+                                  rows={3}
+                                  maxLength={500}
+                                  placeholder={'Ejemplos:\nhttps://mitienda.com\nhttps://wa.me/51987654321\nyape:987654321'}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
+                                />
+                                <div className="flex justify-between items-center mt-1">
+                                  <span className="text-xs text-gray-400">URL de tu web, link de WhatsApp, datos de pago, etc.</span>
+                                  <span className="text-xs text-gray-400">{ticketQrContent.length}/500</span>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">
+                                Imagen del QR
+                              </label>
+                              <div className="flex items-center gap-3">
+                                <label className="flex-1 cursor-pointer">
+                                  <input
+                                    type="file"
+                                    accept="image/jpeg,image/jpg,image/png,image/webp"
+                                    onChange={handleQrImageUpload}
+                                    className="hidden"
+                                  />
+                                  <div className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition-colors text-center">
+                                    {uploadingQrImage ? (
+                                      <span className="flex items-center justify-center gap-2 text-gray-600">
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Subiendo...
+                                      </span>
+                                    ) : ticketQrImageUrl ? (
+                                      <span className="text-primary-700 font-medium">Cambiar imagen</span>
+                                    ) : (
+                                      <span className="text-gray-600">Elegir archivo (PNG, JPG, WEBP — máx 2MB)</span>
+                                    )}
+                                  </div>
+                                </label>
+                                {ticketQrImageUrl && (
+                                  <button
+                                    type="button"
+                                    onClick={handleRemoveQrImage}
+                                    className="px-3 py-2 text-xs font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                                  >
+                                    Quitar
+                                  </button>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-400 mt-1">
+                                Para mejor calidad de impresión: PNG cuadrado, mín 300x300 px, fondo blanco.
+                              </p>
+                            </div>
+                          )}
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Texto debajo del QR <span className="text-gray-400">(opcional)</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={ticketQrCaption}
+                              onChange={(e) => setTicketQrCaption(e.target.value.slice(0, 60))}
+                              maxLength={60}
+                              placeholder='Ej: "Escaneá para pagar con Yape"'
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            />
+                            <span className="text-xs text-gray-400 mt-1 block">{ticketQrCaption.length}/60</span>
+                          </div>
+                        </div>
+
+                        {/* Preview */}
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col items-center md:w-[200px]">
+                          <span className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold mb-2">Vista previa</span>
+                          {ticketQrMode === 'image' ? (
+                            ticketQrImageUrl ? (
+                              <>
+                                <div className="bg-white p-2 rounded border border-gray-300">
+                                  <img
+                                    src={ticketQrImageUrl}
+                                    alt="QR del ticket"
+                                    className="w-[140px] h-[140px] object-contain"
+                                  />
+                                </div>
+                                {ticketQrCaption.trim() && (
+                                  <p className="text-xs text-gray-700 mt-2 text-center font-medium">{ticketQrCaption.trim()}</p>
+                                )}
+                                <p className="text-[10px] text-gray-400 mt-2 text-center">Así se verá en el ticket</p>
+                              </>
+                            ) : (
+                              <div className="w-[140px] h-[140px] bg-gray-200 rounded flex items-center justify-center">
+                                <span className="text-xs text-gray-500 text-center px-2">Subí una imagen para ver la vista previa</span>
+                              </div>
+                            )
+                          ) : ticketQrContent.trim() ? (
+                            <>
+                              <div className="bg-white p-2 rounded border border-gray-300">
+                                <QRCodeSVG value={ticketQrContent.trim()} size={140} level="M" includeMargin={false} />
+                              </div>
+                              {ticketQrCaption.trim() && (
+                                <p className="text-xs text-gray-700 mt-2 text-center font-medium">{ticketQrCaption.trim()}</p>
+                              )}
+                              <p className="text-[10px] text-gray-400 mt-2 text-center">Así se verá en el ticket</p>
+                            </>
+                          ) : (
+                            <div className="w-[140px] h-[140px] bg-gray-200 rounded flex items-center justify-center">
+                              <span className="text-xs text-gray-500 text-center px-2">Escribí un link para ver el QR</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Guías de Remisión */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Guías de Remisión</h3>
+                <SettingToggle
+                  id="opcion-dispatchGuidesEnabled"
+                  checked={dispatchGuidesEnabled}
+                  onChange={(e) => setDispatchGuidesEnabled(e.target.checked)}
+                  title="Habilitar Guías de Remisión Electrónicas"
+                  description={dispatchGuidesEnabled
+                    ? '✓ Habilitado: Podrás generar guías de remisión electrónicas (GRE) desde tus comprobantes. Ideal para negocios que realizan envíos o traslados de mercadería.'
+                    : '✗ Deshabilitado: No se mostrará la opción de generar guías de remisión en tus comprobantes.'}
+                />
+              </div>
+
+              {/* Nota de Salida */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Nota de Salida</h3>
+                <SettingToggle
+                  id="opcion-exitNoteEnabled"
+                  checked={exitNoteEnabled}
+                  onChange={(e) => setExitNoteEnabled(e.target.checked)}
+                  title="Habilitar Nota de Salida (Almacén)"
+                  description={exitNoteEnabled
+                    ? '✓ Habilitado: Podrás generar notas de salida desde tus comprobantes. Muestra solo cantidades sin precios, ideal para el encargado de almacén.'
+                    : '✗ Deshabilitado: No se mostrará la opción de generar notas de salida en tus comprobantes.'}
+                />
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Plantillas de Términos y Condiciones */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="text-base font-semibold text-gray-900">Plantillas de Términos</h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingTemplate(null)
+                      setTemplateName('')
+                      setTemplateContent('')
+                      setShowTermsTemplateModal(true)
+                    }}
+                    className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                  >
+                    + Nueva Plantilla
+                  </button>
+                </div>
+                <p className="text-sm text-gray-600 mb-4">
+                  Crea plantillas de términos y condiciones para usarlas rápidamente en tus cotizaciones.
+                  Ideal para diferentes tipos de servicios (transporte, montacargas, grúas, etc.).
+                </p>
+
+                {termsTemplates.length === 0 ? (
+                  <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                    <p className="text-gray-500 text-sm">No hay plantillas creadas</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingTemplate(null)
+                        setTemplateName('')
+                        setTemplateContent('')
+                        setShowTermsTemplateModal(true)
+                      }}
+                      className="mt-2 text-sm text-primary-600 hover:text-primary-700 font-medium"
+                    >
+                      Crear primera plantilla
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {termsTemplates.map((template) => (
+                      <div
+                        key={template.id}
+                        className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900">{template.name}</p>
+                          <p className="text-xs text-gray-500 truncate">{template.content.substring(0, 80)}...</p>
+                        </div>
+                        <div className="flex items-center gap-2 ml-4">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingTemplate(template)
+                              setTemplateName(template.name)
+                              setTemplateContent(template.content)
+                              setShowTermsTemplateModal(true)
+                            }}
+                            className="text-gray-600 hover:text-primary-600 text-sm"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm('¿Eliminar esta plantilla?')) {
+                                setTermsTemplates(termsTemplates.filter(t => t.id !== template.id))
+                              }
+                            }}
+                            className="text-red-600 hover:text-red-700 text-sm"
+                          >
+                            Eliminar
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Envío a SUNAT */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Envío a SUNAT</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Configura el comportamiento del envío de comprobantes a SUNAT
+                </p>
+
+                <div className="space-y-4">
+                  <SettingToggle
+                    id="opcion-autoSendToSunat"
+                    checked={autoSendToSunat}
+                    onChange={e => setAutoSendToSunat(e.target.checked)}
+                    title="Envío automático a SUNAT desde el POS"
+                    description="Cuando está activado, los comprobantes se envían automáticamente a SUNAT al completar una venta en el punto de venta. Si está desactivado, deberás enviarlos manualmente desde la lista de comprobantes."
+                  >
+                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md">
+                      <Info className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs text-blue-700">
+                        {autoSendToSunat
+                          ? 'Los comprobantes se enviarán automáticamente'
+                          : 'Los comprobantes requerirán envío manual'}
+                      </span>
+                    </div>
+                  </SettingToggle>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Gestión de Comprobantes */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Gestión de Comprobantes</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Configura las opciones de seguridad para la gestión de comprobantes
+                </p>
+
+                <div className="space-y-4">
+                  <SettingToggle
+                    id="opcion-allowDeleteInvoices"
+                    checked={allowDeleteInvoices}
+                    onChange={(e) => setAllowDeleteInvoices(e.target.checked)}
+                    title="Permitir eliminar comprobantes"
+                    description={allowDeleteInvoices
+                      ? '✓ Habilitado: Se mostrará el botón "Eliminar" para notas de venta y comprobantes no enviados a SUNAT. Útil para corregir errores de captura, pero menos seguro desde el punto de vista contable.'
+                      : '✗ Deshabilitado: Solo se podrán ANULAR las notas de venta (se mantiene el registro y se devuelve el stock). Las facturas y boletas aceptadas por SUNAT solo se pueden anular mediante Nota de Crédito. Recomendado para mayor control y seguridad contable.'}
+                  >
+                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-amber-50 rounded-md border border-amber-200">
+                      <AlertTriangle className="w-4 h-4 text-amber-600" />
+                      <span className="text-xs text-amber-700 font-medium">
+                        {allowDeleteInvoices
+                          ? 'Mayor flexibilidad, menor control'
+                          : 'Mayor control y trazabilidad'}
+                      </span>
+                    </div>
+                  </SettingToggle>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Privacidad y Permisos */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Privacidad y Permisos</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Configura qué información pueden ver los usuarios secundarios
+                </p>
+
+                <div className="space-y-4">
+                  <SettingToggle
+                    id="opcion-hideDashboardDataFromSecondary"
+                    checked={hideDashboardDataFromSecondary}
+                    onChange={e => setHideDashboardDataFromSecondary(e.target.checked)}
+                    title="Ocultar totales y datos sensibles a usuarios secundarios"
+                    description={hideDashboardDataFromSecondary
+                      ? '✓ Habilitado: por defecto, los usuarios secundarios no ven el dashboard, ni los totales de Ventas, ni los costos y valores de Inventario y Productos, y no pueden exportar a Excel. Puedes darle acceso a alguien en particular desde Gestión de Usuarios → Qué datos puede ver. Excepción: la página de Contabilidad no se ve afectada — quien tenga acceso a ella (tu contador) podrá descargar el reporte en Excel, los XML y los CDR.'
+                      : '✗ Deshabilitado: por defecto todos los usuarios ven las estadísticas completas — dashboard, totales de ventas, valor de inventario y exportaciones. Puedes restringir a alguien en particular desde Gestión de Usuarios → Qué datos puede ver.'}
+                  >
+                    <div className="mt-3 p-3 bg-purple-50 rounded-md border border-purple-200">
+                      <div className="flex items-start gap-2">
+                        <Shield className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                        <div className="text-xs text-purple-800 space-y-1">
+                          <p className="font-medium">Control de información sensible</p>
+                          <p>
+                            Útil cuando tienes empleados o vendedores y quieres mantener privada la información financiera del negocio.
+                            Los usuarios secundarios seguirán teniendo acceso a sus funciones asignadas (POS, clientes, productos, etc.).
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </SettingToggle>
+
+                  {/* Cada usuario ve solo sus ventas */}
+                  <SettingToggle
+                    id="opcion-showOnlyOwnSalesToSecondary"
+                    checked={showOnlyOwnSalesToSecondary}
+                    onChange={e => setShowOnlyOwnSalesToSecondary(e.target.checked)}
+                    title="Cada usuario secundario ve solo las ventas que él registró"
+                    description={showOnlyOwnSalesToSecondary
+                      ? '✓ Habilitado: En Ventas, Reportes y Dashboard, cada sub-usuario ve únicamente los comprobantes que emitió él. Tú como dueño y los administradores siguen viendo todo.'
+                      : '✗ Deshabilitado: Cada sub-usuario ve las ventas de todas las sucursales que le asignaste, sin importar quién las registró.'}
+                  >
+                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
+                      <Info className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs text-blue-700 font-medium">
+                        Los comprobantes emitidos antes de que existiera el registro de autor quedan ocultos para los sub-usuarios
+                      </span>
+                    </div>
+                  </SettingToggle>
+
+                  {/* Ocultar efectivo esperado a cajeros en cierre de caja */}
+                  <SettingToggle
+                    id="opcion-hideCashExpectedFromCashier"
+                    checked={hideCashExpectedFromCashier}
+                    onChange={(e) => setHideCashExpectedFromCashier(e.target.checked)}
+                    title={'Ocultar "Efectivo Esperado" del cierre de caja a sub-usuarios'}
+                    description={hideCashExpectedFromCashier
+                      ? '✓ Activado: Los cajeros no verán el monto que debería haber ni la diferencia (sobrante/faltante). Solo cuentan e ingresan lo que tienen. Tú como dueño/admin sí lo verás.'
+                      : '✗ Desactivado: Los cajeros ven el monto esperado y la diferencia al cerrar la caja.'}
+                  >
+                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
+                      <Info className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs text-blue-700 font-medium">
+                        Útil para que el cajero reporte "a ciegas" lo que cuenta y tú compares después
+                      </span>
+                    </div>
+                  </SettingToggle>
+
+                  {/* Relacion de productos vendidos en el ticket de cierre */}
+                  <SettingToggle
+                    id="opcion-showProductsInCashClosure"
+                    checked={showProductsInCashClosure}
+                    onChange={(e) => setShowProductsInCashClosure(e.target.checked)}
+                    title="Imprimir los productos vendidos en el cierre de caja"
+                    description={showProductsInCashClosure
+                      ? '✓ Activado: El ticket de cierre lista qué productos se vendieron en el turno, con su cantidad e importe.'
+                      : '✗ Desactivado: El ticket de cierre solo muestra los totales.'}
+                  >
+                    <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-blue-50 rounded-md border border-blue-200">
+                      <Info className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs text-blue-700 font-medium">
+                        Evita entrar venta por venta. Con muchos productos el ticket se alarga: el PDF del cierre siempre los trae
+                      </span>
+                    </div>
+                  </SettingToggle>
+                </div>
+              </div>
+
+              {/* Herramientas de Administración - Solo visible si está habilitado en Firebase */}
+              {adminToolsEnabled && (
+                <>
+                  {/* Divider */}
+                  <div className="border-t border-gray-200"></div>
+
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                      <Wrench className="w-5 h-5 text-orange-500" />
+                      Herramientas de Administración
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Herramientas especiales para resolver problemas con documentos
+                    </p>
+
+                    <div className="space-y-3">
+                      <div className="p-4 border border-orange-200 rounded-lg bg-orange-50">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900 flex items-center gap-2">
+                              <RefreshCw className="w-4 h-4 text-orange-600" />
+                              Renumerar documentos rechazados
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">
+                              Si SUNAT rechazó documentos por duplicidad de numeración (serie ya usada anteriormente),
+                              esta herramienta permite cambiar la serie y renumerar los documentos para reenviarlos.
+                            </p>
+                            <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 bg-orange-100 rounded-md">
+                              <AlertTriangle className="w-4 h-4 text-orange-600" />
+                              <span className="text-xs text-orange-700">
+                                Use con precaución - solo para documentos rechazados
+                              </span>
+                            </div>
+                          </div>
+                          <Button
+                            onClick={() => setShowRenumberModal(true)}
+                            className="bg-orange-500 hover:bg-orange-600 text-white flex-shrink-0"
+                          >
+                            <Wrench className="w-4 h-4 mr-2" />
+                            Abrir herramienta
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </CardContent>
+
+          {/* Save Button for Documentos */}
+          <div className="px-6 pb-6">
+            <div className="flex justify-end">
+              <Button
+                onClick={async () => {
+                  if (isDemoMode) {
+                    toast.error('No se pueden guardar cambios en modo demo. Crea una cuenta para configurar tu empresa.')
+                    return
+                  }
+
+                  setIsSaving(true)
+                  try {
+                    // Subir imagen del QR (si hay pendiente y modo es 'image')
+                    // ANTES de hacer el setDoc, para que la URL quede en la
+                    // misma escritura. Mismo patrón que el save global.
+                    let uploadedQrImageUrl = ticketQrImageUrl
+                    if (ticketQrImageFile && ticketQrMode === 'image') {
+                      setUploadingQrImage(true)
+                      try {
+                        const qrRef = ref(storage, `businesses/${getBusinessId()}/ticket-qr`)
+                        await uploadBytes(qrRef, ticketQrImageFile)
+                        uploadedQrImageUrl = await getDownloadURL(qrRef)
+                        invalidateLogoCache()
+                        console.log('✅ Imagen del QR subida exitosamente')
+                      } catch (qrError) {
+                        console.error('Error al subir imagen del QR:', qrError)
+                        toast.error('Error al subir la imagen del QR. Se guardará el resto de la configuración.')
+                      } finally {
+                        setUploadingQrImage(false)
+                      }
+                    }
+
+                    const businessRef = doc(db, 'businesses', getBusinessId())
+                    await setDoc(businessRef, {
+                      pdfAccentColor: pdfAccentColor,
+                      ticketFooterMessage: ticketFooterMessage || '',
+                      notaVentaLegend: notaVentaLegend.trim() || '',
+                      invoiceFooterTerms: invoiceFooterTerms || '',
+                      showTermsOnTicket: showTermsOnTicket === true,
+                      purchaseOrderDefaultNotes: purchaseOrderDefaultNotes || "",
+                      ticketQrEnabled: ticketQrEnabled === true,
+                      ticketQrContent: ticketQrContent || '',
+                      ticketQrCaption: ticketQrCaption || '',
+                      ticketQrMode: ticketQrMode === 'image' ? 'image' : 'auto',
+                      ticketQrImageUrl: uploadedQrImageUrl || null,
+                      showProductCodeInQuotation: showProductCodeInQuotation,
+                      showProductCodeInInvoices: showProductCodeInInvoices,
+                      showProductDescriptionInQuotation: showProductDescriptionInQuotation,
+                      showProductDescriptionInInvoice: showProductDescriptionInInvoice,
+                      showImagesInQuotations: showImagesInQuotations,
+                      showImagesInInvoices: showImagesInInvoices,
+                      showBrandInInvoices: showBrandInInvoices,
+                      quotationImageScale: Number(quotationImageScale) || 100,
+                      invoiceImageScale: Number(invoiceImageScale) || 100,
+                      pdfSpacious: pdfSpacious,
+                      pdfA5: pdfA5,
+                      hideBatchAndExpiryInDocuments: hideBatchAndExpiryInDocuments,
+                      hideCashExpectedFromCashier: hideCashExpectedFromCashier,
+                      showProductsInCashClosure: showProductsInCashClosure,
+                      dispatchGuidesEnabled: dispatchGuidesEnabled,
+                      exitNoteEnabled: exitNoteEnabled,
+                      termsTemplates: termsTemplates,
+                      autoSendToSunat: autoSendToSunat,
+                      allowDeleteInvoices: allowDeleteInvoices,
+                      allowCustomEmissionDate: allowCustomEmissionDate,
+                      hideDashboardDataFromSecondary: hideDashboardDataFromSecondary,
+                      showOnlyOwnSalesToSecondary: showOnlyOwnSalesToSecondary,
+                      updatedAt: serverTimestamp(),
+                    }, { merge: true })
+                    setTicketQrImageFile(null) // Limpia archivo temporal
+                    if (refreshBusinessSettings) await refreshBusinessSettings()
+                    toast.success('Configuración de documentos guardada exitosamente.')
+                  } catch (error) {
+                    console.error('Error al guardar configuración de documentos:', error)
+                    toast.error('Error al guardar la configuración')
+                  } finally {
+                    setIsSaving(false)
+                  }
+                }}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Guardar Documentos
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Tab Content - Catálogo Público */}
+      {activeTab === 'catalogo' && (
+        <div className="space-y-6 pb-20">
+          {/* ===== CATÁLOGO ===== */}
+          <>
+              {/* Cabecera + interruptor, con el mismo lenguaje visual del resto
+                  del sistema: tarjeta neutra, sin bloques de color. */}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-gray-900">
+                      {businessMode === 'restaurant' ? 'Carta digital' : 'Catálogo online'}
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-1 max-w-2xl">
+                      {businessMode === 'restaurant'
+                        ? 'Tus clientes ven el menú desde su celular y hacen pedidos directo a cocina. Ideal con un QR en cada mesa.'
+                        : 'Tus clientes ven tus productos, arman su carrito y te hacen el pedido. Sin app ni registro.'}
+                    </p>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer flex-shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={catalogEnabled}
+                      onChange={(e) => setCatalogEnabled(e.target.checked)}
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700">
+                      {catalogEnabled ? 'Activo' : 'Activar'}
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Configuración del catálogo (solo si está habilitado) */}
+              {catalogEnabled && (
+                <>
+                  {/* Dos pestanas espejo de shopifree (CONFIGURACION y
+                      APARIENCIA) + AVANZADO para lo que casi nadie toca. */}
+                  <div className="border-b border-gray-200">
+                    <nav className="-mb-px flex gap-6 overflow-x-auto scrollbar-hide">
+                      {[
+                        { id: 'configuracion', label: 'Configuración' },
+                        { id: 'apariencia', label: 'Apariencia' },
+                        { id: 'avanzado', label: 'Avanzado' },
+                      ].map(sub => (
+                        <button
+                          key={sub.id}
+                          type="button"
+                          onClick={() => setCatalogTab(sub.id)}
+                          className={`py-3 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-colors ${
+                            catalogTab === sub.id
+                              ? 'border-primary-500 text-primary-600'
+                              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                          }`}
+                        >
+                          {sub.label}
+                        </button>
+                      ))}
+                    </nav>
+                  </div>
+
+                  {catalogTab === 'configuracion' && (
+                    <div className="space-y-4">
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <Globe className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Tu enlace</h3>
+                          <p className="text-xs text-gray-500">La dirección de tu tienda y el código QR</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-5 space-y-5">
+{/* URL del catálogo */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          {businessMode === 'restaurant' ? 'URL de tu carta digital' : 'URL de tu catálogo'}
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 flex items-center bg-gray-100 rounded-lg overflow-hidden">
+                            <span className="px-3 py-2.5 text-gray-500 text-sm bg-gray-200">
+                              {resellerCustomDomain || 'cobrifyperu.com'}/{businessMode === 'restaurant' ? 'menu' : 'catalogo'}/
+                            </span>
+                            <input
+                              type="text"
+                              value={catalogSlug}
+                              onChange={(e) => setCatalogSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                              placeholder={businessMode === 'restaurant' ? 'mi-restaurante' : 'mi-tienda'}
+                              className="flex-1 px-3 py-2.5 bg-white border-0 focus:ring-2 focus:ring-primary-500 text-gray-900"
+                            />
+                          </div>
+                          {catalogSlug && (
+                            <button
+                              type="button"
+                              onClick={() => window.open(`${resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/${businessMode === 'restaurant' ? 'menu' : 'catalogo'}/${catalogSlug}`, '_blank')}
+                              className="p-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-600 transition-colors"
+                              title={businessMode === 'restaurant' ? 'Ver carta digital' : 'Ver catálogo'}
+                            >
+                              <ExternalLink className="w-5 h-5" />
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                          {businessMode === 'restaurant'
+                            ? 'Solo letras minúsculas, números y guiones. Ejemplo: mi-restaurante, la-buena-mesa'
+                            : 'Solo letras minúsculas, números y guiones. Ejemplo: mi-tienda, ferreteria-lopez'}
+                        </p>
+                      </div>
+
+{/* Vista previa del enlace */}
+                      {catalogSlug && (
+                        <div className="p-4 bg-gray-50 rounded-xl">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs text-gray-500 mb-1">
+                                {businessMode === 'restaurant' ? 'Enlace de tu carta digital:' : 'Enlace de tu catálogo:'}
+                              </p>
+                              <p className="text-sm font-medium text-primary-600 truncate">
+                                {resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/{businessMode === 'restaurant' ? 'menu' : 'catalogo'}/{catalogSlug}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(`${resellerCustomDomain ? `https://${resellerCustomDomain}` : PRODUCTION_URL}/${businessMode === 'restaurant' ? 'menu' : 'catalogo'}/${catalogSlug}`)
+                                toast.success('Enlace copiado al portapapeles')
+                              }}
+                              className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
+                            >
+                              <Copy className="w-4 h-4" />
+                              Copiar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+{/* Código QR */}
+                      {catalogSlug && catalogQrDataUrl && (
+                        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                          <div className="flex items-center gap-2 mb-3">
+                            <QrCode className="w-5 h-5 text-primary-600" />
+                            <h4 className="font-medium text-gray-900">
+                              {businessMode === 'restaurant' ? 'Código QR de tu Carta Digital' : 'Código QR de tu Catálogo'}
+                            </h4>
+                          </div>
+                          <div className="flex flex-col sm:flex-row items-center gap-4">
+                            <div className="bg-white p-3 rounded-xl shadow-sm">
+                              <img
+                                src={catalogQrDataUrl}
+                                alt={businessMode === 'restaurant' ? 'QR de carta digital' : 'QR del catálogo'}
+                                className="w-40 h-40"
+                              />
+                            </div>
+                            <div className="flex-1 text-center sm:text-left">
+                              <p className="text-sm text-gray-600 mb-3">
+                                Descarga este código QR para compartirlo en tu negocio, tarjetas de presentación, o redes sociales.
+                              </p>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const filename = `${businessMode === 'restaurant' ? 'menu' : 'catalogo'}-${catalogSlug}-qr.png`
+                                    await downloadDataUrl(catalogQrDataUrl, filename, {
+                                      title: filename,
+                                      dialogTitle: businessMode === 'restaurant' ? 'Guardar QR de la carta' : 'Guardar QR del catálogo'
+                                    })
+                                    toast.success('QR descargado exitosamente')
+                                  } catch (err) {
+                                    console.error('Error descargando QR:', err)
+                                    toast.error('No se pudo descargar el QR')
+                                  }
+                                }}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
+                              >
+                                <Download className="w-4 h-4" />
+                                Descargar QR
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+{/* QR por Mesa — solo restaurantes */}
+                      {businessMode === 'restaurant' && catalogSlug && (
+                        <div className="p-4 bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl border border-orange-200">
+                          <div className="border-t border-orange-200 pt-4 mt-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <QrCode className="w-5 h-5 text-orange-600" />
+                              <h5 className="font-medium text-gray-900">Códigos QR por Mesa</h5>
+                            </div>
+                            <p className="text-sm text-gray-600 mb-4">
+                              Genera códigos QR para cada mesa. Al escanear, el cliente verá la carta con su número de mesa pre-cargado.
+                            </p>
+
+                            {generatingTableQrs && (
+                              <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Generando QRs de mesas...
+                              </div>
+                            )}
+
+                            {!generatingTableQrs && tableQrCodes.length === 0 && (
+                              <p className="text-sm text-gray-500 italic mb-4">
+                                No hay mesas configuradas. Ve a la página de Mesas para crearlas.
+                              </p>
+                            )}
+
+                            {tableQrCodes.length > 0 && (
+                              <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm text-gray-600">{tableQrCodes.length} códigos generados</span>
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      try {
+                                        // Con varias sedes el nombre lleva la sucursal:
+                                        // "mesa-5-qr.png" repetido no distingue cual imprimir.
+                                        const files = tableQrCodes.map(qr => ({
+                                          dataUrl: qr.dataUrl,
+                                          filename: branches.length > 0
+                                            ? `${slugSede(qr.branchName)}-mesa-${qr.table}-qr.png`
+                                            : `mesa-${qr.table}-qr.png`
+                                        }))
+                                        const result = await saveFilesToDevice(files)
+                                        if (result.nativeFolder) {
+                                          toast.success(`${result.count} QRs guardados en ${result.nativeFolder}`)
+                                        } else {
+                                          toast.success('Descargando todos los QRs...')
+                                        }
+                                      } catch (err) {
+                                        console.error('Error descargando QRs de mesas:', err)
+                                        toast.error('No se pudieron descargar los QRs')
+                                      }
+                                    }}
+                                    className="flex items-center gap-2 px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm"
+                                  >
+                                    <Download className="w-4 h-4" />
+                                    Descargar todos
+                                  </button>
+                                </div>
+
+                                <div className="max-h-96 overflow-y-auto p-2 bg-white rounded-lg space-y-4">
+                                  {(() => {
+                                    // Agrupado por sucursal: con dos locales, una grilla plana
+                                    // con "Mesa 5" repetida no dice cual QR va en cual local.
+                                    const grupos = []
+                                    const principal = tableQrCodes.filter(q => !q.branchId)
+                                    if (principal.length > 0) {
+                                      grupos.push({ key: 'main', nombre: principal[0].branchName, qrs: principal })
+                                    }
+                                    branches.forEach(b => {
+                                      const suyos = tableQrCodes.filter(q => q.branchId === b.id)
+                                      if (suyos.length > 0) grupos.push({ key: b.id, nombre: b.name, qrs: suyos })
+                                    })
+
+                                    const tarjeta = (qr) => (
+                                      <div key={qr.id} className="flex flex-col items-center p-2 border rounded-lg hover:border-orange-300 transition-colors">
+                                        <img src={qr.dataUrl} alt={`${qr.zone ? `${qr.zone} - ` : ''}Mesa ${qr.table}`} className="w-24 h-24" />
+                                        <span className="text-sm font-semibold text-gray-900 mt-1">
+                                          {qr.zone ? `${qr.zone} - ` : ''}Mesa {qr.table}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={async () => {
+                                            try {
+                                              const filename = branches.length > 0
+                                                ? `${slugSede(qr.branchName)}-mesa-${qr.table}-qr.png`
+                                                : `mesa-${qr.table}-qr.png`
+                                              await downloadDataUrl(qr.dataUrl, filename, {
+                                                title: filename,
+                                                dialogTitle: `Guardar QR de la mesa ${qr.table}`
+                                              })
+                                            } catch (err) {
+                                              console.error('Error descargando QR de mesa:', err)
+                                              toast.error('No se pudo descargar el QR')
+                                            }
+                                          }}
+                                          className="mt-1 text-xs text-orange-600 hover:text-orange-700"
+                                        >
+                                          Descargar
+                                        </button>
+                                      </div>
+                                    )
+
+                                    // Sin sucursales configuradas no hay nada que agrupar.
+                                    if (branches.length === 0) {
+                                      return (
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                          {tableQrCodes.map(tarjeta)}
+                                        </div>
+                                      )
+                                    }
+
+                                    return grupos.map(g => (
+                                      <div key={g.key}>
+                                        <div className="flex items-center gap-1.5 mb-2">
+                                          <Store className="w-3.5 h-3.5 text-gray-400" />
+                                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide truncate" title={g.nombre}>
+                                            {g.nombre}
+                                          </span>
+                                          <span className="text-xs text-gray-400">({g.qrs.length})</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                          {g.qrs.map(tarjeta)}
+                                        </div>
+                                      </div>
+                                    ))
+                                  })()}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Sobre tu tienda</h3>
+                          <p className="text-xs text-gray-500">El mensaje de bienvenida y tu lema</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-5 space-y-5">
+{/* Mensaje de bienvenida */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Mensaje de bienvenida (opcional)
+                        </label>
+                        <input
+                          type="text"
+                          value={catalogWelcome}
+                          onChange={(e) => setCatalogWelcome(e.target.value)}
+                          placeholder="¡Bienvenido! Explora nuestros productos"
+                          maxLength={100}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                      </div>
+
+{/* Tagline */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Eslogan o descripción corta (opcional)
+                        </label>
+                        <input
+                          type="text"
+                          value={catalogTagline}
+                          onChange={(e) => setCatalogTagline(e.target.value)}
+                          placeholder="Los mejores productos al mejor precio"
+                          maxLength={60}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">{catalogTagline.length}/60 caracteres</p>
+                      </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <ShoppingCart className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Recepción de pedidos</h3>
+                          <p className="text-xs text-gray-500">Si tu catálogo recibe pedidos y de qué tipo</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-5 space-y-5">
+                      {/* Recepcion de pedidos: el flag ya lo respeta el carrito
+                          (catalogOnlineOrders !== false), pero no tenia
+                          interruptor — shopifree si lo expone. */}
+                      <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                        <div className="flex-1 pr-3">
+                          <span className="text-sm font-medium text-gray-900 block">Recibir pedidos desde el catálogo</span>
+                          <span className="text-xs text-gray-500">Si lo apagas, tu catálogo queda como vitrina: los clientes ven productos y precios, pero el carrito solo escribe por WhatsApp.</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={catalogOnlineOrders}
+                          onChange={(e) => setCatalogOnlineOrders(e.target.checked)}
+                          className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                      </label>
+
+{/* Tipos de pedido en menú digital (solo restaurante) */}
+                      {businessMode === 'restaurant' && (
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-gray-700">Tipos de pedido en carta digital</p>
+                          <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                            <div className="flex-1">
+                              <span className="text-sm font-medium text-gray-900 block">Permitir pedidos Para Llevar</span>
+                              <span className="text-xs text-gray-500">Los clientes pueden hacer pedidos para recoger desde la carta digital</span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={catalogAllowTakeaway}
+                              onChange={(e) => setCatalogAllowTakeaway(e.target.checked)}
+                              className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                            />
+                          </label>
+                          <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                            <div className="flex-1">
+                              <span className="text-sm font-medium text-gray-900 block">Permitir pedidos Delivery</span>
+                              <span className="text-xs text-gray-500">Los clientes pueden hacer pedidos con delivery desde la carta digital</span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={catalogAllowDelivery}
+                              onChange={(e) => setCatalogAllowDelivery(e.target.checked)}
+                              className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                            />
+                          </label>
+                        </div>
+                      )}
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <Bike className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Entrega y envío</h3>
+                          <p className="text-xs text-gray-500">Cómo le llega el pedido a tu cliente</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-5 space-y-5">
+                      {/* Costos de envío: existe en shopifree, en Cobrify todavia no.
+                          Se muestra DESHABILITADO y etiquetado para que nadie
+                          lo configure creyendo que ya funciona. */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Costos de envío</label>
+                        <p className="text-xs text-gray-500 mb-2">Cobrar el delivery según la zona del cliente. Por ahora el costo se coordina por WhatsApp.</p>
+                        <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-3 px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50">
+                          <div className="min-w-0">
+                            <p className="text-sm text-gray-500">Costo de envío fijo</p>
+                            <p className="text-xs text-gray-400">Un monto único para todos los pedidos</p>
+                          </div>
+                          <span className="text-[11px] font-medium text-gray-400 border border-gray-300 rounded-full px-2 py-0.5 flex-shrink-0">Próximamente</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50">
+                          <div className="min-w-0">
+                            <p className="text-sm text-gray-500">Envío gratis desde un monto</p>
+                            <p className="text-xs text-gray-400">Ej: gratis en compras sobre S/ 100</p>
+                          </div>
+                          <span className="text-[11px] font-medium text-gray-400 border border-gray-300 rounded-full px-2 py-0.5 flex-shrink-0">Próximamente</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50">
+                          <div className="min-w-0">
+                            <p className="text-sm text-gray-500">Cobertura por distritos</p>
+                            <p className="text-xs text-gray-400">Elegir a qué distritos llegas</p>
+                          </div>
+                          <span className="text-[11px] font-medium text-gray-400 border border-gray-300 rounded-full px-2 py-0.5 flex-shrink-0">Próximamente</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50">
+                          <div className="min-w-0">
+                            <p className="text-sm text-gray-500">Costos por zona</p>
+                            <p className="text-xs text-gray-400">Un precio distinto por departamento, provincia o distrito</p>
+                          </div>
+                          <span className="text-[11px] font-medium text-gray-400 border border-gray-300 rounded-full px-2 py-0.5 flex-shrink-0">Próximamente</span>
+                        </div>
+                        </div>
+                      </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <Package className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Qué se muestra</h3>
+                          <p className="text-xs text-gray-500">Precios, stock y qué productos aparecen</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-5 space-y-5">
+                      <div className="space-y-3">
+                        <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                          <div className="flex-1">
+                            <span className="text-sm font-medium text-gray-900 block">Mostrar precios</span>
+                            <span className="text-xs text-gray-500">Si desactivas esta opción, los productos se mostrarán sin precio</span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={catalogShowPrices}
+                            onChange={(e) => setCatalogShowPrices(e.target.checked)}
+                            className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                        </label>
+                        <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                          <div className="flex-1">
+                            <span className="text-sm font-medium text-gray-900 block">Ignorar stock en catálogo</span>
+                            <span className="text-xs text-gray-500">Los productos nunca se mostrarán como "Agotado". Ideal para negocios que trabajan bajo pedido</span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={catalogIgnoreStock}
+                            onChange={(e) => setCatalogIgnoreStock(e.target.checked)}
+                            className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                        </label>
+                        <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                          <div className="flex-1">
+                            <span className="text-sm font-medium text-gray-900 block">Ocultar productos sin stock</span>
+                            <span className="text-xs text-gray-500">Los productos sin stock no aparecerán en el catálogo (en vez de mostrarse como "Agotado"). Útil si no quieres que los clientes los vean.</span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={catalogHideOutOfStock}
+                            onChange={(e) => setCatalogHideOutOfStock(e.target.checked)}
+                            className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                        </label>
+                        <label className={`flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors ${catalogIgnoreStock ? 'opacity-50' : ''}`}>
+                          <div className="flex-1">
+                            <span className="text-sm font-medium text-gray-900 block">Mostrar stock disponible</span>
+                            <span className="text-xs text-gray-500">Muestra las unidades disponibles de cada producto en el catálogo y limita la cantidad que el cliente puede pedir a lo que hay en stock. {catalogIgnoreStock && '(Se ignora cuando "Ignorar stock en catálogo" está activo)'}</span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={catalogShowStock}
+                            onChange={(e) => setCatalogShowStock(e.target.checked)}
+                            disabled={catalogIgnoreStock}
+                            className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                        </label>
+                      </div>
+
+                      {/* Mayorista es configuracion avanzada: plegada para que
+                          no se mezcle con los toggles del dia a dia. */}
+                      <details className="border border-gray-200 rounded-lg">
+                        <summary className="px-3 py-3 text-sm font-medium text-gray-900 cursor-pointer select-none hover:bg-gray-50">
+                          Precios mayoristas <span className="text-gray-400 font-normal">(avanzado)</span>
+                        </summary>
+                        <div className="px-3 pb-3 space-y-4">
+                        <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                          <div className="flex-1">
+                            <span className="text-sm font-medium text-gray-900 block">Mostrar todos los precios en catálogo</span>
+                            <span className="text-xs text-gray-500">Muestra precio público, mayorista, etc. en la tarjeta del producto. Si desactivas, solo se mostrará el precio público</span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={catalogShowAllPrices}
+                            onChange={(e) => setCatalogShowAllPrices(e.target.checked)}
+                            className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                        </label>
+
+                        </div>
+                      </details>
+
+{/* Productos en el catálogo */}
+                      <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
+                        <div className="flex items-start gap-3">
+                          <Info className="w-5 h-5 text-blue-600 mt-0.5" />
+                          <div>
+                            <h4 className="font-medium text-blue-900">¿Cómo agrego productos al catálogo?</h4>
+                            <p className="text-sm text-blue-700 mt-1">
+                              Ve a <strong>Productos</strong>, edita un producto y activa la opción <strong>"Mostrar en catálogo"</strong>. Solo los productos con esta opción activada aparecerán en tu catálogo público.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <MessageCircle className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Contacto y horario</h3>
+                          <p className="text-xs text-gray-500">WhatsApp, redes sociales y horario de atención</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-5 space-y-5">
+{/* WhatsApp del catálogo */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          WhatsApp para pedidos del catálogo
+                        </label>
+                        <input
+                          type="text"
+                          value={catalogWhatsapp}
+                          onChange={(e) => setCatalogWhatsapp(e.target.value.replace(/[^\d+]/g, ''))}
+                          placeholder="Ej: 51987654321"
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Número con código de país (ej: 51 para Perú). Si se deja vacío se usará el teléfono de la empresa.
+                        </p>
+                      </div>
+
+{/* Redes sociales (footer "Síguenos" del catálogo) */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Redes sociales
+                        </label>
+                        <p className="text-xs text-gray-500 mb-2">
+                          Aparecen como botones al pie de tu catálogo, en la sección "Síguenos". Escribe el usuario (ej: mitienda) o pega el enlace completo. Deja vacío lo que no uses.
+                        </p>
+                        <div className="space-y-2 max-w-md">
+                          {[
+                            { key: 'instagram', label: 'Instagram' },
+                            { key: 'facebook', label: 'Facebook' },
+                            { key: 'tiktok', label: 'TikTok' },
+                          ].map(red => (
+                            <div key={red.key} className="flex items-center gap-2">
+                              <span className="w-24 text-sm text-gray-600 flex-shrink-0">{red.label}</span>
+                              <input
+                                type="text"
+                                value={catalogSocial[red.key] || ''}
+                                onChange={(e) => setCatalogSocial(prev => ({ ...prev, [red.key]: e.target.value.trim() }))}
+                                placeholder={red.key === 'tiktok' ? '@mitienda' : 'mitienda'}
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+{/* Horario de atención */}
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Horario de atención
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={businessHours.enabled}
+                              onChange={(e) => setBusinessHours(prev => ({ ...prev, enabled: e.target.checked }))}
+                              className="w-4 h-4 text-primary-600 border-gray-300 rounded"
+                            />
+                            <span className="text-sm text-gray-600">Activar</span>
+                          </label>
+                        </div>
+                        {businessHours.enabled && (
+                          <div className="space-y-2 bg-gray-50 rounded-lg p-3">
+                            {[
+                              { key: 1, name: 'Lunes' },
+                              { key: 2, name: 'Martes' },
+                              { key: 3, name: 'Miércoles' },
+                              { key: 4, name: 'Jueves' },
+                              { key: 5, name: 'Viernes' },
+                              { key: 6, name: 'Sábado' },
+                              { key: 0, name: 'Domingo' },
+                            ].map(day => (
+                              <div key={day.key} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <label className="flex items-center gap-2 w-24 sm:w-28 flex-shrink-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={businessHours.days[day.key]?.open || false}
+                                    onChange={(e) => setBusinessHours(prev => ({
+                                      ...prev,
+                                      days: { ...prev.days, [day.key]: { ...prev.days[day.key], open: e.target.checked } }
+                                    }))}
+                                    className="w-4 h-4 text-primary-600 border-gray-300 rounded"
+                                  />
+                                  <span className={`text-sm ${businessHours.days[day.key]?.open ? 'text-gray-700 font-medium' : 'text-gray-400'}`}>
+                                    {day.name}
+                                  </span>
+                                </label>
+                                {businessHours.days[day.key]?.open && (
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="time"
+                                      value={businessHours.days[day.key]?.from || '09:00'}
+                                      onChange={(e) => setBusinessHours(prev => ({
+                                        ...prev,
+                                        days: { ...prev.days, [day.key]: { ...prev.days[day.key], from: e.target.value } }
+                                      }))}
+                                      className="px-1.5 sm:px-2 py-1 border border-gray-300 rounded text-xs sm:text-sm w-[6.5rem] sm:w-auto"
+                                    />
+                                    <span className="text-gray-400 text-xs sm:text-sm">a</span>
+                                    <input
+                                      type="time"
+                                      value={businessHours.days[day.key]?.to || '18:00'}
+                                      onChange={(e) => setBusinessHours(prev => ({
+                                        ...prev,
+                                        days: { ...prev.days, [day.key]: { ...prev.days[day.key], to: e.target.value } }
+                                      }))}
+                                      className="px-1.5 sm:px-2 py-1 border border-gray-300 rounded text-xs sm:text-sm w-[6.5rem] sm:w-auto"
+                                    />
+                                  </div>
+                                )}
+                                {!businessHours.days[day.key]?.open && (
+                                  <span className="text-xs text-red-400">Cerrado</span>
+                                )}
+                              </div>
+                            ))}
+                            <p className="text-xs text-gray-500 mt-2">Se muestra en el catálogo y bloquea pedidos fuera de horario</p>
+                          </div>
+                        )}
+                      </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <User className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Cuentas de clientes</h3>
+                          <p className="text-xs text-gray-500">Deja que tus compradores se registren</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-5 space-y-5">
+                      <div className="space-y-3">
+                        <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                          <div className="flex-1">
+                            <span className="text-sm font-medium text-gray-900 block">Permitir cuentas de clientes</span>
+                            <span className="text-xs text-gray-500">Tus clientes pueden crear una cuenta con Google o correo para ver su historial de pedidos y guardar sus direcciones (el checkout se autocompleta). Siempre es opcional: quien no quiera registrarse compra igual.</span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={catalogCustomerAccounts}
+                            onChange={(e) => setCatalogCustomerAccounts(e.target.checked)}
+                            className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          />
+                        </label>
+                      </div>
+                      </div>
+                    </div>
+                    </div>
+                  )}
+
+                  {catalogTab === 'apariencia' && (
+                    <div className="space-y-4">
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <Palette className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Tema y color</h3>
+                          <p className="text-xs text-gray-500">El estilo general de tu tienda</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-5 space-y-5">
+{/* Tema del catálogo — galería estilo shopifree: cada tarjeta muestra
+    una MINIATURA de la tienda pintada con los tokens del propio tema
+    (ThemeThumb), no un archivo de imagen: si el tema cambia, la
+    miniatura cambia sola. Los temas viven en src/themes/catalogThemes.js */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Tema visual
+                        </label>
+                        <p className="text-xs text-gray-500 mb-3">
+                          Cambia colores, tipografía y forma de las tarjetas. La miniatura ya usa tu color; toca "Vista previa" para verlo con tus productos.
+                        </p>
+
+                        {(() => {
+                        const TEMAS_VISIBLES = 6
+                        const listaTemas = getCatalogThemesList()
+                        const hayDeMas = listaTemas.length > TEMAS_VISIBLES
+                        const iActual = listaTemas.findIndex(t => t.id === catalogTheme)
+                        // Si el tema aplicado quedo fuera del corte, ocupa el
+                        // ultimo lugar visible: nadie deberia tener que abrir
+                        // "Ver mas" para saber cual esta usando.
+                        const temasMostrados = (!hayDeMas || temasExpandidos)
+                          ? listaTemas
+                          : (iActual >= TEMAS_VISIBLES
+                            ? [...listaTemas.slice(0, TEMAS_VISIBLES - 1), listaTemas[iActual]]
+                            : listaTemas.slice(0, TEMAS_VISIBLES))
+                        return (
+                        <>
+                        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2.5">
+                          {temasMostrados.map((theme) => {
+                            const isSelected = catalogTheme === theme.id
+                            return (
+                              <div
+                                key={theme.id}
+                                className={`group relative rounded-xl overflow-hidden transition-all ${
+                                  isSelected
+                                    ? 'ring-2 ring-primary-500 ring-offset-1 border border-primary-500'
+                                    : 'border border-gray-200 hover:border-gray-300'
+                                }`}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => setCatalogTheme(theme.id)}
+                                  className="block w-full text-left"
+                                  title={theme.description}
+                                >
+                                  <div
+                                    className="relative overflow-hidden"
+                                    style={{
+                                      aspectRatio: `${THUMB_W} / ${THUMB_H}`,
+                                    }}
+                                  >
+                                    <ThemeThumb
+                                      themeId={theme.id}
+                                      colorNegocio={catalogColor}
+                                      nombre={businessSettings?.name || businessSettings?.businessName || 'Tu tienda'}
+                                      logoUrl={catalogLogoUrl || logoUrl || ''}
+                                      portadaUrl={catalogCoverImage || (catalogHero?.slides || []).find(sl => sl?.imageUrl)?.imageUrl || ''}
+                                      fotos={fotosMiniatura || []}
+                                    />
+                                    {/* Velo con "Vista previa" al pasar el mouse */}
+                                    <span className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                      <span
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={(e) => { e.stopPropagation(); setPreviewThemeId(theme.id) }}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setPreviewThemeId(theme.id) } }}
+                                        className="px-3 py-1.5 bg-white rounded-lg text-xs font-semibold text-gray-900 hover:bg-gray-50 cursor-pointer flex items-center gap-1.5"
+                                      >
+                                        <Eye className="w-3.5 h-3.5" />
+                                        Vista previa
+                                      </span>
+                                    </span>
+                                  </div>
+                                  <div className="px-2 py-1.5 bg-white border-t border-gray-200/70">
+                                    <p className="text-[11px] font-semibold text-gray-900 truncate">{theme.name}</p>
+                                  </div>
+                                </button>
+
+                                {theme.isNew && !isSelected && (
+                                  <span className="absolute top-1.5 left-1.5 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-gray-900/80 text-white rounded">
+                                    Nuevo
+                                  </span>
+                                )}
+                                {isSelected && (
+                                  <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white bg-primary-600 shadow">
+                                    En uso
+                                  </span>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                        {hayDeMas && (
+                          <button
+                            type="button"
+                            onClick={() => setTemasExpandidos(v => !v)}
+                            className="mt-3 w-full py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                          >
+                            {temasExpandidos
+                              ? 'Ver menos'
+                              : `Ver ${listaTemas.length - TEMAS_VISIBLES} tema${listaTemas.length - TEMAS_VISIBLES === 1 ? '' : 's'} más`}
+                          </button>
+                        )}
+                        </>
+                        )
+                        })()}
+                      </div>
+
+{/* Color */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Color principal del catálogo
+                        </label>
+                        <div className="flex flex-wrap gap-3">
+                          {[
+                            { color: '#10B981', name: 'Esmeralda' },
+                            { color: '#3B82F6', name: 'Azul' },
+                            { color: '#8B5CF6', name: 'Violeta' },
+                            { color: '#F59E0B', name: 'Ámbar' },
+                            { color: '#EF4444', name: 'Rojo' },
+                            { color: '#EC4899', name: 'Rosa' },
+                            { color: '#14B8A6', name: 'Teal' },
+                            { color: '#1F2937', name: 'Oscuro' },
+                          ].map((option) => (
+                            <button
+                              key={option.color}
+                              type="button"
+                              onClick={() => setCatalogColor(option.color)}
+                              className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all ${
+                                catalogColor === option.color
+                                  ? 'border-gray-900 shadow-md'
+                                  : 'border-transparent hover:border-gray-300'
+                              }`}
+                            >
+                              <div
+                                className="w-10 h-10 rounded-full shadow-sm flex items-center justify-center"
+                                style={{ backgroundColor: option.color }}
+                              >
+                                {catalogColor === option.color && (
+                                  <Check className="w-5 h-5 text-white" />
+                                )}
+                              </div>
+                              <span className="text-xs text-gray-600">{option.name}</span>
+                            </button>
+                          ))}
+                          <div className="flex flex-col items-center gap-1 p-2">
+                            <input
+                              type="color"
+                              value={catalogColor}
+                              onChange={(e) => setCatalogColor(e.target.value)}
+                              onInput={(e) => setCatalogColor(e.target.value)}
+                              onBlur={(e) => setCatalogColor(e.target.value)}
+                              className="w-10 h-10 rounded-full cursor-pointer border-2 border-gray-300"
+                            />
+                            <span className="text-xs text-gray-600">Otro</span>
+                          </div>
+                        </div>
+                      </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <Image className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Logo</h3>
+                          <p className="text-xs text-gray-500">Tu logo cuadrado y el horizontal</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-5 space-y-5">
+{/* Logo del catálogo — cuadrado + horizontal. La foto es el control:
+    se toca para cambiar, se arrastra para subir y la X (al pasar el
+    mouse) la quita. Antes eran dos botones por logo y una miniatura
+    de 80px que no dejaba ver nada. */}
+                      <div className="space-y-4">
+                        <p className="text-xs text-gray-500">
+                          Recomendado: PNG con fondo transparente. Toca la imagen para cambiarla o arrastra una encima. Se optimizan solas.
+                        </p>
+
+                        <div className="flex flex-wrap gap-8">
+                          {/* Logo cuadrado */}
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium text-gray-800">Logo cuadrado</p>
+                            <ImageDropZone
+                              value={catalogLogoUrl || logoUrl || ''}
+                              uploading={uploadingCatalogLogo}
+                              className="w-36 h-36"
+                              label="Toca o arrastra tu logo"
+                              hint="Se muestra junto al nombre del negocio en el header."
+                              onClear={() => { setCatalogLogoUrl(''); toast.success('Logo cuadrado quitado') }}
+                              onFile={async (file) => {
+                                setUploadingCatalogLogo(true)
+                                try {
+                                  const url = await uploadImage(await compressForLogoSquare(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
+                                  setCatalogLogoUrl(url)
+                                  toast.success('Logo cuadrado subido')
+                                } catch (err) {
+                                  console.error('Error subiendo logo cuadrado:', err)
+                                  toast.error('Error al subir el logo')
+                                } finally {
+                                  setUploadingCatalogLogo(false)
+                                }
+                              }}
+                            />
+                          </div>
+
+                          {/* Logo horizontal (opcional) */}
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium text-gray-800">
+                              Logo horizontal <span className="text-xs font-normal text-gray-500">(opcional)</span>
+                            </p>
+                            <ImageDropZone
+                              value={catalogLogoLandscape}
+                              uploading={uploadingCatalogLogoLandscape}
+                              className="w-64 h-36"
+                              label="Toca o arrastra tu logo horizontal"
+                              hint="Si lo subes, reemplaza al cuadrado y oculta el nombre del negocio en el header."
+                              onClear={() => { setCatalogLogoLandscape(''); toast.success('Logo horizontal quitado') }}
+                              onFile={async (file) => {
+                                setUploadingCatalogLogoLandscape(true)
+                                try {
+                                  const url = await uploadImage(await compressForLogoLandscape(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
+                                  setCatalogLogoLandscape(url)
+                                  toast.success('Logo horizontal subido')
+                                } catch (err) {
+                                  console.error('Error subiendo logo horizontal:', err)
+                                  toast.error('Error al subir el logo')
+                                } finally {
+                                  setUploadingCatalogLogoLandscape(false)
+                                }
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <Image className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Portada</h3>
+                          <p className="text-xs text-gray-500">La imagen grande de la cabecera</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-5 space-y-5">
+{/* Imagen de portada — desktop + móvil. Mismo control que el logo:
+    tocar para cambiar, arrastrar para subir, X para quitar. */}
+                      <div className="space-y-3">
+                        <p className="text-xs text-gray-500">
+                          Se muestra como fondo en la cabecera del catálogo. Toca la imagen para cambiarla o arrastra una encima.
+                        </p>
+
+                        <div className="flex flex-wrap gap-6">
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium text-gray-800">
+                              Escritorio <span className="text-xs font-normal text-gray-500">(1920×600)</span>
+                            </p>
+                            <ImageDropZone
+                              value={catalogCoverImage}
+                              uploading={uploadingCover}
+                              className="w-80 h-28"
+                              objectFit="cover"
+                              label="Toca o arrastra tu portada"
+                              onClear={() => { setCatalogCoverImage(''); toast.success('Portada de escritorio quitada') }}
+                              onFile={async (file) => {
+                                setUploadingCover(true)
+                                try {
+                                  const url = await uploadImage(await compressForCoverDesktop(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
+                                  setCatalogCoverImage(url)
+                                  toast.success('Portada de escritorio subida')
+                                } catch (err) {
+                                  console.error('Error uploading cover desktop:', err)
+                                  toast.error('Error al subir imagen')
+                                } finally {
+                                  setUploadingCover(false)
+                                }
+                              }}
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium text-gray-800">
+                              Móvil <span className="text-xs font-normal text-gray-500">(opcional)</span>
+                            </p>
+                            <ImageDropZone
+                              value={catalogCoverImageMobile}
+                              uploading={uploadingCoverMobile}
+                              className="w-44 h-28"
+                              objectFit="cover"
+                              label="Toca o arrastra"
+                              hint="Si no la subes, en móvil se usa la de escritorio."
+                              onClear={() => { setCatalogCoverImageMobile(''); toast.success('Portada móvil quitada') }}
+                              onFile={async (file) => {
+                                setUploadingCoverMobile(true)
+                                try {
+                                  const url = await uploadImage(await compressForCoverMobile(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
+                                  setCatalogCoverImageMobile(url)
+                                  toast.success('Portada móvil subida')
+                                } catch (err) {
+                                  console.error('Error uploading cover mobile:', err)
+                                  toast.error('Error al subir imagen')
+                                } finally {
+                                  setUploadingCoverMobile(false)
+                                }
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+{/* Carrusel de portada (F2.2): reemplaza la portada única
+                          con slides promocionales (imagen + texto + enlace) */}
+                      <div className="p-4 border border-gray-200 rounded-lg space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <span className="text-sm font-medium text-gray-900">Carrusel de portada</span>
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              Varios banners rotando automáticamente (promociones, novedades). Si está activo, reemplaza la imagen de portada.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogHero(prev => ({ ...prev, enabled: !prev.enabled }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
+                              catalogHero.enabled ? 'bg-primary-600' : 'bg-gray-300'
+                            }`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              catalogHero.enabled ? 'translate-x-6' : 'translate-x-1'
+                            }`} />
+                          </button>
+                        </div>
+
+                        {catalogHero.enabled && (
+                          <div className="space-y-3">
+                            {(catalogHero.slides || []).map((slide, idx) => (
+                              <div key={slide.id || idx} className="border border-gray-200 rounded-lg p-3 space-y-2">
+                                <div className="flex items-start gap-3">
+                                  {/* Imagen del slide: mismo control que el logo
+                                      y la portada (tocar, arrastrar, X) */}
+                                  <div className="flex-shrink-0">
+                                    <ImageDropZone
+                                      value={slide.imageUrl || ''}
+                                      uploading={uploadingHeroSlide === idx}
+                                      disabled={uploadingHeroSlide !== null && uploadingHeroSlide !== idx}
+                                      className="w-36 h-20"
+                                      objectFit="cover"
+                                      label="Toca o arrastra (1920×600)"
+                                      onClear={() => setCatalogHero(prev => ({
+                                        ...prev,
+                                        slides: prev.slides.map((sl, i) => i === idx ? { ...sl, imageUrl: '' } : sl),
+                                      }))}
+                                      onFile={async (file) => {
+                                        setUploadingHeroSlide(idx)
+                                        try {
+                                          const url = await uploadImage(await compressForCoverDesktop(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
+                                          setCatalogHero(prev => ({
+                                            ...prev,
+                                            slides: prev.slides.map((sl, i) => i === idx ? { ...sl, imageUrl: url } : sl),
+                                          }))
+                                          toast.success('Imagen del slide subida')
+                                        } catch (err) {
+                                          console.error('Error subiendo slide:', err)
+                                          toast.error('Error al subir imagen')
+                                        } finally {
+                                          setUploadingHeroSlide(null)
+                                        }
+                                      }}
+                                    />
+                                  </div>
+                                  {/* Textos del slide */}
+                                  <div className="flex-1 space-y-1.5 min-w-0">
+                                    <input
+                                      type="text"
+                                      value={slide.title || ''}
+                                      onChange={(e) => setCatalogHero(prev => ({ ...prev, slides: prev.slides.map((s, i) => i === idx ? { ...s, title: e.target.value } : s) }))}
+                                      placeholder="Título (opcional)"
+                                      maxLength={60}
+                                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-primary-500"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={slide.subtitle || ''}
+                                      onChange={(e) => setCatalogHero(prev => ({ ...prev, slides: prev.slides.map((s, i) => i === idx ? { ...s, subtitle: e.target.value } : s) }))}
+                                      placeholder="Subtítulo (opcional)"
+                                      maxLength={90}
+                                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-primary-500"
+                                    />
+                                    <input
+                                      type="url"
+                                      value={slide.link || ''}
+                                      onChange={(e) => setCatalogHero(prev => ({ ...prev, slides: prev.slides.map((s, i) => i === idx ? { ...s, link: e.target.value } : s) }))}
+                                      placeholder="Enlace al tocar el slide (opcional, ej: https://...)"
+                                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-1 focus:ring-primary-500"
+                                    />
+                                  </div>
+                                  {/* Acciones: subir/bajar/eliminar */}
+                                  <div className="flex flex-col gap-1 flex-shrink-0">
+                                    <button
+                                      type="button"
+                                      disabled={idx === 0}
+                                      onClick={() => setCatalogHero(prev => {
+                                        const slides = [...prev.slides]
+                                        ;[slides[idx - 1], slides[idx]] = [slides[idx], slides[idx - 1]]
+                                        return { ...prev, slides }
+                                      })}
+                                      className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-30"
+                                      title="Subir"
+                                    >
+                                      <ChevronUp className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={idx === (catalogHero.slides.length - 1)}
+                                      onClick={() => setCatalogHero(prev => {
+                                        const slides = [...prev.slides]
+                                        ;[slides[idx], slides[idx + 1]] = [slides[idx + 1], slides[idx]]
+                                        return { ...prev, slides }
+                                      })}
+                                      className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-30"
+                                      title="Bajar"
+                                    >
+                                      <ChevronDown className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setCatalogHero(prev => ({ ...prev, slides: prev.slides.filter((_, i) => i !== idx) }))}
+                                      className="p-1 text-red-400 hover:text-red-600"
+                                      title="Eliminar slide"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+
+                            {(catalogHero.slides || []).length < 5 && (
+                              <button
+                                type="button"
+                                onClick={() => setCatalogHero(prev => ({
+                                  ...prev,
+                                  slides: [...(prev.slides || []), { id: `slide-${Date.now()}`, imageUrl: '', title: '', subtitle: '', link: '' }],
+                                }))}
+                                className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-gray-400 hover:bg-gray-50 transition-colors"
+                              >
+                                + Agregar slide ({(catalogHero.slides || []).length}/5)
+                              </button>
+                            )}
+                            <p className="text-[11px] text-gray-500">
+                              Los slides rotan cada 5 segundos. Recomendado 1920×600 (mismo formato que la portada). Los slides sin imagen no se muestran.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <LayoutGrid className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Diseño de los productos</h3>
+                          <p className="text-xs text-gray-500">Cómo se ve y se recorre tu catálogo</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-5 space-y-5">
+{/* Diseño de los productos (set de shopifree: incluye 'sections',
+    que reemplaza a los dos checkboxes de agrupar por categoria) */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Diseño de los productos
+                        </label>
+                        <p className="text-xs text-gray-500 mb-3">
+                          Cómo se muestran los productos en tu tienda. El visitante igual puede alternar entre grilla y lista.
+                        </p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                          {[
+                            { id: 'grid', label: 'Cuadrícula', desc: 'Clásico en columnas' },
+                            { id: 'masonry', label: 'Mosaico', desc: 'Alturas naturales' },
+                            { id: 'magazine', label: 'Magazine', desc: 'Producto destacado' },
+                            { id: 'list', label: 'Lista', desc: 'Filas horizontales' },
+                            { id: 'sections', label: 'Secciones por categoría', desc: 'Cada categoría con su título y sus productos, estilo carta' },
+                            { id: 'sections-grid', label: 'Agrupado por categoría', desc: 'Cada categoría con todos sus productos en grilla, sin carrusel' },
+                          ].map(opt => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => {
+                                setCatalogLayout(opt.id)
+                                // El flag viejo sigue existiendo (40 tiendas lo tenian):
+                                // se sincroniza con el selector para que nadie elija
+                                // "Cuadricula" y siga viendo secciones.
+                                const esSecciones = opt.id === 'sections' || opt.id === 'sections-grid'
+                                setCatalogGroupByCategory(esSecciones)
+                                // El flag viejo de "solo carruseles" solo aplica al
+                                // diseño CON carrusel: en grilla no hay carrusel que
+                                // ocultar y la lista final ya se omite sola.
+                                if (opt.id !== 'sections') setCatalogOnlyCarousels(false)
+                              }}
+                              className={`relative p-4 rounded-xl border-2 transition-all text-left ${
+                                catalogLayout === opt.id
+                                  ? 'border-primary-500 bg-primary-50/60'
+                                  : 'border-gray-200 hover:border-gray-300'
+                              }`}
+                            >
+                              {catalogLayout === opt.id && (
+                                <span className="absolute top-2 right-2 w-5 h-5 rounded-full bg-primary-600 flex items-center justify-center">
+                                  <Check className="w-3 h-3 text-white" />
+                                </span>
+                              )}
+                              {/* Mini-mockup del diseño */}
+                              <div className="h-12 mb-2 flex items-center gap-1">
+                                {opt.id === 'grid' && (
+                                  <div className="grid grid-cols-2 gap-1 w-12">
+                                    {[0, 1, 2, 3].map(k => <div key={k} className="bg-gray-300 rounded-sm aspect-square" />)}
+                                  </div>
+                                )}
+                                {opt.id === 'masonry' && (
+                                  <>
+                                    <div className="flex flex-col gap-1 w-4"><div className="bg-gray-300 rounded-sm h-6" /><div className="bg-gray-300 rounded-sm h-3" /></div>
+                                    <div className="flex flex-col gap-1 w-4"><div className="bg-gray-300 rounded-sm h-3" /><div className="bg-gray-300 rounded-sm h-6" /></div>
+                                    <div className="flex flex-col gap-1 w-4"><div className="bg-gray-300 rounded-sm h-5" /><div className="bg-gray-300 rounded-sm h-4" /></div>
+                                  </>
+                                )}
+                                {opt.id === 'magazine' && (
+                                  <div className="flex gap-1">
+                                    <div className="bg-gray-300 rounded-sm w-8 h-8" />
+                                    <div className="flex flex-col gap-1"><div className="bg-gray-300 rounded-sm w-3.5 h-3.5" /><div className="bg-gray-300 rounded-sm w-3.5 h-3.5" /></div>
+                                  </div>
+                                )}
+                                {opt.id === 'list' && (
+                                  <div className="flex flex-col gap-1 w-12">
+                                    {[0, 1, 2].map(k => (
+                                      <div key={k} className="flex items-center gap-1">
+                                        <div className="bg-gray-300 rounded-sm w-3 h-3" />
+                                        <div className="bg-gray-200 rounded-sm h-1.5 flex-1" />
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {opt.id === 'sections' && (
+                                  <div className="flex flex-col gap-1.5 w-14">
+                                    {[0, 1].map(k => (
+                                      <div key={k} className="space-y-0.5">
+                                        <div className="bg-gray-400 rounded-sm h-1 w-6" />
+                                        <div className="flex gap-1">
+                                          <div className="bg-gray-300 rounded-sm w-3.5 h-3.5" />
+                                          <div className="bg-gray-300 rounded-sm w-3.5 h-3.5" />
+                                          <div className="bg-gray-300 rounded-sm w-3.5 h-3.5 opacity-50" />
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {opt.id === 'sections-grid' && (
+                                  <div className="flex flex-col gap-1.5 w-14">
+                                    {[0, 1].map(k => (
+                                      <div key={k} className="space-y-0.5">
+                                        <div className="bg-gray-400 rounded-sm h-1 w-6" />
+                                        <div className="grid grid-cols-4 gap-0.5">
+                                          {[0, 1, 2, 3, 4, 5, 6, 7].map(j => <div key={j} className="bg-gray-300 rounded-sm aspect-square" />)}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              <p className="text-sm font-semibold text-gray-900">{opt.label}</p>
+                              <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+{/* Paginación de productos (port shopifree) */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Paginación de productos
+                        </label>
+                        <p className="text-xs text-gray-500 mb-3">
+                          Elige cómo se cargan los productos cuando hay muchos.
+                        </p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          {[
+                            { id: 'none', label: 'Sin paginación', desc: 'Muestra todos los productos', Icon: LayoutGrid },
+                            { id: 'load-more', label: 'Cargar más', desc: 'Botón para cargar más', Icon: ArrowDown },
+                            { id: 'infinite', label: 'Scroll infinito', desc: 'Carga automática al scroll', Icon: Clock },
+                            { id: 'pages', label: 'Páginas', desc: 'Navegación numerada', Icon: ChevronsUpDown },
+                          ].map(opt => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => setCatalogPagination(opt.id)}
+                              className={`relative p-4 rounded-xl border-2 transition-all text-left ${
+                                catalogPagination === opt.id
+                                  ? 'border-primary-500 bg-primary-50/60'
+                                  : 'border-gray-200 hover:border-gray-300'
+                              }`}
+                            >
+                              {catalogPagination === opt.id && (
+                                <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-primary-600 flex items-center justify-center">
+                                  <Check className="w-3.5 h-3.5 text-white" />
+                                </span>
+                              )}
+                              <opt.Icon className="w-5 h-5 text-gray-400 mb-2" />
+                              <p className="text-sm font-semibold text-gray-900">{opt.label}</p>
+                              <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
+                            </button>
+                          ))}
+                        </div>
+                        {catalogPagination === 'none' && (
+                          <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg mt-2">
+                            Con catálogos grandes (cientos de productos), "Sin paginación" puede hacer lenta la primera carga.
+                          </p>
+                        )}
+                      </div>
+
+{/* Navegación en escritorio: barra superior vs menú lateral */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Navegación en computadora
+                        </label>
+                        <p className="text-xs text-gray-500 mb-3">
+                          Dónde se muestran las categorías cuando el cliente entra desde una computadora. En celular siempre van arriba.
+                        </p>
+                        <div className="grid grid-cols-2 gap-3 max-w-md">
+                          {[
+                            { id: 'top', label: 'Barra superior', desc: 'Categorías arriba, a lo ancho' },
+                            { id: 'sidebar', label: 'Menú lateral', desc: 'Categorías fijas a la izquierda' },
+                          ].map(opt => (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => setCatalogDesktopNav(opt.id)}
+                              className={`p-3 rounded-xl border-2 transition-all text-center ${
+                                catalogDesktopNav === opt.id
+                                  ? 'border-primary-500 bg-primary-50/60'
+                                  : 'border-gray-200 hover:border-gray-300'
+                              }`}
+                            >
+                              {/* Mini-mockup */}
+                              <div className="h-14 mb-2 flex items-center justify-center">
+                                {opt.id === 'top' ? (
+                                  <div className="w-16 flex flex-col gap-1">
+                                    <div className="flex gap-1">
+                                      <div className="bg-gray-400 rounded-sm h-2 flex-1" />
+                                      <div className="bg-gray-300 rounded-sm h-2 flex-1" />
+                                      <div className="bg-gray-300 rounded-sm h-2 flex-1" />
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-1">
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="w-16 flex gap-1">
+                                    <div className="flex flex-col gap-1 w-4">
+                                      <div className="bg-gray-400 rounded-sm h-1.5" />
+                                      <div className="bg-gray-300 rounded-sm h-1.5" />
+                                      <div className="bg-gray-300 rounded-sm h-1.5" />
+                                      <div className="bg-gray-300 rounded-sm h-1.5" />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-1 flex-1">
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                      <div className="bg-gray-200 rounded-sm aspect-square" />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                              <span className="block text-xs font-semibold text-gray-800">{opt.label}</span>
+                              <span className="block text-[10px] text-gray-500">{opt.desc}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+{/* Buscador: lupa (por defecto) o barra siempre a la vista */}
+                      <div className="p-4 border border-gray-200 rounded-lg space-y-2.5">
+                        <span className="text-sm font-medium text-gray-900">Buscador</span>
+                        <label className="flex items-center justify-between gap-3 cursor-pointer">
+                          <span className="text-sm text-gray-700">
+                            Barra de búsqueda siempre visible
+                            <span className="block text-xs text-gray-500">
+                              En vez de la lupa, una barra a la vista que va filtrando los productos mientras el cliente escribe.
+                            </span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogSearchBar(v => !v)}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogSearchBar ? 'bg-primary-600' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogSearchBar ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </label>
+                      </div>
+
+{/* Efectos del catálogo (F2.7) */}
+                      <div className="p-4 border border-gray-200 rounded-lg space-y-2.5">
+                        <span className="text-sm font-medium text-gray-900">Efectos</span>
+                        <label className="flex items-center justify-between gap-3 cursor-pointer">
+                          <span className="text-sm text-gray-700">
+                            Aparición al hacer scroll
+                            <span className="block text-xs text-gray-500">Los productos se deslizan suavemente al aparecer.</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogEffects(prev => ({ ...prev, scrollReveal: !prev.scrollReveal }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogEffects.scrollReveal ? 'bg-primary-600' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogEffects.scrollReveal ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </label>
+                        <label className="flex items-center justify-between gap-3 cursor-pointer">
+                          <span className="text-sm text-gray-700">
+                            Segunda foto al pasar el mouse
+                            <span className="block text-xs text-gray-500">En productos con 2+ imágenes, muestra la segunda al hover.</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogEffects(prev => ({ ...prev, imageSwapOnHover: !prev.imageSwapOnHover }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogEffects.imageSwapOnHover ? 'bg-primary-600' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogEffects.imageSwapOnHover ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </label>
+                      </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <Bell className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Promociones y conversión</h3>
+                          <p className="text-xs text-gray-500">Anuncios, ofertas, sellos y avisos</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-5 space-y-5">
+                      {/* Cada promocion sale en un lugar distinto de la tienda:
+                          sin este mapa nadie sabe cual es cual. */}
+                      <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600 leading-relaxed">
+                        El <strong className="text-gray-900">anuncio</strong> es la tira de color arriba de todo, la <strong className="text-gray-900">oferta flash</strong> es la barra con cuenta regresiva,
+                        los <strong className="text-gray-900">sellos</strong> van debajo de la portada y las <strong className="text-gray-900">observaciones</strong> al pie, antes de los productos. Deja vacío lo que no uses.
+                      </div>
+
+{/* Tira publicitaria (banner superior del catálogo) */}
+                      <div className="p-4 border border-gray-200 rounded-lg space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <span className="text-sm font-medium text-gray-900">Tira publicitaria</span>
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              Banner en la parte superior del catálogo para promociones o avisos (ej: "Envío gratis desde S/ 100").
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogAnnouncement(prev => ({ ...prev, enabled: !prev.enabled }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
+                              catalogAnnouncement.enabled ? 'bg-primary-600' : 'bg-gray-300'
+                            }`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              catalogAnnouncement.enabled ? 'translate-x-6' : 'translate-x-1'
+                            }`} />
+                          </button>
+                        </div>
+                        {catalogAnnouncement.enabled && (
+                          <div className="space-y-3">
+                            <input
+                              type="text"
+                              value={catalogAnnouncement.text}
+                              onChange={(e) => setCatalogAnnouncement(prev => ({ ...prev, text: e.target.value }))}
+                              placeholder="Ej: Envío gratis en pedidos desde S/ 100"
+                              maxLength={120}
+                              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            />
+                            <div className="flex flex-wrap items-center gap-3">
+                              <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                                <button
+                                  type="button"
+                                  onClick={() => setCatalogAnnouncement(prev => ({ ...prev, mode: 'static' }))}
+                                  className={`px-3 py-1.5 text-sm font-medium ${
+                                    catalogAnnouncement.mode !== 'marquee' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  Fija
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setCatalogAnnouncement(prev => ({ ...prev, mode: 'marquee' }))}
+                                  className={`px-3 py-1.5 text-sm font-medium ${
+                                    catalogAnnouncement.mode === 'marquee' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  En movimiento
+                                </button>
+                              </div>
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                                Fondo
+                                <input
+                                  type="color"
+                                  value={catalogAnnouncement.backgroundColor}
+                                  onChange={(e) => setCatalogAnnouncement(prev => ({ ...prev, backgroundColor: e.target.value }))}
+                                  className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
+                                />
+                              </label>
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                                Texto
+                                <input
+                                  type="color"
+                                  value={catalogAnnouncement.textColor}
+                                  onChange={(e) => setCatalogAnnouncement(prev => ({ ...prev, textColor: e.target.value }))}
+                                  className="w-8 h-8 rounded border border-gray-300 cursor-pointer"
+                                />
+                              </label>
+                            </div>
+                            {/* Vista previa en vivo */}
+                            {catalogAnnouncement.text.trim() && (
+                              <div className="rounded-lg overflow-hidden border border-gray-200">
+                                <div className="py-2 px-4 text-center" style={{ backgroundColor: catalogAnnouncement.backgroundColor }}>
+                                  <p className="text-sm font-medium" style={{ color: catalogAnnouncement.textColor }}>
+                                    {catalogAnnouncement.text.trim()}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+{/* Oferta con cuenta regresiva (F2.5) */}
+                      <div className="p-4 border border-gray-200 rounded-lg space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <span className="text-sm font-medium text-gray-900">Oferta con cuenta regresiva</span>
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              Barra con temporizador hacia una fecha límite (crea urgencia). Al llegar a cero desaparece sola.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogFlashSale(prev => ({ ...prev, enabled: !prev.enabled }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogFlashSale.enabled ? 'bg-primary-600' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogFlashSale.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </div>
+                        {catalogFlashSale.enabled && (
+                          <div className="space-y-3">
+                            <input
+                              type="text"
+                              value={catalogFlashSale.text}
+                              onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, text: e.target.value }))}
+                              placeholder="Ej: ¡Cyber días! Hasta 40% de descuento"
+                              maxLength={80}
+                              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            />
+                            <div className="flex flex-wrap items-center gap-3">
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                                Termina el
+                                <input
+                                  type="datetime-local"
+                                  value={catalogFlashSale.endDate}
+                                  onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, endDate: e.target.value }))}
+                                  className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
+                                />
+                              </label>
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                                Fondo
+                                <input type="color" value={catalogFlashSale.backgroundColor} onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, backgroundColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-300 cursor-pointer" />
+                              </label>
+                              <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                                Texto
+                                <input type="color" value={catalogFlashSale.textColor} onChange={(e) => setCatalogFlashSale(prev => ({ ...prev, textColor: e.target.value }))} className="w-8 h-8 rounded border border-gray-300 cursor-pointer" />
+                              </label>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+{/* Sellos de confianza (F2.6) */}
+                      <div className="p-4 border border-gray-200 rounded-lg space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <span className="text-sm font-medium text-gray-900">Sellos de confianza</span>
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              Fila de mensajes con ícono (envío, pago seguro, garantía…) debajo de la portada.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCatalogTrustBadges(prev => ({ ...prev, enabled: !prev.enabled }))}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${catalogTrustBadges.enabled ? 'bg-primary-600' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${catalogTrustBadges.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                        </div>
+                        {catalogTrustBadges.enabled && (
+                          <div className="space-y-2">
+                            {(catalogTrustBadges.badges || []).map((badge, idx) => (
+                              <div key={badge.id || idx} className="flex items-center gap-2">
+                                <select
+                                  value={badge.icon || 'shield'}
+                                  onChange={(e) => setCatalogTrustBadges(prev => ({ ...prev, badges: prev.badges.map((b, i) => i === idx ? { ...b, icon: e.target.value } : b) }))}
+                                  className="px-2 py-1.5 border border-gray-300 rounded-lg text-sm flex-shrink-0"
+                                >
+                                  <option value="truck">🚚 Envío</option>
+                                  <option value="shield">🛡️ Seguro</option>
+                                  <option value="card">💳 Pago</option>
+                                  <option value="return">↩️ Devolución</option>
+                                  <option value="support">🎧 Soporte</option>
+                                  <option value="quality">✅ Garantía</option>
+                                  <option value="clock">⏰ Rapidez</option>
+                                  <option value="tag">🏷️ Ofertas</option>
+                                </select>
+                                <input
+                                  type="text"
+                                  value={badge.text || ''}
+                                  onChange={(e) => setCatalogTrustBadges(prev => ({ ...prev, badges: prev.badges.map((b, i) => i === idx ? { ...b, text: e.target.value } : b) }))}
+                                  placeholder="Ej: Envío gratis desde S/ 100"
+                                  maxLength={40}
+                                  className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-primary-500"
+                                />
+                                <button type="button" onClick={() => setCatalogTrustBadges(prev => ({ ...prev, badges: prev.badges.filter((_, i) => i !== idx) }))} className="p-1 text-red-400 hover:text-red-600 flex-shrink-0">
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                            {(catalogTrustBadges.badges || []).length < 4 && (
+                              <button
+                                type="button"
+                                onClick={() => setCatalogTrustBadges(prev => ({ ...prev, badges: [...(prev.badges || []), { id: `badge-${Date.now()}`, icon: 'shield', text: '' }] }))}
+                                className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-gray-400 hover:bg-gray-50"
+                              >
+                                + Agregar sello ({(catalogTrustBadges.badges || []).length}/4)
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Prueba social: existe en shopifree, en Cobrify todavia no.
+                          Se muestra DESHABILITADO y etiquetado para que nadie
+                          lo configure creyendo que ya funciona. */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Prueba social</label>
+                        <p className="text-xs text-gray-500 mb-2">Avisos tipo "Ana acaba de comprar" que empujan a decidir.</p>
+                        <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-3 px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50">
+                          <div className="min-w-0">
+                            <p className="text-sm text-gray-500">Notificaciones de compra</p>
+                            <p className="text-xs text-gray-400">Aparecen abajo mientras el cliente navega</p>
+                          </div>
+                          <span className="text-[11px] font-medium text-gray-400 border border-gray-300 rounded-full px-2 py-0.5 flex-shrink-0">Próximamente</span>
+                        </div>
+                        </div>
+                      </div>
+
+{/* Observaciones del catálogo */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Observaciones del catálogo (opcional)
+                        </label>
+                        <textarea
+                          value={catalogObservations}
+                          onChange={(e) => setCatalogObservations(e.target.value)}
+                          placeholder="Ej: Cuentas de pago, WhatsApp de vendedores, horarios..."
+                          maxLength={500}
+                          rows={3}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">{catalogObservations.length}/500 caracteres — Se muestra arriba de las categorías en el catálogo</p>
+                      </div>
+                      </div>
+                    </div>
+                    </div>
+                  )}
+
+                  {catalogTab === 'avanzado' && (
+                    <div className="space-y-4">
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <Cog className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Dominio propio</h3>
+                          <p className="text-xs text-gray-500">Usa tu propia dirección web</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-5 space-y-5">
+{/* Dominio personalizado */}
+                      {catalogSlug && (
+                        <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Globe className="w-5 h-5 text-blue-600" />
+                            <h4 className="font-medium text-gray-900">Dominio personalizado</h4>
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Opcional</span>
+                          </div>
+                          <p className="text-sm text-gray-600 mb-3">
+                            Conecta tu propio dominio para que tus clientes accedan a tu {businessMode === 'restaurant' ? 'carta digital' : 'catálogo'} desde tu propia dirección web.
+                          </p>
+                          <input
+                            type="text"
+                            value={catalogCustomDomain}
+                            onChange={(e) => setCatalogCustomDomain(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
+                            placeholder="mitienda.com"
+                            className="w-full px-4 py-2.5 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                          />
+                          {catalogCustomDomain && (
+                            <div className="mt-3 p-3 bg-white rounded-lg border border-blue-100">
+                              <p className="text-xs font-medium text-gray-700 mb-2">Para activar tu dominio, configura estos registros DNS:</p>
+                              <div className="space-y-1.5 text-xs font-mono">
+                                <div className="flex items-center gap-2">
+                                  <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-600">CNAME</span>
+                                  <span className="text-gray-500">www</span>
+                                  <span className="text-gray-400">&rarr;</span>
+                                  <span className="text-blue-600">cname.vercel-dns.com</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-600">A</span>
+                                  <span className="text-gray-500">@</span>
+                                  <span className="text-gray-400">&rarr;</span>
+                                  <span className="text-blue-600">76.76.21.21</span>
+                                </div>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-2">
+                                Contacta a soporte para que activemos tu dominio. La propagación DNS puede tardar hasta 48 horas.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                        <CalendarDays className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-900">Reservas</h3>
+                          <p className="text-xs text-gray-500">Deja que te reserven desde el catálogo</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-5 space-y-5">
+                      {/* Reservas de citas desde el catalogo. Solo para los modos que
+                          tienen agenda: veterinaria (de fabrica) y General con la
+                          agenda activada en el menu. El horario que se define aca es el
+                          que el SERVIDOR usa para validar cada reserva publica — el
+                          catalogo solo lo pinta. */}
+                      {(businessMode === 'veterinary' || (businessMode === 'retail' && appointmentsEnabled)) && (
+                        <div>
+                          <h3 className="text-base font-semibold text-gray-900 mb-1">Reservas de citas</h3>
+                          <p className="text-sm text-gray-600 mb-4">
+                            Deja que tus clientes reserven su cita desde el catálogo, eligiendo un horario libre. Cada reserva aparece sola en tu Agenda de Citas y te llega una notificación.
+                          </p>
+                          <SettingToggle
+                            id="opcion-appointmentsBookingEnabled"
+                            checked={appointmentsBooking.enabled}
+                            onChange={e => setAppointmentsBooking(prev => ({ ...prev, enabled: e.target.checked }))}
+                            title="Recibir reservas desde el catálogo"
+                            description={appointmentsBooking.enabled
+                              ? 'Habilitado: en tu catálogo aparece el botón "Reservar cita". El cliente solo ve horas libres y ocupadas — nunca los datos de otros clientes.'
+                              : 'Deshabilitado: las citas solo se agendan desde tu Agenda.'}
+                          />
+                          {appointmentsBooking.enabled && (
+                            <div className="mt-4 space-y-4 pl-1">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1.5">Días que atiendes con cita</label>
+                                <div className="flex flex-wrap gap-2">
+                                  {[['D', 0], ['L', 1], ['M', 2], ['X', 3], ['J', 4], ['V', 5], ['S', 6]].map(([letra, dia]) => (
+                                    <button
+                                      key={dia}
+                                      type="button"
+                                      onClick={() => setAppointmentsBooking(prev => ({
+                                        ...prev,
+                                        days: prev.days.includes(dia)
+                                          ? prev.days.filter(d => d !== dia)
+                                          : [...prev.days, dia].sort(),
+                                      }))}
+                                      className={'w-9 h-9 rounded-lg border text-sm font-semibold transition-colors ' + (
+                    appointmentsBooking.days.includes(dia)
+                                          ? 'bg-primary-600 border-primary-600 text-white'
+                                          : 'bg-white border-gray-300 text-gray-500 hover:border-gray-400'
+                                      )}
+                                    >
+                                      {letra}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-3 gap-3 max-w-md">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Desde</label>
+                                  <select
+                                    value={appointmentsBooking.startHour}
+                                    onChange={e => setAppointmentsBooking(prev => ({ ...prev, startHour: Number(e.target.value) }))}
+                                    className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                  >
+                                    {Array.from({ length: 17 }, (_, i) => i + 6).map(h => (
+                                      <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Hasta</label>
+                                  <select
+                                    value={appointmentsBooking.endHour}
+                                    onChange={e => setAppointmentsBooking(prev => ({ ...prev, endHour: Number(e.target.value) }))}
+                                    className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                  >
+                                    {Array.from({ length: 17 }, (_, i) => i + 7).map(h => (
+                                      <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Cada</label>
+                                  <select
+                                    value={appointmentsBooking.stepMinutes}
+                                    onChange={e => setAppointmentsBooking(prev => ({ ...prev, stepMinutes: Number(e.target.value) }))}
+                                    className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                  >
+                                    <option value={15}>15 min</option>
+                                    <option value={20}>20 min</option>
+                                    <option value={30}>30 min</option>
+                                    <option value={60}>1 hora</option>
+                                  </select>
+                                </div>
+                              </div>
+                              {appointmentsBooking.endHour <= appointmentsBooking.startHour && (
+                                <p className="text-xs text-red-600">La hora de cierre debe ser mayor que la de inicio.</p>
+                              )}
+
+                              {/* Servicios que se ofrecen al reservar. Se guardan como
+                                  snapshot {id, nombre, precio}: el precio que ve el
+                                  cliente es el que el negocio publico al guardar, y el
+                                  SERVIDOR usa este mismo snapshot al crear la cita —
+                                  nadie puede mandarle otro precio. */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                                  Servicios que se pueden reservar
+                                </label>
+                                <p className="text-xs text-gray-500 mb-2">
+                                  El cliente elige uno al reservar (baño, consulta, podología, masaje...). Si no agregas ninguno, la reserva llega sin servicio y lo coordinas tú.
+                                </p>
+                                {(appointmentsBooking.services || []).length > 0 && (
+                                  <div className="flex flex-wrap gap-2 mb-2">
+                                    {appointmentsBooking.services.map(svc => (
+                                      <span key={svc.id} className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 bg-gray-100 border border-gray-200 rounded-lg text-sm text-gray-800">
+                                        {svc.name}
+                                        <span className="text-gray-400 text-xs">S/ {Number(svc.price || 0).toFixed(2)}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setAppointmentsBooking(prev => ({
+                                            ...prev,
+                                            services: (prev.services || []).filter(x => x.id !== svc.id),
+                                          }))}
+                                          className="p-0.5 text-gray-400 hover:text-red-500"
+                                        >
+                                          <X className="w-3.5 h-3.5" />
+                                        </button>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                                <div className="relative max-w-md">
+                                  <input
+                                    type="text"
+                                    value={busquedaServicio}
+                                    onChange={e => setBusquedaServicio(e.target.value)}
+                                    placeholder={productosReservables === null ? 'Cargando productos...' : 'Buscar un producto o servicio para agregarlo'}
+                                    disabled={productosReservables === null}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                  />
+                                  {busquedaServicio.trim().length >= 2 && productosReservables && (
+                                    <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                                      {productosReservables
+                                        .filter(pr => (pr.name || '').toLowerCase().includes(busquedaServicio.trim().toLowerCase()))
+                                        .filter(pr => !(appointmentsBooking.services || []).some(x => x.id === pr.id))
+                                        .slice(0, 8)
+                                        .map(pr => (
+                                          <button
+                                            key={pr.id}
+                                            type="button"
+                                            onClick={() => {
+                                              setAppointmentsBooking(prev => ({
+                                                ...prev,
+                                                services: [...(prev.services || []), {
+                                                  id: pr.id,
+                                                  name: pr.name || '',
+                                                  price: Number(pr.price) || 0,
+                                                }],
+                                              }))
+                                              setBusquedaServicio('')
+                                            }}
+                                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between gap-2"
+                                          >
+                                            <span className="truncate text-gray-800">{pr.name}</span>
+                                            <span className="text-gray-400 text-xs flex-none">S/ {Number(pr.price || 0).toFixed(2)}</span>
+                                          </button>
+                                        ))}
+                                    </div>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-gray-400 mt-1.5">
+                                  El precio queda fijado al guardar: si lo cambias en Productos, vuelve a guardar acá.
+                                </p>
+                              </div>
+
+                              {/* Profesionales que atienden (OPCIONAL). Solo si el
+                                  negocio los configura aparece el selector en el
+                                  catalogo, y la agenda pasa a ser POR profesional:
+                                  dos clientes pueden tomar las 10:00 con doctores
+                                  distintos sin pisarse. */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                                  Quién atiende <span className="text-gray-400 font-normal">(opcional)</span>
+                                </label>
+                                <p className="text-xs text-gray-500 mb-2">
+                                  Si agregas personas, el cliente elige con quién quiere su cita y cada una lleva su propia agenda. Déjalo vacío si no aplica en tu negocio.
+                                </p>
+                                <div className="max-w-md space-y-2">
+                                  <input
+                                    type="text"
+                                    value={appointmentsBooking.staffLabel || ''}
+                                    onChange={(e) => setAppointmentsBooking(prev => ({ ...prev, staffLabel: e.target.value }))}
+                                    placeholder="Cómo se llama en tu rubro: Doctor, Terapeuta, Estilista..."
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                    maxLength={30}
+                                  />
+                                  {(appointmentsBooking.staff || []).map((persona, idx) => (
+                                    <div key={persona.id} className="flex items-center gap-2">
+                                      <input
+                                        type="text"
+                                        value={persona.name}
+                                        onChange={(e) => setAppointmentsBooking(prev => {
+                                          const lista = [...(prev.staff || [])]
+                                          lista[idx] = { ...lista[idx], name: e.target.value }
+                                          return { ...prev, staff: lista }
+                                        })}
+                                        placeholder="Nombre"
+                                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                        maxLength={60}
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => setAppointmentsBooking(prev => ({
+                                          ...prev,
+                                          staff: (prev.staff || []).filter(x => x.id !== persona.id),
+                                        }))}
+                                        className="p-2 text-gray-400 hover:text-red-500"
+                                        aria-label="Quitar"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                  <button
+                                    type="button"
+                                    onClick={() => setAppointmentsBooking(prev => ({
+                                      ...prev,
+                                      staff: [...(prev.staff || []), { id: `st-${Date.now().toString(36)}`, name: '' }],
+                                    }))}
+                                    className="text-sm font-medium text-primary-600 hover:text-primary-700"
+                                  >
+                                    + Agregar persona
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Solicitudes de reserva (modo hotel). Lo que llega del catalogo
+                          NO bloquea la habitacion: es una solicitud que se confirma o
+                          rechaza en la pantalla de Reservas. */}
+                      {businessMode === 'hotel' && (
+                        <div>
+                          <h3 className="text-base font-semibold text-gray-900 mb-1">Reservas de habitaciones</h3>
+                          <p className="text-sm text-gray-600 mb-4">
+                            Deja que tus huéspedes pidan una habitación desde el catálogo, viendo fechas y tarifas. Cada solicitud te llega con una notificación y la confirmas o rechazas desde Reservas — nada se bloquea solo.
+                          </p>
+                          <SettingToggle
+                            id="opcion-hotelBookingEnabled"
+                            checked={hotelBooking.enabled}
+                            onChange={e => setHotelBooking(prev => ({ ...prev, enabled: e.target.checked }))}
+                            title="Recibir solicitudes de reserva desde el catálogo"
+                            description={hotelBooking.enabled
+                              ? 'Habilitado: en tu catálogo aparece el botón "Reservar una habitación". El huésped ve solo habitaciones y tarifas — nunca los datos de otros huéspedes. Solo tarifas por noche.'
+                              : 'Deshabilitado: las reservas solo se crean desde tu pantalla de Reservas.'}
+                          />
+                        </div>
+                      )}
+                      </div>
+                    </div>
+                    </div>
+                  )}
+                  {/* FIN PESTAÑAS DEL CATÁLOGO */}
+                </>
+              )}
+
+              {/* Save Button for Catalogo — ancho completo */}
+              {/* Boton de guardar FLOTANTE: antes era una barra blanca de ancho
+                  completo pegada abajo, y con formularios largos tapaba el campo
+                  que se estaba escribiendo. Ahora es solo el boton, fijo en la
+                  esquina; el contenido lleva padding para que nunca lo cubra. */}
+              <div
+                className="fixed right-4 md:right-8 z-30"
+                style={{ bottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+              >
+                <Button
+                  className="shadow-xl shadow-gray-900/20"
+                  onClick={async () => {
+                    if (isDemoMode) {
+                      toast.error('No se pueden guardar cambios en modo demo.')
+                      return
+                    }
+
+                    if (catalogEnabled && !catalogSlug) {
+                      toast.error(businessMode === 'restaurant' ? 'Ingresa una URL para tu carta digital' : 'Ingresa una URL para tu catálogo')
+                      return
+                    }
+
+                    setIsSaving(true)
+                    try {
+                      const businessRef = doc(db, 'businesses', getBusinessId())
+                      await setDoc(businessRef, {
+                        catalogEnabled,
+                        // Las personas sin nombre no se publican: una fila vacia
+                        // en el catalogo seria un boton sin etiqueta.
+                        appointmentsBooking: {
+                          ...appointmentsBooking,
+                          staffLabel: (appointmentsBooking.staffLabel || '').trim(),
+                          staff: (appointmentsBooking.staff || [])
+                            .map(x => ({ ...x, name: (x.name || '').trim() }))
+                            .filter(x => x.name),
+                        },
+                        hotelBooking,
+                        catalogSlug: catalogSlug.toLowerCase().trim(),
+                        customDomain: catalogCustomDomain.toLowerCase().trim().replace(/^www\./, '') || null,
+                        catalogColor,
+                        catalogTheme,
+                        catalogCoverImage,
+                        catalogCoverImageMobile: catalogCoverImageMobile || null,
+                        catalogWelcome,
+                        catalogTagline,
+                        catalogShowPrices,
+                        catalogIgnoreStock,
+                        catalogHideOutOfStock,
+                        catalogShowStock,
+                        catalogCustomerAccounts,
+                        catalogWhatsapp: catalogWhatsapp.trim(),
+                        catalogPagination,
+                        catalogOnlineOrders,
+                        catalogSocial: {
+                          instagram: (catalogSocial.instagram || '').trim(),
+                          facebook: (catalogSocial.facebook || '').trim(),
+                          tiktok: (catalogSocial.tiktok || '').trim(),
+                        },
+                        catalogObservations: catalogObservations.trim(),
+                        catalogAnnouncement: { ...catalogAnnouncement, text: (catalogAnnouncement.text || '').trim() },
+                        // Carrusel hero: solo slides con imagen (los vacíos no cuentan)
+                        catalogHero: {
+                          enabled: catalogHero.enabled,
+                          slides: (catalogHero.slides || []).filter(s => s.imageUrl).map(s => ({
+                            id: s.id,
+                            imageUrl: s.imageUrl,
+                            title: (s.title || '').trim(),
+                            subtitle: (s.subtitle || '').trim(),
+                            link: (s.link || '').trim(),
+                          })),
+                        },
+                        catalogLayout,
+                        catalogDesktopNav,
+                        catalogFlashSale: { ...catalogFlashSale, text: (catalogFlashSale.text || '').trim() },
+                        catalogTrustBadges: {
+                          enabled: catalogTrustBadges.enabled,
+                          badges: (catalogTrustBadges.badges || []).filter(b => (b.text || '').trim()).map(b => ({
+                            id: b.id, icon: b.icon || 'shield', text: (b.text || '').trim(),
+                          })),
+                        },
+                        catalogEffects,
+                        catalogSearchBar,
+                        catalogLogoUrl: catalogLogoUrl || null,
+                        catalogLogoLandscape: catalogLogoLandscape || null,
+                        // La cantidad minima por nivel de precio se configura AHORA EN
+                        // CADA PRODUCTO (useAutoPriceByQty + priceMinQtys). El campo del
+                        // negocio ya no se escribe desde aca: el valor que tengan los
+                        // negocios antiguos se respeta tal cual (ver getCatalogMinQty).
+                        catalogShowAllPrices,
+                        catalogAllowTakeaway,
+                        catalogAllowDelivery,
+                        catalogGroupByCategory,
+                        catalogOnlyCarousels: catalogGroupByCategory ? catalogOnlyCarousels : false,
+                        businessHours,
+                        updatedAt: serverTimestamp(),
+                      }, { merge: true })
+                      toast.success(catalogEnabled
+                        ? (businessMode === 'restaurant' ? 'Carta digital configurada exitosamente' : 'Catálogo configurado exitosamente')
+                        : (businessMode === 'restaurant' ? 'Carta digital deshabilitada' : 'Catálogo deshabilitado'))
+                    } catch (error) {
+                      console.error('Error al guardar catálogo:', error)
+                      toast.error('Error al guardar la configuración')
+                    } finally {
+                      setIsSaving(false)
+                    }
+                  }}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Guardar Catálogo
+                    </>
+                  )}
+                </Button>
+              </div>
+            </>
+
+        </div>
+      )}
+
+      {/* Tab Content - Series por Sucursal */}
+      {activeTab === 'series' && (
+        <div className="space-y-6">
+          {/* Información */}
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-blue-800 font-medium">Series por Sucursal</p>
+                <p className="text-sm text-blue-700 mt-1">
+                  La <strong>{businessSettings?.mainBranchName || 'Sucursal Principal'}</strong> usa las series globales configuradas aquí.
+                  Las sucursales adicionales tienen sus propias series independientes.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Loading */}
+          {loadingBranches && (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-primary-600" />
+              <span className="ml-2 text-gray-600">Cargando sucursales...</span>
+            </div>
+          )}
+
+          {/* Sucursal Principal - Series Globales (siempre visible) */}
+          {!loadingBranches && (
+            <Card>
+              <CardHeader>
+                <div className="space-y-3">
+                  {/* Fila 1: Título */}
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
+                      <Store className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <CardTitle className="text-lg">{businessSettings?.mainBranchName || 'Sucursal Principal'}</CardTitle>
+                        <span className="px-2 py-0.5 text-xs font-medium bg-cyan-100 text-cyan-700 rounded-full">
+                          Principal
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-0.5">
+                        Series globales del negocio
+                      </p>
+                    </div>
+                  </div>
+                  {/* Fila 2: Botones */}
+                  <div className="flex justify-end">
+                    {!editingSeries ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setEditingSeries(true)}
+                        className="w-full sm:w-auto"
+                      >
+                        <Edit className="w-4 h-4 mr-1" />
+                        Editar Series
+                      </Button>
+                    ) : (
+                      <div className="flex gap-2 w-full sm:w-auto">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditingSeries(false)}
+                          disabled={isSaving}
+                          className="flex-1 sm:flex-none"
+                        >
+                          Cancelar
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={handleSaveSeries}
+                          disabled={isSaving}
+                          className="flex-1 sm:flex-none"
+                        >
+                          {isSaving ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                              Guardando...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="w-4 h-4 mr-1" />
+                              Guardar
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {/* Vista móvil - Tarjetas */}
+                <div className="md:hidden space-y-4">
+                  {/* Documentos principales */}
+                  {[
+                    { key: 'factura', label: 'Factura Electrónica' },
+                    { key: 'boleta', label: 'Boleta de Venta' },
+                    { key: 'nota_venta', label: 'Nota de Venta' },
+                    { key: 'cotizacion', label: 'Cotización' },
+                  ].map(({ key, label }) => (
+                    <div key={key} className="p-3 border rounded-lg bg-white">
+                      <p className="text-sm font-medium text-gray-700 mb-2">{label}</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-xs text-gray-500">Serie</label>
+                          <Input
+                            value={series[key]?.serie || defaultSeries[key].serie}
+                            onChange={e => handleSeriesChange(key, 'serie', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`text-sm ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            maxLength={4}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Último #</label>
+                          <Input
+                            type="number"
+                            value={series[key]?.lastNumber ?? 0}
+                            onChange={e => handleSeriesChange(key, 'lastNumber', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`text-sm ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            min="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Siguiente</label>
+                          <p className="font-mono text-sm text-gray-600 py-2">
+                            {getNextNumber(series[key]?.serie || defaultSeries[key].serie, series[key]?.lastNumber ?? 0)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Notas de Crédito */}
+                  <div className="py-1 px-3 text-xs font-semibold text-blue-700 bg-blue-50 rounded">Notas de Crédito</div>
+                  {[
+                    { key: 'nota_credito_factura', label: 'NC - Facturas' },
+                    { key: 'nota_credito_boleta', label: 'NC - Boletas' },
+                  ].map(({ key, label }) => (
+                    <div key={key} className="p-3 border rounded-lg bg-white">
+                      <p className="text-sm font-medium text-gray-600 mb-2">{label}</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-xs text-gray-500">Serie</label>
+                          <Input
+                            value={series[key]?.serie || defaultSeries[key].serie}
+                            onChange={e => handleSeriesChange(key, 'serie', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`text-sm ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            maxLength={4}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Último #</label>
+                          <Input
+                            type="number"
+                            value={series[key]?.lastNumber ?? 0}
+                            onChange={e => handleSeriesChange(key, 'lastNumber', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`text-sm ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            min="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Siguiente</label>
+                          <p className="font-mono text-sm text-gray-600 py-2">
+                            {getNextNumber(series[key]?.serie || defaultSeries[key].serie, series[key]?.lastNumber ?? 0)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Notas de Débito */}
+                  <div className="py-1 px-3 text-xs font-semibold text-orange-700 bg-orange-50 rounded">Notas de Débito</div>
+                  {[
+                    { key: 'nota_debito_factura', label: 'ND - Facturas' },
+                    { key: 'nota_debito_boleta', label: 'ND - Boletas' },
+                  ].map(({ key, label }) => (
+                    <div key={key} className="p-3 border rounded-lg bg-white">
+                      <p className="text-sm font-medium text-gray-600 mb-2">{label}</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-xs text-gray-500">Serie</label>
+                          <Input
+                            value={series[key]?.serie || defaultSeries[key].serie}
+                            onChange={e => handleSeriesChange(key, 'serie', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`text-sm ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            maxLength={4}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Último #</label>
+                          <Input
+                            type="number"
+                            value={series[key]?.lastNumber ?? 0}
+                            onChange={e => handleSeriesChange(key, 'lastNumber', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`text-sm ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            min="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Siguiente</label>
+                          <p className="font-mono text-sm text-gray-600 py-2">
+                            {getNextNumber(series[key]?.serie || defaultSeries[key].serie, series[key]?.lastNumber ?? 0)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Guías de Remisión */}
+                  <div className="py-1 px-3 text-xs font-semibold text-purple-700 bg-purple-50 rounded">Guías de Remisión</div>
+                  {[
+                    { key: 'guia_remision', label: 'Guía Remitente', defaultSerie: 'T001' },
+                    { key: 'guia_transportista', label: 'Guía Transportista', defaultSerie: 'V001' },
+                  ].map(({ key, label, defaultSerie }) => (
+                    <div key={key} className="p-3 border rounded-lg bg-white">
+                      <p className="text-sm font-medium text-gray-600 mb-2">{label}</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-xs text-gray-500">Serie</label>
+                          <Input
+                            value={series[key]?.serie || defaultSeries[key]?.serie || defaultSerie}
+                            onChange={e => handleSeriesChange(key, 'serie', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`text-sm ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            maxLength={4}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Último #</label>
+                          <Input
+                            type="number"
+                            value={series[key]?.lastNumber ?? 0}
+                            onChange={e => handleSeriesChange(key, 'lastNumber', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`text-sm ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            min="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Siguiente</label>
+                          <p className="font-mono text-sm text-gray-600 py-2">
+                            {getNextNumber(series[key]?.serie || defaultSerie, series[key]?.lastNumber ?? 0)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Vista desktop - Tabla */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-gray-50">
+                        <th className="text-left py-2 px-3 font-medium text-gray-700">Documento</th>
+                        <th className="text-left py-2 px-3 font-medium text-gray-700">Serie</th>
+                        <th className="text-left py-2 px-3 font-medium text-gray-700">Último #</th>
+                        <th className="text-left py-2 px-3 font-medium text-gray-700">Siguiente</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        { key: 'factura', label: 'Factura Electrónica' },
+                        { key: 'boleta', label: 'Boleta de Venta' },
+                        { key: 'nota_venta', label: 'Nota de Venta' },
+                        { key: 'cotizacion', label: 'Cotización' },
+                      ].map(({ key, label }) => (
+                        <tr key={key} className="border-b border-gray-100">
+                          <td className="py-2 px-3 text-gray-700 font-medium">{label}</td>
+                          <td className="py-2 px-3">
+                            <Input
+                              value={series[key]?.serie || defaultSeries[key].serie}
+                              onChange={e => handleSeriesChange(key, 'serie', e.target.value)}
+                              disabled={!editingSeries}
+                              className={`w-20 ${!editingSeries ? 'bg-gray-50' : ''}`}
+                              maxLength={4}
+                            />
+                          </td>
+                          <td className="py-2 px-3">
+                            <Input
+                              type="number"
+                              value={series[key]?.lastNumber ?? 0}
+                              onChange={e => handleSeriesChange(key, 'lastNumber', e.target.value)}
+                              disabled={!editingSeries}
+                              className={`w-24 ${!editingSeries ? 'bg-gray-50' : ''}`}
+                              min="0"
+                            />
+                          </td>
+                          <td className="py-2 px-3">
+                            <span className="font-mono text-gray-600">
+                              {getNextNumber(series[key]?.serie || defaultSeries[key].serie, series[key]?.lastNumber ?? 0)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className="bg-blue-50">
+                        <td colSpan="4" className="py-1 px-3 text-xs font-semibold text-blue-700">Notas de Crédito</td>
+                      </tr>
+                      {[
+                        { key: 'nota_credito_factura', label: 'NC - Facturas' },
+                        { key: 'nota_credito_boleta', label: 'NC - Boletas' },
+                      ].map(({ key, label }) => (
+                        <tr key={key} className="border-b border-gray-100">
+                          <td className="py-2 px-3 text-gray-600">{label}</td>
+                          <td className="py-2 px-3">
+                            <Input
+                              value={series[key]?.serie || defaultSeries[key].serie}
+                              onChange={e => handleSeriesChange(key, 'serie', e.target.value)}
+                              disabled={!editingSeries}
+                              className={`w-20 ${!editingSeries ? 'bg-gray-50' : ''}`}
+                              maxLength={4}
+                            />
+                          </td>
+                          <td className="py-2 px-3">
+                            <Input
+                              type="number"
+                              value={series[key]?.lastNumber ?? 0}
+                              onChange={e => handleSeriesChange(key, 'lastNumber', e.target.value)}
+                              disabled={!editingSeries}
+                              className={`w-24 ${!editingSeries ? 'bg-gray-50' : ''}`}
+                              min="0"
+                            />
+                          </td>
+                          <td className="py-2 px-3">
+                            <span className="font-mono text-gray-600">
+                              {getNextNumber(series[key]?.serie || defaultSeries[key].serie, series[key]?.lastNumber ?? 0)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className="bg-orange-50">
+                        <td colSpan="4" className="py-1 px-3 text-xs font-semibold text-orange-700">Notas de Débito</td>
+                      </tr>
+                      {[
+                        { key: 'nota_debito_factura', label: 'ND - Facturas' },
+                        { key: 'nota_debito_boleta', label: 'ND - Boletas' },
+                      ].map(({ key, label }) => (
+                        <tr key={key} className="border-b border-gray-100">
+                          <td className="py-2 px-3 text-gray-600">{label}</td>
+                          <td className="py-2 px-3">
+                            <Input
+                              value={series[key]?.serie || defaultSeries[key].serie}
+                              onChange={e => handleSeriesChange(key, 'serie', e.target.value)}
+                              disabled={!editingSeries}
+                              className={`w-20 ${!editingSeries ? 'bg-gray-50' : ''}`}
+                              maxLength={4}
+                            />
+                          </td>
+                          <td className="py-2 px-3">
+                            <Input
+                              type="number"
+                              value={series[key]?.lastNumber ?? 0}
+                              onChange={e => handleSeriesChange(key, 'lastNumber', e.target.value)}
+                              disabled={!editingSeries}
+                              className={`w-24 ${!editingSeries ? 'bg-gray-50' : ''}`}
+                              min="0"
+                            />
+                          </td>
+                          <td className="py-2 px-3">
+                            <span className="font-mono text-gray-600">
+                              {getNextNumber(series[key]?.serie || defaultSeries[key].serie, series[key]?.lastNumber ?? 0)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className="bg-purple-50">
+                        <td colSpan="4" className="py-1 px-3 text-xs font-semibold text-purple-700">Guías de Remisión</td>
+                      </tr>
+                      <tr className="border-b border-gray-100">
+                        <td className="py-2 px-3 text-gray-600">Guía de Remisión (Remitente)</td>
+                        <td className="py-2 px-3">
+                          <Input
+                            value={series['guia_remision']?.serie || defaultSeries['guia_remision'].serie}
+                            onChange={e => handleSeriesChange('guia_remision', 'serie', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`w-20 ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            maxLength={4}
+                          />
+                        </td>
+                        <td className="py-2 px-3">
+                          <Input
+                            type="number"
+                            value={series['guia_remision']?.lastNumber ?? 0}
+                            onChange={e => handleSeriesChange('guia_remision', 'lastNumber', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`w-24 ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            min="0"
+                          />
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="font-mono text-gray-600">
+                            {getNextNumber(series['guia_remision']?.serie || 'T001', series['guia_remision']?.lastNumber ?? 0)}
+                          </span>
+                        </td>
+                      </tr>
+                      <tr className="border-b border-gray-100">
+                        <td className="py-2 px-3 text-gray-600">Guía de Remisión (Transportista)</td>
+                        <td className="py-2 px-3">
+                          <Input
+                            value={series['guia_transportista']?.serie || defaultSeries['guia_transportista'].serie}
+                            onChange={e => handleSeriesChange('guia_transportista', 'serie', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`w-20 ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            maxLength={4}
+                          />
+                        </td>
+                        <td className="py-2 px-3">
+                          <Input
+                            type="number"
+                            value={series['guia_transportista']?.lastNumber ?? 0}
+                            onChange={e => handleSeriesChange('guia_transportista', 'lastNumber', e.target.value)}
+                            disabled={!editingSeries}
+                            className={`w-24 ${!editingSeries ? 'bg-gray-50' : ''}`}
+                            min="0"
+                          />
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="font-mono text-gray-600">
+                            {getNextNumber(series['guia_transportista']?.serie || 'V001', series['guia_transportista']?.lastNumber ?? 0)}
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Sucursales Adicionales */}
+          {!loadingBranches && branches.length > 0 && (
+            <>
+              <div className="flex items-center gap-2 mt-6">
+                <Store className="w-5 h-5 text-gray-400" />
+                <h3 className="text-lg font-medium text-gray-900">Sucursales Adicionales</h3>
+                <span className="text-sm text-gray-500">({branches.length})</span>
+              </div>
+
+              {branches.map((branch, index) => {
+                const bSeries = branchSeries[branch.id] || {}
+                const isEditing = editingBranchId === branch.id
+
+                return (
+                  <Card key={branch.id}>
+                    <CardHeader>
+                      <div className="space-y-3">
+                        {/* Fila 1: Título */}
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-cyan-100 rounded-lg flex-shrink-0">
+                            <Store className="w-5 h-5 text-cyan-600" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <CardTitle className="text-lg">{branch.name}</CardTitle>
+                            {branch.address && (
+                              <p className="text-sm text-gray-500 flex items-center mt-0.5 truncate">
+                                <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
+                                <span className="truncate">{branch.address}</span>
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {/* Fila 2: Botones */}
+                        <div className="flex justify-end">
+                          {!isEditing ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => initializeBranchSeries(branch.id, index)}
+                              className="w-full sm:w-auto"
+                            >
+                              <Edit className="w-4 h-4 mr-1" />
+                              Editar Series
+                            </Button>
+                          ) : (
+                            <div className="flex gap-2 w-full sm:w-auto">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingBranchId(null)
+                                  loadBranchesAndSeries()
+                                }}
+                                disabled={isSaving}
+                                className="flex-1 sm:flex-none"
+                              >
+                                Cancelar
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => handleSaveBranchSeries(branch.id)}
+                                disabled={isSaving}
+                                className="flex-1 sm:flex-none"
+                              >
+                                {isSaving ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                    Guardando...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Save className="w-4 h-4 mr-1" />
+                                    Guardar
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {/* Vista móvil - Tarjetas */}
+                      <div className="md:hidden space-y-4">
+                        {[
+                          { key: 'factura', label: 'Factura Electrónica' },
+                          { key: 'boleta', label: 'Boleta de Venta' },
+                          { key: 'nota_venta', label: 'Nota de Venta' },
+                          { key: 'cotizacion', label: 'Cotización' },
+                        ].map(({ key, label }) => (
+                          <div key={key} className="p-3 border rounded-lg bg-white">
+                            <p className="text-sm font-medium text-gray-700 mb-2">{label}</p>
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="text-xs text-gray-500">Serie</label>
+                                <Input
+                                  value={bSeries[key]?.serie || defaultSeries[key].serie}
+                                  onChange={e => handleBranchSeriesChange(branch.id, key, 'serie', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`text-sm ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  maxLength={4}
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">Último #</label>
+                                <Input
+                                  type="number"
+                                  value={bSeries[key]?.lastNumber ?? 0}
+                                  onChange={e => handleBranchSeriesChange(branch.id, key, 'lastNumber', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`text-sm ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  min="0"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">Siguiente</label>
+                                <p className="font-mono text-sm text-gray-600 py-2">
+                                  {getNextNumber(bSeries[key]?.serie || defaultSeries[key].serie, bSeries[key]?.lastNumber ?? 0)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+
+                        <div className="py-1 px-3 text-xs font-semibold text-blue-700 bg-blue-50 rounded">Notas de Crédito</div>
+                        {[
+                          { key: 'nota_credito_factura', label: 'NC - Facturas' },
+                          { key: 'nota_credito_boleta', label: 'NC - Boletas' },
+                        ].map(({ key, label }) => (
+                          <div key={key} className="p-3 border rounded-lg bg-white">
+                            <p className="text-sm font-medium text-gray-600 mb-2">{label}</p>
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="text-xs text-gray-500">Serie</label>
+                                <Input
+                                  value={bSeries[key]?.serie || defaultSeries[key].serie}
+                                  onChange={e => handleBranchSeriesChange(branch.id, key, 'serie', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`text-sm ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  maxLength={4}
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">Último #</label>
+                                <Input
+                                  type="number"
+                                  value={bSeries[key]?.lastNumber ?? 0}
+                                  onChange={e => handleBranchSeriesChange(branch.id, key, 'lastNumber', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`text-sm ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  min="0"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">Siguiente</label>
+                                <p className="font-mono text-sm text-gray-600 py-2">
+                                  {getNextNumber(bSeries[key]?.serie || defaultSeries[key].serie, bSeries[key]?.lastNumber ?? 0)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+
+                        <div className="py-1 px-3 text-xs font-semibold text-orange-700 bg-orange-50 rounded">Notas de Débito</div>
+                        {[
+                          { key: 'nota_debito_factura', label: 'ND - Facturas' },
+                          { key: 'nota_debito_boleta', label: 'ND - Boletas' },
+                        ].map(({ key, label }) => (
+                          <div key={key} className="p-3 border rounded-lg bg-white">
+                            <p className="text-sm font-medium text-gray-600 mb-2">{label}</p>
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="text-xs text-gray-500">Serie</label>
+                                <Input
+                                  value={bSeries[key]?.serie || defaultSeries[key].serie}
+                                  onChange={e => handleBranchSeriesChange(branch.id, key, 'serie', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`text-sm ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  maxLength={4}
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">Último #</label>
+                                <Input
+                                  type="number"
+                                  value={bSeries[key]?.lastNumber ?? 0}
+                                  onChange={e => handleBranchSeriesChange(branch.id, key, 'lastNumber', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`text-sm ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  min="0"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">Siguiente</label>
+                                <p className="font-mono text-sm text-gray-600 py-2">
+                                  {getNextNumber(bSeries[key]?.serie || defaultSeries[key].serie, bSeries[key]?.lastNumber ?? 0)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+
+                        <div className="py-1 px-3 text-xs font-semibold text-purple-700 bg-purple-50 rounded">Guías de Remisión</div>
+                        {[
+                          { key: 'guia_remision', label: 'Guía Remitente', defaultSerie: 'T001' },
+                          { key: 'guia_transportista', label: 'Guía Transportista', defaultSerie: 'V001' },
+                        ].map(({ key, label, defaultSerie }) => (
+                          <div key={key} className="p-3 border rounded-lg bg-white">
+                            <p className="text-sm font-medium text-gray-600 mb-2">{label}</p>
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="text-xs text-gray-500">Serie</label>
+                                <Input
+                                  value={bSeries[key]?.serie || defaultSeries[key]?.serie || defaultSerie}
+                                  onChange={e => handleBranchSeriesChange(branch.id, key, 'serie', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`text-sm ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  maxLength={4}
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">Último #</label>
+                                <Input
+                                  type="number"
+                                  value={bSeries[key]?.lastNumber ?? 0}
+                                  onChange={e => handleBranchSeriesChange(branch.id, key, 'lastNumber', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`text-sm ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  min="0"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-gray-500">Siguiente</label>
+                                <p className="font-mono text-sm text-gray-600 py-2">
+                                  {getNextNumber(bSeries[key]?.serie || defaultSerie, bSeries[key]?.lastNumber ?? 0)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Vista desktop - Tabla */}
+                      <div className="hidden md:block overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-gray-50">
+                              <th className="text-left py-2 px-3 font-medium text-gray-700">Documento</th>
+                              <th className="text-left py-2 px-3 font-medium text-gray-700">Serie</th>
+                              <th className="text-left py-2 px-3 font-medium text-gray-700">Último #</th>
+                              <th className="text-left py-2 px-3 font-medium text-gray-700">Siguiente</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {[
+                              { key: 'factura', label: 'Factura Electrónica' },
+                              { key: 'boleta', label: 'Boleta de Venta' },
+                              { key: 'nota_venta', label: 'Nota de Venta' },
+                              { key: 'cotizacion', label: 'Cotización' },
+                            ].map(({ key, label }) => (
+                              <tr key={key} className="border-b border-gray-100">
+                                <td className="py-2 px-3 text-gray-700 font-medium">{label}</td>
+                                <td className="py-2 px-3">
+                                  <Input
+                                    value={bSeries[key]?.serie || defaultSeries[key].serie}
+                                    onChange={e => handleBranchSeriesChange(branch.id, key, 'serie', e.target.value)}
+                                    disabled={!isEditing}
+                                    className={`w-20 ${!isEditing ? 'bg-gray-50' : ''}`}
+                                    maxLength={4}
+                                  />
+                                </td>
+                                <td className="py-2 px-3">
+                                  <Input
+                                    type="number"
+                                    value={bSeries[key]?.lastNumber ?? 0}
+                                    onChange={e => handleBranchSeriesChange(branch.id, key, 'lastNumber', e.target.value)}
+                                    disabled={!isEditing}
+                                    className={`w-24 ${!isEditing ? 'bg-gray-50' : ''}`}
+                                    min="0"
+                                  />
+                                </td>
+                                <td className="py-2 px-3">
+                                  <span className="font-mono text-gray-600">
+                                    {getNextNumber(bSeries[key]?.serie || defaultSeries[key].serie, bSeries[key]?.lastNumber ?? 0)}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                            <tr className="bg-blue-50">
+                              <td colSpan="4" className="py-1 px-3 text-xs font-semibold text-blue-700">Notas de Crédito</td>
+                            </tr>
+                            {[
+                              { key: 'nota_credito_factura', label: 'NC - Facturas' },
+                              { key: 'nota_credito_boleta', label: 'NC - Boletas' },
+                            ].map(({ key, label }) => (
+                              <tr key={key} className="border-b border-gray-100">
+                                <td className="py-2 px-3 text-gray-600">{label}</td>
+                                <td className="py-2 px-3">
+                                  <Input
+                                    value={bSeries[key]?.serie || defaultSeries[key].serie}
+                                    onChange={e => handleBranchSeriesChange(branch.id, key, 'serie', e.target.value)}
+                                    disabled={!isEditing}
+                                    className={`w-20 ${!isEditing ? 'bg-gray-50' : ''}`}
+                                    maxLength={4}
+                                  />
+                                </td>
+                                <td className="py-2 px-3">
+                                  <Input
+                                    type="number"
+                                    value={bSeries[key]?.lastNumber ?? 0}
+                                    onChange={e => handleBranchSeriesChange(branch.id, key, 'lastNumber', e.target.value)}
+                                    disabled={!isEditing}
+                                    className={`w-24 ${!isEditing ? 'bg-gray-50' : ''}`}
+                                    min="0"
+                                  />
+                                </td>
+                                <td className="py-2 px-3">
+                                  <span className="font-mono text-gray-600">
+                                    {getNextNumber(bSeries[key]?.serie || defaultSeries[key].serie, bSeries[key]?.lastNumber ?? 0)}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                            <tr className="bg-orange-50">
+                              <td colSpan="4" className="py-1 px-3 text-xs font-semibold text-orange-700">Notas de Débito</td>
+                            </tr>
+                            {[
+                              { key: 'nota_debito_factura', label: 'ND - Facturas' },
+                              { key: 'nota_debito_boleta', label: 'ND - Boletas' },
+                            ].map(({ key, label }) => (
+                              <tr key={key} className="border-b border-gray-100">
+                                <td className="py-2 px-3 text-gray-600">{label}</td>
+                                <td className="py-2 px-3">
+                                  <Input
+                                    value={bSeries[key]?.serie || defaultSeries[key].serie}
+                                    onChange={e => handleBranchSeriesChange(branch.id, key, 'serie', e.target.value)}
+                                    disabled={!isEditing}
+                                    className={`w-20 ${!isEditing ? 'bg-gray-50' : ''}`}
+                                    maxLength={4}
+                                  />
+                                </td>
+                                <td className="py-2 px-3">
+                                  <Input
+                                    type="number"
+                                    value={bSeries[key]?.lastNumber ?? 0}
+                                    onChange={e => handleBranchSeriesChange(branch.id, key, 'lastNumber', e.target.value)}
+                                    disabled={!isEditing}
+                                    className={`w-24 ${!isEditing ? 'bg-gray-50' : ''}`}
+                                    min="0"
+                                  />
+                                </td>
+                                <td className="py-2 px-3">
+                                  <span className="font-mono text-gray-600">
+                                    {getNextNumber(bSeries[key]?.serie || defaultSeries[key].serie, bSeries[key]?.lastNumber ?? 0)}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                            <tr className="bg-purple-50">
+                              <td colSpan="4" className="py-1 px-3 text-xs font-semibold text-purple-700">Guías de Remisión</td>
+                            </tr>
+                            <tr className="border-b border-gray-100">
+                              <td className="py-2 px-3 text-gray-600">Guía de Remisión (Remitente)</td>
+                              <td className="py-2 px-3">
+                                <Input
+                                  value={bSeries['guia_remision']?.serie || defaultSeries['guia_remision'].serie}
+                                  onChange={e => handleBranchSeriesChange(branch.id, 'guia_remision', 'serie', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`w-20 ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  maxLength={4}
+                                />
+                              </td>
+                              <td className="py-2 px-3">
+                                <Input
+                                  type="number"
+                                  value={bSeries['guia_remision']?.lastNumber ?? 0}
+                                  onChange={e => handleBranchSeriesChange(branch.id, 'guia_remision', 'lastNumber', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`w-24 ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  min="0"
+                                />
+                              </td>
+                              <td className="py-2 px-3">
+                                <span className="font-mono text-gray-600">
+                                  {getNextNumber(bSeries['guia_remision']?.serie || 'T001', bSeries['guia_remision']?.lastNumber ?? 0)}
+                                </span>
+                              </td>
+                            </tr>
+                            <tr className="border-b border-gray-100">
+                              <td className="py-2 px-3 text-gray-600">Guía de Remisión (Transportista)</td>
+                              <td className="py-2 px-3">
+                                <Input
+                                  value={bSeries['guia_transportista']?.serie || defaultSeries['guia_transportista'].serie}
+                                  onChange={e => handleBranchSeriesChange(branch.id, 'guia_transportista', 'serie', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`w-20 ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  maxLength={4}
+                                />
+                              </td>
+                              <td className="py-2 px-3">
+                                <Input
+                                  type="number"
+                                  value={bSeries['guia_transportista']?.lastNumber ?? 0}
+                                  onChange={e => handleBranchSeriesChange(branch.id, 'guia_transportista', 'lastNumber', e.target.value)}
+                                  disabled={!isEditing}
+                                  className={`w-24 ${!isEditing ? 'bg-gray-50' : ''}`}
+                                  min="0"
+                                />
+                              </td>
+                              <td className="py-2 px-3">
+                                <span className="font-mono text-gray-600">
+                                  {getNextNumber(bSeries['guia_transportista']?.serie || 'V001', bSeries['guia_transportista']?.lastNumber ?? 0)}
+                                </span>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      {!isEditing && !bSeries.factura && (
+                        <p className="text-sm text-amber-600 mt-3 flex items-center">
+                          <AlertTriangle className="w-4 h-4 mr-1" />
+                          Series no configuradas. Haz clic en "Editar Series" para configurar.
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Tab Content - Impresora */}
+      {activeTab === 'impresora' && (
+        <div className="space-y-6">
+          {/* Pistola lectora: no se conecta a nada, pero cuando "no funciona"
+              hay que poder decir POR QUE en un minuto y no en tres dias de
+              mensajes. */}
+          <ScannerTester />
+
+          {/* Guía: qué impresora imprime qué (modelo por zonas) */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center space-x-2">
+                <Info className="w-5 h-5 text-primary-600" />
+                <CardTitle>¿Qué impresora imprime qué?</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 text-sm">
+                <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <Printer className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold text-blue-900">Impresora principal (esta pantalla)</p>
+                    <p className="text-blue-700">Tickets de venta, comandas (si no usas estaciones) y precuentas.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <FileText className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold text-green-900">Impresora de Caja (más abajo, en esta pantalla)</p>
+                    <p className="text-green-700">Ticketera de red de la CAJA: comprobantes (boletas/facturas) y precuentas. Pon su IP.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <UtensilsCrossed className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold text-amber-900">Cocina / Bar (en Configuración → Ventas → Estaciones)</p>
+                    <p className="text-amber-700">Una estación por zona, cada una con su IP y sus categorías. Las comandas se reparten solas.</p>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 pt-1">
+                  La app de la <strong>tablet</strong> manda a cada impresora por su IP (cocina, bar, caja). Desde la <strong>computadora</strong> (navegador) se imprime a una sola impresora (la predeterminada).
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center space-x-2">
+                <Printer className="w-5 h-5 text-primary-600" />
+                <CardTitle>Configuración de Impresora Térmica</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                {/* Información */}
+                <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg">
+                  <div className="flex items-start">
+                    <Info className="w-5 h-5 text-gray-400 mt-0.5 mr-3 flex-shrink-0" />
+                    <div className="text-sm text-gray-600">
+                      <p className="font-semibold mb-1 text-gray-900">Impresión Térmica WiFi/Bluetooth</p>
+                      <p>
+                        Conecta una impresora térmica (ticketera) para imprimir automáticamente tickets,
+                        comandas de cocina y precuentas desde la app móvil.
+                      </p>
+                      <p className="mt-2">
+                        <strong>Nota:</strong> Esta funcionalidad solo está disponible en la app móvil Android.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <h3 className="text-sm font-semibold text-gray-900 pt-1">Conexión</h3>
+
+                {/* Impresora configurada */}
+                {printerConfig.enabled && printerConfig.address && (
+                  <div className="space-y-4">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                      <div className="flex flex-col space-y-3">
+                        <div className="flex items-start space-x-3">
+                          <div className="bg-green-100 p-2 rounded-full flex-shrink-0">
+                            <CheckCircle className="w-5 h-5 text-green-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-gray-900">{printerConfig.name || 'Impresora Térmica'}</p>
+                            {printerConfig.type !== 'internal' && (
+                              <p className="text-sm text-gray-600 break-all">Dirección: {printerConfig.address}</p>
+                            )}
+                            <p className="text-sm text-gray-600">Tipo: {printerConfig.type === 'internal' ? 'Impresora Interna' : printerConfig.type === 'bluetooth' ? 'Bluetooth' : 'WiFi'}</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleTestPrinter}
+                            disabled={isTesting}
+                            className="flex-1 sm:flex-initial"
+                          >
+                            {isTesting ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Imprimiendo...
+                              </>
+                            ) : (
+                              <>
+                                <Printer className="w-4 h-4 mr-2" />
+                                Probar
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleDisablePrinter}
+                            className="flex-1 sm:flex-initial"
+                          >
+                            <X className="w-4 h-4 mr-2" />
+                            Deshabilitar
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Configuración de ancho de papel */}
+                    <div className="border border-gray-200 rounded-lg p-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-3">
+                        Ancho de Papel
+                      </label>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => handleChangePaperWidth(58)}
+                          className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${
+                            printerConfig.paperWidth === 58
+                              ? 'border-primary-600 bg-primary-50 text-primary-700'
+                              : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                          }`}
+                        >
+                          <div className="font-semibold">58mm</div>
+                          <div className="text-xs mt-1">Impresoras pequeñas</div>
+                        </button>
+                        <button
+                          onClick={() => handleChangePaperWidth(80)}
+                          className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${
+                            printerConfig.paperWidth === 80
+                              ? 'border-primary-600 bg-primary-50 text-primary-700'
+                              : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                          }`}
+                        >
+                          <div className="font-semibold">80mm</div>
+                          <div className="text-xs mt-1">Impresoras estándar</div>
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Selecciona el ancho de papel de tu impresora térmica. Esto ajustará automáticamente el formato de impresión.
+                      </p>
+                    </div>
+
+                  </div>
+                )}
+
+                {/* Escanear impresoras */}
+                {(!printerConfig.enabled || !printerConfig.address) && (
+                  <div className="space-y-4">
+                    {/* Opciones de conexión */}
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                      <Button
+                        onClick={handleInternalConnect}
+                        disabled={isConnecting}
+                        className="flex-1"
+                      >
+                        {isConnecting ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Conectando...
+                          </>
+                        ) : (
+                          <>
+                            <Monitor className="w-4 h-4 mr-2" />
+                            Imp. Interna
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        onClick={handleScanPrinters}
+                        disabled={isScanning}
+                        className="flex-1"
+                      >
+                        {isScanning ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Escaneando...
+                          </>
+                        ) : (
+                          <>
+                            <Bluetooth className="w-4 h-4 mr-2" />
+                            Bluetooth
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowManualConnect(!showManualConnect)
+                          setShowWifiConnect(false)
+                        }}
+                        className="flex-1"
+                      >
+                        {showManualConnect ? (
+                          <>
+                            <X className="w-4 h-4 mr-2" />
+                            Cancelar
+                          </>
+                        ) : (
+                          <>
+                            <Hash className="w-4 h-4 mr-2" />
+                            MAC Manual
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowWifiConnect(!showWifiConnect)
+                          setShowManualConnect(false)
+                        }}
+                        className="flex-1"
+                      >
+                        {showWifiConnect ? (
+                          <>
+                            <X className="w-4 h-4 mr-2" />
+                            Cancelar
+                          </>
+                        ) : (
+                          <>
+                            <Wifi className="w-4 h-4 mr-2" />
+                            WiFi/LAN
+                          </>
+                        )}
+                      </Button>
+                    </div>
+
+                    <p className="text-sm text-gray-500">
+                      {showManualConnect
+                        ? 'Ingresa la dirección MAC de tu impresora Bluetooth'
+                        : showWifiConnect
+                        ? 'Conecta tu impresora térmica por red WiFi/LAN'
+                        : 'Usa "Imp. Interna" para dispositivos iMin con impresora integrada'
+                      }
+                    </p>
+
+                    {/* Formulario de conexión WiFi/LAN */}
+                    {showWifiConnect && (
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
+                        <div className="flex items-start space-x-3 mb-4">
+                          <div className="bg-gray-100 p-2 rounded-full flex-shrink-0">
+                            <Info className="w-4 h-4 text-gray-500" />
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            <p className="font-semibold mb-1 text-gray-900">Conexión WiFi/LAN</p>
+                            <p>Tu impresora debe estar conectada a la misma red que tu celular. Las impresoras térmicas generalmente usan el puerto 9100.</p>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Dirección IP de la impresora *
+                          </label>
+                          <Input
+                            type="text"
+                            placeholder="192.168.1.100"
+                            value={wifiIp}
+                            onChange={(e) => setWifiIp(e.target.value)}
+                            className="font-mono"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Puedes encontrar la IP en la configuración de tu impresora o imprimiendo una página de prueba
+                          </p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Puerto (por defecto: 9100)
+                          </label>
+                          <Input
+                            type="text"
+                            placeholder="9100"
+                            value={wifiPort}
+                            onChange={(e) => setWifiPort(e.target.value.replace(/\D/g, ''))}
+                            className="font-mono w-32"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Nombre de la impresora (opcional)
+                          </label>
+                          <Input
+                            type="text"
+                            placeholder="Impresora Cocina"
+                            value={wifiName}
+                            onChange={(e) => setWifiName(e.target.value)}
+                          />
+                        </div>
+                        <div className="bg-gray-100 border border-gray-200 rounded p-3">
+                          <p className="text-xs text-gray-600">
+                            <strong>Cómo encontrar la IP de tu impresora:</strong><br />
+                            1. Mantén presionado el botón FEED de la impresora al encenderla<br />
+                            2. Se imprimirá una página de autotest con la IP<br />
+                            3. O revisa la configuración de red de la impresora
+                          </p>
+                        </div>
+                        <Button
+                          onClick={handleWifiConnect}
+                          disabled={isConnecting || !wifiIp.trim()}
+                          className="w-full"
+                        >
+                          {isConnecting ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Conectando...
+                            </>
+                          ) : (
+                            '📶 Conectar via WiFi'
+                          )}
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Formulario de conexión manual Bluetooth */}
+                    {showManualConnect && (
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Dirección MAC de la impresora *
+                          </label>
+                          <Input
+                            type="text"
+                            placeholder="XX:XX:XX:XX:XX:XX"
+                            value={manualAddress}
+                            onChange={(e) => setManualAddress(e.target.value.toUpperCase())}
+                            className="font-mono"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Formato: 00:11:22:AA:BB:CC (puedes encontrarla en la configuración de Bluetooth de tu celular)
+                          </p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Nombre de la impresora (opcional)
+                          </label>
+                          <Input
+                            type="text"
+                            placeholder="Mi impresora térmica"
+                            value={manualName}
+                            onChange={(e) => setManualName(e.target.value)}
+                          />
+                        </div>
+                        <div className="bg-gray-100 border border-gray-200 rounded p-3">
+                          <p className="text-xs text-gray-600">
+                            <strong>Cómo encontrar la dirección MAC:</strong><br />
+                            1. Ve a Configuración → Bluetooth en tu celular<br />
+                            2. Busca tu impresora en la lista de dispositivos emparejados<br />
+                            3. Toca en el ícono de información (⚙️ o ℹ️)<br />
+                            4. Copia la dirección MAC que aparece
+                          </p>
+                        </div>
+                        <Button
+                          onClick={handleManualConnect}
+                          disabled={isConnecting || !manualAddress.trim()}
+                          className="w-full"
+                        >
+                          {isConnecting ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Conectando...
+                            </>
+                          ) : (
+                            'Conectar Impresora Bluetooth'
+                          )}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Lista de impresoras encontradas */}
+                {availablePrinters.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900 mb-3">
+                      Impresoras encontradas ({availablePrinters.length})
+                    </h3>
+                    <div className="space-y-2">
+                      {availablePrinters.map((printer) => (
+                        <div
+                          key={printer.address}
+                          className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
+                        >
+                          <div>
+                            <p className="font-medium text-gray-900">{printer.name || 'Impresora sin nombre'}</p>
+                            <p className="text-sm text-gray-500">{printer.address}</p>
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => handleConnectPrinter(printer.address, printer.name)}
+                            disabled={isConnecting}
+                          >
+                            {isConnecting ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Conectando...
+                              </>
+                            ) : (
+                              'Conectar'
+                            )}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Instrucciones */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-gray-900 mb-2">¿Cómo configurar tu impresora?</h3>
+                  <ol className="list-decimal list-inside space-y-2 text-sm text-gray-700">
+                    <li>Enciende tu impresora térmica (ticketera)</li>
+                    <li>Activa el Bluetooth en tu dispositivo móvil</li>
+                    <li>Haz clic en "Buscar Impresoras Bluetooth"</li>
+                    <li>Selecciona tu impresora de la lista y haz clic en "Conectar"</li>
+                    <li>Una vez conectada, prueba la impresión con el botón "Probar"</li>
+                    <li>¡Listo! Ahora puedes imprimir tickets, comandas y precuentas directamente desde la app</li>
+                  </ol>
+                  <p className="text-xs text-gray-500 mt-3">
+                    <strong>Compatibilidad:</strong> Compatible con impresoras térmicas ESC/POS de 58mm y 80mm
+                    (Epson, Star, Bixolon, y otras marcas compatibles con ESC/POS)
+                  </p>
+                </div>
+              </div>
+
+              {/* === Ajustes de impresión === */}
+              <h3 className="text-sm font-semibold text-gray-900 mt-6 mb-1">Ajustes de impresión</h3>
+              <p className="text-xs text-gray-500 mb-4">Cómo salen los tickets al imprimir. El avance antes del corte y el tamaño de letra también aplican a la impresión térmica directa (Bluetooth/WiFi).</p>
+
+              {/* Avance de papel antes del corte */}
+              {(
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-900 mb-1">
+                    Avance de papel antes del corte
+                  </label>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Cantidad de líneas en blanco antes de cortar el ticket. Si el ticket tiene mucho espacio arriba, reduce el valor. Si el contenido se corta abajo, auméntalo. Depende de cada modelo de impresora.
+                    Se guarda en este dispositivo: configúralo en el equipo desde el que se imprime.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        max="15"
+                        step="1"
+                        value={printerConfig.cutFeedLines ?? 5}
+                        onChange={(e) => {
+                          const val = Math.max(0, Math.min(15, parseInt(e.target.value) || 0))
+                          setPrinterConfig({ ...printerConfig, cutFeedLines: val })
+                        }}
+                        onBlur={async (e) => {
+                          const val = Math.max(0, Math.min(15, parseInt(e.target.value) || 0))
+                          const newConfig = { ...printerConfig, cutFeedLines: val }
+                          setPrinterConfig(newConfig)
+                          await savePrinterConfig(getBusinessId(), newConfig)
+                          toast.success(`Avance antes del corte: ${val} líneas`)
+                        }}
+                        className="w-16 sm:w-20 px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      />
+                      <span className="text-sm text-gray-600">líneas</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {[0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 15].map(val => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={async () => {
+                            const newConfig = { ...printerConfig, cutFeedLines: val }
+                            setPrinterConfig(newConfig)
+                            await savePrinterConfig(getBusinessId(), newConfig)
+                            toast.success(`Avance antes del corte: ${val} líneas`)
+                          }}
+                          className={`px-2 py-1 text-xs rounded border ${(printerConfig.cutFeedLines ?? 5) === val ? 'bg-primary-50 border-primary-500 text-primary-700 font-bold' : 'bg-white border-gray-300 hover:bg-gray-50'}`}
+                        >
+                          {val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              )}
+
+              {/* Ancho de papel para impresión web - SIEMPRE VISIBLE */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-900 mb-1">
+                    Ancho de papel (impresión web/USB)
+                  </label>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Selecciona el ancho de tu rollo de papel térmico. Si imprimes desde el navegador con una ticketera USB, este ajuste es esencial para que el ticket se vea correctamente.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={async () => {
+                        const newConfig = { ...printerConfig, paperWidth: 58 }
+                        setPrinterConfig(newConfig)
+                        await savePrinterConfig(getBusinessId(), newConfig)
+                        toast.success('Ancho de papel actualizado a 58mm')
+                      }}
+                      className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${
+                        (printerConfig.paperWidth || 80) === 58
+                          ? 'border-primary-600 bg-primary-50 text-primary-700'
+                          : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                      }`}
+                    >
+                      <div className="font-semibold">58mm</div>
+                      <div className="text-xs mt-1">Impresoras pequeñas</div>
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const newConfig = { ...printerConfig, paperWidth: 80 }
+                        setPrinterConfig(newConfig)
+                        await savePrinterConfig(getBusinessId(), newConfig)
+                        toast.success('Ancho de papel actualizado a 80mm')
+                      }}
+                      className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${
+                        (printerConfig.paperWidth || 80) === 80
+                          ? 'border-primary-600 bg-primary-50 text-primary-700'
+                          : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                      }`}
+                    >
+                      <div className="font-semibold">80mm</div>
+                      <div className="text-xs mt-1">Impresoras estándar (Epson, etc.)</div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tamaño de letra del ticket (impresión web) - SIEMPRE VISIBLE */}
+              <div className="py-4 border-b border-gray-100">
+                <div className="text-sm font-medium text-gray-900 mb-1">Tamaño de letra del ticket</div>
+                <p className="text-xs text-gray-500 mb-3">
+                  Elige qué tan grande sale la letra al imprimir desde el navegador (comprobantes, precuentas y comandas). Útil para tickets más legibles. No afecta la impresión térmica Bluetooth directa.
+                </p>
+                <div className="flex gap-2">
+                  {[
+                    { key: 'small', label: 'Pequeño', hint: 'Estándar', cls: 'text-sm' },
+                    { key: 'medium', label: 'Mediano', hint: 'Más legible', cls: 'text-base' },
+                    { key: 'large', label: 'Grande', hint: 'Letra grande', cls: 'text-lg' },
+                  ].map((opt) => {
+                    const current = printerConfig.ticketFontSize || (printerConfig.webPrintLegible ? 'medium' : 'small')
+                    const selected = current === opt.key
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={async () => {
+                          const newConfig = {
+                            ...printerConfig,
+                            ticketFontSize: opt.key,
+                            webPrintLegible: opt.key !== 'small', // legacy: medium/large => legible
+                            ...(opt.key !== 'small' && { compactPrint: false }), // incompatible con compacto
+                          }
+                          setPrinterConfig(newConfig)
+                          await savePrinterConfig(getBusinessId(), newConfig)
+                          toast.success(`Tamaño de letra: ${opt.label}`)
+                        }}
+                        className={`flex-1 py-3 px-3 rounded-lg border-2 transition-all ${
+                          selected
+                            ? 'border-primary-600 bg-primary-50 text-primary-700'
+                            : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                        }`}
+                      >
+                        <div className={`font-semibold ${opt.cls}`}>{opt.label}</div>
+                        <div className="text-xs mt-1">{opt.hint}</div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Tamaño de letra de la COMANDA (propio). Pedido de un cliente:
+                  en cocina el ticket se lee de lejos y con las manos ocupadas,
+                  pero agrandar el ticket entero gasta papel en cada venta. */}
+              <div className="py-4 border-b border-gray-100">
+                <div className="text-sm font-medium text-gray-900 mb-1">Tamaño de letra de la comanda</div>
+                <p className="text-xs text-gray-500 mb-3">
+                  Solo la comanda de cocina, sin agrandar comprobantes ni precuentas. Aplica a
+                  todas las formas de imprimir: Bluetooth, WiFi y la impresora del equipo.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { key: '', label: 'Igual al ticket', hint: 'Sigue la opción de arriba' },
+                    { key: 'medium', label: 'Mediano', hint: 'Doble alto' },
+                    { key: 'large', label: 'Grande', hint: 'Triple alto' },
+                    { key: 'xlarge', label: 'Muy grande', hint: 'Cuádruple alto' },
+                  ].map((opt) => {
+                    const selected = (printerConfig.kitchenFontSize || '') === opt.key
+                    return (
+                      <button
+                        key={opt.key || 'auto'}
+                        type="button"
+                        onClick={async () => {
+                          const newConfig = { ...printerConfig, kitchenFontSize: opt.key }
+                          setPrinterConfig(newConfig)
+                          await savePrinterConfig(getBusinessId(), newConfig)
+                          toast.success(`Letra de la comanda: ${opt.label}`)
+                        }}
+                        className={`flex-1 min-w-[130px] py-3 px-3 rounded-lg border-2 transition-all ${
+                          selected
+                            ? 'border-primary-600 bg-primary-50 text-primary-700'
+                            : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                        }`}
+                      >
+                        <div className="font-semibold text-sm">{opt.label}</div>
+                        <div className="text-xs mt-1">{opt.hint}</div>
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="text-xs text-gray-500 mt-3">
+                  Con letra muy grande la comanda usa más papel y los nombres largos pueden
+                  cortarse en dos líneas.
+                </p>
+              </div>
+
+              {/* Modo compacto para impresión web */}
+              <SettingToggle
+                checked={printerConfig.compactPrint || false}
+                onChange={async (e) => {
+                  const newConfig = {
+                    ...printerConfig,
+                    compactPrint: e.target.checked,
+                    ...(e.target.checked && { webPrintLegible: false, ticketFontSize: 'small' })
+                  }
+                  setPrinterConfig(newConfig)
+                  await savePrinterConfig(getBusinessId(), newConfig)
+                  toast.success(e.target.checked ? 'Modo compacto activado' : 'Modo compacto desactivado')
+                }}
+                title="Impresión Compacta (Ahorro de papel)"
+                description="Reduce el tamaño de letra, espaciado y márgenes para ahorrar papel. Ideal para tickets más cortos. No es compatible con el modo legible."
+              />
+
+              {/* Modo ultracompacto para comandas */}
+              <SettingToggle
+                checked={printerConfig.ultraCompactKitchen || false}
+                onChange={async (e) => {
+                  const newConfig = {
+                    ...printerConfig,
+                    ultraCompactKitchen: e.target.checked,
+                  }
+                  setPrinterConfig(newConfig)
+                  await savePrinterConfig(getBusinessId(), newConfig)
+                  toast.success(e.target.checked ? 'Comandas ultracompactas activadas' : 'Comandas ultracompactas desactivadas')
+                }}
+                title="Comandas Ultracompactas (Máximo ahorro de papel)"
+                description="Reduce las comandas de cocina al mínimo: solo mesa, orden y productos en formato compacto, sin bordes ni fondos decorativos. Ideal para ahorrar papel al máximo."
+              />
+
+              {/* Modo hoja A4 para impresoras de tinta/laser (no termicas) */}
+              <SettingToggle
+                checked={printerConfig.a4SheetPrint || false}
+                onChange={async (e) => {
+                  const newConfig = {
+                    ...printerConfig,
+                    a4SheetPrint: e.target.checked,
+                  }
+                  setPrinterConfig(newConfig)
+                  await savePrinterConfig(getBusinessId(), newConfig)
+                  toast.success(e.target.checked ? 'Impresion en hoja A4 activada' : 'Impresion en hoja A4 desactivada')
+                }}
+                title="Imprimir en hoja A4 (impresora de tinta/láser, no térmica)"
+                description="Para impresoras de hoja completa (ej. EPSON L5190) que imprimen por WiFi vía su app. El ticket y la comanda salen chicos y legibles en una hoja A4, sin agrandarse. Déjalo APAGADO si usas una impresora térmica de 58/80mm."
+              />
+
+              {/* Mostrar unidad de medida / presentacion en el ticket */}
+              <SettingToggle
+                checked={printerConfig.showItemUnit || false}
+                onChange={async (e) => {
+                  const newConfig = {
+                    ...printerConfig,
+                    showItemUnit: e.target.checked,
+                  }
+                  setPrinterConfig(newConfig)
+                  await savePrinterConfig(getBusinessId(), newConfig)
+                  toast.success(e.target.checked ? 'Unidad de medida activada en el ticket' : 'Unidad de medida desactivada')
+                }}
+                title="Mostrar unidad de medida en el ticket"
+                description="Antepone la cantidad y la unidad (o la presentación) a cada producto del ticket de venta. Ej: '1 UNIDAD Producto' o '3 CAJA Producto'."
+              />
+
+              {/* Márgenes laterales para impresión */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-900 mb-1">
+                    Márgenes laterales de impresión web
+                  </label>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Controla el espacio lateral (en mm) al imprimir desde el navegador. Usa 0 si tu ticket se ve bien en la vista previa. Aumenta si el texto se corta en tu impresora.
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      id="printMargins"
+                      min="0"
+                      max="15"
+                      step="1"
+                      value={printerConfig.printMargins ?? 8}
+                      onChange={(e) => {
+                        const val = Math.max(0, Math.min(15, parseInt(e.target.value) || 0))
+                        setPrinterConfig({ ...printerConfig, printMargins: val })
+                      }}
+                      onBlur={async (e) => {
+                        const val = Math.max(0, Math.min(15, parseInt(e.target.value) || 0))
+                        const newConfig = { ...printerConfig, printMargins: val }
+                        setPrinterConfig(newConfig)
+                        await savePrinterConfig(getBusinessId(), newConfig)
+                        toast.success(`Márgenes de impresión: ${val}mm`)
+                      }}
+                      className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    />
+                    <span className="text-sm text-gray-600">mm</span>
+                    <div className="flex gap-1 ml-2">
+                      {[0, 2, 4, 8, 12].map(val => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={async () => {
+                            const newConfig = { ...printerConfig, printMargins: val }
+                            setPrinterConfig(newConfig)
+                            await savePrinterConfig(getBusinessId(), newConfig)
+                            toast.success(`Márgenes de impresión: ${val}mm`)
+                          }}
+                          className={`px-2 py-1 text-xs rounded border ${(printerConfig.printMargins ?? 8) === val ? 'bg-primary-50 border-primary-500 text-primary-700 font-bold' : 'bg-white border-gray-300 hover:bg-gray-50'}`}
+                        >
+                          {val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Ajustar la hoja al ticket */}
+              <SettingToggle
+                id="opcion-ajustarHojaAlTicket"
+                checked={printerConfig.ajustarHojaAlTicket !== false}
+                onChange={async (e) => {
+                  const newConfig = { ...printerConfig, ajustarHojaAlTicket: e.target.checked }
+                  setPrinterConfig(newConfig)
+                  await savePrinterConfig(getBusinessId(), newConfig)
+                  toast.success(e.target.checked
+                    ? 'El sistema ajustará la hoja al largo del ticket'
+                    : 'Manda el tamaño de papel de tu impresora')
+                }}
+                title="Ajustar la hoja al largo del ticket"
+                description={printerConfig.ajustarHojaAlTicket !== false
+                  ? '✓ Activado: el sistema le pide al navegador una hoja del largo exacto del comprobante, para que no sobre papel ni se parta en dos.'
+                  : '✗ Desactivado: manda el tamaño de papel que tengas elegido en la ventana de imprimir.'}
+              >
+                <div className="mt-2 inline-flex items-start gap-2 px-2.5 py-1.5 bg-amber-50 rounded-md border border-amber-200">
+                  <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-xs text-amber-800">
+                    Apágalo si tu impresora ya tiene su propio tamaño de papel configurado
+                    (por ejemplo un rollo continuo tipo 72&nbsp;×&nbsp;3276&nbsp;mm). Cuando los dos
+                    tamaños no coinciden, el navegador achica el ticket para que entre y lo deja
+                    centrado en el papel.
+                  </span>
+                </div>
+              </SettingToggle>
+
+              {/* Impresión simple */}
+              <SettingToggle
+                checked={printerConfig.simplePrint || false}
+                onChange={async (e) => {
+                  const newConfig = {
+                    ...printerConfig,
+                    simplePrint: e.target.checked
+                  }
+                  setPrinterConfig(newConfig)
+                  await savePrinterConfig(getBusinessId(), newConfig)
+                  toast.success(e.target.checked ? 'Impresión simple activada' : 'Impresión simple desactivada')
+                }}
+                title="Impresión simple (sin fondos negros)"
+                description="Reemplaza los fondos negros (tipo de documento, total a pagar) por bordes simples con texto negro. Actívalo si tu impresora no muestra bien los fondos oscuros o el texto blanco desaparece."
+              />
+            </CardContent>
+          </Card>
+
+          {/* Impresora de Documentos */}
+          <Card className="mt-6">
+            <CardHeader>
+              <div className="flex items-center space-x-2">
+                <FileText className="w-5 h-5 text-primary-600" />
+                <CardTitle>Impresora de Caja (comprobantes y precuentas)</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Info */}
+                <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg">
+                  <div className="flex items-start">
+                    <Info className="w-5 h-5 text-gray-400 mt-0.5 mr-3 flex-shrink-0" />
+                    <div className="text-sm text-gray-600">
+                      <p className="font-semibold mb-1 text-gray-900">Impresora de Caja (de red / WiFi)</p>
+                      <p>
+                        Es la ticketera de la CAJA. Configura aquí su IP para imprimir
+                        <strong> comprobantes (boletas/facturas) y precuentas</strong> en ella.
+                        La impresora principal sigue para las comandas de cocina.
+                      </p>
+                      <p className="mt-1 text-green-700 font-medium">
+                        ✓ Se configura UNA vez y se comparte con todas las tablets y la PC del negocio: el comprobante siempre sale por esta caja, cobres desde donde cobres.
+                      </p>
+                      <p className="mt-1">
+                        <strong>Si no configuras esta impresora</strong>, los comprobantes y precuentas salen en la impresora principal, como siempre.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Impresora de documentos configurada */}
+                {documentPrinterConfig.enabled && documentPrinterConfig.ip && (
+                  <div className="space-y-4">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                      <div className="flex flex-col space-y-3">
+                        <div className="flex items-start space-x-3">
+                          <div className="bg-green-100 p-2 rounded-full flex-shrink-0">
+                            <CheckCircle className="w-5 h-5 text-green-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-gray-900">{documentPrinterConfig.name || 'Impresora de Caja'}</p>
+                            <p className="text-sm text-gray-600 break-all">IP: {documentPrinterConfig.ip}:{documentPrinterConfig.port || 9100}</p>
+                            <p className="text-sm text-gray-600">Imprime: comprobantes y precuentas</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleTestDocPrinter}
+                            disabled={isTestingDocPrinter}
+                            className="flex-1 sm:flex-initial"
+                          >
+                            {isTestingDocPrinter ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Imprimiendo...
+                              </>
+                            ) : (
+                              <>
+                                <Printer className="w-4 h-4 mr-2" />
+                                Probar
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleDisableDocPrinter}
+                            className="flex-1 sm:flex-initial"
+                          >
+                            <X className="w-4 h-4 mr-2" />
+                            Deshabilitar
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Ancho de papel */}
+                    <div className="border border-gray-200 rounded-lg p-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-3">
+                        Ancho de Papel (Impresora de Caja)
+                      </label>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => handleDocPaperWidth(58)}
+                          className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${
+                            documentPrinterConfig.paperWidth === 58
+                              ? 'border-primary-600 bg-primary-50 text-primary-700'
+                              : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                          }`}
+                        >
+                          <div className="font-semibold">58mm</div>
+                          <div className="text-xs mt-1">Impresoras pequeñas</div>
+                        </button>
+                        <button
+                          onClick={() => handleDocPaperWidth(80)}
+                          className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${
+                            documentPrinterConfig.paperWidth === 80
+                              ? 'border-primary-600 bg-primary-50 text-primary-700'
+                              : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                          }`}
+                        >
+                          <div className="font-semibold">80mm</div>
+                          <div className="text-xs mt-1">Impresoras estándar</div>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Formulario para configurar */}
+                {(!documentPrinterConfig.enabled || !documentPrinterConfig.ip) && (
+                  <div className="space-y-4">
+                    {!showDocPrinterForm ? (
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowDocPrinterForm(true)}
+                        className="w-full"
+                      >
+                        <Wifi className="w-4 h-4 mr-2" />
+                        Configurar Impresora de Caja
+                      </Button>
+                    ) : (
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
+                        <div className="flex items-start space-x-3 mb-4">
+                          <div className="bg-gray-100 p-2 rounded-full flex-shrink-0">
+                            <Info className="w-4 h-4 text-gray-500" />
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            <p className="font-semibold mb-1 text-gray-900">Impresora de Caja (de red / WiFi)</p>
+                            <p>Imprime los comprobantes (boletas/facturas) y precuentas. Debe estar en la misma red que tu dispositivo.</p>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Dirección IP *
+                          </label>
+                          <Input
+                            type="text"
+                            placeholder="192.168.1.101"
+                            value={docPrinterIp}
+                            onChange={(e) => setDocPrinterIp(e.target.value)}
+                            className="font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Puerto (por defecto: 9100)
+                          </label>
+                          <Input
+                            type="text"
+                            placeholder="9100"
+                            value={docPrinterPort}
+                            onChange={(e) => setDocPrinterPort(e.target.value.replace(/\D/g, ''))}
+                            className="font-mono w-32"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Nombre (opcional)
+                          </label>
+                          <Input
+                            type="text"
+                            placeholder="Impresora Caja"
+                            value={docPrinterName}
+                            onChange={(e) => setDocPrinterName(e.target.value)}
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={handleDocPrinterConnect}
+                            disabled={isConnectingDocPrinter || !docPrinterIp.trim()}
+                            className="flex-1"
+                          >
+                            {isConnectingDocPrinter ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Conectando...
+                              </>
+                            ) : (
+                              'Configurar Impresora'
+                            )}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setShowDocPrinterForm(false)
+                              setDocPrinterIp('')
+                              setDocPrinterPort('9100')
+                              setDocPrinterName('')
+                            }}
+                          >
+                            Cancelar
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Tab Content - Seguridad */}
+      {activeTab === 'seguridad' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center space-x-2">
+              <Shield className="w-5 h-5 text-primary-600" />
+              <CardTitle>Seguridad de la Cuenta</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {/* Info del usuario */}
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="flex items-start space-x-3">
+                  <Info className="w-5 h-5 text-gray-600 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Correo electrónico</p>
+                    <p className="text-sm text-gray-600 mt-1">{user?.email}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cambio de contraseña — solo el dueño/admin del negocio. Los usuarios
+                  secundarios NO pueden cambiar su contraseña; la gestiona el administrador. */}
+              {(isBusinessOwner || isAdmin) ? (
+                <>
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Formulario de cambio de contraseña */}
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 mb-1">Cambiar Contraseña</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Asegúrate de usar una contraseña segura con al menos 6 caracteres
+                </p>
+
+                <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+                  {/* Contraseña actual */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Contraseña Actual
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showCurrentPassword ? 'text' : 'password'}
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        placeholder="Ingresa tu contraseña actual"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showCurrentPassword ? (
+                          <EyeOff className="w-5 h-5" />
+                        ) : (
+                          <Eye className="w-5 h-5" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Nueva contraseña */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Nueva Contraseña
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        placeholder="Ingresa tu nueva contraseña"
+                        required
+                        minLength={6}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showNewPassword ? (
+                          <EyeOff className="w-5 h-5" />
+                        ) : (
+                          <Eye className="w-5 h-5" />
+                        )}
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Mínimo 6 caracteres</p>
+                  </div>
+
+                  {/* Confirmar contraseña */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Confirmar Nueva Contraseña
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        placeholder="Confirma tu nueva contraseña"
+                        required
+                        minLength={6}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showConfirmPassword ? (
+                          <EyeOff className="w-5 h-5" />
+                        ) : (
+                          <Eye className="w-5 h-5" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Botón de submit */}
+                  <div className="pt-2">
+                    <Button
+                      type="submit"
+                      disabled={isChangingPassword}
+                    >
+                      {isChangingPassword ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Cambiando contraseña...
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="w-4 h-4 mr-2" />
+                          Cambiar Contraseña
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* Recomendaciones de seguridad */}
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="text-sm font-semibold text-blue-900 mb-2">Recomendaciones de Seguridad</h4>
+                <ul className="space-y-1 text-sm text-blue-800">
+                  <li className="flex items-start">
+                    <CheckCircle className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
+                    <span>Usa una contraseña única que no uses en otros sitios</span>
+                  </li>
+                  <li className="flex items-start">
+                    <CheckCircle className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
+                    <span>Combina letras mayúsculas, minúsculas, números y símbolos</span>
+                  </li>
+                  <li className="flex items-start">
+                    <CheckCircle className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
+                    <span>Cambia tu contraseña regularmente</span>
+                  </li>
+                  <li className="flex items-start">
+                    <CheckCircle className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
+                    <span>No compartas tu contraseña con nadie</span>
+                  </li>
+                </ul>
+              </div>
+                </>
+              ) : (
+                <>
+                  {/* Divider */}
+                  <div className="border-t border-gray-200"></div>
+                  {/* Usuarios secundarios: el cambio de contraseña lo gestiona el administrador */}
+                  <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg flex items-start space-x-3">
+                    <Info className="w-5 h-5 text-gray-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-gray-600">
+                      El cambio de contraseña está deshabilitado para usuarios secundarios.
+                      Si necesitas restablecer tu contraseña, contacta al administrador de tu cuenta.
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* TAB: Notificaciones */}
+      {activeTab === 'notificaciones' && (<>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center space-x-2">
+              <Bell className="w-5 h-5 text-primary-600" />
+              <CardTitle>Preferencias de Notificaciones</CardTitle>
+            </div>
+            <p className="text-sm text-gray-500 mt-1">Configura qué notificaciones push deseas recibir en tu dispositivo.</p>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {[
+                { key: 'new_sale', label: 'Nueva Venta', description: 'Recibir notificación cuando se registra una nueva venta.' },
+                { key: 'yape_payment', label: 'Pago Yape', description: 'Recibir notificación cuando se detecta un pago por Yape.' },
+                { key: 'low_stock', label: 'Stock Bajo', description: 'Recibir notificación cuando un producto tiene stock bajo (5 o menos unidades).' },
+                { key: 'out_of_stock', label: 'Producto Sin Stock', description: 'Recibir notificación cuando un producto se queda sin stock.' },
+                { key: 'new_order', label: 'Nuevo Pedido', description: 'Recibir notificación cuando se crea un nuevo pedido (restaurante/menú digital).' },
+                { key: 'items_added', label: 'Items Agregados a Pedido', description: 'Recibir notificación cuando se agregan items a un pedido existente.' },
+              ].map(item => (
+                <label key={item.key} className="flex items-center justify-between cursor-pointer p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                  <div className="flex-1 mr-4">
+                    <span className="text-sm font-medium text-gray-900 block">{item.label}</span>
+                    <span className="text-xs text-gray-500">{item.description}</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={notificationPreferences[item.key]}
+                    onChange={(e) => setNotificationPreferences(prev => ({ ...prev, [item.key]: e.target.checked }))}
+                    className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  />
+                </label>
+              ))}
+
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  Las notificaciones de suscripción (vencimiento, renovación) no se pueden desactivar ya que son importantes para el funcionamiento de tu cuenta.
+                </p>
+              </div>
+
+              <div className="flex justify-end pt-4">
+                <Button
+                  type="button"
+                  onClick={async () => {
+                    if (isDemoMode) {
+                      toast.error('No puedes modificar configuraciones en modo demo')
+                      return
+                    }
+                    setIsSaving(true)
+                    try {
+                      const businessRef = doc(db, 'businesses', getBusinessId())
+                      await setDoc(businessRef, {
+                        notificationPreferences: notificationPreferences,
+                        updatedAt: serverTimestamp(),
+                      }, { merge: true })
+                      toast.success('Preferencias de notificaciones guardadas.')
+                    } catch (error) {
+                      console.error('Error al guardar notificaciones:', error)
+                      toast.error('Error al guardar las preferencias')
+                    } finally {
+                      setIsSaving(false)
+                    }
+                  }}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Guardar Notificaciones
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Detector de Pagos Yape */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Bell className="w-5 h-5 text-purple-600" />
+                <CardTitle>Detector de Pagos Yape</CardTitle>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={yapeConfig.enabled}
+                  onChange={(e) => setYapeConfig(prev => ({ ...prev, enabled: e.target.checked }))}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                <span className="ml-2 text-sm font-medium text-gray-700">
+                  {yapeConfig.enabled ? 'Activado' : 'Desactivado'}
+                </span>
+              </label>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                <p className="text-sm text-purple-800">
+                  Detecta automáticamente cuando recibes un pago por Yape y envía notificaciones
+                  push a los usuarios que selecciones.
+                </p>
+              </div>
+
+              {yapeConfig.enabled && (
+                <>
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Iniciar automáticamente</p>
+                      <p className="text-xs text-gray-600">Comenzar a escuchar notificaciones al abrir la app</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={yapeConfig.autoStartListening}
+                        onChange={(e) => setYapeConfig(prev => ({ ...prev, autoStartListening: e.target.checked }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Notificar a todos los usuarios</p>
+                      <p className="text-xs text-gray-600">Enviar notificación push a todos los usuarios del negocio</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={yapeConfig.notifyAllUsers}
+                        onChange={(e) => setYapeConfig(prev => ({ ...prev, notifyAllUsers: e.target.checked }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                    </label>
+                  </div>
+
+                  {!yapeConfig.notifyAllUsers && (
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-900 mb-3">Usuarios a notificar</h4>
+                      {isLoadingYape ? (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+                        </div>
+                      ) : businessUsers.length === 0 ? (
+                        <p className="text-sm text-gray-500 text-center py-4">
+                          No hay usuarios registrados en este negocio
+                        </p>
+                      ) : (
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                          {businessUsers.map(user => (
+                            <label
+                              key={user.id}
+                              className="flex items-center p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={yapeConfig.notifyUsers.includes(user.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setYapeConfig(prev => ({
+                                      ...prev,
+                                      notifyUsers: [...prev.notifyUsers, user.id]
+                                    }))
+                                  } else {
+                                    setYapeConfig(prev => ({
+                                      ...prev,
+                                      notifyUsers: prev.notifyUsers.filter(id => id !== user.id)
+                                    }))
+                                  }
+                                }}
+                                className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                              />
+                              <div className="ml-3">
+                                <p className="text-sm font-medium text-gray-900">
+                                  {user.displayName || user.name || user.email}
+                                  {user.isOwner && (
+                                    <span className="ml-2 px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded">
+                                      Dueño
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="text-xs text-gray-500">{user.email}</p>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="border-t border-gray-200 pt-4">
+                    <Button
+                      onClick={handleSaveYapeConfig}
+                      disabled={isSavingYape}
+                      className="w-full sm:w-auto"
+                    >
+                      {isSavingYape ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Guardando...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4 mr-2" />
+                          Guardar Configuración Yape
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Instrucciones Yape */}
+        {yapeConfig.enabled && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Instrucciones de uso - Yape</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div className="flex items-start p-3 bg-gray-50 rounded-lg">
+                  <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
+                    <span className="text-purple-600 font-bold text-sm">1</span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Instala el APK en tu celular</p>
+                    <p className="text-xs text-gray-600">El dispositivo donde tengas Yape instalado</p>
+                  </div>
+                </div>
+                <div className="flex items-start p-3 bg-gray-50 rounded-lg">
+                  <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
+                    <span className="text-purple-600 font-bold text-sm">2</span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Otorga el permiso de notificaciones</p>
+                    <p className="text-xs text-gray-600">Configuración → Acceso a notificaciones → Activa Cobrify</p>
+                  </div>
+                </div>
+                <div className="flex items-start p-3 bg-gray-50 rounded-lg">
+                  <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
+                    <span className="text-purple-600 font-bold text-sm">3</span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">¡Listo!</p>
+                    <p className="text-xs text-gray-600">Cuando recibas un Yape, los usuarios seleccionados recibirán una notificación push</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <Link
+                  to="/test-notifications"
+                  className="inline-flex items-center text-sm text-purple-600 hover:text-purple-700"
+                >
+                  <Bell className="w-4 h-4 mr-1" />
+                  Abrir página de pruebas
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Nota de privacidad Yape */}
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-start">
+            <Info className="w-5 h-5 text-blue-600 mr-2 mt-0.5 flex-shrink-0" />
+            <div>
+              <h4 className="text-sm font-semibold text-blue-900">Privacidad</h4>
+              <p className="text-sm text-blue-800 mt-1">
+                Solo se detectan notificaciones de Yape. Las notificaciones se procesan
+                localmente y solo se guarda el monto y nombre del pagador.
+              </p>
+            </div>
+          </div>
+        </div>
+      </>)}
+
+      {/* Tab: Integración Rappi (gated por businessSettings.rappiEnabled) */}
+      {activeTab === 'rappi' && (
+        <div className="space-y-6">
+          {/* Self-Onboarding: conectar tienda con Rappi */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Bike className="w-5 h-5 text-orange-600" />
+                <CardTitle>Conectar tienda con Rappi</CardTitle>
+              </div>
+              <p className="text-sm text-gray-600 mt-1">
+                Vincula tu tienda a la integración de Cobrify mediante el flujo de Self-Onboarding de Rappi.
+                Necesitas tener tu tienda creada en el Portal Partners de Rappi.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Estado OAuth */}
+              <div className={`p-3 rounded-lg border ${
+                businessSettings?.rappiConfig?.merchantToken
+                  ? 'bg-emerald-50 border-emerald-200'
+                  : 'bg-gray-50 border-gray-200'
+              }`}>
+                <div className="flex items-start gap-2">
+                  {businessSettings?.rappiConfig?.merchantToken ? (
+                    <CheckCircle className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-5 h-5 text-gray-500 mt-0.5 flex-shrink-0" />
+                  )}
+                  <div className="text-sm flex-1">
+                    <p className="font-medium">
+                      {businessSettings?.rappiConfig?.merchantToken
+                        ? 'Tienda autenticada con Rappi'
+                        : 'Tienda no conectada'}
+                    </p>
+                    <p className="text-xs text-gray-600 mt-0.5">
+                      {businessSettings?.rappiConfig?.merchantToken
+                        ? 'Ya puedes provisionar tu tienda en la integración.'
+                        : 'Inicia sesión con tu cuenta de Rappi para autorizar a Cobrify.'}
+                    </p>
+                  </div>
+                  <Button
+                    variant={businessSettings?.rappiConfig?.merchantToken ? 'outline' : 'default'}
+                    size="sm"
+                    disabled={isConnectingRappiOAuth}
+                    onClick={async () => {
+                      setIsConnectingRappiOAuth(true)
+                      try {
+                        const startFn = httpsCallable(functions, 'rappiOAuthStart')
+                        const result = await startFn({ businessId: getBusinessId(), env: 'production_pe' })
+                        const oauthUrl = result.data?.url
+                        if (!oauthUrl) throw new Error('No se recibió URL de OAuth')
+
+                        // Listener para postMessage del popup
+                        const onMessage = (evt) => {
+                          if (evt.data?.source !== 'rappi-oauth') return
+                          window.removeEventListener('message', onMessage)
+                          if (evt.data.ok) {
+                            toast.success('Conectado con Rappi')
+                            if (refreshBusinessSettings) refreshBusinessSettings()
+                          } else {
+                            toast.error('No se pudo conectar: ' + (evt.data.error || ''))
+                          }
+                          setIsConnectingRappiOAuth(false)
+                        }
+                        window.addEventListener('message', onMessage)
+
+                        const popup = window.open(oauthUrl, 'rappi-oauth', 'width=520,height=700')
+                        // Si el popup se cierra sin enviar postMessage, libera el botón
+                        const interval = setInterval(() => {
+                          if (popup?.closed) {
+                            clearInterval(interval)
+                            window.removeEventListener('message', onMessage)
+                            setIsConnectingRappiOAuth(false)
+                          }
+                        }, 500)
+                      } catch (err) {
+                        console.error('Error iniciando OAuth Rappi:', err)
+                        toast.error('Error: ' + (err.message || 'desconocido'))
+                        setIsConnectingRappiOAuth(false)
+                      }
+                    }}
+                  >
+                    {isConnectingRappiOAuth ? (
+                      <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Conectando…</>
+                    ) : businessSettings?.rappiConfig?.merchantToken ? 'Reconectar' : 'Conectar con Rappi'}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Provisioning: solo si ya hay merchantToken */}
+              {businessSettings?.rappiConfig?.merchantToken && (
+                <>
+                  <div className="border-t pt-4">
+                    <h4 className="text-sm font-medium mb-3">Provisionar tienda</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Store ID</label>
+                        <Input
+                          value={rappiStoreId}
+                          onChange={(e) => setRappiStoreId(e.target.value)}
+                          placeholder="Ej: 10"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Nombre de la tienda</label>
+                        <Input
+                          value={rappiStoreName}
+                          onChange={(e) => setRappiStoreName(e.target.value)}
+                          placeholder="Mi Tienda Principal"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Estado integración tienda */}
+                  {businessSettings?.rappiConfig?.storeIntegrationStatus && (
+                    <div className={`p-2 rounded-md text-xs border ${
+                      businessSettings.rappiConfig.storeIntegrationStatus === 'active'
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                        : businessSettings.rappiConfig.storeIntegrationStatus === 'failed'
+                        ? 'bg-red-50 border-red-200 text-red-900'
+                        : 'bg-amber-50 border-amber-200 text-amber-900'
+                    }`}>
+                      Estado tienda: <strong>{businessSettings.rappiConfig.storeIntegrationStatus}</strong>
+                      {businessSettings.rappiConfig.lastProvisioningOperation && (
+                        <> · {businessSettings.rappiConfig.lastProvisioningOperation}</>
+                      )}
+                    </div>
+                  )}
+
+                  {rappiProvisioningResult && (
+                    <div className={`p-2 rounded-md text-xs border ${
+                      rappiProvisioningResult.ok
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                        : 'bg-red-50 border-red-200 text-red-900'
+                    }`}>
+                      {rappiProvisioningResult.ok ? (
+                        <span>✓ Solicitud enviada. Esperando confirmación de Rappi vía webhook…</span>
+                      ) : (
+                        <span>✗ {rappiProvisioningResult.message || 'Error'} {rappiProvisioningResult.status ? `(HTTP ${rappiProvisioningResult.status})` : ''}</span>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      onClick={async () => {
+                        setIsProvisioningRappiStore(true)
+                        setRappiProvisioningResult(null)
+                        try {
+                          const fn = httpsCallable(functions, 'rappiProvisionStore')
+                          const result = await fn({
+                            businessId: getBusinessId(),
+                            storeId: rappiStoreId.trim(),
+                            name: rappiStoreName.trim(),
+                          })
+                          setRappiProvisioningResult(result.data)
+                          if (result.data?.ok) {
+                            toast.success('Solicitud de provisioning enviada')
+                            if (refreshBusinessSettings) refreshBusinessSettings()
+                          } else {
+                            toast.error('Provisioning falló: ' + (result.data?.message || ''))
+                          }
+                        } catch (err) {
+                          console.error('Error provisioning:', err)
+                          toast.error('Error: ' + err.message)
+                          setRappiProvisioningResult({ ok: false, message: err.message })
+                        } finally {
+                          setIsProvisioningRappiStore(false)
+                        }
+                      }}
+                      disabled={isProvisioningRappiStore || !rappiStoreId.trim() || !rappiStoreName.trim()}
+                    >
+                      {isProvisioningRappiStore ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Provisionando…</>
+                      ) : 'Provisionar tienda'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        setIsCheckingRappiStatus(true)
+                        try {
+                          const fn = httpsCallable(functions, 'rappiGetStoreStatus')
+                          const result = await fn({ businessId: getBusinessId() })
+                          if (result.data?.ok) {
+                            toast.success('Estado consultado — revisa la consola')
+                            console.log('Rappi integration status:', result.data.data)
+                          } else {
+                            toast.error('No se pudo consultar: ' + (result.data?.message || ''))
+                          }
+                        } catch (err) {
+                          toast.error('Error: ' + err.message)
+                        } finally {
+                          setIsCheckingRappiStatus(false)
+                        }
+                      }}
+                      disabled={isCheckingRappiStatus}
+                    >
+                      {isCheckingRappiStatus ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Consultando…</>
+                      ) : 'Ver estado en Rappi'}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Bike className="w-5 h-5 text-orange-600" />
+                <CardTitle>Configuración manual (legacy / pruebas)</CardTitle>
+              </div>
+              <p className="text-sm text-gray-600 mt-1">
+                Si Rappi te entregó credenciales propias <strong>por tienda</strong> (modo legacy),
+                puedes guardarlas aquí y probar la conexión directamente. Para el flujo nuevo usa la sección superior.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Estado */}
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-amber-900">
+                    <p className="font-medium">Integración en desarrollo</p>
+                    <p className="text-xs mt-1">
+                      Aún estamos finalizando la conexión con Rappi. Por ahora puedes guardar las credenciales
+                      y testear el flujo del UI con pedidos de prueba.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Client ID */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Client ID
+                </label>
+                <Input
+                  value={rappiClientId}
+                  onChange={(e) => setRappiClientId(e.target.value)}
+                  placeholder="Identificador único otorgado por Rappi"
+                />
+              </div>
+
+              {/* Client Secret */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Client Secret
+                </label>
+                <div className="relative">
+                  <Input
+                    type={showRappiSecret ? 'text' : 'password'}
+                    value={rappiClientSecret}
+                    onChange={(e) => setRappiClientSecret(e.target.value)}
+                    placeholder="Secret otorgado por Rappi"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowRappiSecret(!showRappiSecret)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showRappiSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Las credenciales se almacenan cifradas. Solo se usan en el backend para autenticarse.
+                </p>
+              </div>
+
+              {/* Store ID */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Store ID (ID de tienda en Rappi)
+                </label>
+                <Input
+                  value={rappiStoreId}
+                  onChange={(e) => setRappiStoreId(e.target.value)}
+                  placeholder="ID de tu tienda Rappi"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Si manejas varias sucursales, esta es la principal. Más adelante agregaremos soporte multi-sucursal.
+                </p>
+              </div>
+
+              {/* Toggle: Polling automático */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">Captar pedidos automáticamente</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Consulta nuevos pedidos en Rappi cada pocos minutos.
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={rappiPollingEnabled}
+                    onChange={(e) => setRappiPollingEnabled(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                </label>
+              </div>
+
+              {/* Toggle: Auto-aceptar */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">Auto-aceptar pedidos</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Confirma automáticamente la recepción del pedido a Rappi (recomendado para evitar cancelaciones).
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={rappiAutoAccept}
+                    onChange={(e) => setRappiAutoAccept(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                </label>
+              </div>
+
+              {/* Resultado de la prueba de conexión */}
+              {rappiTestResult && (
+                <div
+                  className={`rounded-lg border p-3 text-sm ${
+                    rappiTestResult.ok
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                      : 'bg-red-50 border-red-200 text-red-900'
+                  }`}
+                >
+                  {rappiTestResult.ok ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 font-medium">
+                        <CheckCircle className="w-4 h-4" />
+                        Conexión exitosa con Rappi {rappiTestResult.env === 'production_pe' ? '(Producción)' : '(Sandbox)'} · Store <strong>{rappiTestResult.storeId}</strong>
+                      </div>
+
+                      {/* azp del token */}
+                      {rappiTestResult.tokenInfo && (
+                        <div className="text-xs border border-emerald-300/50 rounded p-2 bg-white/40">
+                          <div className="font-medium mb-0.5">Identidad del token (azp)</div>
+                          <p>azp: <code>{rappiTestResult.clientIdUsed || '—'}</code></p>
+                          <p>{rappiTestResult.tokenInfo.matchesConfiguredClientId
+                            ? '✓ Coincide con el Client ID configurado'
+                            : '⚠ El azp del token NO coincide con el Client ID que pegaste (se usa el azp para el webhook)'}</p>
+                        </div>
+                      )}
+
+                      {/* Registro del webhook de integrador (la llamada que daba 404) */}
+                      {rappiTestResult.webhookRegister && (
+                        <div className={`text-xs border rounded p-2 ${rappiTestResult.webhookDomain ? 'border-emerald-300/50 bg-white/40' : 'border-red-300 bg-red-50/60 text-red-900'}`}>
+                          <div className="font-medium mb-0.5">Webhook STORE_PROVISIONING_STATUS (registro)</div>
+                          {rappiTestResult.webhookDomain ? (
+                            <p>✓ Registrado correctamente en <code>{rappiTestResult.webhookDomain}</code> — el 404 "not found by holder" quedó resuelto 🎉</p>
+                          ) : (
+                            <>
+                              <p>✗ Falló en ambos dominios:</p>
+                              <p className="mt-1">services.rappi.pe → HTTP {rappiTestResult.webhookRegister.status || '?'} · {rappiTestResult.webhookRegister.message}</p>
+                              <p>api.rappi.pe → HTTP {rappiTestResult.webhookRegisterAlt?.status || '?'} · {rappiTestResult.webhookRegisterAlt?.message}</p>
+                              {(rappiTestResult.webhookRegister.data || rappiTestResult.webhookRegisterAlt?.data) && (
+                                <details className="mt-1">
+                                  <summary className="cursor-pointer">Cuerpo del error de Rappi</summary>
+                                  <pre className="mt-1 bg-white/60 p-2 rounded overflow-auto max-h-48">
+{JSON.stringify({ services: rappiTestResult.webhookRegister.data, api: rappiTestResult.webhookRegisterAlt?.data }, null, 2)}
+                                  </pre>
+                                </details>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Webhook de pedidos (NEW_ORDER) */}
+                      {rappiTestResult.newOrderWebhook && (
+                        <div className="text-xs border border-emerald-300/50 rounded p-2 bg-white/40">
+                          <div className="font-medium mb-0.5">Webhook de pedidos (NEW_ORDER)</div>
+                          {rappiTestResult.newOrderWebhook.ok ? (
+                            <p>✓ Configurado — Rappi enviará los pedidos a Cobrify</p>
+                          ) : (
+                            <p>Aún no configurado (HTTP {rappiTestResult.newOrderWebhook.status || '?'}). Usa el botón "Activar recepción de pedidos".</p>
+                          )}
+                        </div>
+                      )}
+
+                      {rappiTestResult.v1 && (
+                        <div className="text-xs border border-emerald-300/50 rounded p-2 bg-white/40">
+                          <div className="font-medium mb-0.5">
+                            REST v1 (/restaurants/orders/v1/stores/{rappiTestResult.storeId}/orders)
+                          </div>
+                          {rappiTestResult.v1.ok ? (
+                            <p>✓ {rappiTestResult.v1.count} pedido(s)</p>
+                          ) : (
+                            <p>✗ HTTP {rappiTestResult.v1.status || '?'} · {rappiTestResult.v1.message}</p>
+                          )}
+                        </div>
+                      )}
+                      {rappiTestResult.v2 && (
+                        <div className="text-xs border border-emerald-300/50 rounded p-2 bg-white/40">
+                          <div className="font-medium mb-0.5">
+                            Public API v2 (/api/v2/restaurants-integrations-public-api/orders)
+                          </div>
+                          {rappiTestResult.v2.ok ? (
+                            <p>✓ {rappiTestResult.v2.count} pedido(s)</p>
+                          ) : (
+                            <p>✗ HTTP {rappiTestResult.v2.status || '?'} · {rappiTestResult.v2.message}</p>
+                          )}
+                        </div>
+                      )}
+                      {rappiTestResult.sample?.length > 0 && (
+                        <details className="text-xs mt-1">
+                          <summary className="cursor-pointer">Ver muestra del payload</summary>
+                          <pre className="mt-1 text-xs bg-white/50 p-2 rounded overflow-auto max-h-64">
+{JSON.stringify(rappiTestResult.sample, null, 2)}
+                          </pre>
+                        </details>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 font-medium">
+                        <AlertCircle className="w-4 h-4" />
+                        No se pudo conectar
+                      </div>
+                      <p className="text-xs">
+                        Paso fallido: <strong>{rappiTestResult.step}</strong>
+                        {rappiTestResult.status ? ` · HTTP ${rappiTestResult.status}` : ''}
+                      </p>
+                      <p className="text-xs">{rappiTestResult.message}</p>
+                      {rappiTestResult.data && (
+                        <details className="text-xs mt-1">
+                          <summary className="cursor-pointer">Detalles</summary>
+                          <pre className="mt-1 text-xs bg-white/50 p-2 rounded overflow-auto">
+{JSON.stringify(rappiTestResult.data, null, 2)}
+                          </pre>
+                        </details>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Acciones */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    setIsTestingRappi(true)
+                    setRappiTestResult(null)
+                    try {
+                      // Guardar primero para que la function lea las credenciales actuales
+                      const businessRef = doc(db, 'businesses', getBusinessId())
+                      await setDoc(businessRef, {
+                        rappiConfig: {
+                          clientId: rappiClientId.trim(),
+                          clientSecret: rappiClientSecret.trim(),
+                          storeId: rappiStoreId.trim(),
+                          pollingEnabled: rappiPollingEnabled,
+                          autoAccept: rappiAutoAccept,
+                          updatedAt: serverTimestamp(),
+                        },
+                        updatedAt: serverTimestamp(),
+                      }, { merge: true })
+
+                      const testFn = httpsCallable(functions, 'testRappiConnection')
+                      const result = await testFn({ businessId: getBusinessId(), env: 'production_pe' })
+                      setRappiTestResult(result.data)
+                      if (result.data?.ok) {
+                        toast.success('Conexión con Rappi OK')
+                      } else {
+                        toast.error('Conexión fallida: ' + (result.data?.message || 'ver detalles'))
+                      }
+                    } catch (error) {
+                      console.error('Error testing Rappi:', error)
+                      setRappiTestResult({ ok: false, step: 'client', message: error.message })
+                      toast.error('Error: ' + error.message)
+                    } finally {
+                      setIsTestingRappi(false)
+                    }
+                  }}
+                  disabled={isTestingRappi || !rappiClientId || !rappiClientSecret}
+                >
+                  {isTestingRappi ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Probando...
+                    </>
+                  ) : (
+                    <>
+                      <Wifi className="w-4 h-4 mr-2" />
+                      Probar conexión
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    setIsEnablingRappiOrders(true)
+                    try {
+                      // Guardar primero para asegurar credenciales actuales
+                      const businessRef = doc(db, 'businesses', getBusinessId())
+                      await setDoc(businessRef, {
+                        rappiConfig: {
+                          clientId: rappiClientId.trim(),
+                          clientSecret: rappiClientSecret.trim(),
+                          storeId: rappiStoreId.trim(),
+                          updatedAt: serverTimestamp(),
+                        },
+                        updatedAt: serverTimestamp(),
+                      }, { merge: true })
+
+                      const fn = httpsCallable(functions, 'rappiEnableOrderReception')
+                      const result = await fn({ businessId: getBusinessId(), env: 'production_pe' })
+                      if (result.data?.ok) {
+                        toast.success('Recepción de pedidos activada — Rappi enviará los pedidos a Cobrify')
+                        if (refreshBusinessSettings) refreshBusinessSettings()
+                      } else {
+                        const ne = result.data?.results?.NEW_ORDER
+                        toast.error('No se pudo activar: ' + (ne?.message || result.data?.message || 'ver consola'))
+                        console.log('rappiEnableOrderReception:', result.data)
+                      }
+                    } catch (err) {
+                      console.error('Error activando recepción Rappi:', err)
+                      toast.error('Error: ' + err.message)
+                    } finally {
+                      setIsEnablingRappiOrders(false)
+                    }
+                  }}
+                  disabled={isEnablingRappiOrders || !rappiClientId || !rappiClientSecret || !rappiStoreId}
+                >
+                  {isEnablingRappiOrders ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Activando...</>
+                  ) : (
+                    <><Bike className="w-4 h-4 mr-2" />Activar recepción de pedidos</>
+                  )}
+                </Button>
+                <Button
+                  onClick={async () => {
+                    setIsSavingRappi(true)
+                    try {
+                      const businessRef = doc(db, 'businesses', getBusinessId())
+                      await setDoc(businessRef, {
+                        rappiConfig: {
+                          clientId: rappiClientId.trim(),
+                          clientSecret: rappiClientSecret.trim(),
+                          storeId: rappiStoreId.trim(),
+                          pollingEnabled: rappiPollingEnabled,
+                          autoAccept: rappiAutoAccept,
+                          updatedAt: serverTimestamp(),
+                        },
+                        updatedAt: serverTimestamp(),
+                      }, { merge: true })
+                      if (refreshBusinessSettings) await refreshBusinessSettings()
+                      toast.success('Configuración de Rappi guardada')
+                    } catch (error) {
+                      console.error('Error guardando config Rappi:', error)
+                      toast.error('Error al guardar la configuración')
+                    } finally {
+                      setIsSavingRappi(false)
+                    }
+                  }}
+                  disabled={isSavingRappi}
+                >
+                  {isSavingRappi ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Guardar configuración
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Tab: Tienda Online — Shopifree (gated por businessSettings.shopifreeEnabled) */}
+      {activeTab === 'shopifree' && (() => {
+        const cfg = businessSettings?.shopifreeConfig
+        const isConnected = !!cfg?.apiKey && !!cfg?.storeId
+        const storeUrl = isConnected ? getShopifreeStoreUrl(cfg) : null
+        const connectedAt = cfg?.connectedAt?.toDate ? cfg.connectedAt.toDate() : null
+        const lastPingAt = cfg?.lastPingAt?.toDate ? cfg.lastPingAt.toDate() : null
+
+        return (
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <ShoppingBag className="w-5 h-5 text-emerald-600" />
+                  <CardTitle>Conectá tu tienda online con Shopifree</CardTitle>
+                </div>
+                <p className="text-sm text-gray-600 mt-1">
+                  Sincronizá tu catálogo y recibí los pedidos de tu tienda online
+                  directamente en Cobrify. Necesitás un API key generado desde
+                  tu dashboard de Shopifree.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+
+                {/* Estado de conexión */}
+                <div className={`p-4 rounded-lg border ${
+                  isConnected ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    {isConnected ? (
+                      <CheckCircle className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-5 h-5 text-gray-500 mt-0.5 flex-shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      {isConnected ? (
+                        <>
+                          <p className="font-medium text-emerald-900">
+                            Conectado a: {cfg.storeName}
+                          </p>
+                          {storeUrl && (
+                            <a
+                              href={storeUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-emerald-700 hover:underline inline-flex items-center gap-1 mt-1"
+                            >
+                              {storeUrl.replace(/^https?:\/\//, '')}
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600 mt-3">
+                            {cfg.currency && <div><strong>Moneda:</strong> {cfg.currency}</div>}
+                            {cfg.plan && <div><strong>Plan:</strong> {cfg.plan}</div>}
+                            {cfg.country && <div><strong>País:</strong> {cfg.country}</div>}
+                            {connectedAt && (
+                              <div className="col-span-2">
+                                <strong>Conectado el:</strong> {connectedAt.toLocaleString('es-PE')}
+                              </div>
+                            )}
+                            {lastPingAt && (
+                              <div className="col-span-2">
+                                <strong>Última verificación:</strong> {lastPingAt.toLocaleString('es-PE')}
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-sm text-gray-700">
+                          Tienda no conectada. Pegá tu API key abajo para conectarla.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Formulario de conexión / desconexión */}
+                {!isConnected ? (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                        API Key de Shopifree
+                      </label>
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <Input
+                            type={showShopifreeKey ? 'text' : 'password'}
+                            value={shopifreeApiKeyInput}
+                            onChange={(e) => {
+                              setShopifreeApiKeyInput(e.target.value)
+                              setShopifreeConnectionResult(null)
+                            }}
+                            placeholder="sfk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                            className="pr-10 font-mono text-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowShopifreeKey(!showShopifreeKey)}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            tabIndex={-1}
+                          >
+                            {showShopifreeKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                        <Button
+                          disabled={isConnectingShopifree || !shopifreeApiKeyInput.trim() || isDemoMode}
+                          onClick={async () => {
+                            if (isDemoMode) {
+                              toast.error('No disponible en modo demo')
+                              return
+                            }
+                            const key = shopifreeApiKeyInput.trim()
+                            if (!key.startsWith('sfk_')) {
+                              setShopifreeConnectionResult({ ok: false, error: 'El API key debe empezar con "sfk_"' })
+                              return
+                            }
+                            setIsConnectingShopifree(true)
+                            setShopifreeConnectionResult(null)
+                            try {
+                              const result = await validateShopifreeApiKey(getBusinessId(), key)
+                              if (result.ok && result.store) {
+                                await connectShopifree(getBusinessId(), key, result.store)
+                                setShopifreeConnectionResult({ ok: true, store: result.store })
+                                setShopifreeApiKeyInput('')
+                                toast.success(`Conectado a ${result.store.name}`)
+                                if (refreshBusinessSettings) await refreshBusinessSettings()
+                              } else {
+                                setShopifreeConnectionResult(result)
+                                toast.error(result.error || 'No se pudo conectar')
+                              }
+                            } catch (err) {
+                              console.error('Error conectando Shopifree:', err)
+                              setShopifreeConnectionResult({ ok: false, error: err.message || 'Error' })
+                              toast.error('Error al conectar')
+                            } finally {
+                              setIsConnectingShopifree(false)
+                            }
+                          }}
+                        >
+                          {isConnectingShopifree ? (
+                            <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Conectando…</>
+                          ) : (
+                            'Conectar'
+                          )}
+                        </Button>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1.5">
+                        Generá tu API key desde{' '}
+                        <a
+                          href="https://shopifree.app/es/dashboard/api"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-emerald-600 hover:underline inline-flex items-center gap-1"
+                        >
+                          tu dashboard de Shopifree
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </p>
+                    </div>
+
+                    {/* Resultado de error */}
+                    {shopifreeConnectionResult && !shopifreeConnectionResult.ok && (
+                      <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                          <div className="text-sm text-red-800">
+                            <p className="font-medium">No se pudo conectar</p>
+                            <p className="text-xs mt-1">{shopifreeConnectionResult.error}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex gap-2 pt-2 border-t">
+                    <Button
+                      variant="outline"
+                      disabled={isPingingShopifree || isDemoMode}
+                      onClick={async () => {
+                        if (isDemoMode) {
+                          toast.error('No disponible en modo demo')
+                          return
+                        }
+                        setIsPingingShopifree(true)
+                        try {
+                          const result = await pingShopifree(getBusinessId())
+                          if (result.ok) {
+                            toast.success('Conexión verificada')
+                            if (refreshBusinessSettings) await refreshBusinessSettings()
+                          } else {
+                            toast.error('Error: ' + (result.error || 'No se pudo verificar'))
+                          }
+                        } catch (err) {
+                          console.error(err)
+                          toast.error('Error al verificar')
+                        } finally {
+                          setIsPingingShopifree(false)
+                        }
+                      }}
+                    >
+                      {isPingingShopifree ? (
+                        <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Verificando…</>
+                      ) : (
+                        <><RefreshCw className="w-4 h-4 mr-1.5" />Verificar conexión</>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="text-red-600 border-red-200 hover:bg-red-50"
+                      disabled={isConnectingShopifree || isDemoMode}
+                      onClick={async () => {
+                        if (isDemoMode) {
+                          toast.error('No disponible en modo demo')
+                          return
+                        }
+                        if (!window.confirm('¿Desconectar la tienda de Shopifree? El catálogo dejará de sincronizarse.')) return
+                        try {
+                          await disconnectShopifree(getBusinessId())
+                          toast.success('Tienda desconectada')
+                          if (refreshBusinessSettings) await refreshBusinessSettings()
+                        } catch (err) {
+                          console.error(err)
+                          toast.error('Error al desconectar')
+                        }
+                      }}
+                    >
+                      <X className="w-4 h-4 mr-1.5" />
+                      Desconectar
+                    </Button>
+                  </div>
+                )}
+
+              </CardContent>
+            </Card>
+
+            {/* Card: Sincronización de productos (Fase 1) */}
+            {isConnected && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="w-5 h-5 text-emerald-600" />
+                    <CardTitle>Sincronización de productos</CardTitle>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Tus productos se sincronizan automáticamente con Shopifree
+                    cuando los creás, editás o eliminás. Si necesitás resincronizar
+                    todos los productos manualmente (ej. primera carga o reparación),
+                    usá el botón de abajo.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+
+                  {/* Última resincronización */}
+                  {cfg?.lastProductsResyncAt && (
+                    <div className="text-xs text-gray-600">
+                      <strong>Última resincronización completa:</strong>{' '}
+                      {cfg.lastProductsResyncAt.toDate
+                        ? cfg.lastProductsResyncAt.toDate().toLocaleString('es-PE')
+                        : '—'}
+                    </div>
+                  )}
+
+                  <Button
+                    variant="outline"
+                    disabled={isResyncingShopifree || isDemoMode}
+                    onClick={async () => {
+                      if (isDemoMode) {
+                        toast.error('No disponible en modo demo')
+                        return
+                      }
+                      if (!window.confirm('¿Sincronizar todos los productos del inventario con Shopifree? Esto puede tardar varios minutos si tenés muchos productos.')) {
+                        return
+                      }
+                      setIsResyncingShopifree(true)
+                      setShopifreeResyncResult(null)
+                      try {
+                        const fn = httpsCallable(functions, 'resyncShopifreeProducts')
+                        const result = await fn({ businessId: getBusinessId() })
+                        setShopifreeResyncResult(result.data)
+                        if (result.data?.ok) {
+                          toast.success(`Sincronizados ${result.data.totalPushed} productos`)
+                        } else {
+                          toast.error(`Sincronización con errores: ${result.data?.errorCount || 0}`)
+                        }
+                        if (refreshBusinessSettings) await refreshBusinessSettings()
+                        refreshShopifreeLogs()
+                      } catch (err) {
+                        console.error('Error resincronizando productos:', err)
+                        toast.error('Error: ' + (err.message || 'desconocido'))
+                        setShopifreeResyncResult({ ok: false, error: err.message })
+                      } finally {
+                        setIsResyncingShopifree(false)
+                      }
+                    }}
+                  >
+                    {isResyncingShopifree ? (
+                      <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Sincronizando…</>
+                    ) : (
+                      <><RefreshCw className="w-4 h-4 mr-1.5" />Sincronizar todos los productos</>
+                    )}
+                  </Button>
+
+                  {/* Resultado del resync */}
+                  {shopifreeResyncResult && (
+                    <div className={`p-3 rounded-lg border text-sm ${
+                      shopifreeResyncResult.ok
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                        : 'bg-amber-50 border-amber-200 text-amber-900'
+                    }`}>
+                      <div className="flex items-start gap-2">
+                        {shopifreeResyncResult.ok ? (
+                          <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        )}
+                        <div className="flex-1">
+                          <p className="font-medium">
+                            {shopifreeResyncResult.ok ? 'Sincronización exitosa' : 'Sincronización con errores'}
+                          </p>
+                          {typeof shopifreeResyncResult.totalChecked === 'number' && (
+                            <div className="text-xs mt-1 space-y-0.5">
+                              <div>Procesados: {shopifreeResyncResult.totalChecked}</div>
+                              <div>Pusheados: {shopifreeResyncResult.totalPushed}</div>
+                              {(shopifreeResyncResult.totalCreated || 0) > 0 && (
+                                <div>Creados nuevos: {shopifreeResyncResult.totalCreated}</div>
+                              )}
+                              {(shopifreeResyncResult.totalUpdated || 0) > 0 && (
+                                <div>Actualizados: {shopifreeResyncResult.totalUpdated}</div>
+                              )}
+                              {(shopifreeResyncResult.errorCount || 0) > 0 && (
+                                <div className="text-red-700">
+                                  Errores: {shopifreeResyncResult.errorCount}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {shopifreeResyncResult.errors?.length > 0 && (
+                            <details className="mt-2 text-xs">
+                              <summary className="cursor-pointer underline">Ver detalle de errores</summary>
+                              <ul className="mt-1 space-y-1 max-h-32 overflow-y-auto">
+                                {shopifreeResyncResult.errors.map((e, idx) => (
+                                  <li key={idx} className="font-mono text-[11px]">
+                                    {e.externalId ? `[${e.externalId}] ` : ''}
+                                    {e.error || JSON.stringify(e)}
+                                  </li>
+                                ))}
+                              </ul>
+                            </details>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-900">
+                    <p className="font-medium mb-1">Cómo funciona</p>
+                    <ul className="space-y-0.5 list-disc pl-4">
+                      <li>Cada vez que creás, editás o eliminás un producto en Cobrify, se envía automáticamente a Shopifree.</li>
+                      <li>Productos con variantes (talla/color) se pushean como producto único sin variantes (Shopifree v1 no soporta variantes en el API).</li>
+                      <li>Productos ocultos del catálogo o desactivados se mandan como inactivos.</li>
+                    </ul>
+                  </div>
+
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Card: Captación de pedidos (Fase 2) */}
+            {isConnected && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <ShoppingBag className="w-5 h-5 text-emerald-600" />
+                    <CardTitle>Captación de pedidos</CardTitle>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Cuando está activado, Cobrify revisa Shopifree cada 3 minutos
+                    en busca de pedidos nuevos y los registra automáticamente en
+                    la sección <strong>Pedidos Online</strong>.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+
+                  {/* Toggle de polling */}
+                  <label className="flex items-start space-x-3 cursor-pointer group p-4 border border-gray-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50/30 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={cfg?.pollingEnabled === true}
+                      disabled={isTogglingShopifreePolling || isDemoMode}
+                      onChange={async (e) => {
+                        if (isDemoMode) {
+                          toast.error('No disponible en modo demo')
+                          return
+                        }
+                        const enabled = e.target.checked
+                        setIsTogglingShopifreePolling(true)
+                        try {
+                          const businessRef = doc(db, 'businesses', getBusinessId())
+                          await setDoc(businessRef, {
+                            shopifreeConfig: { pollingEnabled: enabled },
+                            updatedAt: serverTimestamp(),
+                          }, { merge: true })
+                          if (refreshBusinessSettings) await refreshBusinessSettings()
+                          toast.success(enabled
+                            ? 'Captación de pedidos activada'
+                            : 'Captación de pedidos pausada')
+                        } catch (err) {
+                          console.error('Error toggle polling Shopifree:', err)
+                          toast.error('No se pudo actualizar')
+                        } finally {
+                          setIsTogglingShopifreePolling(false)
+                        }
+                      }}
+                      className="mt-1 w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900 group-hover:text-emerald-900">
+                        Captar pedidos automáticamente desde Shopifree
+                      </span>
+                      <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                        Activado: el sistema busca pedidos nuevos cada 3 minutos.
+                        Desactivado: la sincronización queda en pausa (los pedidos
+                        existentes en Shopifree no se pierden, se recuperan al reactivar).
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Info del último poll */}
+                  {cfg?.lastPollAt && (
+                    <div className="text-xs text-gray-600 space-y-1">
+                      <div>
+                        <strong>Última búsqueda:</strong>{' '}
+                        {cfg.lastPollAt.toDate
+                          ? cfg.lastPollAt.toDate().toLocaleString('es-PE')
+                          : '—'}
+                      </div>
+                      {cfg.lastOrderCursor && (
+                        <div>
+                          <strong>Cursor:</strong>{' '}
+                          <span className="font-mono text-[11px]">{cfg.lastOrderCursor}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Botón manual: buscar ahora */}
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      disabled={isPollingShopifreeNow || isDemoMode}
+                      onClick={async () => {
+                        if (isDemoMode) {
+                          toast.error('No disponible en modo demo')
+                          return
+                        }
+                        setIsPollingShopifreeNow(true)
+                        setShopifreePollResult(null)
+                        try {
+                          const fn = httpsCallable(functions, 'pollShopifreeOrdersNow')
+                          const result = await fn({ businessId: getBusinessId() })
+                          setShopifreePollResult(result.data)
+                          if (result.data?.ok && result.data?.created > 0) {
+                            toast.success(`${result.data.created} pedido(s) nuevo(s) importado(s)`)
+                          } else if (result.data?.processed === 0) {
+                            toast.info('No hay pedidos nuevos')
+                          } else if (result.data?.ok) {
+                            toast.success('Sin pedidos nuevos para procesar')
+                          } else {
+                            toast.error('Error: ' + (result.data?.error || 'Desconocido'))
+                          }
+                          if (refreshBusinessSettings) await refreshBusinessSettings()
+                          refreshShopifreeLogs()
+                        } catch (err) {
+                          console.error('Error polling Shopifree:', err)
+                          toast.error('Error: ' + (err.message || 'desconocido'))
+                          setShopifreePollResult({ ok: false, error: err.message })
+                        } finally {
+                          setIsPollingShopifreeNow(false)
+                        }
+                      }}
+                    >
+                      {isPollingShopifreeNow ? (
+                        <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Buscando…</>
+                      ) : (
+                        <><RefreshCw className="w-4 h-4 mr-1.5" />Buscar pedidos ahora</>
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* Resultado del poll manual */}
+                  {shopifreePollResult && (
+                    <div className={`p-3 rounded-lg border text-sm ${
+                      shopifreePollResult.ok
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                        : 'bg-amber-50 border-amber-200 text-amber-900'
+                    }`}>
+                      <div className="flex items-start gap-2">
+                        {shopifreePollResult.ok ? (
+                          <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        )}
+                        <div className="flex-1 text-xs space-y-0.5">
+                          <p className="font-medium">
+                            {shopifreePollResult.ok ? 'Búsqueda completada' : 'Búsqueda con errores'}
+                          </p>
+                          {typeof shopifreePollResult.processed === 'number' && (
+                            <>
+                              <div>Pedidos revisados: {shopifreePollResult.processed}</div>
+                              <div>Importados nuevos: <strong>{shopifreePollResult.created || 0}</strong></div>
+                              {(shopifreePollResult.alreadySynced || 0) > 0 && (
+                                <div>Ya sincronizados: {shopifreePollResult.alreadySynced}</div>
+                              )}
+                              {(shopifreePollResult.errors?.length || 0) > 0 && (
+                                <div className="text-red-700">Errores: {shopifreePollResult.errors.length}</div>
+                              )}
+                            </>
+                          )}
+                          {shopifreePollResult.error && (
+                            <div className="text-red-700">{shopifreePollResult.error}</div>
+                          )}
+                          {shopifreePollResult.errors?.length > 0 && (
+                            <details className="mt-1.5">
+                              <summary className="cursor-pointer underline">Detalle de errores</summary>
+                              <ul className="mt-1 space-y-1 max-h-32 overflow-y-auto">
+                                {shopifreePollResult.errors.map((e, idx) => (
+                                  <li key={idx} className="font-mono text-[11px]">
+                                    {e.shopifreeOrderId ? `[${e.shopifreeOrderId}] ` : ''}{e.error}
+                                  </li>
+                                ))}
+                              </ul>
+                            </details>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-900">
+                    <p className="font-medium mb-1">Cómo funciona</p>
+                    <ul className="space-y-0.5 list-disc pl-4">
+                      <li>Los pedidos se importan en estado <strong>Pendiente</strong> y aparecen en <strong>Pedidos Online</strong>.</li>
+                      <li>Desde ahí podés aceptar, preparar, generar boleta/factura y completar.</li>
+                      <li>Una vez importado, el pedido queda marcado en Shopifree y no se vuelve a traer.</li>
+                      <li>Los items del pedido que matchean con tu catálogo Cobrify se enlazan al producto interno; los que vienen de productos creados manualmente en Shopifree quedan marcados como externos.</li>
+                    </ul>
+                  </div>
+
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Card: Actividad reciente / Monitoreo (Fase 3) */}
+            {isConnected && (() => {
+              const stats = computeShopifreeStats(shopifreeLogs)
+              const filteredLogs = shopifreeLogs.filter(log => {
+                if (shopifreeLogFilter === 'all') return true
+                if (shopifreeLogFilter === 'orders') return log.action === 'orders_poll'
+                if (shopifreeLogFilter === 'products') return log.action?.startsWith('product') || log.action === 'products_resync_all'
+                if (shopifreeLogFilter === 'errors') return log.ok === false || (log.errorCount || 0) > 0
+                return true
+              })
+
+              return (
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-5 h-5 text-emerald-600" />
+                        <CardTitle>Actividad reciente</CardTitle>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={refreshShopifreeLogs}
+                        disabled={shopifreeLogsLoading || isDemoMode}
+                      >
+                        {shopifreeLogsLoading ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        )}
+                      </Button>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Últimos {shopifreeLogs.length} eventos de la integración.
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+
+                    {/* Stats agregadas */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                      <div className="bg-emerald-50 border border-emerald-200 rounded p-2.5 text-center">
+                        <div className="text-emerald-700 font-medium">Pedidos hoy</div>
+                        <div className="text-2xl font-bold text-emerald-900 mt-0.5">{stats.ordersImportedToday}</div>
+                      </div>
+                      <div className="bg-emerald-50 border border-emerald-200 rounded p-2.5 text-center">
+                        <div className="text-emerald-700 font-medium">Pedidos 7d</div>
+                        <div className="text-2xl font-bold text-emerald-900 mt-0.5">{stats.ordersImportedWeek}</div>
+                      </div>
+                      <div className="bg-blue-50 border border-blue-200 rounded p-2.5 text-center">
+                        <div className="text-blue-700 font-medium">Productos 7d</div>
+                        <div className="text-2xl font-bold text-blue-900 mt-0.5">{stats.productsSyncedWeek}</div>
+                      </div>
+                      <div className={`border rounded p-2.5 text-center ${
+                        stats.errorsToday > 0
+                          ? 'bg-red-50 border-red-200'
+                          : 'bg-gray-50 border-gray-200'
+                      }`}>
+                        <div className={`font-medium ${stats.errorsToday > 0 ? 'text-red-700' : 'text-gray-600'}`}>Errores hoy</div>
+                        <div className={`text-2xl font-bold mt-0.5 ${stats.errorsToday > 0 ? 'text-red-900' : 'text-gray-800'}`}>
+                          {stats.errorsToday}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Filtros */}
+                    <div className="flex flex-wrap gap-1">
+                      {[
+                        { id: 'all', label: 'Todos' },
+                        { id: 'orders', label: 'Pedidos' },
+                        { id: 'products', label: 'Productos' },
+                        { id: 'errors', label: 'Errores' },
+                      ].map(f => (
+                        <button
+                          key={f.id}
+                          onClick={() => setShopifreeLogFilter(f.id)}
+                          className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                            shopifreeLogFilter === f.id
+                              ? 'bg-emerald-600 border-emerald-600 text-white'
+                              : 'bg-white border-gray-300 text-gray-700 hover:border-gray-400'
+                          }`}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Tabla de logs */}
+                    {shopifreeLogsLoading ? (
+                      <div className="flex items-center justify-center py-6 text-gray-500 text-sm">
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        Cargando…
+                      </div>
+                    ) : filteredLogs.length === 0 ? (
+                      <div className="text-center py-6 text-sm text-gray-500">
+                        {shopifreeLogs.length === 0
+                          ? 'Aún no hay actividad registrada.'
+                          : 'No hay eventos que coincidan con el filtro.'}
+                      </div>
+                    ) : (
+                      <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-96 overflow-y-auto">
+                        {filteredLogs.map(log => {
+                          const ts = log.createdAt?.toDate ? log.createdAt.toDate() : null
+                          const isError = log.ok === false || (log.errorCount || 0) > 0
+                          return (
+                            <details key={log.id} className="group">
+                              <summary className="cursor-pointer p-3 hover:bg-gray-50 list-none">
+                                <div className="flex items-start gap-3">
+                                  <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
+                                    isError ? 'bg-red-500' : 'bg-emerald-500'
+                                  }`} />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-sm font-medium text-gray-900 truncate">
+                                        {getLogActionLabel(log.action)}
+                                      </span>
+                                      <span className="text-[11px] text-gray-500 whitespace-nowrap">
+                                        {ts ? ts.toLocaleString('es-PE', {
+                                          day: '2-digit', month: '2-digit',
+                                          hour: '2-digit', minute: '2-digit',
+                                        }) : '—'}
+                                      </span>
+                                    </div>
+                                    {/* Resumen inline */}
+                                    <div className="text-xs text-gray-600 mt-0.5 truncate">
+                                      {log.productName && <span>{log.productName} </span>}
+                                      {typeof log.created === 'number' && log.action === 'orders_poll' && (
+                                        <span>· {log.created} pedido{log.created !== 1 ? 's' : ''} importado{log.created !== 1 ? 's' : ''}</span>
+                                      )}
+                                      {typeof log.totalChecked === 'number' && log.action === 'products_resync_all' && (
+                                        <span>· {log.totalPushed}/{log.totalChecked} productos</span>
+                                      )}
+                                      {log.error && (
+                                        <span className="text-red-600"> · {log.error}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <ChevronDown className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0 transition-transform group-open:rotate-180" />
+                                </div>
+                              </summary>
+                              <pre className="text-[10px] font-mono bg-gray-50 p-2 mx-3 mb-3 rounded overflow-x-auto text-gray-700">
+{JSON.stringify({
+  ...log,
+  createdAt: ts ? ts.toISOString() : undefined,
+}, null, 2)}
+                              </pre>
+                            </details>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                  </CardContent>
+                </Card>
+              )
+            })()}
+          </div>
+        )
+      })()}
+
+      {/* Tab: Limpieza de Datos */}
+      {activeTab === 'limpieza' && (
+        <div className="space-y-6">
+          {/* Advertencia */}
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-start">
+              <AlertTriangle className="w-6 h-6 text-red-600 mr-3 mt-0.5 flex-shrink-0" />
+              <div>
+                <h4 className="text-base font-bold text-red-900">⚠️ ZONA DE PELIGRO</h4>
+                <p className="text-sm text-red-800 mt-1">
+                  Las acciones en esta sección son <strong>IRREVERSIBLES</strong>. Una vez eliminados los datos,
+                  no podrán ser recuperados. Asegúrate de tener respaldos antes de proceder.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Secciones de Limpieza */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-red-600">
+                <Trash2 className="w-5 h-5" />
+                Limpieza de Datos
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-600 mb-6">
+                Selecciona qué datos deseas eliminar. Cada acción requiere confirmación.
+              </p>
+
+              <div className="space-y-4">
+                {/* Productos */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Productos</h4>
+                    <p className="text-sm text-gray-500">
+                      Eliminar todos los productos del catálogo
+                      {bulkDeleteCounts.products > 0 && (
+                        <span className="ml-2 text-red-600 font-medium">({bulkDeleteCounts.products} registros)</span>
+                      )}
+                    </p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => openBulkDeleteModal('products')}
+                    disabled={bulkDeleteCounts.products === 0}
+                    className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Limpiar
+                  </Button>
+                </div>
+
+                {/* Clientes */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Clientes</h4>
+                    <p className="text-sm text-gray-500">
+                      Eliminar todos los clientes registrados
+                      {bulkDeleteCounts.customers > 0 && (
+                        <span className="ml-2 text-red-600 font-medium">({bulkDeleteCounts.customers} registros)</span>
+                      )}
+                    </p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => openBulkDeleteModal('customers')}
+                    disabled={bulkDeleteCounts.customers === 0}
+                    className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Limpiar
+                  </Button>
+                </div>
+
+                {/* Proveedores */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Proveedores</h4>
+                    <p className="text-sm text-gray-500">
+                      Eliminar todos los proveedores
+                      {bulkDeleteCounts.suppliers > 0 && (
+                        <span className="ml-2 text-red-600 font-medium">({bulkDeleteCounts.suppliers} registros)</span>
+                      )}
+                    </p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => openBulkDeleteModal('suppliers')}
+                    disabled={bulkDeleteCounts.suppliers === 0}
+                    className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Limpiar
+                  </Button>
+                </div>
+
+                {/* Ventas/Facturas */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Ventas / Comprobantes</h4>
+                    <p className="text-sm text-gray-500">
+                      Eliminar todas las facturas, boletas y notas de venta
+                      {bulkDeleteCounts.invoices > 0 && (
+                        <span className="ml-2 text-red-600 font-medium">({bulkDeleteCounts.invoices} registros)</span>
+                      )}
+                    </p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => openBulkDeleteModal('invoices')}
+                    disabled={bulkDeleteCounts.invoices === 0}
+                    className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Limpiar
+                  </Button>
+                </div>
+
+                {/* Compras */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Compras</h4>
+                    <p className="text-sm text-gray-500">
+                      Eliminar todas las compras registradas
+                      {bulkDeleteCounts.purchases > 0 && (
+                        <span className="ml-2 text-red-600 font-medium">({bulkDeleteCounts.purchases} registros)</span>
+                      )}
+                    </p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => openBulkDeleteModal('purchases')}
+                    disabled={bulkDeleteCounts.purchases === 0}
+                    className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Limpiar
+                  </Button>
+                </div>
+
+                {/* Movimientos de Stock */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Movimientos de Stock</h4>
+                    <p className="text-sm text-gray-500">
+                      Eliminar historial de movimientos de inventario
+                      {bulkDeleteCounts.stockMovements > 0 && (
+                        <span className="ml-2 text-red-600 font-medium">({bulkDeleteCounts.stockMovements} registros)</span>
+                      )}
+                    </p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => openBulkDeleteModal('stockMovements')}
+                    disabled={bulkDeleteCounts.stockMovements === 0}
+                    className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Limpiar
+                  </Button>
+                </div>
+
+                {/* Guías de Remisión */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Guías de Remisión</h4>
+                    <p className="text-sm text-gray-500">
+                      Eliminar todas las guías de remisión
+                      {bulkDeleteCounts.dispatchGuides > 0 && (
+                        <span className="ml-2 text-red-600 font-medium">({bulkDeleteCounts.dispatchGuides} registros)</span>
+                      )}
+                    </p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => openBulkDeleteModal('dispatchGuides')}
+                    disabled={bulkDeleteCounts.dispatchGuides === 0}
+                    className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Limpiar
+                  </Button>
+                </div>
+
+                {/* Cotizaciones */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Cotizaciones</h4>
+                    <p className="text-sm text-gray-500">
+                      Eliminar todas las cotizaciones
+                      {bulkDeleteCounts.quotations > 0 && (
+                        <span className="ml-2 text-red-600 font-medium">({bulkDeleteCounts.quotations} registros)</span>
+                      )}
+                    </p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => openBulkDeleteModal('quotations')}
+                    disabled={bulkDeleteCounts.quotations === 0}
+                    className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Limpiar
+                  </Button>
+                </div>
+
+                {/* Separador */}
+                <div className="pt-2 pb-1">
+                  <div className="border-t border-gray-300"></div>
+                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mt-3">
+                    Reinicio de Inventario
+                  </p>
+                </div>
+
+                {/* Limpiar Stock e Inventario (sin eliminar productos) */}
+                <div className="flex items-center justify-between p-4 bg-amber-50 rounded-lg border border-amber-200">
+                  <div className="pr-3">
+                    <h4 className="font-medium text-gray-900">Limpiar Stock e Inventario</h4>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Resetea a <strong>cero</strong> el stock, los lotes y los vencimientos de todos los productos, y elimina el historial de movimientos.
+                      <span className="block text-amber-700 font-medium mt-1">
+                        Los productos NO se eliminan. Ideal antes de re-importar stock desde Excel.
+                      </span>
+                      {bulkDeleteCounts.products > 0 && (
+                        <span className="block mt-1 text-gray-700">
+                          Afectará a <strong>{bulkDeleteCounts.products}</strong> productos
+                          {bulkDeleteCounts.stockMovements > 0 && (
+                            <> y eliminará <strong>{bulkDeleteCounts.stockMovements}</strong> movimientos</>
+                          )}.
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => openBulkDeleteModal('resetStock')}
+                    disabled={bulkDeleteCounts.products === 0}
+                    className="bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-50 flex-shrink-0"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Limpiar
+                  </Button>
+                </div>
+
+                {/* Limpiar Stock de Insumos (sin eliminar insumos) + producciones */}
+                <div className="flex items-center justify-between p-4 bg-amber-50 rounded-lg border border-amber-200">
+                  <div className="pr-3">
+                    <h4 className="font-medium text-gray-900">Limpiar Stock de Insumos</h4>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Resetea a <strong>cero</strong> el stock de todos los insumos, elimina sus movimientos y borra el listado de producción.
+                      <span className="block text-amber-700 font-medium mt-1">
+                        Los insumos NO se eliminan. Ideal antes de rehacer el inventario de insumos.
+                      </span>
+                      {bulkDeleteCounts.ingredients > 0 && (
+                        <span className="block mt-1 text-gray-700">
+                          Afectará a <strong>{bulkDeleteCounts.ingredients}</strong> insumos
+                          {bulkDeleteCounts.productions > 0 && (
+                            <> y eliminará <strong>{bulkDeleteCounts.productions}</strong> producciones</>
+                          )}.
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => openBulkDeleteModal('resetIngredientStock')}
+                    disabled={bulkDeleteCounts.ingredients === 0}
+                    className="bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-50 flex-shrink-0"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Limpiar
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Nota informativa */}
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start">
+              <Info className="w-5 h-5 text-blue-600 mr-2 mt-0.5 flex-shrink-0" />
+              <div>
+                <h4 className="text-sm font-semibold text-blue-900">Próximamente</h4>
+                <p className="text-sm text-blue-800 mt-1">
+                  Las funciones de limpieza se irán habilitando gradualmente.
+                  Cada una requerirá confirmación doble para evitar eliminaciones accidentales.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Confirmación de Eliminación Masiva */}
+      <Modal
+        isOpen={showBulkDeleteModal}
+        onClose={() => !isBulkDeleting && setShowBulkDeleteModal(false)}
+        title={`${bulkDeleteType && bulkDeleteLabels[bulkDeleteType]?.actionVerb === 'limpiar' ? 'Limpiar' : 'Eliminar'} ${bulkDeleteType ? bulkDeleteLabels[bulkDeleteType]?.name : ''}`}
+        maxWidth="md"
       >
-        <Componente />
-      </Suspense>
+        <div className="space-y-4">
+          {/* Advertencia */}
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-start">
+              <AlertTriangle className="w-6 h-6 text-red-600 mr-3 flex-shrink-0" />
+              <div>
+                <h4 className="font-bold text-red-900">Esta acción es IRREVERSIBLE</h4>
+                {bulkDeleteType === 'resetStock' ? (
+                  <p className="text-sm text-red-800 mt-1">
+                    Vas a <strong>RESETEAR a CERO</strong> el stock, los lotes y los vencimientos de <strong>TODOS</strong> los productos,
+                    y <strong>ELIMINAR</strong> todo el historial de movimientos de stock.
+                    <br /><br />
+                    <strong>Los productos NO se eliminarán</strong> — solo se limpia su inventario.
+                    Úsalo antes de re-importar stock desde Excel.
+                  </p>
+                ) : bulkDeleteType === 'resetIngredientStock' ? (
+                  <p className="text-sm text-red-800 mt-1">
+                    Vas a <strong>RESETEAR a CERO</strong> el stock de <strong>TODOS</strong> los insumos,
+                    <strong>ELIMINAR</strong> sus movimientos de stock y <strong>BORRAR</strong> todo el listado de producción.
+                    <br /><br />
+                    <strong>Los insumos NO se eliminarán</strong> — solo se limpia su inventario.
+                  </p>
+                ) : (
+                  <p className="text-sm text-red-800 mt-1">
+                    Estás a punto de eliminar <strong>TODOS</strong> los {bulkDeleteType ? bulkDeleteLabels[bulkDeleteType]?.name.toLowerCase() : ''}.
+                    Esta acción no se puede deshacer.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Confirmación */}
+          {!isBulkDeleting ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Para confirmar, escribe <strong className="text-red-600">ELIMINAR</strong> en el campo:
+              </label>
+              <Input
+                type="text"
+                value={bulkDeleteConfirmText}
+                onChange={(e) => setBulkDeleteConfirmText(e.target.value.toUpperCase())}
+                placeholder="Escribe ELIMINAR"
+                className="text-center font-mono text-lg"
+              />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span>Progreso:</span>
+                <span className="font-medium">{bulkDeleteProgress.deleted} / {bulkDeleteProgress.total}</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-3">
+                <div
+                  className="bg-red-600 h-3 rounded-full transition-all duration-300"
+                  style={{ width: `${bulkDeleteProgress.percentage}%` }}
+                />
+              </div>
+              <p className="text-sm text-gray-500 text-center">
+                Eliminando... Por favor no cierres esta ventana.
+              </p>
+            </div>
+          )}
+
+          {/* Botones */}
+          <div className="flex gap-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowBulkDeleteModal(false)}
+              disabled={isBulkDeleting}
+              className="flex-1"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={executeBulkDelete}
+              disabled={bulkDeleteConfirmText !== 'ELIMINAR' || isBulkDeleting}
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+            >
+              {isBulkDeleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Eliminando...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Eliminar Todo
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal: Crear/Editar Plantilla de Términos */}
+
+      <Modal
+        isOpen={showTermsTemplateModal}
+        onClose={() => setShowTermsTemplateModal(false)}
+        title={editingTemplate ? 'Editar Plantilla' : 'Nueva Plantilla de Términos'}
+        maxWidth="lg"
+      >
+        <div className="space-y-4">
+          <Input
+            label="Nombre de la plantilla"
+            value={templateName}
+            onChange={(e) => setTemplateName(e.target.value)}
+            placeholder="Ej: Servicio de Transporte"
+          />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Términos y Condiciones
+            </label>
+            <textarea
+              value={templateContent}
+              onChange={(e) => setTemplateContent(e.target.value)}
+              rows="10"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder="Escribe aquí los términos y condiciones para este tipo de servicio..."
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowTermsTemplateModal(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                if (!templateName.trim() || !templateContent.trim()) {
+                  toast.error('El nombre y contenido son obligatorios')
+                  return
+                }
+
+                if (editingTemplate) {
+                  // Editar plantilla existente
+                  setTermsTemplates(termsTemplates.map(t =>
+                    t.id === editingTemplate.id
+                      ? { ...t, name: templateName, content: templateContent }
+                      : t
+                  ))
+                  toast.success('Plantilla actualizada')
+                } else {
+                  // Crear nueva plantilla
+                  const newTemplate = {
+                    id: Date.now().toString(),
+                    name: templateName,
+                    content: templateContent,
+                  }
+                  setTermsTemplates([...termsTemplates, newTemplate])
+                  toast.success('Plantilla creada')
+                }
+
+                setShowTermsTemplateModal(false)
+                setTemplateName('')
+                setTemplateContent('')
+                setEditingTemplate(null)
+              }}
+            >
+              {editingTemplate ? 'Guardar Cambios' : 'Crear Plantilla'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal de Renumeración de Documentos */}
+      <RenumberInvoicesModal
+        isOpen={showRenumberModal}
+        onClose={() => setShowRenumberModal(false)}
+      />
+
+      {/* Vista previa del tema del catálogo (iframe sobre el catálogo real) */}
+      {previewThemeId && CATALOG_THEMES[previewThemeId] && (
+        <CatalogThemePreview
+          theme={CATALOG_THEMES[previewThemeId]}
+          slug={businessSettings?.catalogSlug || ''}
+          enabled={!!businessSettings?.catalogEnabled}
+          isRestaurantMenu={businessMode === 'restaurant'}
+          isCurrent={catalogTheme === previewThemeId}
+          onClose={() => setPreviewThemeId(null)}
+          onApply={() => {
+            setCatalogTheme(previewThemeId)
+            setPreviewThemeId(null)
+            toast.success(`Tema "${CATALOG_THEMES[previewThemeId].name}" aplicado. No olvides guardar.`)
+          }}
+        />
+      )}
+
+      {/* Nueva fuente de pedido propia. Mismo formato que el de metodos de
+          pago: se crea una cada varios meses, no justifica ocupar espacio
+          permanente en la seccion. */}
+      <Modal
+        isOpen={showNewOrderSourceModal}
+        onClose={() => { setShowNewOrderSourceModal(false); setNewOrderSourceName('') }}
+        title="Nueva fuente de pedido"
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Si recibes pedidos por un canal que no está en la lista —Instagram, TikTok, un
+            convenio con una empresa— agrégalo acá. Aparecerá al crear una orden y separará
+            esas ventas en los reportes.
+          </p>
+
+          <Input
+            label="Nombre de la fuente"
+            value={newOrderSourceName}
+            onChange={e => setNewOrderSourceName(e.target.value)}
+            placeholder="Instagram"
+            maxLength={30}
+          />
+
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => { setShowNewOrderSourceModal(false); setNewOrderSourceName('') }}
+              className="w-full sm:w-auto"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                const nombre = newOrderSourceName.trim()
+                if (!nombre) {
+                  toast.error('Escribe el nombre de la fuente')
+                  return
+                }
+                const yaExiste = [
+                  ...BUILTIN_ORDER_SOURCES.map(s => s.label),
+                  ...customOrderSources.map(s => s.name),
+                ].some(n => n.toLowerCase() === nombre.toLowerCase())
+                if (yaExiste) {
+                  toast.error('Ya existe una fuente con ese nombre')
+                  return
+                }
+                setCustomOrderSources(prev => [
+                  ...prev,
+                  { id: `os_${Date.now()}`, name: nombre },
+                ])
+                setShowNewOrderSourceModal(false)
+                setNewOrderSourceName('')
+              }}
+              className="w-full sm:w-auto"
+            >
+              Agregar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Nuevo método de pago propio. Antes era un formulario siempre abierto
+          dentro de la seccion; se crea un metodo cada varios meses, asi que no
+          justificaba ocupar ese espacio de forma permanente. */}
+      <Modal
+        isOpen={showNewPaymentModal}
+        onClose={() => { setShowNewPaymentModal(false); setNewPaymentName(''); setNewPaymentBehavior('transfer') }}
+        title="Nuevo método de pago"
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Si cobras de una forma que no está en la lista —un vale, un convenio— agrégala acá.
+            Aparece con su propio nombre en el punto de venta, el control de caja, los reportes
+            y el detalle de cada venta.
+          </p>
+
+          <Input
+            label="Nombre del método"
+            value={newPaymentName}
+            onChange={e => setNewPaymentName(e.target.value)}
+            placeholder="Ej: FISE"
+            maxLength={24}
+            autoFocus
+          />
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              ¿Entra al cajón?
+            </label>
+            <select
+              value={newPaymentBehavior}
+              onChange={e => setNewPaymentBehavior(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              {/* behavesLike quedó SOLO para el arqueo: el desglose ya
+                  es independiente en caja, reportes y ventas. */}
+              <option value="cash">Sí, es efectivo físico (entra al cajón)</option>
+              <option value="transfer">No entra al cajón</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Si es efectivo físico, esa plata entra al cajón y suma al arqueo del cierre.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => { setShowNewPaymentModal(false); setNewPaymentName(''); setNewPaymentBehavior('transfer') }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              disabled={!newPaymentName.trim()}
+              onClick={() => {
+                const nombre = newPaymentName.trim()
+                if (!nombre) return
+                // Nombre repetido = dos métodos indistinguibles en los
+                // reportes y en el cierre de caja, que guardan la etiqueta.
+                const yaExiste = [
+                  ...getBuiltinPaymentMethodsForMode(businessMode).map(m => m.label),
+                  ...customPaymentMethods.map(m => m.name),
+                ].some(l => l.toLowerCase() === nombre.toLowerCase())
+                if (yaExiste) {
+                  toast.error('Ya existe un método de pago con ese nombre')
+                  return
+                }
+                setCustomPaymentMethods(prev => [
+                  ...prev,
+                  { id: `pm${Date.now()}`, name: nombre, behavesLike: newPaymentBehavior },
+                ])
+                setNewPaymentName('')
+                setNewPaymentBehavior('transfer')
+                setShowNewPaymentModal(false)
+                toast.success(`"${nombre}" agregado. No olvides guardar los cambios.`)
+              }}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Agregar
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

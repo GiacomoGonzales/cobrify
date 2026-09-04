@@ -45,6 +45,7 @@ import { Seccion, Ajuste, Campo, Nota, BarraGuardar, Separador } from '@/compone
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Modal from '@/components/ui/Modal'
+import VersionApp from '@/components/VersionApp'
 import { getYapeConfig } from '@/services/yapeService'
 import {
   deleteAllProducts,
@@ -1088,6 +1089,15 @@ export default function Cuenta() {
           </Modal>
         </>
       )}
+
+      {/* Qué versión está corriendo. En el celular son dos: la de la tienda y
+          la web que va dentro. Sirve para soporte. */}
+      <Seccion
+        titulo="Versión"
+        descripcion="Si escribes a soporte, este dato ayuda a saber qué versión estás usando."
+      >
+        <VersionApp />
+      </Seccion>
     </div>
   )
 }

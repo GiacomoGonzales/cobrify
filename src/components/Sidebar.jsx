@@ -84,7 +84,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
 import { esDominioReseller } from '@/utils/resellerDomain'
 import { prefijoDeRuta } from '@/utils/demoRoutes'
-import { versionCorta, versionDetallada } from '@/utils/versionApp'
+import VersionApp from '@/components/VersionApp'
 
 function Sidebar() {
   const { mobileMenuOpen, setMobileMenuOpen, sidebarCollapsed, toggleSidebar, orderAlertCount } = useStore()
@@ -2538,12 +2538,7 @@ function Sidebar() {
         {/* Versión de la copia que está corriendo. Sirve para soporte: si un
             cliente reporta algo raro, lo primero es saber si su navegador se
             quedó con una compilación vieja en caché. */}
-        <div
-          className={`px-4 pt-3 text-[11px] text-gray-400 select-text ${sidebarCollapsed ? 'md:hidden' : ''}`}
-          title={versionDetallada()}
-        >
-          {versionCorta()}
-        </div>
+        <VersionApp compacta className={`px-4 pt-3 ${sidebarCollapsed ? 'md:hidden' : ''}`} />
 
         {/* Espaciador inferior para iOS - permite que el scroll muestre la última opción */}
         <div style={{ height: '34px', flexShrink: 0 }} />

@@ -1,3 +1,5 @@
+import { Capacitor } from '@capacitor/core'
+
 /**
  * La versión de Cobrify que está corriendo ahora mismo en este navegador.
  *
@@ -37,4 +39,40 @@ export function versionDetallada() {
   return [`Cobrify v${VERSION}`, cuando && `Actualizado el ${cuando}`, COMMIT && `Build ${COMMIT}`]
     .filter(Boolean)
     .join('\n')
+}
+
+/**
+ * QUÉ VERSIÓN LE IMPORTA A CADA UNO.
+ *
+ * En la web hay una sola: la compilación que sirve Vercel.
+ *
+ * En Android y iPhone hay DOS, y las dos importan. La de la tienda —la que el
+ * usuario ve en Play Store o App Store, y la que decide si tiene que
+ * actualizar— y la web que va empaquetada dentro, que es la que trae los
+ * cambios de pantallas. Se despliegan por caminos distintos: la web sale con
+ * cada push y la nativa solo cuando se sube una versión nueva a la tienda. Por
+ * eso pueden no coincidir, y por eso soporte necesita las dos.
+ *
+ * Es asíncrona porque en nativo hay que preguntarle al sistema operativo.
+ */
+export async function versionDeEstaApp() {
+  const plataforma = Capacitor.getPlatform() // 'web' | 'android' | 'ios'
+  const web = { etiqueta: `Web ${versionCorta()}`, version: VERSION, commit: COMMIT }
+
+  if (plataforma === 'web') return { plataforma, nombre: 'Navegador', principal: web, web: null }
+
+  const nombre = plataforma === 'ios' ? 'iPhone' : 'Android'
+  try {
+    const { App } = await import('@capacitor/app')
+    const info = await App.getInfo()
+    return {
+      plataforma,
+      nombre,
+      principal: { etiqueta: `${nombre} ${info.version} (${info.build})`, version: info.version, build: info.build },
+      web,
+    }
+  } catch {
+    // Si el sistema no contesta, al menos se dice la web: es peor no mostrar nada.
+    return { plataforma, nombre, principal: web, web: null }
+  }
 }
