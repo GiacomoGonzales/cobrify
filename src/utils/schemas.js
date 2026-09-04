@@ -513,6 +513,10 @@ export const companySettingsSchema = z.object({
   email: z.string().email('Correo electrónico inválido').optional().or(z.literal('')),
   website: z.string().optional(),
   socialMedia: z.string().optional(), // Redes sociales (Facebook, Instagram, etc.)
+  // Tiene que estar en el esquema: `z.object()` en modo strip elimina las
+  // claves que no declara, y sin esta línea `data.mtcRegistration` llegaba
+  // siempre undefined y se guardaba vacío en cada guardado.
+  mtcRegistration: z.string().optional(),
   bankAccounts: z.string().optional(), // Cuentas bancarias (BCP, BBVA, Interbank, etc.)
   logo: z.string().optional(),
 })

@@ -190,7 +190,7 @@ export default {
         },
         {
           type: 'enlace',
-          to: '/app/configuracion?tab=preferencias&opcion=showProductsInCashClosure',
+          to: '/app/configuracion?tab=documentos&opcion=showProductsInCashClosure',
           label: 'Imprimir los productos vendidos en el cierre',
         },
         {

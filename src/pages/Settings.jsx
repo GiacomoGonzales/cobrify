@@ -1562,7 +1562,10 @@ export default function Settings() {
           }))
         }
         if (businessData.posCustomFields) {
-          setPosCustomFields(businessData.posCustomFields)
+          // Fusionando, como restaurantConfig y serviceStationConfig: un
+          // documento con esquema viejo no debe perder en pantalla los
+          // sub-campos que se agregaron después.
+          setPosCustomFields(prev => ({ ...prev, ...businessData.posCustomFields }))
         }
         if (businessData.serviceStationConfig) {
           setServiceStationConfig(prev => ({
@@ -2054,27 +2057,6 @@ export default function Settings() {
         }
       }
 
-      // Si hay una imagen del QR pendiente y el modo es 'image', subirla.
-      // (Mismo patrón que el logo. Se invalida la caché de imágenes para
-      // que la próxima impresión la re-descargue con el dithering nuevo.)
-      let uploadedQrImageUrl = ticketQrImageUrl
-      if (ticketQrImageFile && ticketQrMode === 'image') {
-        setUploadingQrImage(true)
-        try {
-          const qrRef = ref(storage, `businesses/${getBusinessId()}/ticket-qr`)
-          await uploadBytes(qrRef, ticketQrImageFile)
-          uploadedQrImageUrl = await getDownloadURL(qrRef)
-          // Invalida caché de imágenes (logo + QR comparten la misma).
-          invalidateLogoCache()
-          console.log('✅ Imagen del QR subida exitosamente')
-        } catch (qrError) {
-          console.error('Error al subir imagen del QR:', qrError)
-          toast.error('Error al subir la imagen del QR. Se guardará el resto de la configuración.')
-        } finally {
-          setUploadingQrImage(false)
-        }
-      }
-
       // Subir los QR pendientes de las billeteras digitales (Yape/Plin). Mismo patrón que
       // el logo/QR del ticket: el archivo se sube a Storage al guardar y se reemplaza por su URL.
       let walletsToSave = digitalWallets.map(w => ({
@@ -2112,7 +2094,9 @@ export default function Settings() {
         email: data.email,
         website: data.website,
         socialMedia: data.socialMedia || '',
-        bankAccounts: data.bankAccounts || '', // Campo legacy (texto libre)
+        // `bankAccounts` (texto libre, legacy) ya no se escribe: no tiene
+        // campo en ninguna pestaña, así que `data.bankAccounts` llegaba vacío
+        // y cada guardado borraba lo que el negocio tuviera de antes.
         bankAccountsList: bankAccounts, // Cuentas estructuradas
         digitalWalletsList: walletsToSave, // Billeteras digitales (Yape/Plin) con QR
         address: data.address,
@@ -2123,33 +2107,14 @@ export default function Settings() {
         ubigeo: data.ubigeo,
         logoUrl: uploadedLogoUrl || null,
         logoPrintScale: Number(logoPrintScale) || 100,
-        pdfAccentColor: pdfAccentColor,
-        ticketFooterMessage: ticketFooterMessage || '',
-        notaVentaLegend: notaVentaLegend.trim() || '',
-        invoiceFooterTerms: invoiceFooterTerms || '',
-        showTermsOnTicket: showTermsOnTicket === true,
-        purchaseOrderDefaultNotes: purchaseOrderDefaultNotes || "",
-        ticketQrEnabled: ticketQrEnabled === true,
-        ticketQrContent: ticketQrContent || '',
-        ticketQrCaption: ticketQrCaption || '',
         companySlogan: companySlogan || '',
-        showProductCodeInQuotation: showProductCodeInQuotation,
-        showProductCodeInInvoices: showProductCodeInInvoices,
-        showProductDescriptionInQuotation: showProductDescriptionInQuotation,
-        showProductDescriptionInInvoice: showProductDescriptionInInvoice,
-        showImagesInQuotations: showImagesInQuotations,
-        showImagesInInvoices: showImagesInInvoices,
-        quotationImageScale: Number(quotationImageScale) || 100,
-        invoiceImageScale: Number(invoiceImageScale) || 100,
-        pdfSpacious: pdfSpacious,
-        pdfA5: pdfA5,
-        hideBatchAndExpiryInDocuments: hideBatchAndExpiryInDocuments,
-        hideCashExpectedFromCashier: hideCashExpectedFromCashier,
-        showProductsInCashClosure: showProductsInCashClosure,
-        businessMode: businessMode,
-        restaurantConfig: restaurantConfig,
-        posCustomFields: posCustomFields,
-        serviceStationConfig: serviceStationConfig,
+        // SOLO lo que esta pestaña edita. Antes este botón escribía además unos
+        // 25 campos de Documentos, Preferencias y Ventas (color del PDF, QR del
+        // ticket, businessMode, restaurantConfig, posCustomFields...). Con
+        // `merge: true` no borraba nada, pero los reescribía con el valor que
+        // cargó al abrir la página: si otra caja cambió cualquiera de ellos
+        // mientras tanto, guardar el RUC lo revertía. Cada pestaña guarda lo
+        // suyo; ver el comentario del payload de Ventas sobre `loyaltyConfig`.
         mtcRegistration: data.mtcRegistration || '',
         establishments: establishments,
         updatedAt: serverTimestamp(),
@@ -9819,6 +9784,7 @@ export default function Settings() {
                         businessHours,
                         updatedAt: serverTimestamp(),
                       }, { merge: true })
+                      if (refreshBusinessSettings) await refreshBusinessSettings()
                       toast.success(catalogEnabled
                         ? (businessMode === 'restaurant' ? 'Carta digital configurada exitosamente' : 'Catálogo configurado exitosamente')
                         : (businessMode === 'restaurant' ? 'Carta digital deshabilitada' : 'Catálogo deshabilitado'))
@@ -11927,7 +11893,7 @@ export default function Settings() {
               {[
                 { key: 'new_sale', label: 'Nueva Venta', description: 'Recibir notificación cuando se registra una nueva venta.' },
                 { key: 'yape_payment', label: 'Pago Yape', description: 'Recibir notificación cuando se detecta un pago por Yape.' },
-                { key: 'low_stock', label: 'Stock Bajo', description: 'Recibir notificación cuando un producto tiene stock bajo (5 o menos unidades).' },
+                { key: 'low_stock', label: 'Stock Bajo', description: 'Recibir notificación cuando un producto baja hasta su stock mínimo (el que le pusiste al producto; 3 si no le pusiste ninguno).' },
                 { key: 'out_of_stock', label: 'Producto Sin Stock', description: 'Recibir notificación cuando un producto se queda sin stock.' },
                 { key: 'new_order', label: 'Nuevo Pedido', description: 'Recibir notificación cuando se crea un nuevo pedido (restaurante/menú digital).' },
                 { key: 'items_added', label: 'Items Agregados a Pedido', description: 'Recibir notificación cuando se agregan items a un pedido existente.' },
@@ -11967,6 +11933,7 @@ export default function Settings() {
                         notificationPreferences: notificationPreferences,
                         updatedAt: serverTimestamp(),
                       }, { merge: true })
+                      if (refreshBusinessSettings) await refreshBusinessSettings()
                       toast.success('Preferencias de notificaciones guardadas.')
                     } catch (error) {
                       console.error('Error al guardar notificaciones:', error)
