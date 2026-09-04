@@ -3,6 +3,28 @@ import { XMLParser } from 'fast-xml-parser'
 import JSZip from 'jszip'
 
 /**
+ * Busca un nodo por su NOMBRE, ignorando el prefijo que traiga.
+ *
+ * SUNAT responde a veces en SOAP 1.1 y a veces en 1.2, y los prefijos cambian
+ * (`soap:`, `soapenv:`, `soap-env:`, o ninguno). Buscar por sufijo evita tener
+ * que enumerarlos.
+ *
+ * Vive a nivel de modulo porque lo usan las DOS funciones que parsean: estaba
+ * declarado dentro de parseSunatError, y parseSunatResponse lo llamaba sin
+ * tenerlo. Reventaba con ReferenceError justo al leer un SOAP Fault — o sea,
+ * cuando SUNAT SI contestaba pero con un error. El fallo se reportaba como
+ * "error de conexion", se daba por temporal y el documento se reintentaba cada
+ * 30 minutos para siempre. Peor todavia: el codigo 1033 ("ya registrado") se
+ * maneja unas lineas mas abajo, asi que un comprobante que SUNAT ya habia
+ * aceptado nunca llegaba a marcarse como aceptado.
+ */
+const porSufijo = (obj, nombre) => {
+  if (!obj || typeof obj !== 'object') return undefined
+  const clave = Object.keys(obj).find(k => k === nombre || k.endsWith(`:${nombre}`))
+  return clave ? obj[clave] : undefined
+}
+
+/**
  * Cliente para comunicación con SUNAT via SOAP Web Services
  *
  * SUNAT proporciona dos ambientes:
@@ -216,7 +238,15 @@ export async function parseSunatResponse(soapResponse) {
       // Estos dos vienen sin prefijo en SOAP 1.1 y con él en 1.2; se buscan
       // igual por sufijo. Cuando el nodo trae atributos, el parser deja el
       // texto en '#text'.
-      const textoDe = (v) => (v && typeof v === 'object') ? (v['#text'] ?? '') : (v ?? '')
+      // En SOAP 1.1 el codigo es texto plano en <faultcode>. En 1.2 viene
+      // anidado: <Code><Value>. Igual con <faultstring> y <Reason><Text>. Se
+      // baja un nivel cuando hace falta, si no el codigo se perdia y un 0109
+      // —usuario sin perfil, que es permanente— se trataba como pasajero.
+      const textoDe = (v) => {
+        if (v == null) return ''
+        if (typeof v !== 'object') return v
+        return v['#text'] ?? textoDe(porSufijo(v, 'Value') ?? porSufijo(v, 'Text')) ?? ''
+      }
       const faultcode = String(textoDe(porSufijo(fault, 'faultcode') ?? porSufijo(fault, 'Code')) || 'UNKNOWN')
       const faultstring = String(textoDe(porSufijo(fault, 'faultstring') ?? porSufijo(fault, 'Reason')) || 'Error desconocido')
 
@@ -400,12 +430,6 @@ function parseSunatError(soapResponse) {
     // error temporal, reintentando para siempre algo que nunca iba a andar.
     //
     // Se busca por el NOMBRE del nodo, ignorando el prefijo que traiga.
-    const porSufijo = (obj, nombre) => {
-      if (!obj || typeof obj !== 'object') return undefined
-      const clave = Object.keys(obj).find(k => k === nombre || k.endsWith(`:${nombre}`))
-      return clave ? obj[clave] : undefined
-    }
-
     const envelope = porSufijo(parsed, 'Envelope')
     const body = porSufijo(envelope, 'Body')
     const fault = porSufijo(body, 'Fault')
