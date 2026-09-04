@@ -1746,6 +1746,23 @@ export default function Settings() {
     }
   }
 
+  // Vuelve a leer las series del servidor. Se llama al entrar en edición, al
+  // cancelar y al cerrar el renumerador, porque `series` vive en memoria desde
+  // que se abrió la página: si mientras tanto se renumeró un correlativo o se
+  // emitió un comprobante desde otra caja, guardar el objeto entero devolvía
+  // el contador a su valor viejo y el siguiente comprobante salía repetido.
+  // Rechazo de SUNAT por un botón de Configuración.
+  const recargarSeries = async () => {
+    if (!user?.uid || isDemoMode) return
+    try {
+      const snap = await getDoc(doc(db, 'businesses', getBusinessId()))
+      const guardadas = snap.exists() ? snap.data()?.series : null
+      if (guardadas) setSeries(prev => ({ ...prev, ...guardadas }))
+    } catch (error) {
+      console.error('Error al recargar series:', error)
+    }
+  }
+
   // Cargar sucursales cuando se abre el tab de series
   useEffect(() => {
     if (activeTab === 'series' && user?.uid && !isDemoMode) {
@@ -2172,6 +2189,7 @@ export default function Settings() {
         updatedAt: serverTimestamp(),
       }, { merge: true })
 
+      if (refreshBusinessSettings) await refreshBusinessSettings()
       toast.success('Series actualizadas exitosamente')
       setEditingSeries(false)
     } catch (error) {
@@ -9855,7 +9873,7 @@ export default function Settings() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setEditingSeries(true)}
+                        onClick={async () => { await recargarSeries(); setEditingSeries(true) }}
                         className="w-full sm:w-auto"
                       >
                         <Edit className="w-4 h-4 mr-1" />
@@ -9866,7 +9884,7 @@ export default function Settings() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setEditingSeries(false)}
+                          onClick={async () => { setEditingSeries(false); await recargarSeries() }}
                           disabled={isSaving}
                           className="flex-1 sm:flex-none"
                         >
@@ -13936,7 +13954,9 @@ export default function Settings() {
       {/* Modal de Renumeración de Documentos */}
       <RenumberInvoicesModal
         isOpen={showRenumberModal}
-        onClose={() => setShowRenumberModal(false)}
+        // Recarga al cerrar: el modal acaba de mover `lastNumber` en
+        // Firestore y la copia en memoria de esta página quedó vieja.
+        onClose={() => { setShowRenumberModal(false); recargarSeries() }}
       />
 
       {/* Vista previa del tema del catálogo (iframe sobre el catálogo real) */}
