@@ -2,84 +2,928 @@
   "_doc": "Catalogo de rubros. Cada rubro pertenece a un modo (businessMode) y define que paginas se suman a las comunes el primer dia, que opciones cambian respecto a la semilla, y como se adivina el rubro de una cuenta que ya existe: por el nombre del negocio (patronesNombre), por lo que vende (patronesProducto, se cuenta cuantos productos calzan con cada rubro y gana el mas votado) o por el texto de actividad economica de SUNAT (patronesSunat), cuando lo haya. Todo se compara sin tildes, en mayusculas, como palabra completa y sin importar el plural. Agregar un rubro = agregar una fila aqui, no codigo.",
   "rubros": [
     {
-      "id": "ferreteria",
-      "nombre": "Ferretería y construcción",
+      "id": "farmacia",
+      "nombre": "Botica y farmacia",
+      "modo": "pharmacy",
+      "paginas": [
+        "inventory",
+        "warehouses",
+        "batch-control",
+        "expiry-alerts",
+        "laboratories",
+        "purchases",
+        "suppliers"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "FARMACEUTIC",
+        "MEDICINALES",
+        "BOTICA",
+        "FARMACIA"
+      ],
+      "patronesNombre": [
+        "FARMACIA",
+        "BOTICA",
+        "DROGUERIA"
+      ],
+      "patronesProducto": [
+        "PARACETAMOL",
+        "IBUPROFENO",
+        "AMOXICILINA",
+        "NAPROXENO",
+        "OMEPRAZOL",
+        "LORATADINA",
+        "DICLOFENACO",
+        "AMPOLLA",
+        "JARABE",
+        "TABLETA",
+        "CAPSULA",
+        "GASA",
+        "ALGODON",
+        "JERINGA",
+        "VITAMINA",
+        "SUERO",
+        "PANAL",
+        "PRESERVATIVO",
+        "ALCOHOL MEDICINAL",
+        "AZITROMICINA",
+        "METFORMINA",
+        "CETIRIZINA",
+        "BOTIQUIN"
+      ]
+    },
+    {
+      "id": "veterinaria",
+      "nombre": "Veterinaria y pet shop",
+      "modo": "veterinary",
+      "paginas": [
+        "vet-agenda",
+        "vet-alerts",
+        "online-orders",
+        "purchase-history"
+      ],
+      "ajustes": {
+        "appointmentsEnabled": true
+      },
+      "patronesSunat": [
+        "VETERINARIA",
+        "ANIMALES DE COMPAÑIA",
+        "MASCOTAS"
+      ],
+      "patronesNombre": [
+        "VETERINARIA",
+        "VETERINARIO",
+        "PET",
+        "PET SHOP",
+        "MASCOTAS"
+      ],
+      "patronesProducto": [
+        "DESPARASITANTE",
+        "ANTIPULGA",
+        "RASCADOR",
+        "ARENA PARA GATO",
+        "CROQUETA",
+        "RICOCAN",
+        "DOG CHOW",
+        "ALIMENTO PARA PERRO",
+        "ALIMENTO PARA GATO",
+        "BANO Y CORTE",
+        "VACUNA",
+        "MASCOTA",
+        "COLLAR PARA PERRO",
+        "PIPETA"
+      ]
+    },
+    {
+      "id": "salud",
+      "nombre": "Clínica, dental y salud",
+      "modo": "retail",
+      "paginas": [
+        "quotations",
+        "vet-agenda"
+      ],
+      "ajustes": {
+        "appointmentsEnabled": true,
+        "allowCustomProducts": true
+      },
+      "patronesSunat": [
+        "SALUD",
+        "MEDICINA",
+        "SERVICIOS MEDICOS",
+        "ODONTOLOGIA"
+      ],
+      "patronesNombre": [
+        "CLINICA",
+        "DENTAL",
+        "ODONTOLOGIA",
+        "ODONTOLOGICO",
+        "MEDICO",
+        "MEDICA",
+        "POLICLINICO",
+        "CENTRO MEDICO",
+        "LABORATORIO CLINICO",
+        "PSICOLOGIA",
+        "FISIOTERAPIA",
+        "PODOLOGICO",
+        "PODOLOGIA",
+        "OBSTETRICIA",
+        "DIAGNOSTICO",
+        "IMAGENES",
+        "REHABILITACION",
+        "NUTRICION",
+        "OFTALMOLOGIA",
+        "DERMATOLOGIA"
+      ],
+      "patronesProducto": [
+        "CONSULTA",
+        "TRATAMIENTO",
+        "LIMPIEZA DENTAL",
+        "RADIOGRAFIA",
+        "EXTRACCION",
+        "BRACKETS",
+        "TERAPIA",
+        "ECOGRAFIA",
+        "ANALISIS"
+      ]
+    },
+    {
+      "id": "optica",
+      "nombre": "Óptica",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "purchases",
+        "suppliers",
+        "promotions",
+        "quotations"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "OPTICA",
+        "LENTES"
+      ],
+      "patronesNombre": [
+        "OPTICA",
+        "OPTICAS",
+        "VISION",
+        "OPTOMETRIA"
+      ],
+      "patronesProducto": [
+        "LENTE",
+        "MONTURA",
+        "ARMAZON",
+        "LUNA",
+        "GAFAS",
+        "ANTIREFLEJO",
+        "FOTOCROMATICO",
+        "LENTE DE CONTACTO",
+        "ESTUCHE"
+      ]
+    },
+    {
+      "id": "equipos-medicos",
+      "nombre": "Equipos e insumos médicos",
       "modo": "retail",
       "paginas": [
         "inventory",
         "warehouses",
         "stock-movements",
         "purchases",
+        "purchase-orders",
         "suppliers",
-        "quotations",
-        "dispatch-guides"
+        "quotations"
       ],
-      "ajustes": {
-        "dispatchGuidesEnabled": true
-      },
+      "ajustes": {},
       "patronesSunat": [
-        "FERRETER",
-        "MATERIALES DE CONSTRUCCI",
-        "PINTURA",
-        "VIDRIO",
-        "SANITARI",
-        "ELECTRIC"
+        "EQUIPOS MEDICOS",
+        "INSTRUMENTAL MEDICO",
+        "INSUMOS MEDICOS"
       ],
       "patronesNombre": [
-        "FERRETERIA",
-        "FERRETERA",
-        "FERRETERO",
-        "VIDRIERIA",
-        "CERRAJERIA",
-        "MADERERA",
-        "MADERAS",
-        "ACEROS",
-        "PINTURAS",
-        "SANITARIOS",
-        "GASFITERIA",
-        "AGREGADOS",
-        "MATERIALES DE CONSTRUCCION",
-        "DEPOSITO DE MATERIALES",
-        "EXTINTOR",
-        "LED",
-        "ILUMINACION",
-        "LUMINARIA"
+        "MEDICAL",
+        "EQUIPOS MEDICOS",
+        "INSUMOS MEDICOS",
+        "INSTRUMENTAL",
+        "BIOMEDICA",
+        "ORTOPEDIA",
+        "HOSPITALARIA"
       ],
       "patronesProducto": [
-        "CEMENTO",
-        "FIERRO",
-        "VARILLA",
-        "CLAVO",
-        "TORNILLO",
-        "TUBO",
-        "PVC",
-        "PINTURA",
-        "BROCHA",
-        "LIJA",
-        "SILICONA",
-        "CERAMICO",
-        "LADRILLO",
-        "YESO",
-        "TRIPLAY",
-        "CANDADO",
-        "BISAGRA",
-        "ALAMBRE",
-        "SOLDADURA",
-        "TALADRO",
-        "MARTILLO",
-        "INTERRUPTOR",
-        "TOMACORRIENTE",
-        "MANGUERA",
-        "CALAMINA",
-        "ESMALTE",
-        "THINNER",
-        "PEGAMENTO",
-        "CODO",
-        "NIPLE",
-        "VALVULA",
-        "CERROJO",
-        "ESCUADRA",
-        "DISCO DE CORTE"
+        "GUANTE QUIRURGICO",
+        "MASCARILLA",
+        "JERINGA",
+        "TENSIOMETRO",
+        "NEBULIZADOR",
+        "OXIMETRO",
+        "SILLA DE RUEDAS",
+        "CAMILLA",
+        "ESTETOSCOPIO",
+        "GASA"
+      ]
+    },
+    {
+      "id": "contable",
+      "nombre": "Estudio contable, legal y notarial",
+      "modo": "retail",
+      "paginas": [
+        "quotations"
+      ],
+      "ajustes": {
+        "allowCustomProducts": true
+      },
+      "patronesSunat": [
+        "CONTABILIDAD",
+        "JURIDICOS",
+        "NOTARIAL",
+        "AUDITORIA"
+      ],
+      "patronesNombre": [
+        "ESTUDIO CONTABLE",
+        "CONTABLE",
+        "CONTADORES",
+        "CONTABILIDAD",
+        "ABOGADOS",
+        "ESTUDIO JURIDICO",
+        "JURIDICO",
+        "NOTARIA",
+        "NOTARIAL",
+        "AUDITORES",
+        "AUDITORIA",
+        "TRIBUTARIA",
+        "LEGAL"
+      ],
+      "patronesProducto": [
+        "ASESORIA CONTABLE",
+        "DECLARACION",
+        "CONSTITUCION DE EMPRESA",
+        "TRAMITE",
+        "HONORARIO",
+        "PLANILLA",
+        "BALANCE"
+      ]
+    },
+    {
+      "id": "digital",
+      "nombre": "Servicios digitales, software y marketing",
+      "modo": "retail",
+      "paginas": [
+        "quotations"
+      ],
+      "ajustes": {
+        "allowCustomProducts": true
+      },
+      "patronesSunat": [
+        "PROGRAMACION",
+        "CONSULTORIA INFORMATICA",
+        "SERVICIOS DIGITALES"
+      ],
+      "patronesNombre": [
+        "SOFTWARE",
+        "CODE",
+        "CODING",
+        "DIGITAL",
+        "MARKETING",
+        "AGENCIA DIGITAL",
+        "DEV",
+        "DEVELOPERS",
+        "WEB",
+        "APPS",
+        "CLOUD",
+        "STUDIO DIGITAL",
+        "COMMUNITY",
+        "SEO"
+      ],
+      "patronesProducto": [
+        "PAGINA WEB",
+        "LANDING",
+        "HOSTING",
+        "DOMINIO",
+        "PUBLICIDAD DIGITAL",
+        "COMMUNITY MANAGER",
+        "DISEÑO WEB",
+        "APLICATIVO",
+        "SOPORTE TECNICO",
+        "LICENCIA",
+        "SUSCRIPCION"
+      ]
+    },
+    {
+      "id": "imprenta",
+      "nombre": "Imprenta, publicidad y gigantografía",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "purchases",
+        "suppliers",
+        "promotions",
+        "quotations"
+      ],
+      "ajustes": {
+        "allowCustomProducts": true
+      },
+      "patronesSunat": [
+        "IMPRESION",
+        "PUBLICIDAD",
+        "SERIGRAFIA",
+        "ARTES GRAFICAS"
+      ],
+      "patronesNombre": [
+        "IMPRENTA",
+        "GRAFICA",
+        "GRAFICAS",
+        "SERIGRAFIA",
+        "IMPRESIONES",
+        "PUBLICIDAD",
+        "GIGANTOGRAFIA",
+        "ROTULOS",
+        "LETREROS",
+        "EDITORA",
+        "EDITORIAL",
+        "COPIERS",
+        "COPIAS",
+        "SUBLIMACION",
+        "ESTAMPADO",
+        "PLOTTER"
+      ],
+      "patronesProducto": [
+        "GIGANTOGRAFIA",
+        "BANNER",
+        "VINIL",
+        "STICKER",
+        "TARJETA DE PRESENTACION",
+        "VOLANTE",
+        "AFICHE",
+        "LONA",
+        "IMPRESION",
+        "SERIGRAFIA",
+        "SELLO",
+        "GORRO PERSONALIZADO",
+        "POLO ESTAMPADO",
+        "LETRERO"
+      ]
+    },
+    {
+      "id": "libreria",
+      "nombre": "Librería y útiles escolares",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "promotions",
+        "purchases",
+        "quotations"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "LIBROS",
+        "PAPELERIA",
+        "UTILES DE OFICINA"
+      ],
+      "patronesNombre": [
+        "LIBRERIA",
+        "UTILES ESCOLARES"
+      ],
+      "patronesProducto": [
+        "CUADERNO",
+        "LAPICERO",
+        "LAPIZ",
+        "BORRADOR",
+        "PAPEL BOND",
+        "FOLDER",
+        "ARCHIVADOR",
+        "PLUMON",
+        "CARTULINA",
+        "ANILLADO",
+        "EMPASTADO",
+        "TINTA",
+        "RESALTADOR",
+        "CORRECTOR",
+        "TIJERA",
+        "GOMA",
+        "REGLA",
+        "MOTA"
+      ]
+    },
+    {
+      "id": "seguridad",
+      "nombre": "Seguridad industrial y extintores",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "purchases",
+        "suppliers",
+        "promotions",
+        "quotations"
+      ],
+      "ajustes": {
+        "allowCustomProducts": true
+      },
+      "patronesSunat": [
+        "EXTINTORES",
+        "SEGURIDAD INDUSTRIAL",
+        "PROTECCION"
+      ],
+      "patronesNombre": [
+        "EXTINTOR",
+        "EXTINTORES",
+        "SEGURIDAD INDUSTRIAL",
+        "SECURITY",
+        "SEGURIDAD",
+        "CONTRA INCENDIOS",
+        "SEÑALETICA",
+        "EPP",
+        "PROTECCION PERSONAL"
+      ],
+      "patronesProducto": [
+        "EXTINTOR",
+        "RECARGA DE EXTINTOR",
+        "PQS",
+        "MANGUERA CONTRA INCENDIO",
+        "DETECTOR DE HUMO",
+        "CASCO",
+        "ARNES",
+        "BOTIN DE SEGURIDAD",
+        "CHALECO",
+        "GUANTE INDUSTRIAL",
+        "SEÑALETICA",
+        "MASCARA"
+      ]
+    },
+    {
+      "id": "motos",
+      "nombre": "Motos, repuestos y accesorios",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "purchases",
+        "suppliers",
+        "quotations"
+      ],
+      "ajustes": {
+        "allowCustomProducts": true
+      },
+      "patronesSunat": [
+        "MOTOCICLETAS",
+        "REPUESTOS DE MOTOS"
+      ],
+      "patronesNombre": [
+        "MOTO",
+        "MOTOS",
+        "MOTOR SHOW",
+        "MOTORS",
+        "BIKER",
+        "BIKE",
+        "MOTOTAXI",
+        "MOTOREPUESTOS",
+        "RIDERS",
+        "MOTOCICLETA"
+      ],
+      "patronesProducto": [
+        "CASCO",
+        "LLANTA DE MOTO",
+        "CADENA",
+        "PIÑON",
+        "CATALINA",
+        "ESPEJO",
+        "MANUBRIO",
+        "PISTON",
+        "CARBURADOR",
+        "FAROL",
+        "ACEITE DE MOTO",
+        "BUJIA"
+      ]
+    },
+    {
+      "id": "llantas",
+      "nombre": "Llantas, baterías y lubricantes",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "purchases",
+        "suppliers",
+        "quotations"
+      ],
+      "ajustes": {
+        "allowCustomProducts": true
+      },
+      "patronesSunat": [
+        "LLANTAS",
+        "LUBRICANTES",
+        "BATERIAS"
+      ],
+      "patronesNombre": [
+        "LLANTA",
+        "LLANTAS",
+        "NEUMATICOS",
+        "LUBRICANTES",
+        "BATERIA",
+        "BATERIAS",
+        "BATPATRI",
+        "TODOTIRO",
+        "TIRE",
+        "VULCANIZADORA"
+      ],
+      "patronesProducto": [
+        "LLANTA",
+        "NEUMATICO",
+        "BATERIA",
+        "ACEITE DE MOTOR",
+        "FILTRO DE ACEITE",
+        "REFRIGERANTE",
+        "GRASA",
+        "ARO",
+        "VULCANIZADO",
+        "ALINEAMIENTO",
+        "BALANCEO"
+      ]
+    },
+    {
+      "id": "taller",
+      "nombre": "Taller mecánico y repuestos",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "purchases",
+        "suppliers",
+        "quotations"
+      ],
+      "ajustes": {
+        "allowCustomProducts": true
+      },
+      "patronesSunat": [
+        "REPARACION DE VEHICULOS",
+        "MANTENIMIENTO DE VEHICULOS",
+        "PARTES, PIEZAS",
+        "REPUESTOS"
+      ],
+      "patronesNombre": [
+        "TALLER",
+        "MECANICA",
+        "AUTOMOTRIZ",
+        "REPUESTOS",
+        "AUTOPARTES",
+        "PLANCHADO Y PINTURA",
+        "AUTOSERVICE",
+        "CAR",
+        "AUTO"
+      ],
+      "patronesProducto": [
+        "FILTRO",
+        "BUJIA",
+        "PASTILLA DE FRENO",
+        "AMORTIGUADOR",
+        "LLANTA",
+        "EMBRAGUE",
+        "RADIADOR",
+        "ALINEAMIENTO",
+        "BALANCEO",
+        "CAMBIO DE ACEITE",
+        "REFRIGERANTE",
+        "RETEN",
+        "RODAJE",
+        "FAJA",
+        "ACEITE DE MOTOR",
+        "PLUMILLA",
+        "FOCO HALOGENO",
+        "ZAPATA"
+      ]
+    },
+    {
+      "id": "maquinaria",
+      "nombre": "Maquinaria y equipos",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "warehouses",
+        "stock-movements",
+        "purchases",
+        "purchase-orders",
+        "suppliers",
+        "quotations"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "MAQUINARIA",
+        "EQUIPOS INDUSTRIALES",
+        "ALQUILER DE MAQUINARIA"
+      ],
+      "patronesNombre": [
+        "MAQUINARIA",
+        "MAQUINARIAS",
+        "MAQUINAS",
+        "MOTORES",
+        "GENERADORES",
+        "COMPRESORES"
+      ],
+      "patronesProducto": [
+        "MOTOSIERRA",
+        "COMPRESORA",
+        "GENERADOR",
+        "SOLDADORA",
+        "BOMBA DE AGUA",
+        "MOTOBOMBA",
+        "TALADRO INDUSTRIAL",
+        "MONTACARGA",
+        "REPUESTO INDUSTRIAL",
+        "MANTENIMIENTO DE EQUIPO"
+      ]
+    },
+    {
+      "id": "agro",
+      "nombre": "Agroinsumos y agroveterinaria",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "purchases",
+        "suppliers",
+        "promotions",
+        "quotations"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "AGRICOLA",
+        "AGROQUIMICOS",
+        "FERTILIZANTES",
+        "AGROPECUARIO"
+      ],
+      "patronesNombre": [
+        "AGRO",
+        "AGRICOLA",
+        "AGROPECUARIA",
+        "AGROVETERINARIA",
+        "AGROQUIMICOS",
+        "AGRODISTRIBUCIONES",
+        "SEMILLAS",
+        "FERTILIZANTES",
+        "GENETICA"
+      ],
+      "patronesProducto": [
+        "FERTILIZANTE",
+        "UREA",
+        "SEMILLA",
+        "INSECTICIDA",
+        "FUNGICIDA",
+        "HERBICIDA",
+        "ABONO",
+        "GUANO",
+        "MANGUERA DE RIEGO",
+        "FOLIAR",
+        "NITRATO"
+      ]
+    },
+    {
+      "id": "avicola",
+      "nombre": "Avícola, granja y ganadería",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "ingredients",
+        "recipes",
+        "purchases",
+        "suppliers",
+        "promotions"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "AVICOLA",
+        "GANADERIA",
+        "CRIANZA"
+      ],
+      "patronesNombre": [
+        "AVICOLA",
+        "GRANJA",
+        "GANADERA",
+        "GANADERIA",
+        "PECUARIA",
+        "POLLOS BB",
+        "INCUBADORA",
+        "PORCINO",
+        "ESTABLO"
+      ],
+      "patronesProducto": [
+        "POLLO VIVO",
+        "GALLINA",
+        "HUEVO",
+        "ALIMENTO BALANCEADO",
+        "MAIZ",
+        "AFRECHO",
+        "POLLO BB",
+        "PONEDORA",
+        "CERDO",
+        "GANADO"
+      ]
+    },
+    {
+      "id": "alimentos",
+      "nombre": "Producción y venta de alimentos",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "ingredients",
+        "recipes",
+        "purchases",
+        "suppliers",
+        "promotions"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "ELABORACION DE ALIMENTOS",
+        "PRODUCTOS ALIMENTICIOS",
+        "AGROINDUSTRIA"
+      ],
+      "patronesNombre": [
+        "ALIMENTOS",
+        "AGROINDUSTRIA",
+        "AGROINDUSTRIAL",
+        "SUPERFOOD",
+        "FOODS",
+        "CONSERVAS",
+        "FRUITS",
+        "PROCESADORA",
+        "ACEITUNAS",
+        "SNACKS",
+        "NATURAL"
+      ],
+      "patronesProducto": [
+        "CONSERVA",
+        "MERMELADA",
+        "HARINA",
+        "ACEITUNA",
+        "QUINUA",
+        "CACAO",
+        "CAFE EN GRANO",
+        "MIEL",
+        "PULPA",
+        "DESHIDRATADO",
+        "ENVASADO"
+      ]
+    },
+    {
+      "id": "panaderia",
+      "nombre": "Panadería, pastelería y dulces",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "ingredients",
+        "recipes",
+        "purchases",
+        "suppliers",
+        "promotions"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "PANADERIA",
+        "PASTELERIA",
+        "ELABORACION DE PAN"
+      ],
+      "patronesNombre": [
+        "PANADERIA",
+        "PANIFICADORA",
+        "PASTELERIA",
+        "REPOSTERIA",
+        "DULCERIA",
+        "BAKERY",
+        "TORTAS",
+        "BIZCOCHERIA"
+      ],
+      "patronesProducto": [
+        "PAN",
+        "TORTA",
+        "PASTEL",
+        "QUEQUE",
+        "EMPANADA",
+        "ALFAJOR",
+        "GALLETA",
+        "BIZCOCHO",
+        "PIONONO",
+        "MASA",
+        "LEVADURA",
+        "HARINA"
+      ]
+    },
+    {
+      "id": "carniceria",
+      "nombre": "Carnicería, avícola y pescadería",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "purchases",
+        "suppliers",
+        "promotions",
+        "quotations"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "CARNES",
+        "PESCADOS",
+        "EXPENDIO DE CARNE"
+      ],
+      "patronesNombre": [
+        "CARNICERIA",
+        "CARNES",
+        "FRIGORIFICO",
+        "PESCADERIA",
+        "MARISCOS",
+        "POLLOS",
+        "EMBUTIDOS",
+        "CECINA"
+      ],
+      "patronesProducto": [
+        "CARNE",
+        "POLLO",
+        "RES",
+        "CERDO",
+        "CHULETA",
+        "BISTEC",
+        "MOLIDA",
+        "PESCADO",
+        "FILETE",
+        "LANGOSTINO",
+        "HOT DOG",
+        "JAMONADA",
+        "CHORIZO"
+      ]
+    },
+    {
+      "id": "fruteria",
+      "nombre": "Frutas, verduras y mercado",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "purchases",
+        "suppliers",
+        "promotions",
+        "quotations"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "FRUTAS",
+        "VERDURAS",
+        "HORTALIZAS"
+      ],
+      "patronesNombre": [
+        "FRUTERIA",
+        "FRUTAS",
+        "VERDULERIA",
+        "VERDURAS",
+        "HORTALIZAS",
+        "MERCADO",
+        "CHACRA"
+      ],
+      "patronesProducto": [
+        "PLATANO",
+        "MANZANA",
+        "PAPA",
+        "TOMATE",
+        "CEBOLLA",
+        "ZANAHORIA",
+        "LIMON",
+        "PALTA",
+        "NARANJA",
+        "LECHUGA",
+        "UVA",
+        "PAPAYA"
+      ]
+    },
+    {
+      "id": "licoreria",
+      "nombre": "Licorería y bebidas",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "purchases",
+        "suppliers",
+        "promotions",
+        "quotations"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "BEBIDAS",
+        "LICORES",
+        "EXPENDIO DE BEBIDAS"
+      ],
+      "patronesNombre": [
+        "LICORERIA",
+        "LICORES",
+        "LICOR",
+        "VINOS",
+        "DESTILERIA",
+        "BEBIDAS",
+        "DRINKS",
+        "BOTILLERIA"
+      ],
+      "patronesProducto": [
+        "CERVEZA",
+        "PISCO",
+        "RON",
+        "VINO",
+        "WHISKY",
+        "VODKA",
+        "GASEOSA",
+        "AGUA MINERAL",
+        "ENERGIZANTE",
+        "SIX PACK",
+        "CAJA DE CERVEZA",
+        "ESPUMANTE"
       ]
     },
     {
@@ -110,9 +954,7 @@
         "MARKET",
         "SUPERMERCADO",
         "AUTOSERVICIO",
-        "LICORERIA",
         "ORGANICO",
-        "DULCE",
         "PRODUCTOS NATURALES"
       ],
       "patronesProducto": [
@@ -145,503 +987,6 @@
         "ENCENDEDOR",
         "GOLOSINA"
       ]
-    },
-    {
-      "id": "ropa",
-      "nombre": "Ropa, calzado y accesorios",
-      "modo": "retail",
-      "paginas": [
-        "inventory",
-        "promotions",
-        "online-orders",
-        "quotations"
-      ],
-      "ajustes": {},
-      "patronesSunat": [
-        "PRENDAS DE VESTIR",
-        "CALZADO",
-        "ARTICULOS DE CUERO",
-        "TEXTIL"
-      ],
-      "patronesNombre": [
-        "BOUTIQUE",
-        "MODA",
-        "CONFECCIONES",
-        "TEXTIL",
-        "CALZADO",
-        "ZAPATERIA",
-        "ROPA",
-        "JEANS",
-        "UNIFORMES",
-        "LENCERIA",
-        "TIENDA DE ROPA",
-        "KIDS",
-        "BABY"
-      ],
-      "patronesProducto": [
-        "POLO",
-        "PANTALON",
-        "CAMISA",
-        "BLUSA",
-        "VESTIDO",
-        "CASACA",
-        "ZAPATO",
-        "ZAPATILLA",
-        "SANDALIA",
-        "MEDIA",
-        "JEAN",
-        "SHORT",
-        "FALDA",
-        "CHOMPA",
-        "GORRA",
-        "CARTERA",
-        "BUZO",
-        "BIVIRI",
-        "LEGGING",
-        "PIJAMA",
-        "CALCETIN",
-        "ROPA INTERIOR",
-        "BRASIER",
-        "TRUSA"
-      ]
-    },
-    {
-      "id": "muebles",
-      "nombre": "Muebles y hogar",
-      "modo": "retail",
-      "paginas": [
-        "inventory",
-        "warehouses",
-        "stock-movements",
-        "purchases",
-        "suppliers",
-        "quotations",
-        "dispatch-guides"
-      ],
-      "ajustes": {
-        "dispatchGuidesEnabled": true
-      },
-      "patronesSunat": [
-        "MUEBLE",
-        "COLCHON",
-        "CARPINTERIA",
-        "ARTICULOS PARA EL HOGAR"
-      ],
-      "patronesNombre": [
-        "MUEBLE",
-        "MUEBLERIA",
-        "COLCHON",
-        "DECORACION",
-        "HOGAR",
-        "TAPICERIA",
-        "CARPINTERIA",
-        "MELAMINA",
-        "SOFA",
-        "DORMITORIO"
-      ],
-      "patronesProducto": [
-        "SOFA",
-        "COLCHON",
-        "CAMA",
-        "ROPERO",
-        "COMODA",
-        "VELADOR",
-        "SILLA",
-        "ESCRITORIO",
-        "ESTANTE",
-        "REPISA",
-        "CAJONERA",
-        "SILLON",
-        "MUEBLE",
-        "CORTINA",
-        "ALFOMBRA",
-        "MELAMINA",
-        "CABECERA",
-        "JUEGO DE COMEDOR",
-        "MESA DE CENTRO"
-      ]
-    },
-    {
-      "id": "tecnologia",
-      "nombre": "Tecnología, celulares y cómputo",
-      "modo": "retail",
-      "paginas": [
-        "inventory",
-        "warehouses",
-        "quotations",
-        "purchases",
-        "suppliers",
-        "certificates"
-      ],
-      "ajustes": {},
-      "patronesSunat": [
-        "TELECOMUNICACION",
-        "COMPUTADORA",
-        "PERIFERICO",
-        "ELECTRODOMESTICO",
-        "EQUIPO DE AUDIO",
-        "VIDEO"
-      ],
-      "patronesNombre": [
-        "CELULAR",
-        "COMPUTO",
-        "COMPUTADORAS",
-        "TECNOLOGIA",
-        "TECNOLOGICA",
-        "ELECTRONICA",
-        "INFORMATICA",
-        "SISTEMAS",
-        "ELECTRODOMESTICOS",
-        "SOFTWARE",
-        "GAMER",
-        "TECH",
-        "REPAIR"
-      ],
-      "patronesProducto": [
-        "CELULAR",
-        "LAPTOP",
-        "MOUSE",
-        "TECLADO",
-        "MONITOR",
-        "IMPRESORA",
-        "CARGADOR",
-        "AUDIFONO",
-        "USB",
-        "MEMORIA",
-        "PARLANTE",
-        "TABLET",
-        "MICA",
-        "PROTECTOR DE PANTALLA",
-        "ROUTER",
-        "TELEVISOR",
-        "HDMI",
-        "COOLER",
-        "DISCO DURO",
-        "LICUADORA",
-        "MICROONDAS",
-        "VENTILADOR"
-      ]
-    },
-    {
-      "id": "belleza",
-      "nombre": "Salón de belleza, barbería y spa",
-      "modo": "retail",
-      "paginas": [
-        "vet-agenda",
-        "promotions",
-        "sellers"
-      ],
-      "ajustes": {
-        "appointmentsEnabled": true,
-        "allowCustomProducts": true
-      },
-      "patronesSunat": [
-        "PELUQUERIA",
-        "TRATAMIENTOS DE BELLEZA",
-        "BARBERIA",
-        "SPA"
-      ],
-      "patronesNombre": [
-        "SALON",
-        "BELLEZA",
-        "BARBERIA",
-        "PELUQUERIA",
-        "SPA",
-        "ESTETICA",
-        "NAILS",
-        "COSMETICOS",
-        "BEAUTY"
-      ],
-      "patronesProducto": [
-        "TINTE",
-        "CORTE DE CABELLO",
-        "MANICURE",
-        "PEDICURE",
-        "KERATINA",
-        "DEPILACION",
-        "PEINADO",
-        "MAQUILLAJE",
-        "LABIAL",
-        "PESTANA",
-        "ALISADO",
-        "BOTOX CAPILAR",
-        "MECHA",
-        "SECADO",
-        "LIMPIEZA FACIAL",
-        "MASAJE"
-      ]
-    },
-    {
-      "id": "servicios",
-      "nombre": "Consultorio y servicios profesionales",
-      "modo": "retail",
-      "paginas": [
-        "quotations",
-        "vet-agenda"
-      ],
-      "ajustes": {
-        "appointmentsEnabled": true,
-        "allowCustomProducts": true
-      },
-      "patronesSunat": [
-        "ODONTOLOG",
-        "CONSULTORIA",
-        "ACTIVIDADES JURIDICAS",
-        "CONTABILIDAD",
-        "MEDICOS",
-        "ARQUITECTURA",
-        "INGENIERIA",
-        "PUBLICIDAD",
-        "FOTOGRAF"
-      ],
-      "patronesNombre": [
-        "CONSULTORIO",
-        "ODONTOLOGIA",
-        "DENTAL",
-        "CLINICA",
-        "MEDICO",
-        "MEDICA",
-        "ESTUDIO CONTABLE",
-        "CONTABLE",
-        "CONTADORES",
-        "ASESORIA",
-        "ASESORES",
-        "CONSULTORES",
-        "CONSULTORIA",
-        "ABOGADOS",
-        "LABORATORIO",
-        "PSICOLOGIA",
-        "SERVICIOS PROFESIONALES",
-        "OPTICA",
-        "NOTARIA",
-        "POLICLINICO",
-        "CENTRO MEDICO",
-        "ODONTOLOGICO",
-        "ESTUDIO JURIDICO"
-      ],
-      "patronesProducto": [
-        "CONSULTA",
-        "TERAPIA",
-        "LIMPIEZA DENTAL",
-        "EXTRACCION",
-        "RADIOGRAFIA",
-        "HONORARIO",
-        "SESION",
-        "TRATAMIENTO",
-        "EXAMEN",
-        "CURACION",
-        "PROFILAXIS",
-        "BRACKET",
-        "LENTE",
-        "MONTURA"
-      ]
-    },
-    {
-      "id": "taller",
-      "nombre": "Taller mecánico y repuestos",
-      "modo": "retail",
-      "paginas": [
-        "inventory",
-        "purchases",
-        "suppliers",
-        "quotations"
-      ],
-      "ajustes": {
-        "allowCustomProducts": true
-      },
-      "patronesSunat": [
-        "REPARACION DE VEHICULOS",
-        "MANTENIMIENTO DE VEHICULOS",
-        "PARTES, PIEZAS",
-        "REPUESTOS",
-        "MOTOCICLETAS"
-      ],
-      "patronesNombre": [
-        "TALLER",
-        "MECANICA",
-        "AUTOMOTRIZ",
-        "REPUESTOS",
-        "AUTOPARTES",
-        "LLANTAS",
-        "LUBRICANTES",
-        "MOTOS",
-        "PLANCHADO Y PINTURA",
-        "AUTOSERVICE",
-        "CAR",
-        "AUTO"
-      ],
-      "patronesProducto": [
-        "FILTRO",
-        "BUJIA",
-        "PASTILLA DE FRENO",
-        "AMORTIGUADOR",
-        "LLANTA",
-        "EMBRAGUE",
-        "RADIADOR",
-        "ALINEAMIENTO",
-        "BALANCEO",
-        "CAMBIO DE ACEITE",
-        "REFRIGERANTE",
-        "RETEN",
-        "RODAJE",
-        "FAJA",
-        "ACEITE DE MOTOR",
-        "PLUMILLA",
-        "FOCO HALOGENO",
-        "ZAPATA"
-      ]
-    },
-    {
-      "id": "grifo",
-      "nombre": "Grifo y estación de servicio",
-      "modo": "retail",
-      "paginas": [
-        "inventory",
-        "warehouses",
-        "stock-movements",
-        "purchases",
-        "suppliers",
-        "dispatch-guides"
-      ],
-      "ajustes": {
-        "dispatchGuidesEnabled": true
-      },
-      "patronesSunat": [
-        "COMBUSTIBLE",
-        "GASOLINA",
-        "ESTACION DE SERVICIO",
-        "GRIFO"
-      ],
-      "patronesNombre": [
-        "GRIFO",
-        "ESTACION DE SERVICIO",
-        "SERVICENTRO",
-        "GASOCENTRO",
-        "COMBUSTIBLES",
-        "PETROLEOS"
-      ],
-      "patronesProducto": [
-        "GASOLINA",
-        "DIESEL",
-        "GASOHOL",
-        "PETROLEO",
-        "GLP",
-        "GNV",
-        "KEROSENE",
-        "COMBUSTIBLE"
-      ]
-    },
-    {
-      "id": "libreria",
-      "nombre": "Librería, útiles e imprenta",
-      "modo": "retail",
-      "paginas": [
-        "inventory",
-        "promotions",
-        "purchases",
-        "quotations"
-      ],
-      "ajustes": {},
-      "patronesSunat": [
-        "LIBROS",
-        "PAPELERIA",
-        "IMPRESION",
-        "UTILES DE OFICINA"
-      ],
-      "patronesNombre": [
-        "LIBRERIA",
-        "IMPRENTA",
-        "GRAFICA",
-        "EDITORA",
-        "EDITORIAL",
-        "SERIGRAFIA",
-        "IMPRESIONES",
-        "UTILES ESCOLARES",
-        "COPIAS",
-        "PUBLICIDAD"
-      ],
-      "patronesProducto": [
-        "CUADERNO",
-        "LAPICERO",
-        "LAPIZ",
-        "BORRADOR",
-        "PAPEL BOND",
-        "FOLDER",
-        "ARCHIVADOR",
-        "PLUMON",
-        "CARTULINA",
-        "IMPRESION",
-        "FOTOCOPIA",
-        "ANILLADO",
-        "EMPASTADO",
-        "TINTA",
-        "RESALTADOR",
-        "CORRECTOR",
-        "TIJERA",
-        "GOMA",
-        "REGLA",
-        "MOTA"
-      ]
-    },
-    {
-      "id": "mayorista",
-      "nombre": "Distribuidora y mayorista",
-      "modo": "retail",
-      "paginas": [
-        "inventory",
-        "warehouses",
-        "stock-movements",
-        "dispatch-guides",
-        "bulk-emission",
-        "purchases",
-        "purchase-orders",
-        "suppliers",
-        "sellers",
-        "quotations"
-      ],
-      "ajustes": {
-        "dispatchGuidesEnabled": true
-      },
-      "patronesSunat": [
-        "VENTA AL POR MAYOR",
-        "DISTRIBUCION"
-      ],
-      "patronesNombre": [
-        "DISTRIBUIDORA",
-        "DISTRIBUCIONES",
-        "DISTRIBUIDOR",
-        "MAYORISTA",
-        "POR MAYOR",
-        "IMPORTADORA",
-        "IMPORTACIONES",
-        "COMERCIALIZADORA"
-      ],
-      "patronesProducto": []
-    },
-    {
-      "id": "otro-comercio",
-      "nombre": "Otro comercio",
-      "modo": "retail",
-      "paginas": [
-        "inventory",
-        "purchases",
-        "quotations"
-      ],
-      "ajustes": {},
-      "patronesSunat": [
-        "VENTA AL POR MENOR"
-      ],
-      "patronesNombre": [
-        "COMERCIAL",
-        "INVERSIONES",
-        "NEGOCIOS",
-        "MULTISERVICIO",
-        "REPRESENTACIONES",
-        "CORPORACION",
-        "TRADING",
-        "BAZAR"
-      ],
-      "patronesProducto": []
     },
     {
       "id": "restaurante",
@@ -681,7 +1026,6 @@
         "CAMPESTRE",
         "ANTICUCHERIA",
         "BROASTER",
-        "CATERING",
         "COMIDA CRIOLLA",
         "GRILL",
         "CHICHARRONERIA",
@@ -732,24 +1076,18 @@
       "patronesSunat": [
         "CAFETERIA",
         "JUGUERIA",
-        "COMIDA RAPIDA",
-        "PANADERIA",
-        "PASTELERIA"
+        "COMIDA RAPIDA"
       ],
       "patronesNombre": [
         "CAFETERIA",
         "CAFE",
         "JUGUERIA",
         "HELADERIA",
-        "PASTELERIA",
-        "PANADERIA",
-        "PANIFICADORA",
         "HELADOS",
         "SANGUCHERIA",
         "PIZZERIA",
         "BURGER",
         "SNACK",
-        "DULCERIA",
         "COMIDA RAPIDA",
         "COFFEE"
       ],
@@ -825,131 +1163,41 @@
       ]
     },
     {
-      "id": "farmacia",
-      "nombre": "Botica y farmacia",
-      "modo": "pharmacy",
+      "id": "eventos",
+      "nombre": "Eventos, catering y alquiler",
+      "modo": "retail",
       "paginas": [
-        "inventory",
-        "warehouses",
-        "batch-control",
-        "expiry-alerts",
-        "laboratories",
-        "purchases",
-        "suppliers"
-      ],
-      "ajustes": {},
-      "patronesSunat": [
-        "FARMACEUTIC",
-        "MEDICINALES",
-        "BOTICA",
-        "FARMACIA"
-      ],
-      "patronesNombre": [
-        "FARMACIA",
-        "BOTICA",
-        "DROGUERIA"
-      ],
-      "patronesProducto": [
-        "PARACETAMOL",
-        "IBUPROFENO",
-        "AMOXICILINA",
-        "NAPROXENO",
-        "OMEPRAZOL",
-        "LORATADINA",
-        "DICLOFENACO",
-        "AMPOLLA",
-        "JARABE",
-        "TABLETA",
-        "CAPSULA",
-        "GASA",
-        "ALGODON",
-        "JERINGA",
-        "VITAMINA",
-        "SUERO",
-        "PANAL",
-        "PRESERVATIVO",
-        "ALCOHOL MEDICINAL",
-        "AZITROMICINA",
-        "METFORMINA",
-        "CETIRIZINA",
-        "BOTIQUIN"
-      ]
-    },
-    {
-      "id": "veterinaria",
-      "nombre": "Veterinaria y pet shop",
-      "modo": "veterinary",
-      "paginas": [
-        "vet-agenda",
-        "vet-alerts",
-        "online-orders",
-        "purchase-history"
+        "quotations"
       ],
       "ajustes": {
-        "appointmentsEnabled": true
+        "allowCustomProducts": true
       },
       "patronesSunat": [
-        "VETERINARIA",
-        "ANIMALES DE COMPAÑIA",
-        "MASCOTAS"
+        "EVENTOS",
+        "BANQUETES",
+        "ALQUILER DE EQUIPOS"
       ],
       "patronesNombre": [
-        "VETERINARIA",
-        "VETERINARIO",
-        "AGROVETERINARIA",
-        "PET",
-        "PET SHOP",
-        "MASCOTAS"
+        "EVENTOS",
+        "CATERING",
+        "BANQUETES",
+        "ALQUILER",
+        "PRODUCCIONES",
+        "FIESTAS",
+        "RECEPCIONES",
+        "TOLDOS"
       ],
       "patronesProducto": [
-        "DESPARASITANTE",
-        "ANTIPULGA",
-        "RASCADOR",
-        "ARENA PARA GATO",
-        "CROQUETA",
-        "RICOCAN",
-        "DOG CHOW",
-        "ALIMENTO PARA PERRO",
-        "ALIMENTO PARA GATO",
-        "BANO Y CORTE",
-        "VACUNA",
-        "MASCOTA",
-        "COLLAR PARA PERRO",
-        "PIPETA"
-      ]
-    },
-    {
-      "id": "prestamos",
-      "nombre": "Casa de préstamos",
-      "modo": "lending",
-      "paginas": [
-        "lending"
-      ],
-      "ajustes": {},
-      "patronesSunat": [
-        "ACTIVIDADES DE CREDITO",
-        "PRESTAMOS",
-        "CASA DE EMPEÑO"
-      ],
-      "patronesNombre": [
-        "PRESTAMOS",
-        "CREDITOS",
-        "FINANCIERA",
-        "PRESTAMISTA",
-        "EMPENO",
-        "CASA DE EMPENO",
-        "COOPERATIVA",
-        "SERVICIOS FINANCIEROS",
-        "MICROFINANZAS"
-      ],
-      "patronesProducto": [
-        "PRESTAMO",
-        "INTERES",
-        "CUOTA",
-        "MORA",
-        "DESEMBOLSO",
-        "EMPENO",
-        "GARANTIA"
+        "ALQUILER DE SILLA",
+        "MESA",
+        "TOLDO",
+        "MENAJE",
+        "SONIDO",
+        "DECORACION DE EVENTO",
+        "BUFFET",
+        "BOCADITO",
+        "ANIMACION",
+        "TARIMA"
       ]
     },
     {
@@ -982,6 +1230,773 @@
         "HOSPEDAJE",
         "CHECK IN",
         "BUNGALOW"
+      ]
+    },
+    {
+      "id": "ferreteria",
+      "nombre": "Ferretería y construcción",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "warehouses",
+        "stock-movements",
+        "purchases",
+        "suppliers",
+        "quotations",
+        "dispatch-guides"
+      ],
+      "ajustes": {
+        "dispatchGuidesEnabled": true
+      },
+      "patronesSunat": [
+        "FERRETER",
+        "MATERIALES DE CONSTRUCCI",
+        "PINTURA",
+        "VIDRIO",
+        "SANITARI",
+        "ELECTRIC"
+      ],
+      "patronesNombre": [
+        "FERRETERIA",
+        "FERRETERA",
+        "FERRETERO",
+        "CERRAJERIA",
+        "MADERERA",
+        "MADERAS",
+        "ACEROS",
+        "PINTURAS",
+        "AGREGADOS",
+        "MATERIALES DE CONSTRUCCION",
+        "DEPOSITO DE MATERIALES",
+        "LED",
+        "ILUMINACION",
+        "LUMINARIA"
+      ],
+      "patronesProducto": [
+        "CEMENTO",
+        "FIERRO",
+        "VARILLA",
+        "CLAVO",
+        "TORNILLO",
+        "TUBO",
+        "PVC",
+        "PINTURA",
+        "BROCHA",
+        "LIJA",
+        "SILICONA",
+        "CERAMICO",
+        "LADRILLO",
+        "YESO",
+        "TRIPLAY",
+        "CANDADO",
+        "BISAGRA",
+        "ALAMBRE",
+        "SOLDADURA",
+        "TALADRO",
+        "MARTILLO",
+        "INTERRUPTOR",
+        "TOMACORRIENTE",
+        "MANGUERA",
+        "CALAMINA",
+        "ESMALTE",
+        "THINNER",
+        "PEGAMENTO",
+        "CODO",
+        "NIPLE",
+        "VALVULA",
+        "CERROJO",
+        "ESCUADRA",
+        "DISCO DE CORTE"
+      ]
+    },
+    {
+      "id": "vidrieria",
+      "nombre": "Vidriería, aluminio y melamina",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "purchases",
+        "suppliers",
+        "quotations"
+      ],
+      "ajustes": {
+        "allowCustomProducts": true
+      },
+      "patronesSunat": [
+        "VIDRIOS",
+        "ALUMINIO",
+        "CARPINTERIA METALICA"
+      ],
+      "patronesNombre": [
+        "VIDRIERIA",
+        "VIDRIOS",
+        "ALUMINIO",
+        "CRISTALES",
+        "MAMPARAS",
+        "DRYWALL",
+        "METALICA",
+        "SOLDADURA"
+      ],
+      "patronesProducto": [
+        "VIDRIO",
+        "CRISTAL",
+        "MAMPARA",
+        "VENTANA",
+        "PUERTA DE ALUMINIO",
+        "MELAMINA",
+        "PERFIL",
+        "TEMPLADO",
+        "ESPEJO",
+        "DRYWALL",
+        "PLANCHA"
+      ]
+    },
+    {
+      "id": "electricos",
+      "nombre": "Materiales eléctricos y gasfitería",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "purchases",
+        "suppliers",
+        "promotions",
+        "quotations"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "MATERIALES ELECTRICOS",
+        "GASFITERIA",
+        "ARTICULOS SANITARIOS"
+      ],
+      "patronesNombre": [
+        "ELECTRICOS",
+        "ELECTRICA",
+        "ELECTRICIDAD",
+        "GASFITERIA",
+        "SANITARIOS",
+        "TUBERIAS",
+        "BOMBAS"
+      ],
+      "patronesProducto": [
+        "CABLE",
+        "INTERRUPTOR",
+        "TOMACORRIENTE",
+        "FOCO",
+        "LLAVE TERMICA",
+        "TUBO",
+        "CODO",
+        "VALVULA",
+        "CAÑO",
+        "TANQUE",
+        "TABLERO",
+        "CANALETA"
+      ]
+    },
+    {
+      "id": "muebles",
+      "nombre": "Muebles y hogar",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "warehouses",
+        "stock-movements",
+        "purchases",
+        "suppliers",
+        "quotations",
+        "dispatch-guides"
+      ],
+      "ajustes": {
+        "dispatchGuidesEnabled": true
+      },
+      "patronesSunat": [
+        "MUEBLE",
+        "COLCHON",
+        "CARPINTERIA",
+        "ARTICULOS PARA EL HOGAR"
+      ],
+      "patronesNombre": [
+        "MUEBLE",
+        "MUEBLERIA",
+        "COLCHON",
+        "DECORACION",
+        "HOGAR",
+        "TAPICERIA",
+        "CARPINTERIA",
+        "SOFA",
+        "DORMITORIO"
+      ],
+      "patronesProducto": [
+        "SOFA",
+        "COLCHON",
+        "CAMA",
+        "ROPERO",
+        "COMODA",
+        "VELADOR",
+        "SILLA",
+        "ESCRITORIO",
+        "ESTANTE",
+        "REPISA",
+        "CAJONERA",
+        "SILLON",
+        "MUEBLE",
+        "CORTINA",
+        "ALFOMBRA",
+        "MELAMINA",
+        "CABECERA",
+        "JUEGO DE COMEDOR",
+        "MESA DE CENTRO"
+      ]
+    },
+    {
+      "id": "plasticos",
+      "nombre": "Plásticos y descartables",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "warehouses",
+        "stock-movements",
+        "purchases",
+        "purchase-orders",
+        "suppliers",
+        "quotations"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "PLASTICOS",
+        "ENVASES",
+        "DESCARTABLES"
+      ],
+      "patronesNombre": [
+        "PLASTICO",
+        "PLASTICOS",
+        "PLASTIHOGAR",
+        "DESCARTABLES",
+        "ENVASES",
+        "EMPAQUES",
+        "POLIETILENO"
+      ],
+      "patronesProducto": [
+        "VASO DESCARTABLE",
+        "BOLSA",
+        "TAPER",
+        "ENVASE",
+        "BANDEJA",
+        "STRECH",
+        "CUBIERTO DESCARTABLE",
+        "BALDE",
+        "TINA",
+        "CAJA DE PLASTICO"
+      ]
+    },
+    {
+      "id": "tecnologia",
+      "nombre": "Tecnología, celulares y cómputo",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "warehouses",
+        "quotations",
+        "purchases",
+        "suppliers",
+        "certificates"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "TELECOMUNICACION",
+        "COMPUTADORA",
+        "PERIFERICO",
+        "ELECTRODOMESTICO",
+        "EQUIPO DE AUDIO",
+        "VIDEO"
+      ],
+      "patronesNombre": [
+        "CELULAR",
+        "COMPUTO",
+        "COMPUTADORAS",
+        "TECNOLOGIA",
+        "TECNOLOGICA",
+        "ELECTRONICA",
+        "INFORMATICA",
+        "SISTEMAS",
+        "ELECTRODOMESTICOS",
+        "GAMER",
+        "TECH",
+        "REPAIR"
+      ],
+      "patronesProducto": [
+        "CELULAR",
+        "LAPTOP",
+        "MOUSE",
+        "TECLADO",
+        "MONITOR",
+        "IMPRESORA",
+        "CARGADOR",
+        "AUDIFONO",
+        "USB",
+        "MEMORIA",
+        "PARLANTE",
+        "TABLET",
+        "MICA",
+        "PROTECTOR DE PANTALLA",
+        "ROUTER",
+        "TELEVISOR",
+        "HDMI",
+        "COOLER",
+        "DISCO DURO",
+        "LICUADORA",
+        "MICROONDAS",
+        "VENTILADOR"
+      ]
+    },
+    {
+      "id": "ropa",
+      "nombre": "Ropa, calzado y accesorios",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "promotions",
+        "online-orders",
+        "quotations"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "PRENDAS DE VESTIR",
+        "CALZADO",
+        "ARTICULOS DE CUERO",
+        "TEXTIL"
+      ],
+      "patronesNombre": [
+        "BOUTIQUE",
+        "MODA",
+        "CALZADO",
+        "ZAPATERIA",
+        "ROPA",
+        "JEANS",
+        "UNIFORMES",
+        "LENCERIA",
+        "TIENDA DE ROPA",
+        "KIDS",
+        "BABY"
+      ],
+      "patronesProducto": [
+        "POLO",
+        "PANTALON",
+        "CAMISA",
+        "BLUSA",
+        "VESTIDO",
+        "CASACA",
+        "ZAPATO",
+        "ZAPATILLA",
+        "SANDALIA",
+        "MEDIA",
+        "JEAN",
+        "SHORT",
+        "FALDA",
+        "CHOMPA",
+        "GORRA",
+        "CARTERA",
+        "BUZO",
+        "BIVIRI",
+        "LEGGING",
+        "PIJAMA",
+        "CALCETIN",
+        "ROPA INTERIOR",
+        "BRASIER",
+        "TRUSA"
+      ]
+    },
+    {
+      "id": "textil",
+      "nombre": "Textil y confecciones",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "ingredients",
+        "recipes",
+        "purchases",
+        "suppliers",
+        "promotions"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "CONFECCIONES"
+      ],
+      "patronesNombre": [
+        "TEXTIL",
+        "TEXTILES",
+        "CONFECCIONES",
+        "TELAS",
+        "TEJIDOS",
+        "COSTURA",
+        "BORDADOS"
+      ],
+      "patronesProducto": [
+        "TELA",
+        "HILO",
+        "BOTON",
+        "CIERRE",
+        "ELASTICO",
+        "ALGODON",
+        "POLIESTER",
+        "UNIFORME",
+        "BORDADO",
+        "METRO DE TELA",
+        "FRANELA"
+      ]
+    },
+    {
+      "id": "joyeria",
+      "nombre": "Joyería y relojería",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "purchases",
+        "suppliers",
+        "promotions",
+        "quotations"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "JOYERIA",
+        "RELOJERIA",
+        "ORFEBRERIA"
+      ],
+      "patronesNombre": [
+        "JOYERIA",
+        "JOYAS",
+        "RELOJERIA",
+        "ORFEBRERIA",
+        "PLATERIA",
+        "SILVER"
+      ],
+      "patronesProducto": [
+        "ANILLO",
+        "CADENA DE ORO",
+        "ARETE",
+        "PULSERA",
+        "RELOJ",
+        "DIJE",
+        "PLATA",
+        "ORO",
+        "GRABADO",
+        "CORREA"
+      ]
+    },
+    {
+      "id": "jugueteria",
+      "nombre": "Juguetería, bazar y regalos",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "purchases",
+        "suppliers",
+        "promotions",
+        "quotations"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "JUGUETES",
+        "BAZAR",
+        "REGALOS"
+      ],
+      "patronesNombre": [
+        "JUGUETERIA",
+        "JUGUETES",
+        "BAZAR",
+        "REGALOS",
+        "NOVEDADES",
+        "VARIEDADES",
+        "PARTY",
+        "SORPRESAS"
+      ],
+      "patronesProducto": [
+        "JUGUETE",
+        "MUÑECA",
+        "PELUCHE",
+        "ROMPECABEZAS",
+        "GLOBO",
+        "PIÑATA",
+        "SORPRESA",
+        "ADORNO",
+        "TARJETA DE REGALO",
+        "BOLSA DE REGALO"
+      ]
+    },
+    {
+      "id": "floreria",
+      "nombre": "Florería y viveros",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "purchases",
+        "suppliers",
+        "promotions",
+        "quotations"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "FLORES",
+        "PLANTAS",
+        "VIVERO"
+      ],
+      "patronesNombre": [
+        "FLORERIA",
+        "VIVERO",
+        "JARDINERIA",
+        "PLANTAS",
+        "ARREGLOS FLORALES"
+      ],
+      "patronesProducto": [
+        "ROSA",
+        "RAMO",
+        "ARREGLO FLORAL",
+        "PLANTA",
+        "MACETA",
+        "TIERRA PREPARADA",
+        "GIRASOL",
+        "ORQUIDEA",
+        "CORONA",
+        "FLORERO"
+      ]
+    },
+    {
+      "id": "belleza",
+      "nombre": "Salón de belleza, barbería y spa",
+      "modo": "retail",
+      "paginas": [
+        "vet-agenda",
+        "promotions",
+        "sellers"
+      ],
+      "ajustes": {
+        "appointmentsEnabled": true,
+        "allowCustomProducts": true
+      },
+      "patronesSunat": [
+        "PELUQUERIA",
+        "TRATAMIENTOS DE BELLEZA",
+        "BARBERIA",
+        "SPA"
+      ],
+      "patronesNombre": [
+        "SALON",
+        "BELLEZA",
+        "BARBERIA",
+        "PELUQUERIA",
+        "SPA",
+        "ESTETICA",
+        "NAILS",
+        "COSMETICOS",
+        "BEAUTY"
+      ],
+      "patronesProducto": [
+        "TINTE",
+        "CORTE DE CABELLO",
+        "MANICURE",
+        "PEDICURE",
+        "KERATINA",
+        "DEPILACION",
+        "PEINADO",
+        "MAQUILLAJE",
+        "LABIAL",
+        "PESTANA",
+        "ALISADO",
+        "BOTOX CAPILAR",
+        "MECHA",
+        "SECADO",
+        "LIMPIEZA FACIAL",
+        "MASAJE"
+      ]
+    },
+    {
+      "id": "lavanderia",
+      "nombre": "Lavandería y limpieza",
+      "modo": "retail",
+      "paginas": [
+        "quotations"
+      ],
+      "ajustes": {
+        "allowCustomProducts": true
+      },
+      "patronesSunat": [
+        "LAVANDERIA",
+        "LIMPIEZA",
+        "TINTORERIA"
+      ],
+      "patronesNombre": [
+        "LAVANDERIA",
+        "LAVASECO",
+        "TINTORERIA",
+        "LAVADO"
+      ],
+      "patronesProducto": [
+        "LAVADO",
+        "PLANCHADO",
+        "KILO DE ROPA",
+        "LAVADO EN SECO",
+        "TERNO",
+        "EDREDON",
+        "ALFOMBRA",
+        "DETERGENTE",
+        "SERVICIO DE LIMPIEZA"
+      ]
+    },
+    {
+      "id": "gimnasio",
+      "nombre": "Gimnasio y deportes",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "purchases",
+        "suppliers",
+        "promotions",
+        "quotations"
+      ],
+      "ajustes": {
+        "allowCustomProducts": true
+      },
+      "patronesSunat": [
+        "GIMNASIO",
+        "ARTICULOS DEPORTIVOS",
+        "ACTIVIDADES DEPORTIVAS"
+      ],
+      "patronesNombre": [
+        "GIMNASIO",
+        "GYM",
+        "FITNESS",
+        "DEPORTES",
+        "DEPORTIVO",
+        "SPORT",
+        "CROSSFIT"
+      ],
+      "patronesProducto": [
+        "MENSUALIDAD",
+        "MATRICULA",
+        "PROTEINA",
+        "MANCUERNA",
+        "GUANTE DE BOX",
+        "PELOTA",
+        "ZAPATILLA",
+        "SUPLEMENTO",
+        "CREATINA",
+        "PASE DIARIO"
+      ]
+    },
+    {
+      "id": "educacion",
+      "nombre": "Academia, instituto y colegio",
+      "modo": "retail",
+      "paginas": [
+        "quotations"
+      ],
+      "ajustes": {
+        "allowCustomProducts": true
+      },
+      "patronesSunat": [
+        "ENSEÑANZA",
+        "EDUCACION",
+        "CAPACITACION"
+      ],
+      "patronesNombre": [
+        "ACADEMIA",
+        "INSTITUTO",
+        "COLEGIO",
+        "EDUCATIVO",
+        "EDUCACION",
+        "CAPACITACION",
+        "ESCUELA",
+        "CENTRO DE IDIOMAS",
+        "PREUNIVERSITARIO",
+        "NIDO",
+        "CUNA"
+      ],
+      "patronesProducto": [
+        "MATRICULA",
+        "PENSION",
+        "MENSUALIDAD",
+        "CURSO",
+        "TALLER",
+        "CERTIFICADO",
+        "MODULO",
+        "EXAMEN",
+        "MATERIAL EDUCATIVO",
+        "CLASE"
+      ]
+    },
+    {
+      "id": "viajes",
+      "nombre": "Agencia de viajes y turismo",
+      "modo": "retail",
+      "paginas": [
+        "quotations"
+      ],
+      "ajustes": {
+        "allowCustomProducts": true
+      },
+      "patronesSunat": [
+        "AGENCIA DE VIAJES",
+        "TURISMO",
+        "OPERADOR TURISTICO"
+      ],
+      "patronesNombre": [
+        "VIAJES",
+        "TOURS",
+        "TRAVEL",
+        "AGENCIA DE VIAJES",
+        "OPERADOR TURISTICO",
+        "EXPEDITIONS"
+      ],
+      "patronesProducto": [
+        "PASAJE",
+        "TOUR",
+        "FULL DAY",
+        "PAQUETE TURISTICO",
+        "TICKET",
+        "EXCURSION",
+        "TRASLADO",
+        "CITY TOUR",
+        "RESERVA",
+        "GUIA TURISTICO"
+      ]
+    },
+    {
+      "id": "grifo",
+      "nombre": "Grifo y estación de servicio",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "warehouses",
+        "stock-movements",
+        "purchases",
+        "suppliers",
+        "dispatch-guides"
+      ],
+      "ajustes": {
+        "dispatchGuidesEnabled": true
+      },
+      "patronesSunat": [
+        "COMBUSTIBLE",
+        "GASOLINA",
+        "ESTACION DE SERVICIO",
+        "GRIFO"
+      ],
+      "patronesNombre": [
+        "GRIFO",
+        "ESTACION DE SERVICIO",
+        "SERVICENTRO",
+        "GASOCENTRO",
+        "COMBUSTIBLES",
+        "PETROLEOS"
+      ],
+      "patronesProducto": [
+        "GASOLINA",
+        "DIESEL",
+        "GASOHOL",
+        "PETROLEO",
+        "GLP",
+        "GNV",
+        "KEROSENE",
+        "COMBUSTIBLE"
       ]
     },
     {
@@ -1088,6 +2103,145 @@
         "ESTACIONAMIENTO",
         "COCHERA"
       ]
+    },
+    {
+      "id": "prestamos",
+      "nombre": "Casa de préstamos",
+      "modo": "lending",
+      "paginas": [
+        "lending"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "ACTIVIDADES DE CREDITO",
+        "PRESTAMOS",
+        "CASA DE EMPEÑO"
+      ],
+      "patronesNombre": [
+        "PRESTAMOS",
+        "CREDITOS",
+        "FINANCIERA",
+        "PRESTAMISTA",
+        "EMPENO",
+        "CASA DE EMPENO",
+        "COOPERATIVA",
+        "SERVICIOS FINANCIEROS",
+        "MICROFINANZAS"
+      ],
+      "patronesProducto": [
+        "PRESTAMO",
+        "INTERES",
+        "CUOTA",
+        "MORA",
+        "DESEMBOLSO",
+        "EMPENO",
+        "GARANTIA"
+      ]
+    },
+    {
+      "id": "servicios",
+      "nombre": "Servicios profesionales y consultoría",
+      "modo": "retail",
+      "paginas": [
+        "quotations",
+        "vet-agenda"
+      ],
+      "ajustes": {
+        "appointmentsEnabled": true,
+        "allowCustomProducts": true
+      },
+      "patronesSunat": [
+        "ODONTOLOG",
+        "CONSULTORIA",
+        "ACTIVIDADES JURIDICAS",
+        "MEDICOS",
+        "ARQUITECTURA",
+        "INGENIERIA",
+        "FOTOGRAF"
+      ],
+      "patronesNombre": [
+        "CONSULTORIO",
+        "ASESORIA",
+        "ASESORES",
+        "CONSULTORES",
+        "CONSULTORIA",
+        "SERVICIOS PROFESIONALES"
+      ],
+      "patronesProducto": [
+        "CONSULTA",
+        "TERAPIA",
+        "LIMPIEZA DENTAL",
+        "EXTRACCION",
+        "RADIOGRAFIA",
+        "HONORARIO",
+        "SESION",
+        "TRATAMIENTO",
+        "EXAMEN",
+        "CURACION",
+        "PROFILAXIS",
+        "BRACKET",
+        "LENTE",
+        "MONTURA"
+      ]
+    },
+    {
+      "id": "mayorista",
+      "nombre": "Distribuidora y mayorista",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "warehouses",
+        "stock-movements",
+        "dispatch-guides",
+        "bulk-emission",
+        "purchases",
+        "purchase-orders",
+        "suppliers",
+        "sellers",
+        "quotations"
+      ],
+      "ajustes": {
+        "dispatchGuidesEnabled": true
+      },
+      "patronesSunat": [
+        "VENTA AL POR MAYOR",
+        "DISTRIBUCION"
+      ],
+      "patronesNombre": [
+        "DISTRIBUIDORA",
+        "DISTRIBUCIONES",
+        "DISTRIBUIDOR",
+        "MAYORISTA",
+        "POR MAYOR",
+        "IMPORTADORA",
+        "IMPORTACIONES",
+        "COMERCIALIZADORA"
+      ],
+      "patronesProducto": []
+    },
+    {
+      "id": "otro-comercio",
+      "nombre": "Otro comercio",
+      "modo": "retail",
+      "paginas": [
+        "inventory",
+        "purchases",
+        "quotations"
+      ],
+      "ajustes": {},
+      "patronesSunat": [
+        "VENTA AL POR MENOR"
+      ],
+      "patronesNombre": [
+        "COMERCIAL",
+        "INVERSIONES",
+        "NEGOCIOS",
+        "MULTISERVICIO",
+        "REPRESENTACIONES",
+        "CORPORACION",
+        "TRADING"
+      ],
+      "patronesProducto": []
     }
   ]
 }

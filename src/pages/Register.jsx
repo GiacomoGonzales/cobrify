@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { RUBROS } from '@/data/rubros'
+import { RUBROS, RUBROS_ALFABETICOS } from '@/data/rubros'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate, Link } from 'react-router-dom'
@@ -381,7 +381,7 @@ export default function Register() {
                     {...register('rubro')}
                   >
                     <option value="">Seleccione el rubro</option>
-                    {RUBROS.map(r => (
+                    {RUBROS_ALFABETICOS.map(r => (
                       <option key={r.id} value={r.id}>{r.nombre}</option>
                     ))}
                   </Select>

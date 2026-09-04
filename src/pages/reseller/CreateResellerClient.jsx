@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { RUBROS } from '@/data/rubros'
+import { RUBROS, RUBROS_ALFABETICOS } from '@/data/rubros'
 import { useAuth } from '@/contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { doc, setDoc, updateDoc, addDoc, collection, Timestamp } from 'firebase/firestore'
@@ -488,7 +488,7 @@ export default function CreateResellerClient() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                     >
                       <option value="">Seleccione el rubro</option>
-                      {RUBROS.map(r => (
+                      {RUBROS_ALFABETICOS.map(r => (
                         <option key={r.id} value={r.id}>{r.nombre}</option>
                       ))}
                     </select>

@@ -9,12 +9,24 @@ import { sugerirRubroDeCuenta as sugerirRubroBase } from '../../functions/src/da
 
 export const RUBROS = catalogo.rubros
 
+/**
+ * La misma lista, en orden alfabético, para MOSTRAR.
+ *
+ * `RUBROS` no se puede ordenar: su orden ES la prioridad del clasificador (lo
+ * específico antes que lo genérico, y "Otro comercio" al final). Ordenar el
+ * catálogo haría que "Abarrotes" le ganara a "Panadería" y todo se caiga.
+ * Por eso hay dos vistas de lo mismo: una para decidir y otra para elegir.
+ */
+export const RUBROS_ALFABETICOS = [...catalogo.rubros].sort((a, b) =>
+  a.nombre.localeCompare(b.nombre, 'es')
+)
+
 export const RUBRO_SIN_CLASIFICAR = { id: null, nombre: 'Sin clasificar' }
 
 export const nombreRubro = (id) => RUBROS.find((r) => r.id === id)?.nombre || RUBRO_SIN_CLASIFICAR.nombre
 
 /** Rubros de un modo, para el selector (p.ej. solo los de retail). */
-export const rubrosDelModo = (modo) => RUBROS.filter((r) => r.modo === modo)
+export const rubrosDelModo = (modo) => RUBROS_ALFABETICOS.filter((r) => r.modo === modo)
 
 /**
  * Rubro sugerido para una cuenta que ya existe. Las reglas están junto al
