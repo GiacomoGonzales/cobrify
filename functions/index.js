@@ -4397,12 +4397,22 @@ export const retryPendingInvoices = onSchedule(
           continue // Saltar negocios sin configuración SUNAT
         }
 
-        // Respetar configuración de envío automático: solo reenviar si está EXPLÍCITAMENTE activado.
-        // Usar !== true (no === false) para que negocios con el campo undefined caigan al default OFF,
-        // consistente con el frontend (POS.jsx) y con cómo el toggle se muestra apagado en Settings.jsx.
-        if (businessData.autoSendToSunat !== true) {
-          continue
-        }
+        // Envio automatico: apagado significa "no mandes solo al crear", NO
+        // "si lo intente a mano y se corto la conexion, abandonalo".
+        //
+        // Antes se saltaba el negocio ENTERO, y eso dejaba un hueco: el usuario
+        // le daba a Enviar, se caia la conexion, el documento quedaba pendiente
+        // y no lo reintentaba nadie nunca.
+        //
+        // Con el automatico apagado un comprobante NACE en 'not_sent', no en
+        // 'pending' (ver POS.jsx), asi que llegar a pendiente ya implica que
+        // alguien le dio a Enviar. Aun asi se exige huella de intento previo
+        // antes de reenviar: mandarle a SUNAT algo que el usuario no mando no
+        // se deshace.
+        const envioAutomatico = businessData.autoSendToSunat === true
+
+        // Huella de que un documento YA se intento enviar y fallo.
+        const yaSeIntento = (d) => !!(d.sunatSentAt || d.sunatResponse || d.retryCount || d.lastRetryError)
 
         // Determinar si este negocio con IGV reducido tiene pausa activa (solo aplica a facturas)
         let skipFacturas = false
@@ -4467,6 +4477,12 @@ export const retryPendingInvoices = onSchedule(
 
           if (ageMinutes < MIN_AGE_MINUTES) {
             console.log(`⏳ [RETRY] ${invoiceData.series}-${invoiceData.correlativeNumber}: Muy reciente (${ageMinutes.toFixed(1)} min), saltando`)
+            totalSkipped++
+            continue
+          }
+
+          // Negocio con el automatico apagado: solo lo que ya se intento enviar.
+          if (!envioAutomatico && !yaSeIntento(invoiceData)) {
             totalSkipped++
             continue
           }
@@ -4663,9 +4679,7 @@ export const retryPendingInvoices = onSchedule(
             // filtro el trabajo enviaria a SUNAT borradores que nadie mando —
             // y eso no se deshace. La huella de un intento previo es tener
             // respuesta, error de reintento o fecha de envio.
-            const seIntentoAntes = !!(guia.sunatDescription || guia.sunatResponseCode ||
-              guia.lastRetryError || guia.retryCount || guia.sunatSentAt)
-            if (!seIntentoAntes) continue
+            if (!yaSeIntento(guia) && !guia.sunatDescription && !guia.sunatResponseCode) continue
 
             // Las muy recientes las deja en paz: puede haber un envío en curso.
             const creada = guia.createdAt?.toDate?.() || new Date(guia.createdAt)
