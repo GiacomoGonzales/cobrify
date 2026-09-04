@@ -61,6 +61,7 @@ import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate, formatDateTime, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { getDocumentTotalInBase, getDocumentRate, getReportsCurrency, resolveReportsRate, convertBaseToDisplay } from '@/utils/currency'
 import { getInvoiceDate, getInvoiceTimeInfo } from '@/utils/invoiceDate'
+import { consumoDeModificadoresDeVarias } from '@/utils/modificadorInsumo'
 import { toDateString } from '@/utils/emissionDate'
 import { getInvoicesPage, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, updateProductStockTransaction } from '@/services/firestoreService'
 import { getCashRegisterSession, addCashMovement } from '@/services/firestoreService'
@@ -1173,7 +1174,25 @@ Gracias por tu preferencia.`
             const { restoreIngredients } = await import('@/services/ingredientService')
 
             // Mismo guard de idempotencia que el stock de producto.
-            for (const item of (hasSaleMovements && !alreadyRestored) ? voidingInvoice.items : []) {
+            const lineasAReponer = (hasSaleMovements && !alreadyRestored) ? voidingInvoice.items : []
+
+            // Insumos consumidos por los MODIFICADORES ("Pieza extra de pollo").
+            // Se calculan con la misma función que usó el POS para descontarlos,
+            // sobre el comprobante guardado: lo que se devuelve es exactamente
+            // lo que se sacó, aunque el modificador se haya editado después.
+            try {
+              const porModificadores = consumoDeModificadoresDeVarias(
+                lineasAReponer.filter(item => !item.isCustom)
+              )
+              if (porModificadores.length > 0) {
+                await restoreIngredients(businessId, porModificadores, warehouseId)
+                console.log(`✅ Insumos de modificadores restaurados: ${porModificadores.length}`)
+              }
+            } catch (err) {
+              console.warn('No se pudieron restaurar insumos de modificadores:', err)
+            }
+
+            for (const item of lineasAReponer) {
               if (!item.productId || item.isCustom) continue
               try {
                 const recipeResult = await getRecipeByProductId(businessId, item.productId)
@@ -1593,7 +1612,22 @@ Gracias por tu preferencia.`
 
         // Mismo guard de idempotencia que el stock de producto: si la venta original no
         // registró movimientos, NO restaurar insumos (evita doble restauración / inflado).
-        for (const item of hasSaleMovements ? invoice.items : []) {
+        const lineasAReponer = hasSaleMovements ? invoice.items : []
+
+        // Insumos de los MODIFICADORES, con la misma función que los descontó.
+        try {
+          const porModificadores = consumoDeModificadoresDeVarias(
+            lineasAReponer.filter(item => !item.isCustom)
+          )
+          if (porModificadores.length > 0) {
+            await restoreIngredients(businessId, porModificadores, warehouseId)
+            console.log(`✅ Insumos de modificadores restaurados: ${porModificadores.length}`)
+          }
+        } catch (err) {
+          console.warn('No se pudieron restaurar insumos de modificadores:', err)
+        }
+
+        for (const item of lineasAReponer) {
           if (!item.productId || item.isCustom) continue
           try {
             const recipeResult = await getRecipeByProductId(businessId, item.productId)

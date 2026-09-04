@@ -4,6 +4,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import { useAppContext } from '@/hooks/useAppContext'
 import { getModifierTemplates } from '@/services/modifierTemplateService'
+import { sinElEnlace, conElEnlace } from '@/utils/modificadorInsumo'
 
 /**
  * Componente para gestionar modificadores de productos en modo restaurante
@@ -30,6 +31,40 @@ export default function ProductModifiersSection({
   const [templates, setTemplates] = useState([])
   const [showTemplateMenu, setShowTemplateMenu] = useState(false)
 
+  // Insumos, para poder enlazarlos a una opción ("Pieza extra de pollo"
+  // descuenta una pieza del inventario). Se cargan la primera vez que alguien
+  // abre el enlace y no al montar: la gran mayoría de los modificadores no
+  // descuenta nada, y esto se monta en el editor de cada producto.
+  const [insumos, setInsumos] = useState(null) // null = todavía no se pidieron
+  const [modificadoresConEnlace, setModificadoresConEnlace] = useState(() => new Set())
+
+  const cargarInsumos = async () => {
+    if (insumos !== null || isDemoMode) return
+    setInsumos([])
+    try {
+      const { getIngredients } = await import('@/services/ingredientService')
+      const res = await getIngredients(getBusinessId())
+      if (res.success) setInsumos(res.data || [])
+    } catch (error) {
+      console.error('No se pudieron cargar los insumos:', error)
+    }
+  }
+
+  // Si un modificador ya tiene opciones enlazadas, sus selectores se muestran
+  // solos: si no, el enlace quedaría guardado y sin verse en pantalla.
+  useEffect(() => {
+    const conEnlace = (modifiers || [])
+      .filter(m => (m.options || []).some(o => o?.ingredientId))
+      .map(m => m.id)
+    if (conEnlace.length === 0) return
+    setModificadoresConEnlace(prev => {
+      if (conEnlace.every(id => prev.has(id))) return prev
+      return new Set([...prev, ...conEnlace])
+    })
+    cargarInsumos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modifiers])
+
   // Cargar plantillas de modificadores (definidas en Insumos > Modificadores)
   useEffect(() => {
     if (!enableTemplates || isDemoMode) return
@@ -53,11 +88,13 @@ export default function ProductModifiersSection({
       allowRepeat: !!tpl.allowRepeat,
       ...(tpl.trackUsage ? { trackUsage: true } : {}),
       ...(tpl.id ? { templateId: tpl.id } : {}),
-      options: (tpl.options || []).map((o, i) => ({
+      // El insumo enlazado viaja con la opción: si no, insertar la plantilla
+      // daría un modificador que cobra el agregado y no lo descuenta.
+      options: (tpl.options || []).map((o, i) => conElEnlace({
         id: `opt-${ts}-${i}`,
         name: o.name || '',
         priceAdjustment: o.priceAdjustment || 0,
-      })),
+      }, o)),
     }
     onChange([...modifiers, copy])
     setShowTemplateMenu(false)
@@ -155,6 +192,44 @@ export default function ProductModifiersSection({
         : mod
     )
     onChange(updated)
+  }
+
+  // Enlazar (o desenlazar) el insumo que descuenta una opción al venderse.
+  // Se guarda también el NOMBRE y la UNIDAD del insumo: son los que viajan
+  // congelados dentro de la venta, y el movimiento de stock los necesita para
+  // poder leerse aunque el insumo se renombre después.
+  const handleEnlazarInsumo = (modifierId, optionId, ingredientId) => {
+    const insumo = (insumos || []).find(i => i.id === ingredientId)
+    const updated = modifiers.map(mod =>
+      mod.id === modifierId
+        ? {
+            ...mod,
+            options: mod.options.map(opt => {
+              if (opt.id !== optionId) return opt
+              if (!insumo) return sinElEnlace(opt)
+              return {
+                ...opt,
+                ingredientId: insumo.id,
+                ingredientName: insumo.name || '',
+                ingredientType: 'ingredient',
+                ingredientQuantity: opt.ingredientQuantity || 1,
+                ingredientUnit: opt.ingredientUnit || insumo.unit || '',
+              }
+            })
+          }
+        : mod
+    )
+    onChange(updated)
+  }
+
+  const toggleEnlaces = (modifierId) => {
+    cargarInsumos()
+    setModificadoresConEnlace(prev => {
+      const next = new Set(prev)
+      if (next.has(modifierId)) next.delete(modifierId)
+      else next.add(modifierId)
+      return next
+    })
   }
 
   // Mover opción arriba o abajo
@@ -439,8 +514,8 @@ export default function ProductModifiersSection({
                       ) : (
                         <div className="space-y-2">
                           {modifier.options.map((option, optIndex) => (
+                            <div key={option.id}>
                             <div
-                              key={option.id}
                               onDragOver={(e) => handleDragOver(e, modifier.id, optIndex)}
                               className={`flex items-start gap-1.5 p-2 bg-gray-50 rounded border transition-colors ${
                                 dragOptionData?.modifierId === modifier.id && dragOptionData?.optionIndex === optIndex
@@ -531,8 +606,62 @@ export default function ProductModifiersSection({
                                 <X className="w-4 h-4" />
                               </button>
                             </div>
+
+                            {/* Insumo que descuenta esta opción al venderse.
+                                Se muestra solo cuando el modificador lo pide,
+                                porque la mayoría de las opciones no descuenta
+                                nada y el selector en todas sería ruido. */}
+                            {modificadoresConEnlace.has(modifier.id) && (
+                              <div className="flex flex-wrap items-center gap-1.5 pl-2 pr-2 pb-2 -mt-1">
+                                <span className="text-xs text-gray-500">Descuenta</span>
+                                <select
+                                  value={option.ingredientId || ''}
+                                  onChange={(e) => handleEnlazarInsumo(modifier.id, option.id, e.target.value)}
+                                  className="px-2 py-1 border border-gray-300 rounded text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 max-w-[12rem]"
+                                >
+                                  <option value="">Nada</option>
+                                  {(insumos || []).map(i => (
+                                    <option key={i.id} value={i.id}>{i.name}</option>
+                                  ))}
+                                </select>
+                                {option.ingredientId && (
+                                  <>
+                                    <input
+                                      type="text"
+                                      inputMode="decimal"
+                                      value={option.ingredientQuantity ?? 1}
+                                      onChange={(e) => {
+                                        const raw = e.target.value.replace(',', '.')
+                                        if (raw === '' || /^\d*\.?\d*$/.test(raw)) {
+                                          handleUpdateOption(modifier.id, option.id, 'ingredientQuantity', raw)
+                                        }
+                                      }}
+                                      onBlur={(e) => handleUpdateOption(modifier.id, option.id, 'ingredientQuantity', parseFloat(e.target.value) || 1)}
+                                      className="w-16 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                    />
+                                    <span className="text-xs text-gray-500">
+                                      {option.ingredientUnit || 'por unidad pedida'}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                            </div>
                           ))}
                         </div>
+                      )}
+
+                      {/* Abrir o cerrar los selectores de insumo del grupo */}
+                      {modifier.options.length > 0 && !isDemoMode && (
+                        <button
+                          type="button"
+                          onClick={() => toggleEnlaces(modifier.id)}
+                          className="mt-2 text-xs text-gray-500 hover:text-primary-600"
+                        >
+                          {modificadoresConEnlace.has(modifier.id)
+                            ? 'Ocultar descuento de insumos'
+                            : 'Descontar insumos al vender'}
+                        </button>
                       )}
                     </div>
                   </div>

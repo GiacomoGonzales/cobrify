@@ -23,6 +23,7 @@
  * los productos que pierdan su versión.
  */
 import { cleanText, normalizeText } from '@/lib/utils'
+import { enlaceDeLaOpcion, conElEnlace } from '@/utils/modificadorInsumo'
 
 /**
  * El nombre con el que se comparan dos modificadores: sin espacios de sobra,
@@ -51,8 +52,18 @@ export const firmaDelGrupo = (grupo) => JSON.stringify({
   maximo: Number(grupo?.maxSelection) || 1,
   repite: !!grupo?.allowRepeat,
   opciones: (grupo?.options || [])
-    .map((o) => [nombreComparable(o?.name), Number(o?.priceAdjustment) || 0])
-    .sort((a, b) => a[0].localeCompare(b[0]) || a[1] - b[1]),
+    .map((o) => {
+      // El insumo enlazado SÍ entra: dos "Pieza extra" que descuentan cosas
+      // distintas no son el mismo modificador, y unificarlas dejaría platos
+      // descontando del insumo equivocado.
+      const enlace = enlaceDeLaOpcion(o)
+      return [
+        nombreComparable(o?.name),
+        Number(o?.priceAdjustment) || 0,
+        enlace ? `${enlace.ingredientId}|${enlace.ingredientQuantity}|${enlace.ingredientUnit}` : '',
+      ]
+    })
+    .sort((a, b) => a[0].localeCompare(b[0]) || a[1] - b[1] || a[2].localeCompare(b[2])),
 })
 
 /**
@@ -187,11 +198,11 @@ export function grupoDesdePlantilla(plantilla, grupoActual = null) {
     ...(plantilla?.allowRepeat ? { allowRepeat: true } : {}),
     ...(plantilla?.trackUsage ? { trackUsage: true } : {}),
     ...(plantilla?.id ? { templateId: plantilla.id } : {}),
-    options: (plantilla?.options || []).map((o, i) => ({
+    options: (plantilla?.options || []).map((o, i) => conElEnlace({
       id: tomarId(o?.name, i),
       name: cleanText(o?.name),
       priceAdjustment: Number(o?.priceAdjustment) || 0,
-    })),
+    }, o)),
   }
 }
 
@@ -269,10 +280,10 @@ export function plantillaDesdeVersion(version, nombre) {
     // Si CUALQUIER copia llevaba control, la plantilla lo lleva: es más fácil
     // destildarlo una vez que descubrir por qué el reporte quedó vacío.
     ...(version?.llevaControl ? { trackUsage: true } : {}),
-    options: (grupo.options || []).map((o, i) => ({
+    options: (grupo.options || []).map((o, i) => conElEnlace({
       id: `opt-tpl-${ts}-${i}`,
       name: cleanText(o?.name),
       priceAdjustment: Number(o?.priceAdjustment) || 0,
-    })),
+    }, o)),
   }
 }

@@ -3,6 +3,7 @@ import { Check, AlertCircle, Plus, Minus } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import { formatCurrency } from '@/lib/utils'
+import { conElEnlace } from '@/utils/modificadorInsumo'
 
 /**
  * Modal para seleccionar modificadores de un producto en el pedido
@@ -200,12 +201,12 @@ export default function ModifierSelectorModal({
             if (count > 0) {
               const option = modifier.options.find(o => o.id === optionId)
               if (option) {
-                options.push({
+                options.push(conElEnlace({
                   optionId: option.id,
                   optionName: option.name,
                   priceAdjustment: option.priceAdjustment || 0,
                   quantity: count
-                })
+                }, option))
               }
             }
           })
@@ -213,11 +214,14 @@ export default function ModifierSelectorModal({
           // Modo normal
           options = sel.map(optionId => {
             const option = modifier.options.find(o => o.id === optionId)
-            return {
+            // El insumo enlazado se CONGELA acá, igual que el precio: al anular
+            // se devuelve lo que el comprobante dice, sin volver a mirar la
+            // definición del producto (que pudo cambiar en el medio).
+            return conElEnlace({
               optionId: option.id,
               optionName: option.name,
               priceAdjustment: option.priceAdjustment || 0
-            }
+            }, option)
           })
         }
 

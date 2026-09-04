@@ -9,6 +9,7 @@ import { convertFromBase } from '@/utils/currency'
 import { CatalogDetailImage } from '@/components/catalog/CatalogImages'
 import { getCatalogAccent } from '@/themes/catalogThemes'
 import { useCatalogTheme } from '@/components/catalog/CatalogThemeProvider'
+import { conElEnlace } from '@/utils/modificadorInsumo'
 import {
   getShortUnitLabel,
   formatQty,
@@ -320,22 +321,24 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
             Object.entries(sel || {}).forEach(([optId, count]) => {
               if (count > 0) {
                 const opt = mod.options?.find(o => o.id === optId)
-                options.push({
+                options.push(conElEnlace({
                   optionId: optId,
                   optionName: opt?.name || '',
                   priceAdjustment: opt?.priceAdjustment || 0,
                   quantity: count
-                })
+                }, opt))
               }
             })
           } else {
             options = (sel || []).map(optId => {
               const opt = mod.options?.find(o => o.id === optId)
-              return {
+              // Se congela el insumo enlazado, igual que en el POS: el pedido
+              // del catalogo termina en una venta y tiene que descontar igual.
+              return conElEnlace({
                 optionId: optId,
                 optionName: opt?.name || '',
                 priceAdjustment: opt?.priceAdjustment || 0
-              }
+              }, opt)
             })
           }
 

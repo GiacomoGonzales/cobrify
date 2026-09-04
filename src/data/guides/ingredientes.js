@@ -120,6 +120,27 @@ export default {
           type: 'consejo',
           text: 'Las ventas ya emitidas no cambian: cada comprobante guarda lo que se cobró ese día. Esto solo cambia lo que se va a ofrecer de ahora en adelante.',
         },
+        {
+          type: 'texto',
+          text: 'Un modificador también puede **descontar un insumo** al venderse. Si cobras "Pieza extra de pollo" y llevas las piezas en Insumos, cada vez que alguien la pida se descuenta una del inventario, igual que si estuviera en la receta del plato.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Abre el producto y baja a **Modificadores**.',
+            'Despliega el grupo y presiona **Descontar insumos al vender**.',
+            'En la opción que consume algo, elige el insumo y pon cuánto gasta cada vez que se pide.',
+            'Guarda el producto.',
+          ],
+        },
+        {
+          type: 'ojo',
+          text: 'El insumo se elige por opción, no por grupo: "Pieza extra" descuenta y "Sin cebolla" no. Lo que no enlaces no toca el inventario. Si el modificador permite pedir varias veces la misma opción, se descuenta por cada una.',
+        },
+        {
+          type: 'consejo',
+          text: 'Al anular la venta el insumo vuelve solo, con la misma cantidad que se descontó. Las ventas hechas antes de enlazar el insumo no descuentan ni devuelven nada.',
+        },
       ],
     },
   ],
@@ -136,6 +157,14 @@ export default {
     {
       q: 'Quiero que todos los productos de una categoría lleven el mismo modificador.',
       a: 'En **Aplicar a los productos** marca esa categoría. Los productos que no lo tengan lo reciben, y los que ya lo tenían quedan con la versión de la plantilla.',
+    },
+    {
+      q: 'Cobro una pieza extra de pollo. ¿Se descuenta del inventario?',
+      a: 'Sí, si la enlazas. Abre el producto, en **Modificadores** presiona **Descontar insumos al vender** y en esa opción elige el insumo y cuánto gasta. Desde ahí cada pieza extra que vendas baja del stock, y si anulas la venta vuelve.',
+    },
+    {
+      q: 'Enlacé el insumo y el stock no bajó.',
+      a: 'Revisa que la venta sea posterior al enlace: lo que se descuenta queda grabado en cada comprobante al momento de venderlo, así que las ventas anteriores no lo tienen. Si vendes desde la app instalada, además necesitas la versión nueva de la app.',
     },
     {
       q: 'Vendí todo el día y los insumos no bajaron.',

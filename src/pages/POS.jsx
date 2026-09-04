@@ -118,6 +118,7 @@ import ModifierSelectorModal from '@/components/restaurant/ModifierSelectorModal
 import VariantSelectorModal from '@/components/product/VariantSelectorModal'
 import { consultarDNI, consultarRUC, consultarEstablecimientos } from '@/services/documentLookupService'
 import { deductIngredients } from '@/services/ingredientService'
+import { consumoDeModificadoresDeVarias } from '@/utils/modificadorInsumo'
 import { getRecipeByProductId, checkRecipeStock, shouldDeductIngredients, getRecipes } from '@/services/recipeService'
 import { computeRecipeStockAlerts, hasAnyRecipe } from '@/utils/recipeAvailability'
 import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse, getTotalAvailableStock, getOrphanStock, createStockMovement, sinControlDeStock } from '@/services/warehouseService'
@@ -8735,6 +8736,18 @@ ${textoDeErrores(revision.errores)}`, 9000)
               // el verdadero cuello de la venta. Sumamos por (ingredientId|unidad) y descontamos
               // una vez: cada insumo se lee/escribe una sola vez, sin race.
               const _ingAgg = new Map()
+              // Insumos que consumen los MODIFICADORES ("Pieza extra de pollo").
+              // Van al mismo agregado que la receta: son insumos del mismo plato
+              // y así el documento de cada insumo se lee y escribe una sola vez.
+              // No dependen de que el producto tenga receta —un plato sin receta
+              // puede igual tener un agregado que descuenta— y por eso se suman
+              // antes del filtro de recetas.
+              for (const fila of consumoDeModificadoresDeVarias(bgCart.filter(item => !item.isCustom))) {
+                const k = `${fila.ingredientId}|${fila.unit || ''}`
+                const ex = _ingAgg.get(k)
+                if (ex) ex.quantity += fila.quantity
+                else _ingAgg.set(k, { ...fila })
+              }
               for (const item of bgCart.filter(item => !item.isCustom)) {
                 const recipe = _recipeByProduct.get(item.id)
                 if (!recipe || !shouldDeductIngredients(recipe, businessMode)) continue
