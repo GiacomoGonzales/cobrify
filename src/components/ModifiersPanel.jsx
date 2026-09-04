@@ -5,6 +5,9 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { getInvoices, getProducts } from '@/services/firestoreService'
 import { getInvoiceDate, parseLocalDateString } from '@/utils/invoiceDate'
 import { getModifierTemplates, saveModifierTemplates } from '@/services/modifierTemplateService'
+import {
+  modificadoresEnUso, resumenDeModificadores, plantillaDesdeVersion, nombreComparable,
+} from '@/utils/modificadoresEnUso'
 import ProductModifiersSection from '@/components/ProductModifiersSection'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -53,6 +56,7 @@ export default function ModifiersPanel({ companySettings }) {
   const [templates, setTemplates] = useState([])
   const [templatesDirty, setTemplatesDirty] = useState(false)
   const [isSavingTemplates, setIsSavingTemplates] = useState(false)
+  const [expandedUso, setExpandedUso] = useState(() => new Set())
 
   useEffect(() => {
     if (isDemoMode) return
@@ -242,6 +246,36 @@ export default function ModifiersPanel({ companySettings }) {
   }
 
   // ===== Plantillas =====
+  // Lo que el negocio YA tiene escrito dentro de sus productos, agrupado por
+  // nombre. Las plantillas llegaron después: en un negocio que viene de antes
+  // están vacías, así que esta pestaña no mostraba nada de lo que realmente usa.
+  const enUso = useMemo(() => modificadoresEnUso(products), [products])
+  const resumenUso = useMemo(() => resumenDeModificadores(enUso), [enUso])
+
+  // Nombres que ya están como plantilla, para no ofrecer crearla dos veces.
+  const clavesDePlantillas = useMemo(
+    () => new Set(templates.map((t) => nombreComparable(t?.name))),
+    [templates],
+  )
+
+  const toggleUso = (clave) => {
+    setExpandedUso((prev) => {
+      const next = new Set(prev)
+      if (next.has(clave)) next.delete(clave)
+      else next.add(clave)
+      return next
+    })
+  }
+
+  // Crear la plantilla NO toca los productos: es solo dejar el grupo escrito
+  // una vez para que el próximo producto lo tome de ahí en vez de tipearlo.
+  // Los productos que ya lo tienen siguen exactamente igual.
+  const handleUsarComoPlantilla = (version, nombre) => {
+    setTemplates((prev) => [...prev, plantillaDesdeVersion(version, nombre)])
+    setTemplatesDirty(true)
+    toast.success(`"${nombre}" agregado abajo. Falta guardar.`)
+  }
+
   const handleTemplatesChange = (next) => {
     setTemplates(next)
     setTemplatesDirty(true)
@@ -450,41 +484,147 @@ export default function ModifiersPanel({ companySettings }) {
       )}
 
       {subTab === 'templates' && (
-        <div className="space-y-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <p className="text-xs text-blue-800">
-              Define acá grupos de modificadores reutilizables (ej. "Cremas", "Término de la carne").
-              Luego, en el editor de cada producto, usa <strong>"Desde plantilla"</strong> para insertarlos
-              sin volver a escribirlos. Al insertar se copia: editar la plantilla después NO cambia los
-              productos que ya la usan.
+        <div className="space-y-6">
+          {/* ── Lo que el negocio YA tiene escrito en sus productos ───────── */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">Modificadores en uso</h3>
+            <p className="text-xs text-gray-500 mt-0.5 mb-3">
+              Todo lo que está escrito dentro de tus productos, agrupado por nombre. Si el mismo
+              modificador se tipeó en muchos productos, acá aparece una sola vez.
             </p>
+
+            {enUso.length === 0 ? (
+              <p className="text-sm text-gray-500 border border-dashed border-gray-200 rounded-lg p-4 text-center">
+                Ningún producto tiene modificadores todavía.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs text-gray-600 mb-2">
+                  <strong>{resumenUso.escritos}</strong> escritos en los productos,{' '}
+                  <strong>{resumenUso.distintos}</strong> distintos
+                  {resumenUso.divergentes > 0 && (
+                    <> · <strong>{resumenUso.divergentes}</strong> con versiones que no coinciden</>
+                  )}
+                </p>
+
+                <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
+                  {enUso.map((m) => {
+                    const abierto = expandedUso.has(m.clave)
+                    const yaEsPlantilla = clavesDePlantillas.has(m.clave)
+                    return (
+                      <div key={m.clave}>
+                        <button
+                          type="button"
+                          onClick={() => toggleUso(m.clave)}
+                          className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors"
+                        >
+                          {abierto
+                            ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                            : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                          <span className="text-sm font-medium text-gray-900 flex-1 truncate">{m.nombre}</span>
+                          {!m.esIgualEnTodos && (
+                            <span className="chip-aviso px-2 py-0.5 rounded-full text-xs flex-shrink-0">
+                              {m.versiones.length} versiones
+                            </span>
+                          )}
+                          {yaEsPlantilla && (
+                            <span className="chip-neutro px-2 py-0.5 rounded-full text-xs flex-shrink-0">
+                              Ya es plantilla
+                            </span>
+                          )}
+                          <span className="text-xs text-gray-500 flex-shrink-0">
+                            {m.productos} producto{m.productos === 1 ? '' : 's'}
+                          </span>
+                        </button>
+
+                        {abierto && (
+                          <div className="px-3 pb-3 pl-9 space-y-3">
+                            {!m.esIgualEnTodos && (
+                              <p className="text-xs text-amber-700">
+                                Se llaman igual pero no dicen lo mismo. Elige cuál dejar como plantilla;
+                                los productos no se tocan.
+                              </p>
+                            )}
+                            {m.versiones.map((v, i) => (
+                              <div key={v.firma} className="bg-gray-50 rounded-lg p-3 space-y-2">
+                                {!m.esIgualEnTodos && (
+                                  <p className="text-xs font-medium text-gray-700">
+                                    Versión {i + 1} · {v.productos.length} producto{v.productos.length === 1 ? '' : 's'}
+                                  </p>
+                                )}
+                                <div className="flex flex-wrap gap-1.5">
+                                  {(v.grupo?.options || []).length === 0 ? (
+                                    <span className="text-xs text-gray-500">Sin opciones</span>
+                                  ) : (
+                                    (v.grupo.options || []).map((o, oi) => (
+                                      <span
+                                        key={o?.id || oi}
+                                        className="chip-neutro px-2 py-0.5 rounded-full text-xs"
+                                      >
+                                        {o?.name || 'Sin nombre'}
+                                        {Number(o?.priceAdjustment) ? ` +${formatCurrency(Number(o.priceAdjustment))}` : ''}
+                                      </span>
+                                    ))
+                                  )}
+                                </div>
+                                <p className="text-xs text-gray-500">
+                                  En: {v.productos.slice(0, 6).map((x) => x.nombre).join(', ')}
+                                  {v.productos.length > 6 && ` y ${v.productos.length - 6} más`}
+                                </p>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleUsarComoPlantilla(v, m.nombre)}
+                                >
+                                  <Copy className="w-3.5 h-3.5 mr-1.5" />
+                                  Crear plantilla con esta
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
+            )}
           </div>
 
-          <ProductModifiersSection
-            modifiers={templates}
-            onChange={handleTemplatesChange}
-            enableTemplates={false}
-            title="Plantillas de modificadores"
-            description="Estos grupos estarán disponibles en el editor de productos con el botón 'Desde plantilla'."
-          />
+          {/* ── Plantillas reutilizables ──────────────────────────────────── */}
+          <div className="space-y-4 pt-2 border-t border-gray-200">
+            <p className="text-xs text-gray-500 pt-3">
+              Las plantillas son los grupos que quedan disponibles en el editor de cada producto con el
+              botón <strong>"Desde plantilla"</strong>, para no volver a escribirlos. Al insertarlas se
+              copian: editar una plantilla después NO cambia los productos que ya la usan.
+            </p>
 
-          <div className="flex items-center justify-end gap-3">
-            {templatesDirty && (
-              <span className="text-xs text-amber-600 font-medium">Hay cambios sin guardar</span>
-            )}
-            <Button onClick={handleSaveTemplates} disabled={isSavingTemplates || !templatesDirty}>
-              {isSavingTemplates ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Guardando...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4 mr-2" />
-                  Guardar plantillas
-                </>
+            <ProductModifiersSection
+              modifiers={templates}
+              onChange={handleTemplatesChange}
+              enableTemplates={false}
+              title="Plantillas de modificadores"
+              description="Estos grupos estarán disponibles en el editor de productos con el botón 'Desde plantilla'."
+            />
+
+            <div className="flex items-center justify-end gap-3">
+              {templatesDirty && (
+                <span className="text-xs text-amber-600 font-medium">Hay cambios sin guardar</span>
               )}
-            </Button>
+              <Button onClick={handleSaveTemplates} disabled={isSavingTemplates || !templatesDirty}>
+                {isSavingTemplates ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Guardar plantillas
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       )}

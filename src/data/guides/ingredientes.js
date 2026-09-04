@@ -72,11 +72,45 @@ export default {
           type: 'texto',
           text: 'La pestaña **Modificadores** es para los extras que el cliente pide sobre un producto (extra queso, sin cebolla, doble carne). Puedes llevarles control de consumo para saber cuánto se gasta realmente en ellos.',
         },
+        {
+          type: 'texto',
+          text: 'En **Plantillas** vas a ver primero **Modificadores en uso**: todo lo que ya está escrito dentro de tus productos, agrupado por nombre. Si "Cremas" se tipeó en cuarenta platos, ahí sale una sola vez y te dice en cuántos productos está.',
+        },
+        {
+          type: 'ojo',
+          text: 'Si un nombre aparece con la etiqueta **versiones**, quiere decir que se llaman igual pero no dicen lo mismo: en un producto tiene cuatro opciones y en otro tres, o con otro precio. Ábrelo para ver cada versión y de qué productos es.',
+        },
+        {
+          type: 'texto',
+          text: 'Una **plantilla** es un grupo escrito una sola vez, que después insertas en cualquier producto desde el editor con el botón **Desde plantilla**. Sirve para dejar de tipear lo mismo cada vez.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Abre **Modificadores > Plantillas**.',
+            'Busca en **Modificadores en uso** el que más repites y ábrelo.',
+            'Si tiene varias versiones, elige la que quieres dejar como buena.',
+            'Presiona **Crear plantilla con esta**: se agrega abajo, en la lista de plantillas.',
+            'Presiona **Guardar plantillas**.',
+          ],
+        },
+        {
+          type: 'ojo',
+          text: 'Crear la plantilla no toca tus productos: los que ya tienen ese modificador siguen exactamente igual, y se sigue vendiendo y cobrando lo mismo. La plantilla es para los productos que cargues de ahora en adelante.',
+        },
       ],
     },
   ],
 
   preguntas: [
+    {
+      q: 'Tengo el mismo modificador escrito en decenas de productos. ¿Los junto?',
+      a: 'En **Modificadores > Plantillas** ya los ves juntos: **Modificadores en uso** agrupa por nombre y te dice en cuántos productos está cada uno. Conviértelo en plantilla para no volver a escribirlo. Los productos que ya lo tienen no cambian: cada uno conserva su copia y se sigue cobrando igual.',
+    },
+    {
+      q: 'Cambié una plantilla y los productos siguen con lo de antes.',
+      a: 'Es así a propósito. Al insertar una plantilla en un producto se copia, para que puedas ajustarla en ese plato sin afectar a los demás. Si quieres el cambio en un producto, ábrelo y edítalo ahí.',
+    },
     {
       q: 'Vendí todo el día y los insumos no bajaron.',
       a: 'Los productos vendidos no tienen su composición definida. Revisa en **Composición** (**Recetas** en restaurante) que el producto tenga sus insumos cargados y que esté activo el descuento al vender.',
