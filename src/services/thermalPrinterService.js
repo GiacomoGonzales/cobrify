@@ -592,25 +592,32 @@ export const savePrinterConfig = async (userId, printerConfig) => {
     }
     const cfg = { ...guardado, ...printerConfig }
 
+    // Se parte de TODO lo que llega (`...cfg`) y encima se normalizan los
+    // campos que tienen valor por defecto. Antes era una lista blanca: cada
+    // ajuste nuevo había que acordarse de sumarlo acá, y `ajustarHojaAlTicket`
+    // no estaba —el interruptor cambiaba en pantalla y al recargar volvía al
+    // valor de fábrica—. Con la lista al revés, lo que no figure abajo se
+    // guarda igual, tal cual vino.
     const configData = {
-      address: cfg.address,
-      name: cfg.name,
+      ...cfg,
       type: cfg.type || 'bluetooth', // bluetooth, wifi o internal
-      paperWidth: cfg.paperWidth || 80, // Guardar ancho de papel (80mm por defecto)
+      paperWidth: cfg.paperWidth || 80,
       enabled: cfg.enabled !== false,
-      webPrintLegible: cfg.webPrintLegible || false, // Modo legible para impresión web (legacy; derivado de ticketFontSize)
-      ticketFontSize: cfg.ticketFontSize || (cfg.webPrintLegible ? 'medium' : 'small'), // Tamaño de letra del ticket web: 'small' | 'medium' | 'large'
-      // Tamaño de letra propio de la COMANDA ('' = sigue al del ticket). En
-      // cocina se lee de lejos, así que suele querer letra más grande que el
-      // comprobante del cliente.
+      webPrintLegible: cfg.webPrintLegible || false, // legacy; derivado de ticketFontSize
+      ticketFontSize: cfg.ticketFontSize || (cfg.webPrintLegible ? 'medium' : 'small'), // 'small' | 'medium' | 'large'
+      // Letra propia de la COMANDA ('' = sigue al del ticket): en cocina se lee
+      // de lejos y suele querer más grande que el comprobante del cliente.
       kitchenFontSize: cfg.kitchenFontSize || '',
-      compactPrint: cfg.compactPrint || false, // Modo compacto para ahorro de papel
-      printMargins: cfg.printMargins ?? 8, // Márgenes laterales en mm para impresión web
-      simplePrint: cfg.simplePrint || false, // Impresión simple sin fondos negros
-      cutFeedLines: cfg.cutFeedLines ?? 5, // Líneas de avance antes del corte
-      ultraCompactKitchen: cfg.ultraCompactKitchen || false, // Comandas ultracompactas
-      a4SheetPrint: cfg.a4SheetPrint || false, // Imprimir en hoja A4 (impresoras de tinta/laser, no termicas)
-      showItemUnit: cfg.showItemUnit || false, // Mostrar unidad/presentacion antes de cada producto en el ticket
+      compactPrint: cfg.compactPrint || false,
+      printMargins: cfg.printMargins ?? 8, // mm, impresión web
+      simplePrint: cfg.simplePrint || false, // sin fondos negros
+      cutFeedLines: cfg.cutFeedLines ?? 5, // líneas de avance antes del corte
+      ultraCompactKitchen: cfg.ultraCompactKitchen || false,
+      a4SheetPrint: cfg.a4SheetPrint || false, // tinta/láser, no térmica
+      showItemUnit: cfg.showItemUnit || false,
+      // Encendido salvo que se apague a propósito: es lo que hace que el ticket
+      // no salga chiquito y centrado en una hoja A4.
+      ajustarHojaAlTicket: cfg.ajustarHojaAlTicket !== false,
       updatedAt: new Date().toISOString()
     };
 

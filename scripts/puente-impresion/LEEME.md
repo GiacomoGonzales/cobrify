@@ -17,7 +17,7 @@ Este puente escucha en el **puerto 9100** —el mismo que hablan las ticketeras 
 
 1. Copiar esta carpeta a la computadora que tiene la impresora.
 2. Doble clic en **Iniciar-Puente.bat**. La ventana muestra la IP de esa computadora.
-3. En el celular: **Configuración → Impresora de Documentos**
+3. En el celular, desde la app: **Configuración → Impresora → Impresora de Caja**
    - IP: la que muestra la ventana
    - Puerto: `9100`
 4. Dejar la ventana abierta mientras se atiende.
