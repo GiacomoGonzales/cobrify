@@ -398,7 +398,7 @@ export default function MassTransferModal({
         setShowConfirm(false)
         // Transferencia parcial: algunos ítems no se movieron (stock insuficiente, etc.).
         if (result.failedItems?.length > 0) {
-          alert(`Atención: ${result.failedItems.length} ítem(s) no se pudieron transferir: ${result.failedItems.map(f => f.productName).join(', ')}. Revisá el stock.`)
+          alert(`Atención: ${result.failedItems.length} ítem(s) no se pudieron transferir: ${result.failedItems.map(f => f.productName).join(', ')}. Revisa el stock.`)
         }
       } else {
         alert('Error: ' + (result.error || 'No se pudo realizar la transferencia'))

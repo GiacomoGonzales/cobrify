@@ -1231,7 +1231,7 @@ export default function Attendance() {
                     {branches.length === 0 && (
                       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-900">
                         <AlertTriangle className="w-5 h-5 inline mr-2" />
-                        No tenés sucursales creadas. Andá a Configuración → Sucursales para crear al menos una.
+                        No tienes sucursales creadas. Ve a Configuración → Sucursales para crear al menos una.
                       </div>
                     )}
                     {branches.map(branch => (
@@ -1267,7 +1267,7 @@ export default function Attendance() {
             <h3 className="text-lg font-bold text-gray-900">Marcación manual</h3>
             <button onClick={() => setShowManualModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
           </div>
-          <p className="text-sm text-gray-600 mb-4">Usá esto solo en emergencia: cuando la app falló, el empleado olvidó marcar, etc.</p>
+          <p className="text-sm text-gray-600 mb-4">Usa esto solo en emergencia: cuando la app falló, el empleado olvidó marcar, etc.</p>
           <div className="space-y-3">
             <Select label="Empleado *" value={manualForm.userId} onChange={e => setManualForm({ ...manualForm, userId: e.target.value })}>
               <option value="">Seleccionar...</option>

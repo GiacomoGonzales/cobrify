@@ -730,7 +730,7 @@ export default function SchedulePlanner({ businessId, employees, currentUserUid,
 
   const emptyEmployeesBlock = (
     <div className="bg-white border border-dashed border-gray-300 rounded-xl p-12 text-center text-sm text-gray-500">
-      No hay empleados. Agregá personal desde &quot;Gestión de Usuarios&quot; para asignarles horarios.
+      No hay empleados. Agrega personal desde &quot;Gestión de Usuarios&quot; para asignarles horarios.
     </div>
   )
 

@@ -241,7 +241,7 @@ export default {
     },
     {
       q: '¿Puedo llevar insumos sin definir composiciones?',
-      a: 'Sí. Podés cargarlos, comprarlos y controlar su stock igual. Lo que perdés sin composición es el descuento automático al vender y el costo por producto: tendrías que descontarlos a mano.',
+      a: 'Sí. Puedes cargarlos, comprarlos y controlar su stock igual. Lo que perdés sin composición es el descuento automático al vender y el costo por producto: tendrías que descontarlos a mano.',
     },
   ],
 }

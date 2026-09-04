@@ -10233,7 +10233,7 @@ export default function Products() {
                   <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
                     <p className="text-sm font-medium text-amber-900">
-                      Tenés {handwritten.length} marca{handwritten.length !== 1 ? 's' : ''} escrita{handwritten.length !== 1 ? 's' : ''} a mano sin administrar
+                      Tienes {handwritten.length} marca{handwritten.length !== 1 ? 's' : ''} escrita{handwritten.length !== 1 ? 's' : ''} a mano sin administrar
                     </p>
                     <p className="text-xs text-amber-700 mt-0.5">
                       Detecté {handwritten.length} marca{handwritten.length !== 1 ? 's' : ''} en {totalProducts} producto{totalProducts !== 1 ? 's' : ''} que no están vinculadas a marcas administradas.

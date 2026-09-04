@@ -104,8 +104,8 @@ export default function ConsumoInternoModal({
   }
 
   const registrar = async () => {
-    if (carrito.length === 0) { toast.error('Agregá al menos un producto'); return }
-    if (!almacenId) { toast.error('Elegí de qué almacén sale'); return }
+    if (carrito.length === 0) { toast.error('Agrega al menos un producto'); return }
+    if (!almacenId) { toast.error('Elige de qué almacén sale'); return }
 
     setGuardando(true)
     try {
@@ -123,7 +123,7 @@ export default function ConsumoInternoModal({
       if (!r.success) throw new Error(r.error)
 
       if (r.advertencias?.length) {
-        toast.warning(`Registrado, pero ${r.advertencias.length} producto(s) no se pudieron descontar. Revisá el inventario.`, 8000)
+        toast.warning(`Registrado, pero ${r.advertencias.length} producto(s) no se pudieron descontar. Revisa el inventario.`, 8000)
       } else {
         toast.success('Consumo registrado y stock descontado')
       }

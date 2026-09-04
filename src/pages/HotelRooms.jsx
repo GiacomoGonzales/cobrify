@@ -1208,7 +1208,7 @@ export default function HotelRooms() {
               placeholder="0.00"
             />
             <p className="text-xs text-gray-500">
-              Dejá en 0 si esta habitación se cobra solo por noche.
+              Deja en 0 si esta habitación se cobra solo por noche.
               Si la llenás, podrás elegir el modo (por noche o por hora) al crear cada reserva.
             </p>
           </div>

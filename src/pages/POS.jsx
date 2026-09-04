@@ -8791,7 +8791,7 @@ ${textoDeErrores(revision.errores)}`, 9000)
                   // Antes el fallo era silencioso (solo console.warn) y el inventario de
                   // insumos quedaba descuadrado sin que el usuario se enterara.
                   try {
-                    toast.warning('La venta se registró, pero no se pudieron descontar algunos insumos. Revisá el inventario de insumos.', 7000)
+                    toast.warning('La venta se registró, pero no se pudieron descontar algunos insumos. Revisa el inventario de insumos.', 7000)
                   } catch (_) { /* noop */ }
                 }
               }

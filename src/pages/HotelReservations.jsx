@@ -1094,7 +1094,7 @@ export default function HotelReservations() {
   // Enviar todos los items del carrito al folio (una llamada por item)
   const handleSubmitCart = async () => {
     if (pendingItems.length === 0) {
-      toast.error('Agregá al menos un ítem al carrito')
+      toast.error('Agrega al menos un ítem al carrito')
       return
     }
     if (isDemoMode) { toast.error('No disponible en modo demo'); return }

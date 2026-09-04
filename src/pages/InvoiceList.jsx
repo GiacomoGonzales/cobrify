@@ -1076,7 +1076,7 @@ Gracias por tu preferencia.`
             toast.info('El stock de este comprobante ya había sido restaurado antes (no se duplica).')
           } else if (!hasSaleMovements) {
             toast.warning(
-              'La venta original no registró movimientos de stock. No se devolvió stock al anular para evitar descuadre. Revisá el inventario manualmente.',
+              'La venta original no registró movimientos de stock. No se devolvió stock al anular para evitar descuadre. Revisa el inventario manualmente.',
               8000
             )
           }
@@ -1527,7 +1527,7 @@ Gracias por tu preferencia.`
       if (!hasSaleMovements) {
         console.warn(`⚠️ Venta ${invoice.number} sin movimientos de stock originales. Se omite la devolución para evitar descuadre.`)
         toast.warning(
-          'La venta original no registró movimientos de stock. No se devolvió stock al anular para evitar descuadre. Revisá el inventario manualmente.',
+          'La venta original no registró movimientos de stock. No se devolvió stock al anular para evitar descuadre. Revisa el inventario manualmente.',
           8000
         )
       }

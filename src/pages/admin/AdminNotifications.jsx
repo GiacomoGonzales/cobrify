@@ -1010,7 +1010,7 @@ export default function AdminNotifications() {
                   </p>
                   {audience.usuarios === 0 && (
                     <p className="text-xs text-gray-700 mt-1">
-                      Ningún usuario cumple estos filtros. Revisá la combinación antes de enviar.
+                      Ningún usuario cumple estos filtros. Revisa la combinación antes de enviar.
                     </p>
                   )}
                   {audience.porPlataforma && Object.keys(audience.porPlataforma).length > 0 && (

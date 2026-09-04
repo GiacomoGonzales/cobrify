@@ -150,7 +150,7 @@ export default function VacationManager({ businessId, employees, currentUser }) 
   if (employees.length === 0) {
     return (
       <div className="bg-white border border-dashed border-gray-300 rounded-xl p-12 text-center text-sm text-gray-500">
-        Agregá personal desde "Gestión de Usuarios" para gestionar sus vacaciones.
+        Agrega personal desde "Gestión de Usuarios" para gestionar sus vacaciones.
       </div>
     )
   }
