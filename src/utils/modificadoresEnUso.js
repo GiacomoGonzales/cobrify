@@ -287,3 +287,56 @@ export function plantillaDesdeVersion(version, nombre) {
     }, o)),
   }
 }
+
+/**
+ * Qué productos quedaron con una versión vieja de las plantillas que usan.
+ *
+ * Es la pregunta que el dueño se hace después de editar una plantilla: "¿y los
+ * platos que ya la tenían?". Editar la plantilla no los toca —cada producto
+ * guarda su propia copia, que es lo que el POS lee— así que hace falta un
+ * empujón explícito, y para darlo hay que saber a quiénes alcanza.
+ *
+ * Solo mira los productos que YA usan cada plantilla: sincronizar nunca le
+ * agrega un modificador a un plato que no lo tenía. Para eso está aplicar por
+ * categoría, que es una decisión distinta.
+ *
+ * Se encadena plantilla por plantilla sobre el mismo estado y no sobre el
+ * catálogo original: un plato puede usar dos plantillas, y calculando cada una
+ * por separado la segunda pisaría el cambio de la primera.
+ *
+ * @returns {{porPlantilla: Array, cambios: Array}} `cambios` trae UNA entrada
+ *   por producto, con su array `modifiers` ya completo, lista para escribir.
+ */
+export function planDeSincronizacion(productos, plantillas) {
+  const estado = new Map()
+  for (const p of productos || []) {
+    if (p?.id) estado.set(p.id, p)
+  }
+
+  const porPlantilla = []
+  const porProducto = new Map()
+
+  for (const plantilla of plantillas || []) {
+    if (!plantilla?.id) continue
+    const actuales = [...estado.values()]
+    const laUsan = actuales
+      .filter((p) => (p.modifiers || []).some((g) => grupoEsDeLaPlantilla(g, plantilla)))
+      .map((p) => p.id)
+
+    const { cambios, totales } = planDeAplicacion(actuales, plantilla, laUsan)
+    porPlantilla.push({
+      plantilla,
+      usan: laUsan.length,
+      desactualizados: totales.reemplazan,
+    })
+
+    for (const cambio of cambios) {
+      const previo = estado.get(cambio.producto.id)
+      const actualizado = { ...previo, modifiers: cambio.modifiers }
+      estado.set(cambio.producto.id, actualizado)
+      porProducto.set(cambio.producto.id, { producto: cambio.producto, modifiers: cambio.modifiers })
+    }
+  }
+
+  return { porPlantilla, cambios: [...porProducto.values()] }
+}

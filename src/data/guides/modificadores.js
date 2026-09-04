@@ -144,15 +144,29 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Al insertar una plantilla en un producto se **copia**, para que puedas ajustarla en ese plato sin afectar a los demás. Por eso editar la plantilla no cambia sola a los que ya la usan. Para que el cambio llegue está **Aplicar a los productos**, abajo de las plantillas.',
+          text: 'Al insertar una plantilla en un producto se **copia**, para que puedas ajustarla en ese plato sin afectar a los demás. Por eso **guardar la plantilla no cambia a los que ya la usan**: guardar y aplicar son dos cosas.',
+        },
+        {
+          type: 'texto',
+          text: 'No hace falta que te acuerdes. Al guardar, si algún plato quedó con la versión anterior, aparece un aviso con los nombres y un botón **Actualizar** que los pone al día de una sola vez.',
         },
         {
           type: 'pasos',
           items: [
             'Edita la plantilla como quieres que quede y presiona **Guardar plantillas**.',
-            'En **Aplicar a los productos**, presiona **Aplicar** en la que cambiaste.',
+            'Si sale el aviso, presiona **Actualizar**: listo, ya están todos igual.',
+          ],
+        },
+        {
+          type: 'texto',
+          text: 'Cuando además quieras que el modificador llegue a platos que hoy **no lo tienen**, usa **Aplicar a los productos**, abajo de las plantillas:',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Presiona **Aplicar** en la plantilla que quieres repartir.',
             'Deja marcado **Los que ya lo tienen**.',
-            'Si además quieres que lo reciban platos que hoy no lo tienen, marca esas categorías.',
+            'Marca las categorías cuyos platos deban recibirlo aunque hoy no lo tengan.',
             'Lee el resumen y confirma.',
           ],
         },
@@ -225,7 +239,11 @@ export default {
     },
     {
       q: 'Cambié una plantilla y los productos siguen con lo de antes.',
-      a: 'Es a propósito: al insertarla en un producto se copia, para que puedas ajustarla en ese plato. Para bajar el cambio usa **Aplicar a los productos**, que te dice cuántos cambian antes de confirmar.',
+      a: 'Guardar y aplicar son dos cosas: al insertar la plantilla en un producto se copia, para que puedas ajustarla en ese plato. Al guardar te sale un aviso con los platos que quedaron atrás y un botón **Actualizar** que los pone al día todos juntos. Si no lo ves, es que ya están iguales.',
+    },
+    {
+      q: 'Le cambié el nombre a la plantilla y ya no reconoce mis productos.',
+      a: 'Los modificadores escritos a mano se reconocen por el nombre, así que renombrar la plantilla corta ese vínculo. Aplícala una vez ANTES de renombrarla: desde ahí quedan enlazados de verdad y el nombre ya no importa.',
     },
     {
       q: 'Quiero que todos los productos de una categoría lleven el mismo modificador.',

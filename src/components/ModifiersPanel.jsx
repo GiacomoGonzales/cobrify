@@ -11,7 +11,7 @@ import {
 } from '@/services/modifierTemplateService'
 import {
   modificadoresEnUso, resumenDeModificadores, plantillaDesdeVersion, nombreComparable,
-  grupoEsDeLaPlantilla, planDeAplicacion,
+  grupoEsDeLaPlantilla, planDeAplicacion, planDeSincronizacion,
 } from '@/utils/modificadoresEnUso'
 import ProductModifiersSection from '@/components/ProductModifiersSection'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -69,6 +69,7 @@ export default function ModifiersPanel({ companySettings }) {
   const [incluirLosQueLaUsan, setIncluirLosQueLaUsan] = useState(true)
   const [categoriasElegidas, setCategoriasElegidas] = useState(() => new Set())
   const [isApplying, setIsApplying] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
 
   useEffect(() => {
     if (isDemoMode) return
@@ -335,6 +336,42 @@ export default function ModifiersPanel({ companySettings }) {
   const cuantosLaUsan = (tpl) =>
     products.filter((p) => (p?.modifiers || []).some((g) => grupoEsDeLaPlantilla(g, tpl))).length
 
+  // Los productos que quedaron con una versión vieja de la plantilla que usan.
+  //
+  // Editar la plantilla NO los cambia solo: cada producto guarda su copia, que
+  // es lo que el POS lee al vender. Antes eso obligaba a ir plato por plato
+  // —quitar el modificador viejo y volver a insertarlo—, que es justo lo que no
+  // sirve. Acá se detecta y se arregla de una vez.
+  //
+  // Se calcula sobre las plantillas GUARDADAS: mientras hay cambios sin
+  // guardar, actualizar dejaría los productos con algo que ni siquiera está en
+  // el negocio todavía.
+  const sincronizacion = useMemo(
+    () => (templatesDirty ? { porPlantilla: [], cambios: [] } : planDeSincronizacion(products, templates)),
+    [products, templates, templatesDirty],
+  )
+
+  const handleSincronizar = async () => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+    if (!sincronizacion.cambios.length) return
+    setIsSyncing(true)
+    try {
+      const res = await aplicarPlantillaAProductos(getBusinessId(), sincronizacion.cambios)
+      if (!res.success) throw new Error(res.error)
+      const porId = new Map(sincronizacion.cambios.map((c) => [c.producto.id, c.modifiers]))
+      setProducts((prev) => prev.map((p) => (porId.has(p.id) ? { ...p, modifiers: porId.get(p.id) } : p)))
+      toast.success(`${res.escritos} producto${res.escritos === 1 ? '' : 's'} actualizado${res.escritos === 1 ? '' : 's'}`)
+    } catch (e) {
+      console.error('Error sincronizando plantillas:', e)
+      toast.error('No se pudieron actualizar los productos')
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
   const abrirAplicar = (tpl) => {
     setAplicando(tpl)
     setIncluirLosQueLaUsan(true)
@@ -391,7 +428,19 @@ export default function ModifiersPanel({ companySettings }) {
       const res = await saveModifierTemplates(getBusinessId(), templates)
       if (res.success) {
         setTemplatesDirty(false)
-        toast.success('Plantillas guardadas')
+        // El plan se calcula acá y no se lee del memo: `setTemplatesDirty` no
+        // cambia las variables de esta función, así que el memo todavía trae el
+        // valor del render anterior (vacío, porque estaba "sucio").
+        const pendiente = planDeSincronizacion(products, templates)
+        if (pendiente.cambios.length > 0) {
+          toast.success(
+            `Plantillas guardadas. ${pendiente.cambios.length} producto${pendiente.cambios.length === 1 ? '' : 's'} ` +
+            `${pendiente.cambios.length === 1 ? 'sigue' : 'siguen'} con la versión anterior: actualízalos abajo.`,
+            7000,
+          )
+        } else {
+          toast.success('Plantillas guardadas')
+        }
       } else {
         throw new Error(res.error)
       }
@@ -737,6 +786,36 @@ export default function ModifiersPanel({ companySettings }) {
                 )}
               </Button>
             </div>
+
+            {/* Lo que quedó con la versión vieja de su plantilla. Aparece solo
+                cuando hay algo que hacer, y ahí mismo se arregla: sin esto
+                había que ir plato por plato, quitando el modificador viejo y
+                volviendo a insertarlo. */}
+            {sincronizacion.cambios.length > 0 && (
+              <div className="border border-amber-200 bg-amber-50 rounded-lg p-3">
+                <p className="text-sm text-amber-900">
+                  <strong>{sincronizacion.cambios.length}</strong> producto{sincronizacion.cambios.length === 1 ? '' : 's'}
+                  {sincronizacion.cambios.length === 1 ? ' quedó' : ' quedaron'} con la versión anterior de{' '}
+                  {sincronizacion.porPlantilla.filter((x) => x.desactualizados > 0).length === 1
+                    ? `la plantilla "${sincronizacion.porPlantilla.find((x) => x.desactualizados > 0)?.plantilla.name}"`
+                    : 'sus plantillas'}.
+                </p>
+                <p className="text-xs text-amber-800 mt-1">
+                  {sincronizacion.cambios.slice(0, 8).map((c) => c.producto.nombre).join(', ')}
+                  {sincronizacion.cambios.length > 8 && ` y ${sincronizacion.cambios.length - 8} más`}
+                </p>
+                <Button size="sm" className="mt-2" onClick={handleSincronizar} disabled={isSyncing}>
+                  {isSyncing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Actualizando...
+                    </>
+                  ) : (
+                    `Actualizar ${sincronizacion.cambios.length} producto${sincronizacion.cambios.length === 1 ? '' : 's'}`
+                  )}
+                </Button>
+              </div>
+            )}
 
             {/* ── Llevar una plantilla a los productos ──────────────────── */}
             {templates.length > 0 && (
