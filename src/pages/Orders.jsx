@@ -17,7 +17,7 @@ import { createBarTab, occupyTable } from '@/services/tableService'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { useAppContext } from '@/hooks/useAppContext'
 import { Cantidad, ChipDeEstadoItem, Modificadores, NotaDelPlato } from '@/components/restaurant/tarjetaOrden'
-import { BOTON_ACCION, BOTON_CABECERA, ETIQUETA_CABECERA, ZOOM_TARJETAS, clasesDeTarjeta, clasesDeBanda } from '@/components/restaurant/tarjetaOrdenEstilos'
+import { BOTON_ACCION, BOTON_CABECERA, CAJITA, ETIQUETA_CABECERA, ZOOM_TARJETAS, clasesDeTarjeta, clasesDeCabecera, chipDeEstado } from '@/components/restaurant/tarjetaOrdenEstilos'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -1564,7 +1564,7 @@ export default function Orders() {
             {pestana === 'historial' ? 'Historial de Órdenes' : 'Órdenes Activas'}
           </h1>
           <GuideLink />
-          <div className="flex border border-gray-300 overflow-hidden">
+          <div className="flex bg-gray-100 rounded-md p-0.5">
             {[
               { id: 'activas', label: 'Activas' },
               { id: 'historial', label: 'Historial' },
@@ -1573,10 +1573,10 @@ export default function Orders() {
                 key={t.id}
                 type="button"
                 onClick={() => setPestana(t.id)}
-                className={`px-3 py-1.5 text-sm font-semibold transition-colors ${
+                className={`px-3 py-1 text-sm font-semibold rounded-[5px] transition-colors ${
                   pestana === t.id
-                    ? 'bg-gray-900 text-white'
-                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-900'
                 }`}
               >
                 {t.label}
@@ -1604,7 +1604,7 @@ export default function Orders() {
                 variant="outline"
                 onClick={abrirConsumoInterno}
                 disabled={isDemoMode || cargandoConsumo}
-                className="flex-1 sm:flex-none rounded-none"
+                className="flex-1 sm:flex-none"
                 title={isDemoMode ? 'No disponible en modo demo' : 'Descontar stock sin cobrar: consumo del personal, merma, cortesías'}
               >
                 {cargandoConsumo
@@ -1615,12 +1615,12 @@ export default function Orders() {
               <Button
                 variant="outline"
                 onClick={() => { setBarTabName(''); setShowBarTabModal(true) }}
-                className="flex-1 sm:flex-none rounded-none"
+                className="flex-1 sm:flex-none"
               >
                 <Wine className="w-4 h-4 mr-2" />
                 Cuenta de barra
               </Button>
-              <Button onClick={handleCreateOrderClick} className="flex-1 sm:flex-none rounded-none">
+              <Button onClick={handleCreateOrderClick} className="flex-1 sm:flex-none">
                 <Plus className="w-4 h-4 mr-2" />
                 Nueva Orden
               </Button>
@@ -1646,7 +1646,7 @@ export default function Orders() {
       ) : (
       <>
       {/* Contadores en una tira, en vez de cuatro tarjetas de 100px */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 px-4 py-2 bg-white border border-gray-300 text-sm text-gray-600">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600">
         <span>Activas <strong className="ml-1 text-base text-gray-900 tabular-nums">{orders.length}</strong></span>
         <span>Pendientes <strong className="ml-1 text-base text-amber-600 tabular-nums">{stats?.pending || 0}</strong></span>
         <span>En preparación <strong className="ml-1 text-base text-blue-600 tabular-nums">{stats?.preparing || 0}</strong></span>
@@ -1658,7 +1658,7 @@ export default function Orders() {
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setSelectedBrandFilter('all')}
-            className={`px-3 py-1.5 rounded-none font-medium text-sm transition-all ${
+            className={`px-3 py-1.5 rounded-md font-medium text-sm transition-all ${
               selectedBrandFilter === 'all'
                 ? 'bg-gray-800 text-white shadow-md'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1672,7 +1672,7 @@ export default function Orders() {
               <button
                 key={brand.id}
                 onClick={() => setSelectedBrandFilter(brand.id)}
-                className={`px-3 py-1.5 rounded-none font-medium text-sm transition-all flex items-center gap-2 ${
+                className={`px-3 py-1.5 rounded-md font-medium text-sm transition-all flex items-center gap-2 ${
                   selectedBrandFilter === brand.id
                     ? 'text-white shadow-md'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1689,7 +1689,7 @@ export default function Orders() {
           })}
           <button
             onClick={() => setSelectedBrandFilter('none')}
-            className={`px-3 py-1.5 rounded-none font-medium text-sm transition-all ${
+            className={`px-3 py-1.5 rounded-md font-medium text-sm transition-all ${
               selectedBrandFilter === 'none'
                 ? 'bg-gray-600 text-white shadow-md'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1733,25 +1733,27 @@ export default function Orders() {
             const isUrgent = order.priority === 'urgent'
 
             return (
-              <Card key={order.id} className={clasesDeTarjeta(isUrgent)}>
+              <Card key={order.id} className={clasesDeTarjeta(order.status, isUrgent)}>
                 {/* Cabecera: una sola banda de color por tarjeta. Numero y
                     tiempo grandes, que es lo que se mira desde lejos. */}
-                <div className={clasesDeBanda(order.status, isUrgent)}>
+                {/* Cabecera gris suave. El estado va en el filete de la
+                    izquierda de la tarjeta y en la etiqueta chica. */}
+                <div className={clasesDeCabecera(isUrgent)}>
                   <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="shrink-0 text-2xl font-bold tracking-tight leading-none">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="shrink-0 text-xl font-bold text-gray-900 tracking-tight">
                         {order.orderNumber || '#' + order.id.slice(-6)}
                       </span>
                       {/* `truncate` en el texto: si la tarjeta es angosta, el
                           rotulo se corta con "..." en vez de montarse sobre
                           el tiempo. */}
-                      <span className="flex items-center gap-1 min-w-0 text-sm font-semibold uppercase tracking-wide opacity-90">
-                        <StatusIcon className="w-4 h-4 shrink-0" />
+                      <span className={`${ETIQUETA_CABECERA} ${chipDeEstado(order.status, isUrgent)} min-w-0`}>
+                        <StatusIcon className="w-3.5 h-3.5 shrink-0" />
                         <span className="truncate">{statusConfig.label}</span>
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-xl font-bold tabular-nums leading-none">
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-base font-semibold text-gray-700 tabular-nums mr-1">
                         {elapsed}
                       </span>
                       {order.status !== 'delivered' && !order.tableNumber && (
@@ -1764,7 +1766,7 @@ export default function Orders() {
                           className={BOTON_CABECERA}
                           title="Editar orden"
                         >
-                          <Edit2 className="w-5 h-5" />
+                          <Edit2 className="w-[18px] h-[18px]" />
                         </button>
                       )}
                       {/* Se apagan TODOS los botones mientras hay una comanda en
@@ -1779,8 +1781,8 @@ export default function Orders() {
                         title={printingOrderId === order.id ? 'Enviando a cocina...' : 'Imprimir Comanda'}
                       >
                         {printingOrderId === order.id
-                          ? <Loader2 className="w-5 h-5 animate-spin" />
-                          : <Printer className="w-5 h-5" />}
+                          ? <Loader2 className="w-[18px] h-[18px] animate-spin" />
+                          : <Printer className="w-[18px] h-[18px]" />}
                       </button>
                     </div>
                   </div>
@@ -1793,30 +1795,30 @@ export default function Orders() {
                     || order.brandName) && (
                     <div className="flex flex-wrap items-center gap-1.5 mt-2">
                       {isUrgent && (
-                        <span className={`${ETIQUETA_CABECERA} animate-pulse`}>URGENTE</span>
+                        <span className={`${ETIQUETA_CABECERA} chip-error animate-pulse`}>URGENTE</span>
                       )}
                       {requirePaymentBeforeKitchen && (
                         order.paid ? (
-                          <span className={ETIQUETA_CABECERA}>
+                          <span className={`${ETIQUETA_CABECERA} chip-ok`}>
                             <DollarSign className="w-3 h-3" />
                             PAGADO
                           </span>
                         ) : order.status === 'pending' ? (
-                          <span className={ETIQUETA_CABECERA}>
+                          <span className={`${ETIQUETA_CABECERA} chip-aviso`}>
                             <DollarSign className="w-3 h-3" />
                             PAGO PENDIENTE
                           </span>
                         ) : null
                       )}
                       {order.invoiced && (
-                        <span className={ETIQUETA_CABECERA}>
+                        <span className={`${ETIQUETA_CABECERA} chip-info`}>
                           <Receipt className="w-3 h-3" />
                           FACTURADO
                         </span>
                       )}
                       {order.brandName && (
                         <span
-                          className="inline-flex items-center px-1.5 py-0.5 text-white text-xs font-bold rounded-sm ring-1 ring-black/10"
+                          className="inline-flex items-center px-2 py-0.5 text-white text-xs font-semibold rounded-md"
                           style={{ backgroundColor: order.brandColor || '#8B5CF6' }}
                         >
                           {order.brandName}
@@ -1831,7 +1833,7 @@ export default function Orders() {
                   <div className="flex items-center justify-between text-sm font-medium text-gray-700 pb-3 border-b border-gray-200">
                     {order.tableNumber ? (
                       <div className="flex items-center gap-2">
-                        <span className="w-8 h-8 flex items-center justify-center bg-gray-900 text-white font-bold rounded-sm">
+                        <span className={`w-8 h-8 flex items-center justify-center font-bold ${CAJITA}`}>
                           {order.tableNumber}
                         </span>
                         <span>Mesa {order.tableNumber}</span>
@@ -1956,17 +1958,17 @@ export default function Orders() {
                   {/* Items: cantidad en un cuadrado, nombre grande. Los
                       modificadores y las notas cuelgan del plato, con un filete
                       a la izquierda en vez de una caja de color. */}
-                  <div className="divide-y divide-gray-200">
+                  <div className="divide-y divide-gray-100">
                     {(order.items || []).map((item, idx) => {
                       return (
                         <div key={item.itemId || idx} className="flex gap-3 py-2.5">
                           <Cantidad n={item.quantity} />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-3">
-                              <span className="text-base font-semibold text-gray-900 leading-snug">
+                              <span className="text-[15px] font-medium text-gray-900 leading-snug">
                                 {item.name}
                               </span>
-                              <span className="text-base font-semibold text-gray-700 tabular-nums whitespace-nowrap">
+                              <span className="text-[15px] font-semibold text-gray-800 tabular-nums whitespace-nowrap">
                                 S/ {(item.total || 0).toFixed(2)}
                               </span>
                             </div>
@@ -1986,22 +1988,22 @@ export default function Orders() {
                   </div>
 
                   {/* Total */}
-                  <div className="flex justify-between items-center pt-3 border-t-2 border-gray-900">
-                    <span className="text-base font-bold text-gray-900">TOTAL</span>
-                    <span className="text-xl font-bold text-gray-900 tabular-nums">
+                  <div className="flex justify-between items-center pt-3 border-t border-gray-200">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Total</span>
+                    <span className="text-lg font-bold text-gray-900 tabular-nums">
                       S/ {(order.total || 0).toFixed(2)}
                     </span>
                   </div>
 
                   {/* Horas */}
-                  <div className="space-y-1 text-sm text-gray-500">
+                  <div className="space-y-1 text-xs text-gray-500">
                     <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 shrink-0" />
+                      <Clock className="w-3.5 h-3.5 shrink-0" />
                       <span>Iniciada a las {formatTime(order.createdAt)}</span>
                     </div>
                     {order.dispatchedAt && (
                       <div className="flex items-center gap-2">
-                        <Truck className="w-4 h-4 shrink-0" />
+                        <Truck className="w-3.5 h-3.5 shrink-0" />
                         <span>Despachada a las {formatTime(order.dispatchedAt)}</span>
                       </div>
                     )}
@@ -2066,7 +2068,7 @@ export default function Orders() {
                         disabled={isUpdating}
                         size="sm"
                         variant="outline"
-                        className={`${BOTON_ACCION} border-2 border-violet-600 text-violet-700 hover:bg-violet-50`}
+                        className={`${BOTON_ACCION} border-violet-300 text-violet-700 hover:bg-violet-50`}
                       >
                         {isUpdating ? (
                           <Loader2 className="w-5 h-5 animate-spin" />
@@ -2101,7 +2103,7 @@ export default function Orders() {
                         onClick={() => setOpenMenuOrderId(openMenuOrderId === order.id ? null : order.id)}
                         variant="outline"
                         size="sm"
-                        className="w-14 min-h-[52px] rounded-none"
+                        className="w-14 min-h-[48px] rounded-md"
                         title="Más acciones"
                       >
                         <Plus className="w-5 h-5" />
@@ -2113,7 +2115,7 @@ export default function Orders() {
                             className="fixed inset-0 z-10"
                             onClick={() => setOpenMenuOrderId(null)}
                           />
-                          <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-300 rounded-none shadow-lg py-1 overflow-hidden min-w-[220px]">
+                          <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 overflow-hidden min-w-[220px]">
                             {/* Cobrar / Facturar. Vive acá y no como botón porque se usa
                                 mucho menos que cerrar la orden — y porque "Marcar
                                 Entregada" sobre una orden sin facturar ya ofrece emitir

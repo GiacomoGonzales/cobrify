@@ -9,7 +9,7 @@ import { getActiveBranches } from '@/services/branchService'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { useAppContext } from '@/hooks/useAppContext'
 import { Cantidad, ChipDeEstadoItem, Modificadores, NotaDelPlato } from '@/components/restaurant/tarjetaOrden'
-import { BOTON_ACCION, BOTON_ITEM, ETIQUETA_CABECERA, RECUADRO_CABECERA, ZOOM_TARJETAS, clasesDeTarjeta, clasesDeBanda } from '@/components/restaurant/tarjetaOrdenEstilos'
+import { BOTON_ACCION, BOTON_ITEM, ETIQUETA_CABECERA, RECUADRO_CABECERA, ZOOM_TARJETAS, clasesDeTarjeta, clasesDeCabecera } from '@/components/restaurant/tarjetaOrdenEstilos'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, query, where, onSnapshot, orderBy as firestoreOrderBy, doc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -446,8 +446,8 @@ export default function Kitchen() {
     const isUrgent = order.priority === 'urgent'
 
     return (
-      <Card key={order.id} className={clasesDeTarjeta(isUrgent)}>
-        <div className={clasesDeBanda(order.status, isUrgent)}>
+      <Card key={order.id} className={clasesDeTarjeta(order.status, isUrgent)}>
+        <div className={clasesDeCabecera(isUrgent)}>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 min-w-0">
               {order.tableNumber && (
@@ -457,30 +457,32 @@ export default function Kitchen() {
               )}
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-2xl font-bold tracking-tight leading-none">
+                  <span className="text-xl font-bold text-gray-900 tracking-tight">
                     {order.orderNumber || '#' + order.id.slice(-6)}
                   </span>
                   {isUrgent && (
-                    <span className={`${ETIQUETA_CABECERA} animate-pulse`}>URGENTE</span>
+                    <span className={`${ETIQUETA_CABECERA} chip-error animate-pulse`}>URGENTE</span>
                   )}
                 </div>
                 {order.waiterName && (
-                  <div className="text-sm opacity-90 truncate mt-1">{order.waiterName}</div>
+                  <div className="text-sm text-gray-500 truncate mt-0.5">{order.waiterName}</div>
                 )}
               </div>
             </div>
+            {/* El tiempo en su cajita: se pone ambar a los 10 minutos y rojo a
+                los 20, porque en cocina lo que importa es que se atrasa. */}
             <div className="text-right shrink-0">
-              <div className={`inline-block px-2 py-0.5 text-xl font-bold tabular-nums leading-tight ${RECUADRO_CABECERA} ${getElapsedColor(elapsed)}`}>
+              <div className={`inline-block px-2 py-0.5 text-lg font-bold tabular-nums leading-tight ${RECUADRO_CABECERA} ${getElapsedColor(elapsed)}`}>
                 {elapsed} min
               </div>
-              <div className="text-sm opacity-90 mt-1">{formatTime(order.createdAt)}</div>
+              <div className="text-xs text-gray-500 mt-0.5">{formatTime(order.createdAt)}</div>
             </div>
           </div>
         </div>
 
         <CardContent className="px-4 py-3 space-y-3">
           {/* Platos */}
-          <div className="divide-y divide-gray-200">
+          <div className="divide-y divide-gray-100">
             {(order.items || []).map((item, idx) => {
               const itemStatus = item.status || 'pending'
               const isItemUpdating = updatingItemId === item.itemId
@@ -491,7 +493,7 @@ export default function Kitchen() {
                     <Cantidad n={item.quantity} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-3">
-                        <span className="text-base font-semibold text-gray-900 leading-snug">
+                        <span className="text-[15px] font-medium text-gray-900 leading-snug">
                           {item.name}
                         </span>
                         {/* Estado del plato - Solo si itemStatusTracking está habilitado */}
@@ -627,8 +629,8 @@ export default function Kitchen() {
               {branches.map((b) => (<option key={b.id} value={b.id}>{b.name}</option>))}
             </Select>
           )}
-          <div className="flex items-center gap-2 bg-gray-900 text-white px-3 py-1.5">
-            <Clock className="w-4 h-4" />
+          <div className="flex items-center gap-2 bg-gray-100 text-gray-900 px-3 py-1.5 rounded-md">
+            <Clock className="w-4 h-4 text-gray-500" />
             <span className="font-mono text-lg font-bold tabular-nums">
               {new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
             </span>
@@ -638,11 +640,11 @@ export default function Kitchen() {
 
       {/* Tabs de Estaciones - Solo si está habilitado el modo multi-estación */}
       {enableKitchenStations && kitchenStations.length > 0 && (
-        <div className="bg-white shadow-sm border border-gray-300 p-2">
+        <div className="bg-white shadow-sm border border-gray-200 rounded-lg p-2">
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             <button
               onClick={() => setSelectedStation('all')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-none font-semibold text-sm whitespace-nowrap transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-md font-semibold text-sm whitespace-nowrap transition-colors ${
                 selectedStation === 'all'
                   ? 'bg-gray-900 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -665,7 +667,7 @@ export default function Kitchen() {
                 <button
                   key={station.id}
                   onClick={() => setSelectedStation(station.id)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-none font-semibold text-sm whitespace-nowrap transition-colors ${
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md font-semibold text-sm whitespace-nowrap transition-colors ${
                     isSelected
                       ? 'text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -712,7 +714,7 @@ export default function Kitchen() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" style={{ zoom: ZOOM_TARJETAS }}>
           {/* Pendientes */}
           <div className="space-y-4">
-            <div className="flex items-center gap-2 pb-2 border-b-4 border-amber-300">
+            <div className="flex items-center gap-2 pb-2 border-b-2 border-amber-400">
               <Clock className="w-5 h-5 text-amber-600" />
               <h2 className="text-lg font-bold text-gray-900">
                 Pendientes ({filteredPendingOrders.length})
@@ -731,7 +733,7 @@ export default function Kitchen() {
 
           {/* En Preparación */}
           <div className="space-y-4">
-            <div className="flex items-center gap-2 pb-2 border-b-4 border-sky-300">
+            <div className="flex items-center gap-2 pb-2 border-b-2 border-sky-500">
               <Flame className="w-5 h-5 text-sky-600" />
               <h2 className="text-lg font-bold text-gray-900">
                 En Preparación ({filteredPreparingOrders.length})
@@ -750,7 +752,7 @@ export default function Kitchen() {
 
           {/* Listas */}
           <div className="space-y-4">
-            <div className="flex items-center gap-2 pb-2 border-b-4 border-emerald-300">
+            <div className="flex items-center gap-2 pb-2 border-b-2 border-emerald-500">
               <CheckCircle className="w-5 h-5 text-emerald-600" />
               <h2 className="text-lg font-bold text-gray-900">
                 Listas ({filteredReadyOrders.length})
@@ -772,7 +774,7 @@ export default function Kitchen() {
       {/* Modo Item-Tracking: Una sola lista ordenada por tiempo */}
       {itemStatusTracking && (
         <div>
-          <div className="flex items-center gap-2 pb-2 border-b-4 border-gray-900 mb-3">
+          <div className="flex items-center gap-2 pb-2 border-b-2 border-gray-300 mb-3">
             <ChefHat className="w-5 h-5 text-gray-700" />
             <h2 className="text-lg font-bold text-gray-900">
               Órdenes Activas ({filteredAllActiveOrders.length})

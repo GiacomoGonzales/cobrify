@@ -140,6 +140,7 @@
   .chip-aviso  { @apply bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200; }
   .chip-error  { @apply bg-red-50 text-red-700 ring-1 ring-inset ring-red-200; }
   .chip-info   { @apply bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200; }
+  .chip-morado { @apply bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200; }
 
   /* Panel de administracion (.admin): Inter, 13px y cifras tabulares. Sin
      zoom: la densidad sale del tamano de letra y de las filas, no de encoger

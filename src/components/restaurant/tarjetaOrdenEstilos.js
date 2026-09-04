@@ -3,27 +3,27 @@
  *
  * Los pedazos con JSX (cantidad, modificadores, nota, chip) están al lado, en
  * tarjetaOrden.jsx. Van en dos archivos porque Fast Refresh solo recarga en
- * caliente los archivos que exportan componentes y nada más; si las constantes
- * fueran en el mismo, cada edición recargaría la página entera en desarrollo.
+ * caliente los archivos que exportan componentes y nada más.
  *
  * ── Por qué existe ──────────────────────────────────────────────────────────
  * Órdenes y Cocina muestran la misma orden a gente distinta —caja y cocina— y
- * tienen que verse iguales: misma cabecera, misma letra, mismos botones. Si
- * cada pantalla tuviera su copia, la primera vez que se agrande un botón en
- * una se olvidaría la otra.
+ * tienen que verse iguales. Si cada pantalla tuviera su copia, la primera vez
+ * que se agrande un botón en una se olvidaría la otra.
  *
- * ── El estilo ───────────────────────────────────────────────────────────────
- * Pedido del usuario, con una pantalla de cocina (KDS) de referencia: la letra
- * era chica, los modificadores iban en una caja azul con letra diminuta y el
- * cuerpo entero se teñía del color del estado, así que todo se veía lavado.
+ * ── El estilo, y cómo se llegó ──────────────────────────────────────────────
+ * Primera versión: banda de color saturado con texto blanco, cuadrados negros
+ * con la cantidad, línea negra gruesa sobre el total, esquinas a 90°. Un
+ * usuario la encontró poco estética y el dueño coincidió: "ese amarillo se ve
+ * feo", "no me gusta el número sobre un cuadrado negro", "esquinas un poquito
+ * curvas". Lo que había en común era que todo gritaba en bloques.
  *
- *   - Esquinas rectas. Cuerpo blanco.
- *   - UNA banda de color en la cabecera, y es la única que lleva color según
- *     el estado. Número y tiempo grandes, que es lo que se mira desde lejos.
- *   - Cantidad en un cuadrado negro; nombre del plato a 16px en negrita.
- *   - Modificadores colgando del plato con un filete gris a la izquierda. Sin
- *     cajas de color ni el rótulo "MODIFICADORES:".
- *   - Botones altos y en negrita, para tocarlos sin mirar.
+ * Ahora la tarjeta es tranquila y el estado se lee de dos maneras discretas:
+ *   - un FILETE de color a la izquierda de la tarjeta (4px), y
+ *   - una etiqueta chica con el nombre del estado, con la misma paleta
+ *     `chip-*` de index.css que usa el resto del sistema.
+ * La cabecera es gris muy suave e igual para todas. Nada negro con texto
+ * blanco: las cajitas de cantidad y de mesa son grises claras con texto
+ * oscuro. Esquinas de 8px en la tarjeta y de 6px en botones, chips y cajitas.
  *
  * Sin emojis: regla de la casa.
  */
@@ -33,29 +33,32 @@
  *
  * Al 100% la letra se lee pero entran pocas órdenes; al 70% (lo que tenían
  * las dos páginas enteras hasta septiembre) no se leía. El usuario comparó
- * 100% y 80% en pantalla y se quedó con 80%: legible y con una orden más por
- * fila. Va en el contenedor del grid, no en la página: la cabecera, la tira
- * de contadores y los filtros siguen al tamaño normal.
+ * 100% y 80% en pantalla y se quedó con 80%. Va en el contenedor del grid, no
+ * en la página: la cabecera, la tira de contadores y los filtros siguen al
+ * tamaño normal.
  */
 export const ZOOM_TARJETAS = 0.8
 
 /** Botones de la orden (Iniciar Preparación, Marcar Entregada...). */
-export const BOTON_ACCION = 'flex-1 min-h-[52px] text-base font-bold rounded-none'
+export const BOTON_ACCION = 'flex-1 min-h-[48px] text-[15px] font-semibold rounded-md'
 
 /** Botones por plato (Iniciar, Marcar Listo): en una orden de ocho platos, a
- *  52px la tarjeta no cabría en pantalla. 44px es el mínimo para el dedo. */
-export const BOTON_ITEM = 'flex-1 min-h-[44px] text-sm font-bold rounded-none'
+ *  48px la tarjeta no cabría en pantalla. 42px sigue siendo cómodo al dedo. */
+export const BOTON_ITEM = 'flex-1 min-h-[42px] text-sm font-semibold rounded-md'
 
-/** Botones de icono sobre la banda (editar, imprimir). Heredan el color del
- *  texto de la banda. */
-export const BOTON_CABECERA = 'w-9 h-9 flex items-center justify-center rounded-sm bg-black/5 hover:bg-black/10 text-current transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+/** Botones de icono en la cabecera (editar, imprimir): grises, se marcan al
+ *  pasar por encima. */
+export const BOTON_CABECERA = 'w-9 h-9 flex items-center justify-center rounded-md text-gray-500 hover:bg-gray-200/70 hover:text-gray-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
 
-/** Etiquetas sobre la banda (URGENTE, PAGADO, FACTURADO...): blancas con un
- *  filo gris, para que se despeguen del tono suave de la banda. */
-export const ETIQUETA_CABECERA = 'inline-flex items-center gap-1 px-1.5 py-0.5 bg-white text-gray-900 text-xs font-bold rounded-sm ring-1 ring-black/10'
+/** Etiquetas de la cabecera (estado, URGENTE, PAGADO, FACTURADO...). Se
+ *  completan con una clase `chip-*` que pone el color. */
+export const ETIQUETA_CABECERA = 'inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-md whitespace-nowrap'
 
-/** Recuadros blancos sobre la banda (número de mesa, tiempo en cocina). */
-export const RECUADRO_CABECERA = 'bg-white rounded-sm ring-1 ring-black/10'
+/** Cajitas de la cabecera (número de mesa, tiempo en cocina). */
+export const RECUADRO_CABECERA = 'bg-white border border-gray-200 rounded-md'
+
+/** Cajita de la cantidad del plato y del número de mesa en el cuerpo. */
+export const CAJITA = 'bg-gray-100 text-gray-900 rounded-md'
 
 /** Estado de cada plato dentro de la orden (solo con itemStatusTracking). */
 export const ESTADO_ITEM = {
@@ -66,30 +69,32 @@ export const ESTADO_ITEM = {
 }
 
 /**
- * El color de la banda según el estado de la orden.
- *
- * Tonos suaves con texto oscuro, no saturados con texto blanco: la primera
- * versión (ámbar 500, azul 600, violeta 600) se veía como cuatro bloques de
- * color gritando en la misma fila. Es la misma lógica de las etiquetas
- * `chip-*` de index.css: fondo claro del tono, texto oscuro del tono.
+ * El acento del estado de la orden: el filete de la izquierda y la etiqueta.
+ * Un solo lugar para los dos, así nunca se desencuentran.
  */
-export function bandaDeEstado(status) {
+export function acentoDeEstado(status) {
   switch (status) {
-    case 'pending': return 'bg-amber-100 text-amber-900'
-    case 'preparing': return 'bg-sky-100 text-sky-900'
-    case 'ready': return 'bg-emerald-100 text-emerald-900'
-    case 'dispatched': return 'bg-violet-100 text-violet-900'
-    case 'delivered': return 'bg-gray-100 text-gray-800'
-    default: return 'bg-gray-100 text-gray-800'
+    case 'pending': return { filete: 'border-l-amber-400', chip: 'chip-aviso' }
+    case 'preparing': return { filete: 'border-l-sky-500', chip: 'chip-info' }
+    case 'ready': return { filete: 'border-l-emerald-500', chip: 'chip-ok' }
+    case 'dispatched': return { filete: 'border-l-violet-500', chip: 'chip-morado' }
+    case 'delivered': return { filete: 'border-l-gray-300', chip: 'chip-neutro' }
+    default: return { filete: 'border-l-gray-300', chip: 'chip-neutro' }
   }
 }
 
-/** Clases de la tarjeta. Urgente: borde rojo grueso. */
-export function clasesDeTarjeta(esUrgente) {
-  return `rounded-none shadow-sm ${esUrgente ? 'border-2 border-red-600' : 'border border-gray-300'}`
+/** Clases de la tarjeta. Urgente pisa al estado: filete rojo. */
+export function clasesDeTarjeta(status, esUrgente) {
+  const filete = esUrgente ? 'border-l-red-500' : acentoDeEstado(status).filete
+  return `rounded-lg shadow-sm border border-gray-200 border-l-4 ${filete}`
 }
 
-/** Clases de la banda de la cabecera. Urgente pisa al estado: rojo. */
-export function clasesDeBanda(status, esUrgente) {
-  return `px-4 py-3 border-b border-black/5 ${esUrgente ? 'bg-red-100 text-red-900' : bandaDeEstado(status)}`
+/** Clases de la cabecera: gris suave, o rosado si es urgente. */
+export function clasesDeCabecera(esUrgente) {
+  return `px-4 py-3 rounded-tr-lg border-b ${esUrgente ? 'bg-red-50 border-red-100' : 'bg-gray-50 border-gray-200'}`
+}
+
+/** La clase `chip-*` de la etiqueta del estado. */
+export function chipDeEstado(status, esUrgente) {
+  return esUrgente ? 'chip-error' : acentoDeEstado(status).chip
 }

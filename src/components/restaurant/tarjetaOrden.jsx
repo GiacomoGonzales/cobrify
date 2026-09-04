@@ -6,12 +6,12 @@
  * Fast Refresh recargar el archivo en caliente.
  */
 import { AlertTriangle } from 'lucide-react'
-import { ESTADO_ITEM } from './tarjetaOrdenEstilos'
+import { CAJITA, ESTADO_ITEM } from './tarjetaOrdenEstilos'
 
-/** La cantidad del plato, en un cuadrado negro. */
+/** La cantidad del plato, en una cajita gris clara. */
 export function Cantidad({ n }) {
   return (
-    <span className="shrink-0 min-w-[2rem] h-8 px-1.5 flex items-center justify-center bg-gray-900 text-white text-base font-bold rounded-sm tabular-nums">
+    <span className={`shrink-0 min-w-[2rem] h-8 px-1.5 flex items-center justify-center text-[15px] font-bold tabular-nums ${CAJITA}`}>
       {n}
     </span>
   )
@@ -21,7 +21,7 @@ export function Cantidad({ n }) {
 export function ChipDeEstadoItem({ status }) {
   const estado = ESTADO_ITEM[status] || ESTADO_ITEM.pending
   return (
-    <span className={`shrink-0 inline-block px-1.5 py-0.5 text-xs font-semibold rounded-sm ${estado.chip}`}>
+    <span className={`shrink-0 inline-block px-1.5 py-0.5 text-xs font-semibold rounded-md ${estado.chip}`}>
       {estado.texto}
     </span>
   )
@@ -36,13 +36,13 @@ export function ChipDeEstadoItem({ status }) {
 export function Modificadores({ modifiers, conPrecios = true }) {
   if (!Array.isArray(modifiers) || modifiers.length === 0) return null
   return (
-    <div className="mt-1.5 space-y-0.5 border-l-2 border-gray-300 pl-2.5">
+    <div className="mt-1.5 space-y-0.5 border-l-2 border-gray-200 pl-2.5">
       {modifiers.map((modifier, i) => {
         const opciones = Array.isArray(modifier.options) ? modifier.options : []
         return (
-          <div key={i} className="text-sm text-gray-600 leading-snug">
+          <div key={i} className="text-sm text-gray-500 leading-snug">
             {modifier.modifierName}:{' '}
-            <span className="font-semibold text-gray-800">
+            <span className="font-medium text-gray-700">
               {opciones.map((opt, j) => (
                 <span key={j}>
                   {opt.optionName}
@@ -58,11 +58,11 @@ export function Modificadores({ modifiers, conPrecios = true }) {
   )
 }
 
-/** La nota del plato ("sin ají"), con filete ámbar. */
+/** La nota del plato ("sin ají"): fondo ámbar muy suave, filete ámbar. */
 export function NotaDelPlato({ nota }) {
   if (!nota) return null
   return (
-    <div className="mt-1.5 flex items-start gap-1.5 text-sm text-amber-900 bg-amber-50 border-l-2 border-amber-500 pl-2 pr-2 py-1">
+    <div className="mt-1.5 flex items-start gap-1.5 text-sm text-amber-800 bg-amber-50 border-l-2 border-amber-300 rounded-r-md pl-2 pr-2 py-1">
       <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
       <span>{nota}</span>
     </div>
