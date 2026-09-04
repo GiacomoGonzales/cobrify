@@ -8072,7 +8072,6 @@ ${textoDeErrores(revision.errores)}`, 9000)
         const bgProducts = [...productsRaw]
         const bgSelectedWarehouse = selectedWarehouse
         const bgDocumentType = documentType
-        const bgTaxConfig = taxConfig
         const bgAmounts = { ...amounts }
         const bgCustomerData = { ...customerData }
         // Veterinaria: a quién y qué recordarle. Se captura antes de limpiar el
@@ -8306,27 +8305,7 @@ ${textoDeErrores(revision.errores)}`, 9000)
             const shouldAutoSend = shouldAutoSendToSunat
             const canSendToSunat = bgDocumentType === 'factura' || bgDocumentType === 'boleta'
 
-            let isPausedByAdmin = false
-            if (shouldAutoSend && bgDocumentType === 'factura') {
-              try {
-                const { doc: docRef, getDoc: getDocSnap } = await import('firebase/firestore')
-                const { db: fireDb } = await import('@/lib/firebase')
-                const adminSettingsSnap = await getDocSnap(docRef(fireDb, 'config', 'adminSettings'))
-                if (adminSettingsSnap.exists()) {
-                  const adminConfig = adminSettingsSnap.data()
-                  const isReducedIgv = bgTaxConfig.taxType === 'reduced' || bgTaxConfig.igvRate === 10.5
-                  if (adminConfig.system?.pauseSunatRestaurants && isReducedIgv) {
-                    isPausedByAdmin = true
-                    console.log('⏸️ Envío de factura a SUNAT pausado por admin (restaurantes IGV reducido)')
-                    toast.warning('Envío de facturas a SUNAT pausado temporalmente por el administrador.', 6000)
-                  }
-                }
-              } catch (adminCheckError) {
-                console.warn('No se pudo verificar config admin:', adminCheckError)
-              }
-            }
-
-            if (shouldAutoSend && canSendToSunat && !isPausedByAdmin) {
+            if (shouldAutoSend && canSendToSunat) {
               console.log('🚀 Enviando automáticamente a SUNAT (background)...')
               sendInvoiceToSunat(businessId, bgInvoiceId)
                 .then(() => {

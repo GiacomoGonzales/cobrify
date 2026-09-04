@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { PLANS } from '@/services/subscriptionService'
 import { getEmissionSecrets, saveEmissionSecrets } from '@/services/emissionSecretsService'
 import { useToast } from '@/contexts/ToastContext'
 import { Modal, Boton, Campo, Entrada, Selector, Casilla, Opcion } from '@/components/admin/ui'
@@ -217,15 +216,16 @@ export default function SunatModal({ cuenta, onClose, onGuardado }) {
       cambios.allowInvoicingWithoutSunat = !!form.allowInvoicingWithoutSunat
       await updateDoc(ref, cambios)
 
-      // Si el plan de la cuenta no emite por el metodo elegido, se le pone el
-      // minimo que si lo hace. Se mira el emissionMethod REAL del plan, no el
-      // texto de su id (eso pisaba planes pagados). Enterprise ('any') nunca se toca.
-      const metodoDelPlan = PLANS[cuenta.plan]?.emissionMethod
-      const yaEmite = metodoDelPlan === form.emissionMethod || metodoDelPlan === 'any'
-      if (!yaEmite && (form.emissionMethod === 'qpse' || form.emissionMethod === 'sunat_direct')) {
-        const planMinimo = form.emissionMethod === 'qpse' ? 'qpse_1_month' : 'sunat_direct_1_month'
-        await updateDoc(doc(db, 'subscriptions', cuenta.id), { plan: planMinimo, limits: PLANS[planMinimo].limits })
-      }
+      // EL PLAN NO SE TOCA. Antes, si el metodo elegido no coincidia con el
+      // `emissionMethod` del plan, esta pantalla le CAMBIABA el plan a un
+      // `qpse_1_month` o `sunat_direct_1_month` (planes viejos) y le pisaba los
+      // limites. Es decir: a un cliente que pago el Anual y al que le pones
+      // SUNAT directo, le borraba lo que compro.
+      //
+      // La premisa era falsa. Cualquier plan puede emitir por cualquiera de los
+      // dos metodos; lo que se usa se decide POR CUENTA y se pacta con el
+      // cliente. El servidor tampoco mira el plan: `determineEmissionRouter`
+      // resuelve por `businessData.emissionMethod`.
 
       toast.success('Configuración de emisión guardada')
       onGuardado?.()

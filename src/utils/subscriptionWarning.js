@@ -1,3 +1,5 @@
+import { nuncaVence } from '@/services/subscriptionService'
+
 /**
  * ESTADO DE AVISO DE VENCIMIENTO — 16-ago-2026.
  *
@@ -43,6 +45,9 @@ export const getSubscriptionWarning = (subscription, { ahora = new Date() } = {}
   // tiene su propia pantalla de sin acceso.
   if (subscription.accessBlocked === true) return null
   if (subscription.status !== 'active') return null
+  // Enterprise no vence: avisarle "tu plan vence el ..." a una cuenta interna
+  // seria mentirle, y ademas la empujaria a renovar algo que no se cobra.
+  if (nuncaVence(subscription)) return null
 
   const fin = subscription.currentPeriodEnd?.toDate?.() || subscription.currentPeriodEnd
   if (!fin) return null

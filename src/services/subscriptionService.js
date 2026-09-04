@@ -459,6 +459,24 @@ export const SYSTEM_PLAN_IDS = ['trial', 'enterprise'];
 
 export const isSellablePlan = (id) => SELLABLE_PLAN_IDS.includes(id);
 
+/**
+ * ¿Esta cuenta NUNCA vence?
+ *
+ * Es el caso de Enterprise: cuentas internas (Giacomo, gente de confianza) con
+ * todo ilimitado y sin fecha de corte. `neverExpires` existia en el catalogo
+ * desde el principio pero NADIE lo leia, asi que una cuenta Enterprise se
+ * suspendia igual al pasar su `currentPeriodEnd` — el trabajo nocturno no hacia
+ * ninguna excepcion.
+ *
+ * Vive aca para que el criterio sea uno solo: lo usan el panel, el aviso de
+ * vencimiento del cliente y (con su propia copia) el trabajo del servidor.
+ */
+export const nuncaVence = (subscription) => {
+  const plan = subscription?.plan;
+  if (!plan) return false;
+  return PLANS[plan]?.neverExpires === true;
+};
+
 // ============================================
 // INTERRUPTOR del pago en línea (pasarela Flow).
 //
@@ -664,6 +682,13 @@ export const hasActiveAccess = (subscription) => {
 
   // Verificar que no esté bloqueado
   if (subscription.accessBlocked === true) return false;
+
+  // Cuentas que no vencen (Enterprise): mientras no esten bloqueadas a mano,
+  // tienen acceso y punto. El trabajo nocturno del servidor ya las saltaba
+  // —nunca las suspende—, pero ESTA funcion corre en el navegador y miraba
+  // igual la fecha: con un `currentPeriodEnd` viejo dejaba fuera de la app a
+  // una cuenta que el panel mostraba como activa.
+  if (nuncaVence(subscription)) return true;
 
   // Verificar que el estado sea activo
   if (subscription.status !== 'active') return false;

@@ -18,6 +18,8 @@ import OfflineIndicator from '@/components/OfflineIndicator'
 import ReviewPrompt from '@/components/ReviewPrompt'
 import KitchenTicket from '@/components/KitchenTicket'
 import { useYapeListener } from '@/hooks/useYapeListener'
+import Mantenimiento from '@/pages/Mantenimiento'
+import { escucharMantenimiento, MANTENIMIENTO_APAGADO } from '@/services/mantenimientoService'
 import { useReactToPrint } from 'react-to-print'
 import { AlertTriangle, MessageCircle, Bell, Smartphone, Plus, Printer, CheckCircle, X } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
@@ -34,6 +36,7 @@ import { getSubscriptionWarning, ESTILO_AVISO } from '@/utils/subscriptionWarnin
 export default function MainLayout() {
   const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription, isBusinessOwner, isReseller, userPermissions, rolesResolved, hasPageAccess, allowedPages, getBusinessId, businessMode, businessSettings } = useAuth()
   const toast = useToast()
+  const [mantenimiento, setMantenimiento] = useState(MANTENIMIENTO_APAGADO)
   const [hasBusiness, setHasBusiness] = useState(null)
   const [checkingBusiness, setCheckingBusiness] = useState(false)
   const { branding } = useBranding()
@@ -526,6 +529,14 @@ export default function MainLayout() {
     }
   }, [user?.uid, isAuthenticated])
 
+  // Mantenimiento, en vivo: al apagarlo las pantallas vuelven solas. Solo se
+  // escucha con sesión iniciada: sin ella las reglas rechazan la lectura y
+  // llenaría la consola de errores de permisos en cada visita anónima.
+  useEffect(() => {
+    if (!isAuthenticated) return undefined
+    return escucharMantenimiento(setMantenimiento)
+  }, [isAuthenticated])
+
   // Splash mientras carga la sesión (solo en móvil) — pieza única SplashMarca:
   // marca del reseller en su dominio, Cobrify solo en los propios.
   if (isLoading && Capacitor.isNativePlatform()) {
@@ -552,6 +563,13 @@ export default function MainLayout() {
   const isBusinessUser = isAdmin || isBusinessOwner || isReseller || !!userPermissions
   if (rolesResolved && !isBusinessUser) {
     return <Navigate to="/login?cuenta=comprador" replace />
+  }
+
+  // Mantenimiento: cierra la app a los clientes. A los admins no, o el que
+  // prendió el modo no podría apagarlo. Se espera a `rolesResolved` para no
+  // mostrarle la pantalla de cierre a un admin durante el parpadeo inicial.
+  if (mantenimiento.activo && rolesResolved && !isAdmin) {
+    return <Mantenimiento mensaje={mantenimiento.mensaje} />
   }
 
   // Verificar acceso a suscripción

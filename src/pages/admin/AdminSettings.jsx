@@ -1,136 +1,41 @@
 import React, { useState, useEffect } from 'react'
 import { db, auth } from '@/lib/firebase'
 import { nombreRubro, sugerirRubroDeCuenta } from '@/data/rubros'
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs, deleteDoc, writeBatch, query, limit } from 'firebase/firestore'
-import { PLANS } from '@/services/subscriptionService'
-import { getCustomPlans, createCustomPlan, updateCustomPlan, deleteCustomPlan, getHiddenPlans, hidePlan, unhidePlan } from '@/services/customPlanService'
+import { doc, collection, getDocs, deleteDoc, writeBatch, query, limit } from 'firebase/firestore'
+import { PLANS, SELLABLE_PLAN_IDS } from '@/services/subscriptionService'
 import {
-  Settings,
-  Save,
   RefreshCw,
-  CreditCard,
-  Bell,
   Shield,
-  Mail,
-  Globe,
   Database,
-  AlertTriangle,
   CheckCircle,
   Info,
-  DollarSign,
-  Percent,
   Clock,
-  Users,
   Trash2,
-  Wrench,
-  Plus,
-  Edit2,
-  X,
   Image as ImageIcon, Hash, Tag } from 'lucide-react'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '@/lib/firebase'
-import { Boton } from '@/components/admin/ui'
+import { Boton, Seccion, Tabla, Th, Td, Fila, FilaVacia } from '@/components/admin/ui'
+import { leerMantenimiento, guardarMantenimiento, MANTENIMIENTO_APAGADO } from '@/services/mantenimientoService'
+import { VERSION, COMMIT, versionDetallada } from '@/utils/versionApp'
+/**
+ * Configuración del admin: tres pestañas.
+ *
+ * Ya no hay nada que "guardar" acá arriba. Había un botón Guardar global que
+ * escribía `config/adminSettings`, pero de ese documento no queda nada vivo:
+ * los planes se leen del código, el mantenimiento se guarda solo al prenderlo
+ * y las herramientas de Mantenimiento actúan directo.
+ */
 export default function AdminSettings() {
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [activeSection, setActiveSection] = useState('plans')
-  const [settings, setSettings] = useState({
-    plans: {},
-    notifications: {
-      notifyOnNewUser: true,
-      notifyOnPayment: true,
-      notifyOnExpiring: true,
-      daysBeforeExpiry: 3
-    },
-    system: {
-      maintenanceMode: false,
-      allowNewRegistrations: true,
-      pauseSunatRestaurants: false,
-      pauseSunatExceptions: []
-    }
-  })
-  const [saved, setSaved] = useState(false)
-
-  useEffect(() => {
-    loadSettings()
-  }, [])
-
-  async function loadSettings() {
-    setLoading(true)
-    try {
-      // Intentar cargar configuración guardada (puede fallar por permisos)
-      try {
-        const settingsRef = doc(db, 'config', 'adminSettings')
-        const settingsSnap = await getDoc(settingsRef)
-
-        if (settingsSnap.exists()) {
-          setSettings(prev => ({ ...prev, ...settingsSnap.data() }))
-        }
-      } catch (permError) {
-        console.warn('No se pudo cargar config/adminSettings (permisos), usando valores por defecto')
-      }
-
-      // Cargar planes actuales (siempre desde el código)
-      setSettings(prev => ({ ...prev, plans: { ...PLANS } }))
-    } catch (error) {
-      console.error('Error loading settings:', error)
-      // Asegurar que los planes se carguen aunque falle todo lo demás
-      setSettings(prev => ({ ...prev, plans: { ...PLANS } }))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function saveSettings() {
-    setSaving(true)
-    try {
-      const settingsRef = doc(db, 'config', 'adminSettings')
-      await setDoc(settingsRef, {
-        notifications: settings.notifications,
-        system: settings.system,
-        updatedAt: new Date()
-      }, { merge: true })
-
-      setSaved(true)
-      setTimeout(() => setSaved(false), 3000)
-    } catch (error) {
-      console.error('Error saving settings:', error)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  function updateSetting(section, key, value) {
-    setSettings(prev => ({
-      ...prev,
-      [section]: {
-        ...prev[section],
-        [key]: value
-      }
-    }))
-  }
 
   const sections = [
-    { id: 'plans', label: 'Planes', icon: CreditCard },
-    { id: 'notifications', label: 'Notificaciones', icon: Bell },
-    { id: 'system', label: 'Sistema', icon: Settings },
-    { id: 'maintenance', label: 'Mantenimiento', icon: Wrench }
+    { id: 'plans', label: 'Planes' },
+    { id: 'system', label: 'Sistema' },
+    { id: 'maintenance', label: 'Mantenimiento' }
   ]
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <RefreshCw className="w-8 h-8 text-primary-600 animate-spin mx-auto mb-4" />
-          <p className="text-gray-500">Cargando configuración...</p>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="space-y-6">
-      {/* Section Tabs */}
       <div className="bg-white rounded-lg border border-gray-200">
         <div className="flex items-center gap-1 border-b border-gray-200 px-2 overflow-x-auto">
           {sections.map(section => (
@@ -145,702 +50,311 @@ export default function AdminSettings() {
               {section.label}
             </button>
           ))}
-          <div className="flex-1" />
-          <div className="flex items-center gap-2 py-1.5">
-            {saved && <span className="text-[12.5px] text-gray-500">Guardado</span>}
-            <Boton tamano="sm" variante="primario" onClick={saveSettings} disabled={saving}>{saving ? 'Guardando…' : 'Guardar'}</Boton>
-          </div>
         </div>
 
         <div className="p-3 sm:p-6">
-          {activeSection === 'plans' && (
-            <PlansSection plans={settings.plans} />
-          )}
-          {activeSection === 'notifications' && (
-            <NotificationsSection
-              settings={settings.notifications}
-              onChange={(key, value) => updateSetting('notifications', key, value)}
-            />
-          )}
-          {activeSection === 'system' && (
-            <SystemSection
-              settings={settings.system}
-              onChange={(key, value) => updateSetting('system', key, value)}
-            />
-          )}
-          {activeSection === 'maintenance' && (
-            <MaintenanceSection />
-          )}
+          {activeSection === 'plans' && <PlansSection plans={PLANS} />}
+          {activeSection === 'system' && <SystemSection />}
+          {activeSection === 'maintenance' && <MaintenanceSection />}
         </div>
       </div>
     </div>
   )
 }
+
+/**
+ * Planes.
+ *
+ * Solo existen dos cosas: los 6 que se VENDEN y el interno ENTERPRISE. Los dos
+ * viven escritos en `subscriptionService.js`, asi que esta pantalla los muestra
+ * y no los edita.
+ *
+ * NO hay planes personalizados. Los hubo: se creaban en la base y se mezclaban
+ * con el catalogo, y encima el boton de editar un plan del catalogo guardaba un
+ * personalizado con el MISMO id, dejando dos definiciones del mismo plan
+ * compitiendo. Se quitaron a pedido de Giacomo — un precio pactado se resuelve
+ * con `renewalPrice` en la ficha de la cuenta, que es lo que ya hace el sistema
+ * al registrar un pago distinto al de catalogo.
+ *
+ * Los ANTIGUOS (migraciones viejas y `trial`) se pueden consultar plegados: hay
+ * cuentas vivas paradas en ellos.
+ */
+
+const numeroOIlimitado = v => (v === -1 || v === 0 || v == null ? 'Ilimitados' : new Intl.NumberFormat('es-PE').format(v))
+const sucursales = v => (v === -1 ? 'Ilimitadas' : v ?? 1)
+const duracion = m => (m >= 999 ? 'Sin vencimiento' : m === 1 ? '1 mes' : `${m} meses`)
+const soles = v => `S/ ${Number(v || 0).toFixed(2)}`
 
 function PlansSection({ plans }) {
-  const planEntries = Object.entries(plans || {})
-  const [customPlans, setCustomPlans] = useState({})
-  const [hiddenPlanKeys, setHiddenPlanKeys] = useState([])
-  const [showHidden, setShowHidden] = useState(false)
-  const [loadingCustom, setLoadingCustom] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [editingPlan, setEditingPlan] = useState(null)
-  const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({
-    name: '', months: 1, totalPrice: 0, includesIgv: false, emissionMethod: 'qpse',
-    maxInvoicesPerMonth: 500, maxBranches: 1,
-    sunatIntegration: true, multiUser: true, notes: ''
+  const [verAntiguos, setVerAntiguos] = useState(false)
+
+  const catalogo = plans && Object.keys(plans).length ? plans : PLANS
+  const vendibles = SELLABLE_PLAN_IDS.map(id => [id, catalogo[id]]).filter(([, p]) => p)
+  const enterprise = catalogo.enterprise ? [['enterprise', catalogo.enterprise]] : []
+  const antiguos = Object.entries(catalogo)
+    .filter(([id]) => !SELLABLE_PLAN_IDS.includes(id) && id !== 'enterprise')
+    .sort(([a], [b]) => a.localeCompare(b))
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Seccion
+        titulo={`Planes que se venden (${vendibles.length})`}
+        descripcion="El catálogo vigente. Viven en el código, así que se cambian ahí y no desde esta pantalla."
+        sinRelleno
+      >
+        <TablaDePlanes filas={vendibles} />
+        <div className="px-4 py-3 border-t border-gray-200">
+          <p className="text-[12.5px] text-gray-600">
+            Cualquiera de estos planes puede emitir por QPse o por SUNAT directo. El método no
+            depende del plan: se pacta con cada cliente y se configura en su ficha, en «Emisión
+            electrónica».
+          </p>
+        </div>
+      </Seccion>
+
+      <Seccion
+        titulo="Plan interno"
+        descripcion="Para cuentas de la casa: todo ilimitado y sin fecha de vencimiento."
+        sinRelleno
+      >
+        <TablaDePlanes filas={enterprise} vacio="No está definido en el catálogo." />
+        <div className="px-4 py-3 border-t border-gray-200">
+          <p className="text-[12.5px] text-gray-600">
+            Se asigna desde la ficha de la cuenta, en «Cambiar plan». No se cobra, no vence y no
+            recibe avisos de renovación. No hay planes personalizados: si a un cliente le pactaste
+            otro precio, se registra el pago con el monto real y queda como precio pactado de esa
+            cuenta.
+          </p>
+        </div>
+      </Seccion>
+
+      {!verAntiguos ? (
+        <button
+          type="button"
+          onClick={() => setVerAntiguos(true)}
+          className="self-start text-[12.5px] text-gray-500 hover:text-gray-900 underline underline-offset-2"
+        >
+          Ver planes antiguos ({antiguos.length})
+        </button>
+      ) : (
+        <Seccion
+          titulo={`Planes antiguos (${antiguos.length})`}
+          descripcion="No se venden, pero hay cuentas que todavía los tienen. Solo para consultar."
+          sinRelleno
+          acciones={<Boton tamano="sm" variante="enlace" onClick={() => setVerAntiguos(false)}>Ocultar</Boton>}
+        >
+          <TablaDePlanes filas={antiguos} />
+        </Seccion>
+      )}
+    </div>
+  )
+}
+
+/** Los planes en filas, y en tarjetas en el celular. */
+function TablaDePlanes({ filas, vacio = 'Sin planes' }) {
+  const dato = plan => ({
+    duracion: duracion(plan.months || 1),
+    precio: plan.totalPrice > 0 ? soles(plan.totalPrice) : 'Sin costo',
+    comprobantes: numeroOIlimitado(plan.limits?.maxInvoicesPerMonth),
+    sucursales: sucursales(plan.limits?.maxBranches),
   })
 
+  return (
+    <>
+      <div className="sm:hidden divide-y divide-gray-100">
+        {filas.length === 0 && <p className="px-4 py-6 text-center text-[12.5px] text-gray-500">{vacio}</p>}
+        {filas.map(([id, plan]) => {
+          const d = dato(plan)
+          return (
+            <div key={id} className="px-4 py-2.5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-[12.5px] font-medium text-gray-900 break-words">{plan.name || id}</p>
+                  <p className="font-mono text-[11px] text-gray-400">{id}</p>
+                </div>
+                <span className="shrink-0 text-[12.5px] font-medium text-gray-900">{d.precio}</span>
+              </div>
+              <dl className="mt-1 space-y-0.5">
+                {[['Duración', d.duracion], ['Comprobantes', d.comprobantes], ['Sucursales', d.sucursales]].map(([k, v]) => (
+                  <div key={k} className="flex gap-2 text-[11.5px]">
+                    <dt className="w-24 shrink-0 text-gray-500">{k}</dt>
+                    <dd className="min-w-0 flex-1 text-gray-700">{v}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="hidden sm:block">
+        <Tabla>
+          <thead>
+            <tr>
+              <Th>Plan</Th>
+              <Th>Duración</Th>
+              <Th alinear="der">Precio</Th>
+              <Th alinear="der">Comprobantes/mes</Th>
+              <Th alinear="der">Sucursales</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {filas.length === 0 && <FilaVacia colSpan={5}>{vacio}</FilaVacia>}
+            {filas.map(([id, plan]) => {
+              const d = dato(plan)
+              return (
+                <Fila key={id}>
+                  <Td>
+                    <span className="font-medium">{plan.name || id}</span>
+                    <span className="block font-mono text-[11px] text-gray-400">{id}</span>
+                  </Td>
+                  <Td apagado>{d.duracion}</Td>
+                  <Td numero className="font-medium">{d.precio}</Td>
+                  <Td numero apagado>{d.comprobantes}</Td>
+                  <Td numero apagado>{d.sucursales}</Td>
+                </Fila>
+              )
+            })}
+          </tbody>
+        </Tabla>
+      </div>
+    </>
+  )
+}
+
+/**
+ * Sistema.
+ *
+ * Antes vivían acá cuatro cosas y tres no hacían nada: "permitir nuevos
+ * registros" y "modo mantenimiento" no los leía nadie, y las "excepciones" a la
+ * pausa de SUNAT tampoco — el negocio que agregabas seguía pausado igual.
+ *
+ * La pausa de SUNAT sí se leía, pero solo en el POS y encima fallaba: las
+ * reglas dan `config/*` solo a los admins, así que el cliente al que había que
+ * pausar era el único que no podía leer el interruptor. Se quitó a pedido de
+ * Giacomo: ya no la usa (Ley 31556).
+ *
+ * Queda una sola cosa, y funciona de verdad: el modo mantenimiento.
+ */
+function SystemSection() {
+  const [estado, setEstado] = useState(MANTENIMIENTO_APAGADO)
+  const [mensaje, setMensaje] = useState('')
+  const [cargando, setCargando] = useState(true)
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState(null)
+
   useEffect(() => {
-    loadCustomPlans()
-    loadHiddenPlans()
+    leerMantenimiento().then(m => {
+      setEstado(m)
+      setMensaje(m.mensaje)
+      setCargando(false)
+    })
   }, [])
 
-  async function loadCustomPlans() {
-    setLoadingCustom(true)
+  async function cambiar(activo) {
+    if (activo && !window.confirm('¿Cerrar Cobrify a todos los clientes ahora mismo?\n\nDejan de poder facturar hasta que lo apagues. Tú sigues entrando al panel.')) return
+    setGuardando(true)
+    setError(null)
     try {
-      const data = await getCustomPlans()
-      setCustomPlans(data)
+      await guardarMantenimiento({ activo, mensaje })
+      setEstado({ activo, mensaje: mensaje.trim() })
     } catch (e) {
-      console.error('Error loading custom plans:', e)
+      setError(e.message || 'No se pudo guardar')
     } finally {
-      setLoadingCustom(false)
+      setGuardando(false)
     }
   }
 
-  async function loadHiddenPlans() {
+  async function guardarMensaje() {
+    setGuardando(true)
+    setError(null)
     try {
-      const data = await getHiddenPlans()
-      setHiddenPlanKeys(data)
+      await guardarMantenimiento({ activo: estado.activo, mensaje })
+      setEstado(e => ({ ...e, mensaje: mensaje.trim() }))
     } catch (e) {
-      console.error('Error loading hidden plans:', e)
-    }
-  }
-
-  async function handleHidePlan(planKey) {
-    await hidePlan(planKey)
-    setHiddenPlanKeys(prev => [...prev, planKey])
-  }
-
-  async function handleUnhidePlan(planKey) {
-    await unhidePlan(planKey)
-    setHiddenPlanKeys(prev => prev.filter(k => k !== planKey))
-  }
-
-  const visiblePlanEntries = showHidden
-    ? planEntries
-    : planEntries.filter(([key]) => !hiddenPlanKeys.includes(key))
-  const hiddenCount = planEntries.filter(([key]) => hiddenPlanKeys.includes(key)).length
-
-  function resetForm() {
-    setForm({
-      name: '', months: 1, totalPrice: 0, includesIgv: false, emissionMethod: 'qpse',
-      maxInvoicesPerMonth: 500, maxBranches: 1,
-      sunatIntegration: true, multiUser: true, notes: ''
-    })
-    setEditingPlan(null)
-    setShowForm(false)
-  }
-
-  function openEdit(planId, plan) {
-    setEditingPlan(planId)
-    setForm({
-      name: plan.name || '',
-      months: plan.months || 1,
-      totalPrice: plan.totalPrice || 0,
-      includesIgv: plan.includesIgv || false,
-      emissionMethod: plan.emissionMethod || 'qpse',
-      maxInvoicesPerMonth: plan.limits?.maxInvoicesPerMonth ?? 500,
-      maxBranches: plan.limits?.maxBranches ?? 1,
-      sunatIntegration: plan.limits?.sunatIntegration ?? true,
-      multiUser: plan.limits?.multiUser ?? true,
-      notes: plan.notes || ''
-    })
-    setShowForm(true)
-  }
-
-  async function handleSave() {
-    if (!form.name.trim()) return
-    setSaving(true)
-    try {
-      const planData = {
-        name: form.name.trim(),
-        months: parseInt(form.months) || 1,
-        totalPrice: parseFloat(form.totalPrice) || 0,
-        includesIgv: form.includesIgv,
-        emissionMethod: form.emissionMethod,
-        limits: {
-          maxInvoicesPerMonth: parseInt(form.maxInvoicesPerMonth) || 500,
-          maxBranches: parseInt(form.maxBranches) || 1,
-          sunatIntegration: form.sunatIntegration,
-          multiUser: form.multiUser
-        },
-        notes: form.notes
-      }
-
-      if (editingPlan) {
-        await updateCustomPlan(editingPlan, planData)
-      } else {
-        await createCustomPlan(planData)
-      }
-
-      await loadCustomPlans()
-      resetForm()
-    } catch (e) {
-      console.error('Error saving custom plan:', e)
+      setError(e.message || 'No se pudo guardar')
     } finally {
-      setSaving(false)
-    }
-  }
-
-  async function handleDelete(planId) {
-    if (!confirm('¿Eliminar este plan personalizado?')) return
-    try {
-      await deleteCustomPlan(planId)
-      await loadCustomPlans()
-    } catch (e) {
-      console.error('Error deleting custom plan:', e)
+      setGuardando(false)
     }
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="flex items-start gap-2 text-gray-700 bg-gray-50 p-3 sm:p-4 rounded-lg">
-        <Info className="w-5 h-5 flex-shrink-0 mt-0.5" />
-        <p className="text-xs sm:text-sm">
-          Los planes estándar se configuran en el código. Los planes personalizados se gestionan abajo.
-        </p>
-      </div>
-
-      {/* Planes estándar */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-base font-semibold text-gray-900">Planes Estándar</h3>
-        {hiddenCount > 0 && (
-          <button
-            onClick={() => setShowHidden(!showHidden)}
-            className="text-xs text-gray-500 hover:text-gray-700"
-          >
-            {showHidden ? 'Ocultar eliminados' : `Mostrar eliminados (${hiddenCount})`}
-          </button>
-        )}
-      </div>
-      {planEntries.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">
-          <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2" />
-          <p>Cargando planes...</p>
-        </div>
-      ) : (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-        {visiblePlanEntries.map(([key, plan]) => (
-          <div
-            key={key}
-            className={`rounded-lg border p-3 sm:p-5 ${
-              hiddenPlanKeys.includes(key) ? 'bg-gray-50 border-dashed border-gray-300 opacity-60' : 'bg-white border-gray-200'
-            }`}
-          >
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h3 className="font-semibold text-gray-900 text-sm sm:text-base">{plan.name}</h3>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                key === 'trial' || key === 'free'
-                  ? 'bg-gray-100 text-gray-900'
-                  : 'bg-gray-100 text-gray-900'
-              }`}>
-                {key === 'trial' || key === 'free' ? 'Gratis' : 'Pago'}
-              </span>
-            </div>
-
-            <div className="space-y-2 sm:space-y-3">
-              <div className="flex items-center justify-between text-xs sm:text-sm">
-                <span className="text-gray-500 flex items-center gap-1.5">
-                  <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Precio
-                </span>
-                <span className="font-medium">S/ {plan.pricePerMonth?.toFixed(2) || '0.00'}</span>
-              </div>
-
-              <div className="flex items-center justify-between text-xs sm:text-sm">
-                <span className="text-gray-500 flex items-center gap-1.5">
-                  <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Docs
-                </span>
-                <span className="font-medium">
-                  {plan.limits?.maxInvoicesPerMonth === -1 ? '∞' : (plan.limits?.maxInvoicesPerMonth || '∞')}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between text-xs sm:text-sm">
-                <span className="text-gray-500 flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Multi-user
-                </span>
-                <span className={`font-medium ${plan.limits?.multiUser ? 'text-gray-700' : 'text-gray-400'}`}>
-                  {plan.limits?.multiUser ? 'Sí' : 'No'}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between text-xs sm:text-sm">
-                <span className="text-gray-500 flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Período
-                </span>
-                <span className="font-medium">
-                  {plan.months === 0 ? '7 días' : plan.months >= 999 ? '∞' : `${plan.months}m`}
-                </span>
-              </div>
-
-              {plan.category && (
-                <div className="flex items-center justify-between text-xs sm:text-sm">
-                  <span className="text-gray-500 flex items-center gap-1.5">
-                    <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Emisión
-                  </span>
-                  <span className="font-medium">
-                    {plan.category === 'qpse' ? 'QPse' : plan.category === 'sunat_direct' ? 'SUNAT' : plan.category === 'offline' ? 'Sin conexión' : plan.category}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {plan.features && plan.features.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-gray-100">
-                <p className="text-xs text-gray-500 mb-2">Características:</p>
-                <ul className="space-y-1">
-                  {plan.features.slice(0, 3).map((feature, idx) => (
-                    <li key={idx} className="text-xs text-gray-600 flex items-center gap-1">
-                      <CheckCircle className="w-3 h-3 text-gray-500" />
-                      {feature}
-                    </li>
-                  ))}
-                  {plan.features.length > 3 && (
-                    <li className="text-xs text-gray-400">
-                      +{plan.features.length - 3} más...
-                    </li>
-                  )}
-                </ul>
-              </div>
-            )}
-
-            <div className="mt-3 pt-3 border-t border-gray-100">
-              {hiddenPlanKeys.includes(key) ? (
-                <button
-                  onClick={() => handleUnhidePlan(key)}
-                  className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100"
-                >
-                  <CheckCircle className="w-3.5 h-3.5" /> Restaurar
-                </button>
-              ) : (
-                <button
-                  onClick={() => handleHidePlan(key)}
-                  className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100"
-                >
-                  <Trash2 className="w-3.5 h-3.5" /> Eliminar
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-      )}
-
-      {/* Planes Personalizados */}
-      <div className="border-t pt-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-gray-900">Planes Personalizados</h3>
-          <button
-            onClick={() => { resetForm(); setShowForm(true) }}
-            className="flex items-center gap-1.5 px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
-          >
-            <Plus className="w-4 h-4" />
-            Crear Plan
-          </button>
-        </div>
-
-        {/* Formulario inline */}
-        {showForm && (
-          <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-lg space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="font-semibold text-gray-900">
-                {editingPlan ? 'Editar Plan' : 'Nuevo Plan Personalizado'}
-              </h4>
-              <button onClick={resetForm} className="text-gray-400 hover:text-gray-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <div className="max-w-2xl space-y-6">
+      <Seccion
+        titulo="Modo mantenimiento"
+        descripcion="Cierra Cobrify a los clientes mientras trabajas. Se aplica al instante en las sesiones abiertas, y al apagarlo vuelven solas sin recargar. A ti no te bloquea: el panel sigue funcionando."
+      >
+        {cargando ? (
+          <p className="py-2 text-gray-500">Cargando…</p>
+        ) : (
+          <>
+            <div className="flex items-center justify-between gap-4 py-1">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Nombre *</label>
+                <p className="font-medium text-gray-900">
+                  {estado.activo ? 'Cobrify está cerrado' : 'Cobrify está abierto'}
+                </p>
+                <p className="text-gray-500">
+                  {estado.activo
+                    ? 'Tus clientes ven la pantalla de mantenimiento y no pueden facturar.'
+                    : 'Todo funciona con normalidad.'}
+                </p>
+              </div>
+              <Boton
+                variante={estado.activo ? 'primario' : 'peligro'}
+                tamano="sm"
+                onClick={() => cambiar(!estado.activo)}
+                disabled={guardando}
+              >
+                {guardando ? 'Guardando…' : estado.activo ? 'Abrir de nuevo' : 'Cerrar ahora'}
+              </Boton>
+            </div>
+
+            <div className="mt-4 border-t border-gray-100 pt-4">
+              <label className="block font-medium text-gray-900">Mensaje para el cliente</label>
+              <p className="mb-2 text-gray-500">Si lo dejas vacío, se muestra un aviso genérico.</p>
+              <div className="flex gap-2">
                 <input
                   type="text"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="Ej: Plan Especial - Restaurante Juan"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  value={mensaje}
+                  onChange={e => setMensaje(e.target.value)}
+                  maxLength={200}
+                  placeholder="Volvemos a las 3 de la tarde."
+                  className="h-8 flex-1 rounded-md border border-gray-300 px-2.5 text-[12.5px] focus:outline-none focus:ring-2 focus:ring-primary-500/40"
                 />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Método de emisión</label>
-                <select
-                  value={form.emissionMethod}
-                  onChange={(e) => setForm({ ...form, emissionMethod: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="qpse">QPse</option>
-                  <option value="sunat_direct">SUNAT Directo</option>
-                  <option value="offline">Sin conexión</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Meses</label>
-                <input
-                  type="number" min="1" max="36"
-                  value={form.months}
-                  onChange={(e) => setForm({ ...form, months: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Precio Total (S/)</label>
-                <input
-                  type="number" min="0" step="0.01"
-                  value={form.totalPrice}
-                  onChange={(e) => setForm({ ...form, totalPrice: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Comprobantes/mes</label>
-                <input
-                  type="number" min="-1"
-                  value={form.maxInvoicesPerMonth}
-                  onChange={(e) => setForm({ ...form, maxInvoicesPerMonth: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-                <p className="text-xs text-gray-400 mt-0.5">-1 = ilimitado</p>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Sucursales</label>
-                <input
-                  type="number" min="1"
-                  value={form.maxBranches}
-                  onChange={(e) => setForm({ ...form, maxBranches: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
+                <Boton tamano="sm" onClick={guardarMensaje} disabled={guardando || mensaje === estado.mensaje}>
+                  Guardar
+                </Boton>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-4">
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input
-                  type="checkbox" checked={form.includesIgv}
-                  onChange={(e) => setForm({ ...form, includesIgv: e.target.checked })}
-                  className="w-4 h-4 text-primary-600 rounded"
-                />
-                Precio incluye IGV (18%)
-              </label>
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input
-                  type="checkbox" checked={form.sunatIntegration}
-                  onChange={(e) => setForm({ ...form, sunatIntegration: e.target.checked })}
-                  className="w-4 h-4 text-primary-600 rounded"
-                />
-                Integración SUNAT
-              </label>
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input
-                  type="checkbox" checked={form.multiUser}
-                  onChange={(e) => setForm({ ...form, multiUser: e.target.checked })}
-                  className="w-4 h-4 text-primary-600 rounded"
-                />
-                Multi-usuario
-              </label>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Notas</label>
-              <input
-                type="text"
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                placeholder="Notas internas del admin..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-
-            {form.months > 0 && form.totalPrice > 0 && (
-              <div className="text-xs text-gray-700 space-y-0.5">
-                <p>Precio por mes: S/ {(parseFloat(form.totalPrice) / parseInt(form.months)).toFixed(2)}</p>
-                {form.includesIgv ? (
-                  <p>Desglose: Base S/ {(parseFloat(form.totalPrice) / 1.18).toFixed(2)} + IGV S/ {(parseFloat(form.totalPrice) - parseFloat(form.totalPrice) / 1.18).toFixed(2)} = Total S/ {parseFloat(form.totalPrice).toFixed(2)}</p>
-                ) : (
-                  <p>Con IGV: S/ {parseFloat(form.totalPrice).toFixed(2)} + IGV S/ {(parseFloat(form.totalPrice) * 0.18).toFixed(2)} = Total S/ {(parseFloat(form.totalPrice) * 1.18).toFixed(2)}</p>
-                )}
-              </div>
-            )}
-
-            <div className="flex gap-2 pt-1">
-              <button
-                onClick={handleSave}
-                disabled={saving || !form.name.trim()}
-                className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 text-sm"
-              >
-                {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {editingPlan ? 'Actualizar' : 'Crear'}
-              </button>
-              <button onClick={resetForm} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50">
-                Cancelar
-              </button>
-            </div>
-          </div>
+            {error && <p className="mt-3 text-red-600">{error}</p>}
+          </>
         )}
+      </Seccion>
 
-        {/* Grid de planes personalizados */}
-        {loadingCustom ? (
-          <div className="text-center py-6 text-gray-500">
-            <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
-            <p className="text-sm">Cargando planes personalizados...</p>
+      <Seccion titulo="Información">
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-gray-500">Versión</span>
+            <span className="font-mono text-gray-900" title={versionDetallada()}>v{VERSION}{COMMIT ? ` · ${COMMIT}` : ''}</span>
           </div>
-        ) : Object.keys(customPlans).length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-4">No hay planes personalizados aún.</p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            {Object.entries(customPlans).map(([key, plan]) => (
-              <div
-                key={key}
-                className="bg-white rounded-lg border border-gray-200 p-3 sm:p-5"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate flex-1 mr-2">{plan.name}</h3>
-                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-900 flex-shrink-0">
-                    Custom
-                  </span>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs sm:text-sm">
-                    <span className="text-gray-500">Precio total</span>
-                    <div className="text-right">
-                      <span className="font-semibold text-gray-700">S/ {plan.totalPrice?.toFixed?.(2) || plan.totalPrice}</span>
-                      <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[11px] font-medium ${plan.includesIgv ? 'bg-gray-100 text-gray-700' : 'bg-gray-100 text-gray-600'}`}>
-                        {plan.includesIgv ? 'Inc. IGV' : '+ IGV'}
-                      </span>
-                    </div>
-                  </div>
-                  {plan.includesIgv ? (
-                    <div className="flex items-center justify-between text-[11px] text-gray-400">
-                      <span>Desglose</span>
-                      <span>Base S/ {(plan.totalPrice / 1.18).toFixed(2)} + IGV S/ {(plan.totalPrice - plan.totalPrice / 1.18).toFixed(2)}</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between text-[11px] text-gray-400">
-                      <span>Con IGV</span>
-                      <span>S/ {(plan.totalPrice * 1.18).toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between text-xs sm:text-sm">
-                    <span className="text-gray-500">Período</span>
-                    <span className="font-medium">{plan.months}m (S/ {plan.pricePerMonth?.toFixed?.(2) || '0.00'}/mes)</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs sm:text-sm">
-                    <span className="text-gray-500">Comprobantes</span>
-                    <span className="font-medium">{plan.limits?.maxInvoicesPerMonth === -1 ? '∞' : plan.limits?.maxInvoicesPerMonth}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs sm:text-sm">
-                    <span className="text-gray-500">Emisión</span>
-                    <span className="font-medium">
-                      {plan.emissionMethod === 'qpse' ? 'QPse' : plan.emissionMethod === 'sunat_direct' ? 'SUNAT' : 'Sin conexión'}
-                    </span>
-                  </div>
-                  {plan.notes && (
-                    <p className="text-xs text-gray-500 italic mt-1">{plan.notes}</p>
-                  )}
-                </div>
-
-                <div className="flex gap-2 mt-3 pt-3 border-t border-gray-200">
-                  <button
-                    onClick={() => openEdit(key, plan)}
-                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" /> Editar
-                  </button>
-                  <button
-                    onClick={() => handleDelete(key)}
-                    className="flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
+          <div className="flex items-center justify-between">
+            <span className="text-gray-500">Entorno</span>
+            <span className="font-mono text-gray-900">{import.meta.env.MODE === 'production' ? 'Producción' : 'Desarrollo'}</span>
           </div>
-        )}
-      </div>
+        </div>
+      </Seccion>
     </div>
   )
 }
 
-function NotificationsSection({ settings, onChange }) {
-  return (
-    <div className="space-y-6 max-w-2xl">
-      <div className="flex items-center gap-2 text-gray-700 bg-gray-50 p-4 rounded-lg">
-        <Info className="w-5 h-5 flex-shrink-0" />
-        <p className="text-sm">
-          Estas configuraciones controlan las notificaciones que aparecen en la campanita del panel de administración.
-        </p>
-      </div>
-
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Notificaciones Push (Campanita)</h3>
-
-        <div className="space-y-4">
-          <label className="flex items-center justify-between p-4 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
-            <div className="flex items-center gap-3">
-              <Users className="w-5 h-5 text-primary-600" />
-              <div>
-                <p className="font-medium text-gray-900">Nuevo usuario registrado</p>
-                <p className="text-sm text-gray-500">Mostrar notificación cuando un nuevo usuario se registra</p>
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={settings.notifyOnNewUser !== false}
-              onChange={e => onChange('notifyOnNewUser', e.target.checked)}
-              className="w-5 h-5 text-primary-600 rounded focus:ring-primary-500"
-            />
-          </label>
-
-          <label className="flex items-center justify-between p-4 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
-            <div className="flex items-center gap-3">
-              <CreditCard className="w-5 h-5 text-gray-700" />
-              <div>
-                <p className="font-medium text-gray-900">Nuevo pago recibido</p>
-                <p className="text-sm text-gray-500">Mostrar notificación cuando se registra un pago</p>
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={settings.notifyOnPayment !== false}
-              onChange={e => onChange('notifyOnPayment', e.target.checked)}
-              className="w-5 h-5 text-primary-600 rounded focus:ring-primary-500"
-            />
-          </label>
-
-          <label className="flex items-center justify-between p-4 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-gray-700" />
-              <div>
-                <p className="font-medium text-gray-900">Suscripción por vencer</p>
-                <p className="text-sm text-gray-500">Mostrar alertas de suscripciones próximas a vencer</p>
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={settings.notifyOnExpiring !== false}
-              onChange={e => onChange('notifyOnExpiring', e.target.checked)}
-              className="w-5 h-5 text-primary-600 rounded focus:ring-primary-500"
-            />
-          </label>
-        </div>
-      </div>
-
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Configuración de Alertas</h3>
-
-        <div className="bg-gray-50 rounded-lg p-4">
-          <label className="block">
-            <span className="text-sm font-medium text-gray-700">Días antes del vencimiento para alertar</span>
-            <input
-              type="number"
-              min="1"
-              max="30"
-              value={settings.daysBeforeExpiry || 3}
-              onChange={e => onChange('daysBeforeExpiry', parseInt(e.target.value) || 3)}
-              className="mt-2 block w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            />
-            <p className="mt-1 text-sm text-gray-500">
-              Se mostrarán alertas para suscripciones que vencen en los próximos {settings.daysBeforeExpiry || 3} días
-            </p>
-          </label>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ExceptionsList({ exceptions, onChange }) {
-  const [inputId, setInputId] = useState('')
-  const [businessNames, setBusinessNames] = useState({})
-
-  useEffect(() => {
-    if (exceptions.length === 0) return
-    const loadNames = async () => {
-      const names = {}
-      for (const id of exceptions) {
-        if (businessNames[id]) continue
-        try {
-          const snap = await getDoc(doc(db, 'businesses', id))
-          if (snap.exists()) {
-            names[id] = snap.data().businessName || snap.data().name || id
-          } else {
-            names[id] = id + ' (no encontrado)'
-          }
-        } catch { names[id] = id }
-      }
-      if (Object.keys(names).length > 0) setBusinessNames(prev => ({ ...prev, ...names }))
-    }
-    loadNames()
-  }, [exceptions])
-
-  const addException = () => {
-    const id = inputId.trim()
-    if (!id || exceptions.includes(id)) return
-    onChange([...exceptions, id])
-    setInputId('')
-  }
-
-  const removeException = (id) => {
-    onChange(exceptions.filter(e => e !== id))
-    setBusinessNames(prev => { const n = { ...prev }; delete n[id]; return n })
-  }
-
-  return (
-    <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-      <p className="font-medium text-gray-900 mb-1">Excepciones a la pausa</p>
-      <p className="text-sm text-gray-500 mb-3">Negocios con IGV reducido que SÍ pueden enviar a SUNAT (ej: ya compraron comprobantes)</p>
-      <div className="flex gap-2 mb-3">
-        <input
-          type="text"
-          value={inputId}
-          onChange={e => setInputId(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && addException()}
-          placeholder="Business ID"
-          className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-        />
-        <button
-          onClick={addException}
-          className="px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium flex items-center gap-1"
-        >
-          <Plus className="w-4 h-4" /> Agregar
-        </button>
-      </div>
-      {exceptions.length === 0 ? (
-        <p className="text-sm text-gray-400 italic">No hay excepciones</p>
-      ) : (
-        <div className="space-y-2">
-          {exceptions.map(id => (
-            <div key={id} className="flex items-center justify-between bg-white p-2 rounded-lg border border-gray-200">
-              <div>
-                <p className="text-sm font-medium text-gray-800">{businessNames[id] || 'Cargando...'}</p>
-                <p className="text-xs text-gray-400 font-mono">{id}</p>
-              </div>
-              <button onClick={() => removeException(id)} className="p-1 text-red-500 hover:bg-red-50 rounded">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function SystemSection({ settings, onChange }) {
+/**
+ * Productos con IGV 10% que deberían ser 10.5%. Es una reparación puntual de
+ * cuando cambió la Ley 31556, no una configuración: por eso vive acá y ya no
+ * en la pestaña Sistema. Borra el `igvRate` del producto para que herede el
+ * del negocio.
+ */
+function ProductosIgv10Card() {
   const [scanning, setScanning] = useState(false)
   const [scanResult, setScanResult] = useState(null)
   const [migrating, setMigrating] = useState(false)
@@ -918,167 +432,76 @@ function SystemSection({ settings, onChange }) {
       setMigrating(false)
     }
   }
+
   return (
-    <div className="space-y-6 max-w-2xl">
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Configuración del Sistema</h3>
+    <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-medium text-gray-900">Productos con IGV 10% (deben ser 10.5%)</p>
+            <p className="text-sm text-gray-500">Detecta negocios con IGV reducido cuyos productos aún tienen 10% guardado</p>
+          </div>
+          <button
+            onClick={scanProducts}
+            disabled={scanning}
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 text-sm font-medium"
+          >
+            {scanning ? 'Escaneando...' : 'Escanear'}
+          </button>
+        </div>
 
-        <div className="space-y-4">
-          <label className="flex items-center justify-between p-4 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
-            <div className="flex items-center gap-3">
-              <Globe className="w-5 h-5 text-gray-700" />
-              <div>
-                <p className="font-medium text-gray-900">Permitir nuevos registros</p>
-                <p className="text-sm text-gray-500">Permitir que nuevos usuarios se registren en la plataforma</p>
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={settings.allowNewRegistrations}
-              onChange={e => onChange('allowNewRegistrations', e.target.checked)}
-              className="w-5 h-5 text-primary-600 rounded focus:ring-primary-500"
-            />
-          </label>
-
-          <label className="flex items-center justify-between p-4 bg-red-50 rounded-lg cursor-pointer hover:bg-red-100">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-red-600" />
-              <div>
-                <p className="font-medium text-gray-900">Modo mantenimiento</p>
-                <p className="text-sm text-gray-500">Bloquear acceso a usuarios mientras se realiza mantenimiento</p>
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={settings.maintenanceMode}
-              onChange={e => onChange('maintenanceMode', e.target.checked)}
-              className="w-5 h-5 text-red-600 rounded focus:ring-red-500"
-            />
-          </label>
-
-          <label className={`flex items-center justify-between p-4 rounded-lg cursor-pointer ${settings.pauseSunatRestaurants ? 'bg-gray-50 hover:bg-gray-100 border border-gray-300' : 'bg-gray-50 hover:bg-gray-100'}`}>
-            <div className="flex items-center gap-3">
-              <Shield className="w-5 h-5 text-gray-700" />
-              <div>
-                <p className="font-medium text-gray-900">Pausar envío de facturas a SUNAT (IGV 10.5%)</p>
-                <p className="text-sm text-gray-500">Suspende el envío automático de facturas a SUNAT para negocios con IGV reducido (Ley 31556). Las boletas se envían normalmente. Las facturas se generan pero quedan pendientes de envío.</p>
-                {settings.pauseSunatRestaurants && (
-                  <p className="text-xs text-gray-700 font-medium mt-1">ACTIVO: Las facturas de negocios con IGV 10.5% NO se envían automáticamente a SUNAT. Las boletas SÍ se envían.</p>
-                )}
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={settings.pauseSunatRestaurants}
-              onChange={e => onChange('pauseSunatRestaurants', e.target.checked)}
-              className="w-5 h-5 text-gray-700 rounded focus:ring-primary-500"
-            />
-          </label>
-
-          {/* Excepciones a la pausa SUNAT */}
-          {settings.pauseSunatRestaurants && (
-            <ExceptionsList
-              exceptions={settings.pauseSunatExceptions || []}
-              onChange={(list) => onChange('pauseSunatExceptions', list)}
-            />
-          )}
-
-          {/* Detectar productos IGV 10% → 10.5% */}
-          <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-gray-900">Productos con IGV 10% (deben ser 10.5%)</p>
-                <p className="text-sm text-gray-500">Detecta negocios con IGV reducido cuyos productos aún tienen 10% guardado</p>
-              </div>
-              <button
-                onClick={scanProducts}
-                disabled={scanning}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 text-sm font-medium"
-              >
-                {scanning ? 'Escaneando...' : 'Escanear'}
-              </button>
-            </div>
-
-            {/* Resultados del escaneo */}
-            {scanResult !== null && (
-              <div className="mt-3 p-3 bg-white rounded-lg border text-sm max-h-80 overflow-y-auto">
-                {scanResult.length === 0 ? (
-                  <p className="text-gray-700 font-medium">Todo correcto. No hay productos con IGV 10%.</p>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="font-medium text-gray-900">
-                        {scanResult.reduce((sum, r) => sum + r.products.length, 0)} productos en {scanResult.length} negocios
-                      </p>
+        {/* Resultados del escaneo */}
+        {scanResult !== null && (
+          <div className="mt-3 p-3 bg-white rounded-lg border text-sm max-h-80 overflow-y-auto">
+            {scanResult.length === 0 ? (
+              <p className="text-gray-700 font-medium">Todo correcto. No hay productos con IGV 10%.</p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="font-medium text-gray-900">
+                    {scanResult.reduce((sum, r) => sum + r.products.length, 0)} productos en {scanResult.length} negocios
+                  </p>
+                  <button
+                    onClick={fixAll}
+                    disabled={migrating}
+                    className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 text-xs font-medium"
+                  >
+                    {migrating ? 'Corrigiendo...' : 'Corregir todos'}
+                  </button>
+                </div>
+                {scanResult.map(biz => (
+                  <div key={biz.businessId} className="mb-3 pb-3 border-b last:border-0">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-gray-800">{biz.businessName}</p>
+                        <p className="text-xs text-gray-500">Config actual: IGV {biz.configIgv}% ({biz.taxType}) — {biz.products.length} productos con 10%</p>
+                      </div>
                       <button
-                        onClick={fixAll}
+                        onClick={() => fixProducts(biz.businessId, biz.products.map(p => p.id))}
                         disabled={migrating}
-                        className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 text-xs font-medium"
+                        className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200 disabled:opacity-50 shrink-0"
                       >
-                        {migrating ? 'Corrigiendo...' : 'Corregir todos'}
+                        Corregir
                       </button>
                     </div>
-                    {scanResult.map(biz => (
-                      <div key={biz.businessId} className="mb-3 pb-3 border-b last:border-0">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-medium text-gray-800">{biz.businessName}</p>
-                            <p className="text-xs text-gray-500">Config actual: IGV {biz.configIgv}% ({biz.taxType}) — {biz.products.length} productos con 10%</p>
-                          </div>
-                          <button
-                            onClick={() => fixProducts(biz.businessId, biz.products.map(p => p.id))}
-                            disabled={migrating}
-                            className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200 disabled:opacity-50 shrink-0"
-                          >
-                            Corregir
-                          </button>
-                        </div>
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {biz.products.map(p => (
-                            <span key={p.id} className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">{p.name}</span>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Mensaje */}
-            {migrateMsg && (
-              <div className={`mt-3 p-3 rounded-lg text-sm ${migrateMsg.success ? 'bg-gray-50 text-gray-900' : 'bg-red-50 text-red-800'}`}>
-                <p className="font-medium">{migrateMsg.message}</p>
-              </div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {biz.products.map(p => (
+                        <span key={p.id} className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">{p.name}</span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </>
             )}
           </div>
-        </div>
-      </div>
+        )}
 
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Información del Sistema</h3>
-
-        <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-500">Versión de la aplicación</span>
-            <span className="font-mono text-sm">v1.7.0</span>
+        {/* Mensaje */}
+        {migrateMsg && (
+          <div className={`mt-3 p-3 rounded-lg text-sm ${migrateMsg.success ? 'bg-gray-50 text-gray-900' : 'bg-red-50 text-red-800'}`}>
+            <p className="font-medium">{migrateMsg.message}</p>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-500">Entorno</span>
-            <span className="font-mono text-sm">
-              {import.meta.env.MODE === 'production' ? 'Producción' : 'Desarrollo'}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-500">Base de datos</span>
-            <span className="font-mono text-sm flex items-center gap-1">
-              <Database className="w-4 h-4 text-gray-500" />
-              Firebase Firestore
-            </span>
-          </div>
-        </div>
+        )}
       </div>
-    </div>
   )
 }
 
@@ -1213,6 +636,9 @@ function MaintenanceSection() {
           <EmissionSecretsMigrationCard />
           <CodigoClienteCard />
           <RubroSugeridoCard />
+
+          {/* Productos con IGV 10% que deberían ser 10.5% (Ley 31556). Vivía en Sistema. */}
+          <ProductosIgv10Card />
 
           {/* Info */}
           <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
