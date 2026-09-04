@@ -525,6 +525,11 @@ export default function Settings() {
   // Prestamos en modo Restaurante: misma idea, con la cartera del modo
   // Prestamos. Apagado por defecto.
   const [lendingEnabled, setLendingEnabled] = useState(false)
+  const [serviciosEnabled, setServiciosEnabled] = useState(false)
+  // Lo que sale impreso en el recibo de servicio (titulo, firma, lema).
+  const [servicioTituloRecibo, setServicioTituloRecibo] = useState('')
+  const [servicioFirma, setServicioFirma] = useState('')
+  const [servicioLema, setServicioLema] = useState('')
   // Aca vive lo que NOMBRA los niveles de precio. El CALCULO (base, formula y
   // porcentajes) se configura en Productos > Ajuste de precios, junto al ajuste
   // masivo: las dos cosas responden a de donde sale el numero de un precio.
@@ -1439,6 +1444,10 @@ export default function Settings() {
         setBranchCatalogEnabled(businessData.branchCatalogEnabled || false)
         setObrasEnabled(businessData.obrasEnabled === true)
         setLendingEnabled(businessData.lendingEnabled === true)
+        setServiciosEnabled(businessData.serviciosEnabled === true)
+        setServicioTituloRecibo(businessData.servicioTituloRecibo || '')
+        setServicioFirma(businessData.servicioFirma || '')
+        setServicioLema(businessData.servicioLema || '')
         // Presentaciones y niveles de precio: `?? true` para reflejar el mismo
         // default que aplica AuthContext (encendidas si nunca se configuraron).
         // Con `|| false` el interruptor salía apagado mientras la función estaba
@@ -4165,6 +4174,65 @@ export default function Settings() {
                 </>
               )}
 
+              {/* Cobranza de servicios por medidor. Para el negocio que compra un
+                  recibo mayorista de luz o agua y lo reparte entre los vecinos de
+                  un centro poblado: sigue siendo un negocio General, solo suma
+                  las páginas de la cobranza. */}
+              {businessMode === 'retail' && (
+                <>
+                  <div className="border-t border-gray-200"></div>
+                  <div>
+                    <SettingToggle
+                      id="opcion-serviciosEnabled"
+                      checked={serviciosEnabled}
+                      onChange={(e) => setServiciosEnabled(e.target.checked)}
+                      title="Cobranza de servicios (luz, agua)"
+                      description={serviciosEnabled
+                        ? '✓ Habilitado: en el menú aparecen Suministros, Lecturas del mes y Recibos de servicio. La tarifa sale del recibo que te llega a ti, así que se actualiza sola cada mes.'
+                        : '✗ Deshabilitado: no se muestran las páginas de cobranza de servicios. Actívalo si compras un recibo de luz o agua y lo repartes entre los vecinos, por medidor o por cuota fija.'}
+                    />
+                  </div>
+                  {serviciosEnabled && (
+                    <div className="space-y-3 pl-1">
+                      <p className="text-sm font-medium text-gray-700">Lo que sale impreso en el recibo</p>
+                      <label className="block">
+                        <span className="block text-sm text-gray-600 mb-1">Título del recibo</span>
+                        <input
+                          type="text"
+                          value={servicioTituloRecibo}
+                          onChange={(e) => setServicioTituloRecibo(e.target.value)}
+                          placeholder="RECIBO POR CONSUMO DE ENERGÍA ELÉCTRICA"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="block text-sm text-gray-600 mb-1">Firma autorizada</span>
+                        <input
+                          type="text"
+                          value={servicioFirma}
+                          onChange={(e) => setServicioFirma(e.target.value)}
+                          placeholder="PROF. VICTOR"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        />
+                        <span className="block text-xs text-gray-500 mt-1">
+                          Sale al pie, sobre una línea. Es el nombre del responsable, no una firma electrónica.
+                        </span>
+                      </label>
+                      <label className="block">
+                        <span className="block text-sm text-gray-600 mb-1">Frase del pie</span>
+                        <input
+                          type="text"
+                          value={servicioLema}
+                          onChange={(e) => setServicioLema(e.target.value)}
+                          placeholder="Mi negocio es pequeño, pero tu recomendación lo hace grande"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        />
+                      </label>
+                    </div>
+                  )}
+                </>
+              )}
+
               {/* Divider */}
               <div className="border-t border-gray-200"></div>
 
@@ -4227,6 +4295,14 @@ export default function Settings() {
                         ] },
                         { title: 'Operación y otros', items: [
                           { id: 'student-payments', label: 'Control de Alumnos', description: 'Control de pagos de alumnos' },
+                          // Solo con el módulo encendido, como las de Obras: si no,
+                          // el catálogo ofrece marcar tres páginas que el menú va a
+                          // filtrar igual, y parece que la opción no funciona.
+                          ...(serviciosEnabled ? [
+                            { id: 'service-supplies', label: 'Suministros', description: 'Padrón de medidores y cuotas fijas' },
+                            { id: 'service-readings', label: 'Lecturas del mes', description: 'Cobranza de luz o agua por medidor' },
+                            { id: 'service-receipts', label: 'Recibos de servicio', description: 'Emitir, imprimir y cobrar los recibos del mes' },
+                          ] : []),
                           { id: 'certificates', label: 'Certificados', description: 'Emisión de certificados' },
                           { id: 'attendance', label: 'Personal', description: 'Directorio, asistencia y datos de los empleados' },
                           { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
@@ -4929,6 +5005,10 @@ export default function Settings() {
                       // Preferencias" decía que sí y no guardaba nada de esto.
                       obrasEnabled: obrasEnabled,
                       lendingEnabled: lendingEnabled,
+                      serviciosEnabled: serviciosEnabled,
+                      servicioTituloRecibo: servicioTituloRecibo,
+                      servicioFirma: servicioFirma,
+                      servicioLema: servicioLema,
                       hiddenOrderSources: hiddenOrderSources,
                       customOrderSources: customOrderSources,
                       metaAdsEnabled: metaAdsEnabled,
@@ -6584,6 +6664,10 @@ export default function Settings() {
                       branchCatalogEnabled: branchCatalogEnabled,
                       obrasEnabled: obrasEnabled,
                       lendingEnabled: lendingEnabled,
+                      serviciosEnabled: serviciosEnabled,
+                      servicioTituloRecibo: servicioTituloRecibo,
+                      servicioFirma: servicioFirma,
+                      servicioLema: servicioLema,
                       multiplePricesEnabled: multiplePricesEnabled,
                       priceLabels: priceLabels,
                       // OJO: pricePercentages, priceCalculationBase y marginFormula

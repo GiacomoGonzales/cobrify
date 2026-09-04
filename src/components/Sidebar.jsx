@@ -72,6 +72,8 @@ import {
   Heart,
   Bell,
   Facebook,
+  Gauge,
+  ReceiptText,
   HelpCircle,
   HandCoins,
   Gift,
@@ -521,6 +523,36 @@ function Sidebar() {
           label: 'Préstamos',
           pageId: 'loans',
           menuId: 'loans',
+          hideInDemo: true,
+        },
+        {
+          // Cobranza de servicios por medidor (luz, agua) para el negocio que
+          // le revende a un centro poblado. Opt-in `serviciosEnabled`: no es un
+          // modo aparte porque el negocio sigue vendiendo y facturando igual.
+          path: '/servicios-suministros',
+          icon: Gauge,
+          label: 'Suministros',
+          pageId: 'service-supplies',
+          menuId: 'service-supplies',
+          requiresServicios: true,
+          hideInDemo: true,
+        },
+        {
+          path: '/servicios-lecturas',
+          icon: Gauge,
+          label: 'Lecturas del mes',
+          pageId: 'service-readings',
+          menuId: 'service-readings',
+          requiresServicios: true,
+          hideInDemo: true,
+        },
+        {
+          path: '/servicios-recibos',
+          icon: ReceiptText,
+          label: 'Recibos de servicio',
+          pageId: 'service-receipts',
+          menuId: 'service-receipts',
+          requiresServicios: true,
           hideInDemo: true,
         },
         {
@@ -2148,6 +2180,11 @@ function Sidebar() {
       // Apagado por defecto: la mayoría de los negocios no presta plata.
       // Se enciende en Configuración > Preferencias.
       if (businessSettings?.lendingEnabled !== true && !saltarFiltros) return false
+    }
+    if (item.requiresServicios) {
+      // Apagado por defecto: cobrar luz o agua por medidor es de un punado de
+      // negocios. Se enciende en Configuracion > Preferencias.
+      if (businessSettings?.serviciosEnabled !== true && !saltarFiltros) return false
     }
     if (item.requiresAppointments) {
       const appointmentsEnabled = businessSettings?.appointmentsEnabled === true

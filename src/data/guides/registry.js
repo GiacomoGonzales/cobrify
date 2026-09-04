@@ -279,6 +279,19 @@ export const GUIDES = [
     load: () => import('./almacenes.js'),
   },
   {
+    // Una guia, tres pantallas: Suministros, Lecturas y Recibos son un solo
+    // trabajo ("cobrar la luz del mes") y el usuario no pregunta por pantalla.
+    // Se ancla a Lecturas, que es donde se pasa mas tiempo.
+    id: 'cobranza-servicios',
+    route: '/app/servicios-lecturas',
+    title: 'Cobranza de servicios (luz, agua)',
+    category: 'Operación',
+    description: 'Compras un recibo de luz o agua y lo repartes entre los vecinos: lecturas por medidor, tarifa que sale de tu propio recibo, recibos numerados y cobranza.',
+    keywords: 'luz agua energia electrica medidor lectura kwh tarifa recibo consumo cuota fija sin medidor centro poblado jass caserio pueblo cobranza reparto perdida conciliacion suministro talonario correlativo minimo alumbrado vecinos',
+    modos: ['retail'],
+    load: () => import('./cobranza-servicios.js'),
+  },
+  {
     id: 'consumo-interno',
     route: '/app/inventario',
     title: 'Consumo Interno',

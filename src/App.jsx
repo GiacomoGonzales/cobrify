@@ -111,6 +111,9 @@ const PublicManual = lazy(() => import('./pages/PublicManual'))
 const MigratePurchases = lazy(() => import('./pages/MigratePurchases'))
 const Expenses = lazy(() => import('./pages/Expenses'))
 const Loans = lazy(() => import('./pages/Loans'))
+const ServiceReadings = lazy(() => import('./pages/ServiceReadings'))
+const ServiceSupplies = lazy(() => import('./pages/ServiceSupplies'))
+const ServiceReceipts = lazy(() => import('./pages/ServiceReceipts'))
 const LendingPortfolio = lazy(() => import('./pages/LendingPortfolio'))
 const Certificates = lazy(() => import('./pages/Certificates'))
 const CashFlow = lazy(() => import('./pages/CashFlow'))
@@ -593,6 +596,9 @@ function App() {
               <Route path="meta-ads" element={<MetaAdsExport />} />
               <Route path="gastos" element={<Expenses />} />
               <Route path="prestamos" element={<Loans />} />
+              <Route path="servicios-suministros" element={<ServiceSupplies />} />
+              <Route path="servicios-lecturas" element={<ServiceReadings />} />
+              <Route path="servicios-recibos" element={<ServiceReceipts />} />
               <Route path="prestamos-cartera" element={<LendingPortfolio />} />
               <Route path="certificados" element={<Certificates />} />
               <Route path="flujo-caja" element={<CashFlow />} />

@@ -269,6 +269,9 @@ export const AVAILABLE_PAGES = [
 // Modo Préstamos: la cartera + lo común (clientes, caja, configuración)
 export const LENDING_PAGES = [
   { id: 'lending', name: 'Préstamos (Cartera)', path: '/prestamos-cartera', category: 'principal' },
+  { id: 'service-supplies', name: 'Suministros', path: '/servicios-suministros', category: 'otros' },
+  { id: 'service-readings', name: 'Lecturas del mes', path: '/servicios-lecturas', category: 'otros' },
+  { id: 'service-receipts', name: 'Recibos de servicio', path: '/servicios-recibos', category: 'otros' },
 ]
 
 /**

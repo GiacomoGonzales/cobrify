@@ -832,6 +832,37 @@ service cloud.firestore {
         allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
       }
 
+      // ─── Cobranza de servicios (luz, agua por medidor) ───────────────
+      // Colecciones propias, no `invoices`: estos recibos NO son comprobantes
+      // SUNAT ni ventas, y mezclarlos los metería en el Registro de Ventas.
+
+      // El padrón: un documento por SUMINISTRO, no por cliente (hay titulares
+      // con dos y tres medidores).
+      match /serviceSupplies/{supplyId} {
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
+      // Un documento por mes, con la tarifa y el mínimo CONGELADOS.
+      match /servicePeriods/{periodId} {
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+
+        // Las lecturas van en subcolección y no dentro del periodo: 179 en un
+        // solo documento chocarían con el límite de 1 MB, y dos personas
+        // tomando lecturas a la vez se pisarían la una a la otra.
+        match /readings/{supplyId} {
+          allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+          allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        }
+      }
+
+      // Los recibos emitidos, con su correlativo y su estado de cobranza.
+      match /serviceReceipts/{receiptId} {
+        allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+      }
+
       // Subcollection: Tarjetas de fidelidad (sellos por cliente).
       // El ID del documento es el teléfono normalizado del cliente.
       match /loyaltyCards/{cardId} {
