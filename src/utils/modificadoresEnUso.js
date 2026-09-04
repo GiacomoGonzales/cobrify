@@ -340,3 +340,95 @@ export function planDeSincronizacion(productos, plantillas) {
 
   return { porPlantilla, cambios: [...porProducto.values()] }
 }
+
+/**
+ * Lo que distingue a una versión, además de sus opciones.
+ *
+ * En pantalla se ven los nombres y los precios, pero la comparación mira
+ * también si el grupo es obligatorio, cuántas opciones deja elegir, si permite
+ * repetir y qué insumo descuenta. Sin esto, dos versiones con las MISMAS
+ * opciones aparecían separadas sin explicación y la pantalla parecía rota
+ * (reporte con "Tamaño", 04-sep-2026: la Versión 1 y la 4 se veían idénticas).
+ */
+export const atributosDeLaVersion = (grupo) => ({
+  obligatorio: !!grupo?.required,
+  maximo: Number(grupo?.maxSelection) || 1,
+  repite: !!grupo?.allowRepeat,
+  insumos: (grupo?.options || [])
+    .map((o) => {
+      const enlace = enlaceDeLaOpcion(o)
+      return enlace ? `${cleanText(o?.name)}: ${enlace.ingredientQuantity} ${enlace.ingredientUnit} de ${enlace.ingredientName}` : ''
+    })
+    .filter(Boolean),
+})
+
+/**
+ * Cuáles de esos atributos NO son iguales en todas las versiones.
+ *
+ * Se muestran solo los que difieren: repetir "Máximo 1" en las cuatro
+ * versiones no ayuda a elegir, y el que cambia se pierde entre el ruido.
+ */
+export function atributosQueDifieren(versiones) {
+  const lista = (versiones || []).map((v) => atributosDeLaVersion(v?.grupo))
+  if (lista.length < 2) return []
+  const distinto = (leer) => new Set(lista.map((a) => JSON.stringify(leer(a)))).size > 1
+  return [
+    distinto((a) => a.obligatorio) && 'obligatorio',
+    distinto((a) => a.maximo) && 'maximo',
+    distinto((a) => a.repite) && 'repite',
+    distinto((a) => a.insumos) && 'insumos',
+  ].filter(Boolean)
+}
+
+/**
+ * Dejar en UNA sola versión todos los modificadores que se llaman igual.
+ *
+ * Es la respuesta a "tengo el mismo modificador en cuatro versiones, ¿cómo hago
+ * para que todos queden con esta?". Alcanza por NOMBRE, que es lo que el dueño
+ * ve agrupado en pantalla, y no por plantilla: acá todavía puede no haber
+ * ninguna.
+ *
+ * Cada producto conserva su `templateId` si lo tenía. Unificar es una decisión
+ * sobre el CONTENIDO; a qué plantilla pertenece cada grupo es otra cosa y no
+ * hay motivo para romperla de paso.
+ *
+ * @param {Array} productos Todos los productos del negocio.
+ * @param {string} clave El nombre comparable del modificador.
+ * @param {object} version La versión que queda como buena (de `modificadoresEnUso`).
+ */
+export function planDeUnificacion(productos, clave, version) {
+  const buena = version?.grupo
+  const cambios = []
+  const totales = { alcanzados: 0, iguales: 0, reemplazan: 0 }
+  if (!buena || !clave) return { cambios, totales }
+
+  // Sin `id`, para que `grupoDesdePlantilla` no confunda el id del GRUPO con el
+  // de una plantilla y lo estampe como `templateId`.
+  const molde = { ...buena, id: undefined }
+  const firmaBuena = firmaDelGrupo(buena)
+  const nombreBueno = cleanText(buena.name)
+
+  for (const producto of productos || []) {
+    const actuales = producto?.modifiers || []
+    let toco = false
+    const nuevos = actuales.map((grupo) => {
+      if (nombreComparable(grupo?.name) !== clave) return grupo
+      totales.alcanzados++
+      if (firmaDelGrupo(grupo) === firmaBuena && cleanText(grupo.name) === nombreBueno) {
+        totales.iguales++
+        return grupo
+      }
+      totales.reemplazan++
+      toco = true
+      const rehecho = grupoDesdePlantilla(molde, grupo)
+      return grupo.templateId ? { ...rehecho, templateId: grupo.templateId } : rehecho
+    })
+    if (toco) {
+      cambios.push({
+        producto: { id: producto.id, nombre: cleanText(producto?.name) },
+        modifiers: nuevos,
+      })
+    }
+  }
+  return { cambios, totales }
+}

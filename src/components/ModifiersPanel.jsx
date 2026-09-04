@@ -12,6 +12,7 @@ import {
 import {
   modificadoresEnUso, resumenDeModificadores, plantillaDesdeVersion, nombreComparable,
   grupoEsDeLaPlantilla, planDeAplicacion, planDeSincronizacion,
+  atributosDeLaVersion, atributosQueDifieren, planDeUnificacion,
 } from '@/utils/modificadoresEnUso'
 import ProductModifiersSection from '@/components/ProductModifiersSection'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -70,6 +71,8 @@ export default function ModifiersPanel({ companySettings }) {
   const [categoriasElegidas, setCategoriasElegidas] = useState(() => new Set())
   const [isApplying, setIsApplying] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
+  const [unificando, setUnificando] = useState(null)
+  const [isUnifying, setIsUnifying] = useState(false)
 
   useEffect(() => {
     if (isDemoMode) return
@@ -350,6 +353,41 @@ export default function ModifiersPanel({ companySettings }) {
     () => (templatesDirty ? { porPlantilla: [], cambios: [] } : planDeSincronizacion(products, templates)),
     [products, templates, templatesDirty],
   )
+
+  // ── Dejar todos los que se llaman igual con UNA sola versión ──────────────
+  //
+  // Es la pregunta directa del dueño viendo "Tamaño" partido en cuatro:
+  // "¿cómo hago para que todas esas sean una?".
+  const abrirUnificar = (entrada, version) => {
+    setUnificando({
+      clave: entrada.clave,
+      nombre: entrada.nombre,
+      version,
+      plan: planDeUnificacion(products, entrada.clave, version),
+    })
+  }
+
+  const handleUnificar = async () => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+    if (!unificando?.plan?.cambios.length) return
+    setIsUnifying(true)
+    try {
+      const res = await aplicarPlantillaAProductos(getBusinessId(), unificando.plan.cambios)
+      if (!res.success) throw new Error(res.error)
+      const porId = new Map(unificando.plan.cambios.map((c) => [c.producto.id, c.modifiers]))
+      setProducts((prev) => prev.map((p) => (porId.has(p.id) ? { ...p, modifiers: porId.get(p.id) } : p)))
+      toast.success(`"${unificando.nombre}" quedó igual en ${res.escritos + unificando.plan.totales.iguales} productos`)
+      setUnificando(null)
+    } catch (e) {
+      console.error('Error unificando el modificador:', e)
+      toast.error('No se pudo unificar')
+    } finally {
+      setIsUnifying(false)
+    }
+  }
 
   const handleSincronizar = async () => {
     if (isDemoMode) {
@@ -702,8 +740,9 @@ export default function ModifiersPanel({ companySettings }) {
                           <div className="px-3 pb-3 pl-9 space-y-3">
                             {!m.esIgualEnTodos && (
                               <p className="text-xs text-amber-700">
-                                Se llaman igual pero no dicen lo mismo. Elige cuál dejar como plantilla;
-                                los productos no se tocan.
+                                Se llaman igual pero no dicen lo mismo. Con <strong>Dejar todos con esta</strong> los
+                                unificas en una sola; con <strong>Crear plantilla</strong> solo la guardas para
+                                reusarla, sin tocar los productos.
                               </p>
                             )}
                             {m.versiones.map((v, i) => (
@@ -728,18 +767,46 @@ export default function ModifiersPanel({ companySettings }) {
                                     ))
                                   )}
                                 </div>
+                                {/* Lo que separa esta versión de las otras y NO se ve
+                                    en las opciones. Sin esto, dos versiones con los
+                                    mismos nombres y precios aparecían separadas sin
+                                    explicación y la pantalla parecía rota. */}
+                                {(() => {
+                                  const difieren = atributosQueDifieren(m.versiones)
+                                  if (difieren.length === 0) return null
+                                  const a = atributosDeLaVersion(v.grupo)
+                                  const textos = []
+                                  if (difieren.includes('obligatorio')) textos.push(a.obligatorio ? 'Obligatorio' : 'Opcional')
+                                  if (difieren.includes('maximo')) textos.push(`Máximo ${a.maximo}`)
+                                  if (difieren.includes('repite')) textos.push(a.repite ? 'Permite repetir' : 'Sin repetir')
+                                  if (difieren.includes('insumos')) {
+                                    textos.push(a.insumos.length ? `Descuenta ${a.insumos.join(' y ')}` : 'No descuenta insumo')
+                                  }
+                                  return (
+                                    <p className="text-xs text-amber-700">
+                                      Se diferencia en: {textos.join(' · ')}
+                                    </p>
+                                  )
+                                })()}
                                 <p className="text-xs text-gray-500">
                                   En: {v.productos.slice(0, 6).map((x) => x.nombre).join(', ')}
                                   {v.productos.length > 6 && ` y ${v.productos.length - 6} más`}
                                 </p>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleUsarComoPlantilla(v, m.nombre)}
-                                >
-                                  <Copy className="w-3.5 h-3.5 mr-1.5" />
-                                  Crear plantilla con esta
-                                </Button>
+                                <div className="flex flex-wrap gap-2">
+                                  {!m.esIgualEnTodos && (
+                                    <Button size="sm" onClick={() => abrirUnificar(m, v)}>
+                                      Dejar todos con esta
+                                    </Button>
+                                  )}
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleUsarComoPlantilla(v, m.nombre)}
+                                  >
+                                    <Copy className="w-3.5 h-3.5 mr-1.5" />
+                                    Crear plantilla con esta
+                                  </Button>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -857,6 +924,68 @@ export default function ModifiersPanel({ companySettings }) {
           </div>
         </div>
       )}
+
+      {/* Dejar todos los que se llaman igual con una sola versión */}
+      <Modal
+        isOpen={!!unificando}
+        onClose={() => !isUnifying && setUnificando(null)}
+        title={`Unificar "${unificando?.nombre || ''}"`}
+      >
+        {unificando && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-1.5">
+              {(unificando.version?.grupo?.options || []).map((o, i) => (
+                <span key={o?.id || i} className="chip-neutro px-2 py-0.5 rounded-full text-xs">
+                  {o?.name || 'Sin nombre'}
+                  {Number(o?.priceAdjustment) ? ` +${formatCurrency(Number(o.priceAdjustment))}` : ''}
+                </span>
+              ))}
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-3 space-y-1">
+              <p className="text-sm text-gray-900">
+                Todos los <strong>{unificando.plan.totales.alcanzados}</strong> que se llaman
+                "{unificando.nombre}" van a quedar con esta versión.
+              </p>
+              <ul className="text-xs text-gray-600 space-y-0.5">
+                <li className="text-amber-700">
+                  <strong>{unificando.plan.totales.reemplazan}</strong> cambian, y con eso cambia lo que se
+                  les cobra.
+                </li>
+                {unificando.plan.totales.iguales > 0 && (
+                  <li><strong>{unificando.plan.totales.iguales}</strong> ya estaban así y no se tocan.</li>
+                )}
+              </ul>
+            </div>
+
+            {unificando.plan.cambios.length > 0 && (
+              <div className="text-xs text-gray-600">
+                <p className="font-medium text-gray-700 mb-1">Cambian:</p>
+                <p>
+                  {unificando.plan.cambios.slice(0, 12).map((c) => c.producto.nombre).join(', ')}
+                  {unificando.plan.cambios.length > 12 && ` y ${unificando.plan.cambios.length - 12} más`}
+                </p>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-200">
+              <Button variant="outline" onClick={() => setUnificando(null)} disabled={isUnifying}>
+                Cancelar
+              </Button>
+              <Button onClick={handleUnificar} disabled={isUnifying || !unificando.plan.cambios.length}>
+                {isUnifying ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Unificando...
+                  </>
+                ) : (
+                  `Unificar ${unificando.plan.cambios.length} producto${unificando.plan.cambios.length === 1 ? '' : 's'}`
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Aplicar una plantilla: se elige a quién y se ven los números antes */}
       <Modal

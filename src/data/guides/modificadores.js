@@ -104,6 +104,14 @@ export default {
           text: 'Si un nombre trae la etiqueta **versiones**, significa que se llaman igual pero no dicen lo mismo: en un plato tiene cuatro opciones y en otro tres, o con otro precio. Ábrelo y vas a ver cada versión con los productos que la usan.',
         },
         {
+          type: 'texto',
+          text: 'A veces dos versiones muestran las mismas opciones al mismo precio. En ese caso la diferencia está en otra parte y te la dice el renglón **Se diferencia en**: una es obligatoria y la otra no, deja elegir más opciones, permite repetir, o descuenta un insumo distinto.',
+        },
+        {
+          type: 'texto',
+          text: 'Para dejarlas en una sola, abre la versión que quieres conservar y presiona **Dejar todos con esta**. Todos los que se llamen igual quedan con esa, y antes de confirmar te dice cuántos cambian.',
+        },
+        {
           type: 'consejo',
           text: 'No es un error tener varias versiones. A veces el rocoto cuesta distinto en la salchipapa que en el pollo. La etiqueta solo avisa para que no las unifiques sin mirar.',
         },
@@ -252,6 +260,14 @@ export default {
     {
       q: 'Un nombre me sale con "2 versiones". ¿Está mal?',
       a: 'No necesariamente. Significa que ese modificador está escrito distinto en unos platos y en otros: otras opciones u otro precio. Ábrelo para ver cuál es cuál y decide si de verdad quieres unificarlos.',
+    },
+    {
+      q: 'Tengo el mismo modificador en cuatro versiones. ¿Cómo hago para que todas sean una?',
+      a: 'Ábrelo, mira cuál versión quieres conservar y presiona **Dejar todos con esta**. Todos los que se llamen igual quedan con esa, incluidos los que estaban escritos con otra mayúscula o con tilde. Antes de confirmar te dice cuántos cambian.',
+    },
+    {
+      q: 'Dos versiones muestran exactamente lo mismo. ¿Por qué están separadas?',
+      a: 'Porque se diferencian en algo que no son las opciones. Mira el renglón **Se diferencia en** de cada una: puede ser que una sea obligatoria, que deje elegir más opciones, que permita repetir, o que descuente un insumo distinto.',
     },
     {
       q: 'Cobro una pieza extra de pollo. ¿Se descuenta del inventario?',
