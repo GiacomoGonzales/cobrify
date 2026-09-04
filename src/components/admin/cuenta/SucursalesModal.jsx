@@ -5,6 +5,7 @@ import { getBranches, createBranch, updateBranch, deleteBranch } from '@/service
 import { createWarehouse, getWarehouses, deleteWarehouse } from '@/services/warehouseService'
 import { updateMaxBranches } from '@/services/subscriptionService'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
+import { MODOS_NEGOCIO } from '@/utils/businessModes'
 import { useToast } from '@/contexts/ToastContext'
 import { Modal, Boton, Campo, Entrada, Selector, Casilla } from '@/components/admin/ui'
 
@@ -37,18 +38,8 @@ const FORM_VACIO = {
   ubigeo: '',
 }
 
-const MODOS = [
-  ['', 'Heredar del negocio'],
-  ['retail', 'General (todo tipo de negocio)'],
-  ['restaurant', 'Restaurante'],
-  ['pharmacy', 'Farmacia'],
-  ['hotel', 'Hotel'],
-  ['veterinary', 'Veterinaria'],
-  ['lending', 'Préstamos'],
-  ['transport', 'Transporte'],
-  ['logistics', 'Logística / construcción'],
-  ['real_estate', 'Inmobiliaria'],
-]
+// La opcion vacia es "hereda del negocio"; el resto sale del catalogo comun.
+const MODOS = [['', 'Heredar del negocio'], ...MODOS_NEGOCIO.map(m => [m.id, m.nombre])]
 
 export default function SucursalesModal({ cuenta, onClose, onCambio }) {
   const toast = useToast()

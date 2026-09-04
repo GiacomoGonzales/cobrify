@@ -1,6 +1,6 @@
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { PLANS } from '@/services/subscriptionService'
+import { PLANS, nuncaVence } from '@/services/subscriptionService'
 import { nombreRubro } from '@/data/rubros'
 
 // Una cuenta del admin sale de tres documentos con el mismo id: subscriptions
@@ -84,6 +84,7 @@ export function armarCuenta(id, data, business = {}, userDoc = null, { resellers
     igvRate: business.emissionConfig?.taxConfig?.igvRate ?? 18,
     taxType: business.emissionConfig?.taxConfig?.taxType || 'standard',
     plan: data.plan || 'unknown',
+    nuncaVence: nuncaVence(data),
     planName: data.planName || null,
     status,
     createdAt,
@@ -219,8 +220,12 @@ export async function cargarCuenta(id, { customPlans = {} } = {}) {
 }
 
 // Dias que faltan para el vencimiento (negativo si ya paso); null sin fecha.
+// null tambien cuando la cuenta NO vence (Enterprise): no es que falte la fecha,
+// es que no aplica. Quien lo pinta debe distinguirlo con `nuncaVence`.
 export const diasParaVencer = cuenta =>
-  cuenta.periodEnd ? Math.ceil((cuenta.periodEnd.getTime() - Date.now()) / 86400000) : null
+  (!cuenta.nuncaVence && cuenta.periodEnd)
+    ? Math.ceil((cuenta.periodEnd.getTime() - Date.now()) / 86400000)
+    : null
 
 // Telefono guardado en el negocio → formato wa.me (solo digitos, con el 51 de Peru).
 export function numeroWhatsappPeru(rawPhone) {

@@ -5,6 +5,7 @@ import { getInvestorReport, recalculateInvestorReport } from '@/services/adminSt
 import { resumenRapido, resumenCompleto, compararCobranza } from '@/services/adminResumenService'
 import { PLANS } from '@/services/subscriptionService'
 import { CHART, CHART_TOOLTIP } from '@/components/charts/chartTheme'
+import { nombreModo } from '@/utils/businessModes'
 import { Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Boton, Cifras, Cifra, Aviso } from '@/components/admin/ui'
 
 // Toda la informacion global en una sola pagina, en dos velocidades:
@@ -20,7 +21,6 @@ const decimal = (v, d = 1) => (Number(v) || 0).toLocaleString('es-PE', { minimum
 const porcentaje = (parte, total) => (total > 0 ? `${Math.round((parte / total) * 100)} %` : '—')
 const fecha = d => (d ? new Date(d).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: '2-digit' }) : '—')
 
-const MODOS = { retail: 'General', restaurant: 'Restaurante', pharmacy: 'Farmacia', real_estate: 'Inmobiliaria', transport: 'Transporte', hotel: 'Hotel', veterinary: 'Veterinaria', logistics: 'Logística', lending: 'Préstamos' }
 const PLANES_ETIQUETA = { free: 'Gratis', basic: 'Básico', pro: 'Pro', premium: 'Premium', enterprise: 'Enterprise', starter: 'Starter' }
 const TIPOS_DOC = { factura: 'Facturas', boleta: 'Boletas', nota_venta: 'Notas de venta', nota_credito: 'Notas de crédito', nota_debito: 'Notas de débito' }
 const CANALES = { organico: 'Búsqueda orgánica', publicidad: 'Publicidad paga', social: 'Redes sociales', mensajeria: 'Mensajería', referido: 'Sitios referidos', directo: 'Directo' }
@@ -636,7 +636,7 @@ function Inversores({ r }) {
         <Bloque titulo="Por tipo de negocio">
           <tbody>
             {Object.entries(r.businessFlags?.byMode || {}).sort((a, b) => b[1] - a[1]).map(([modo, n]) => (
-              <FilaConteo key={modo} etiqueta={MODOS[modo] || modo} valor={n} total={total} />
+              <FilaConteo key={modo} etiqueta={nombreModo(modo)} valor={n} total={total} />
             ))}
           </tbody>
         </Bloque>
@@ -678,7 +678,7 @@ function Inversores({ r }) {
                 <Fila key={b.businessId}>
                   <Td numero apagado>{i + 1}</Td>
                   <Td className="font-medium">{b.businessName}</Td>
-                  <Td apagado>{MODOS[b.businessMode] || b.businessMode}</Td>
+                  <Td apagado>{nombreModo(b.businessMode)}</Td>
                   <Td numero>{entero(b.documentCount)}</Td>
                   <Td numero className="font-medium">{moneda(b.totalAmount)}</Td>
                 </Fila>

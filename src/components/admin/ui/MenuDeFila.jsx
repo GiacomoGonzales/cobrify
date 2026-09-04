@@ -17,7 +17,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
  * sirve para los dos.
  */
 
-const ANCHO = 208 // w-52
+const ANCHO = 232 // tiene que coincidir con el w-[232px] de CajaMenu
 
 export function useMenuDeFila() {
   const [abiertoEn, setAbiertoEn] = useState(null)
@@ -94,7 +94,7 @@ export function CajaMenu({ posicion, refMenu, children }) {
   return (
     <div
       ref={refMenu}
-      className="fixed w-52 max-h-[calc(100vh-16px)] overflow-y-auto overscroll-contain bg-white rounded-md border border-gray-200 shadow-md py-1 z-50 text-left"
+      className="fixed w-[232px] max-h-[calc(100vh-16px)] overflow-y-auto overflow-x-hidden overscroll-contain whitespace-normal bg-white rounded-md border border-gray-200 shadow-md py-1 z-50 text-left"
       style={{ top: posicion.top, left: posicion.left }}
       onClick={e => e.stopPropagation()}
     >
@@ -108,7 +108,7 @@ export function ItemMenu({ rojo = false, onClick, children }) {
     <button
       type="button"
       onClick={onClick}
-      className={`w-full px-3 py-1.5 text-left text-[12.5px] hover:bg-gray-50 ${rojo ? 'text-red-600' : 'text-gray-700'}`}
+      className={`w-full px-3 py-1.5 text-left text-[12.5px] leading-snug whitespace-normal break-words hover:bg-gray-50 ${rojo ? 'text-red-600' : 'text-gray-700'}`}
     >
       {children}
     </button>

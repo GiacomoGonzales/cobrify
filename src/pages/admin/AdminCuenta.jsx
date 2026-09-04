@@ -8,7 +8,8 @@ import { getVendedores } from '@/services/vendedorService'
 import { getBranches } from '@/services/branchService'
 import { resumenDeUso } from '@/services/adminUsoService'
 import { cargarCuenta, diasParaVencer, enlaceRecordatorioWhatsapp } from '@/services/adminCuentasService'
-import { RUBROS, nombreRubro } from '@/data/rubros'
+import { RUBROS_ALFABETICOS, nombreRubro } from '@/data/rubros'
+import { nombreModo } from '@/utils/businessModes'
 import { useToast } from '@/contexts/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
 import UserDetailsModal from '@/components/admin/UserDetailsModal'
@@ -28,10 +29,6 @@ import {
 // usuario" y a los modales sueltos de la lista.
 
 const ESTADOS = { active: 'Activa', suspended: 'Suspendida', expired: 'Vencida' }
-const MODOS = {
-  retail: 'General', restaurant: 'Restaurante', pharmacy: 'Farmacia', real_estate: 'Inmobiliaria',
-  transport: 'Transporte', hotel: 'Hotel', veterinary: 'Veterinaria', logistics: 'Logística', lending: 'Préstamos',
-}
 // Se nombra el regimen y despues la tasa: lo que distingue a una cuenta es
 // estar en Amazonia o ser NRUS, no el numero suelto.
 const REGIMENES = {
@@ -140,6 +137,28 @@ export default function AdminCuenta() {
     } catch (error) {
       console.error('Error al registrar pago:', error)
       toast.error(error.message || 'No se pudo registrar el pago')
+    } finally {
+      setProcesando(false)
+    }
+  }
+
+  // Renovar sin abrir nada: mismo plan, mismo precio, un paso.
+  async function renovarRapido() {
+    const planConfig = PLANS[c.plan] || customPlans[c.plan]
+    if (!planConfig) {
+      toast.error('Esta cuenta no tiene un plan válido')
+      return
+    }
+    const monto = c.renewalPrice != null ? c.renewalPrice : planConfig.totalPrice
+    if (!window.confirm(`¿Renovar ${c.businessName} con ${planConfig.name} por S/ ${monto}?`)) return
+    setProcesando(true)
+    try {
+      await registerPayment(c.id, monto, 'Admin - Renovación rápida', c.plan)
+      toast.success('Renovación registrada')
+      await cargar()
+    } catch (error) {
+      console.error('Error al renovar:', error)
+      toast.error('No se pudo renovar')
     } finally {
       setProcesando(false)
     }
@@ -289,7 +308,9 @@ export default function AdminCuenta() {
     ? c.customDomain ? `https://${c.customDomain}` : `${window.location.origin}/catalogo/${c.catalogSlug}`
     : null
   const vendedor = c.vendedorId ? vendedores.find(v => v.id === c.vendedorId) : null
-  const textoVence = c.periodEnd
+  const textoVence = c.nuncaVence
+    ? 'Sin vencimiento (cuenta interna)'
+    : c.periodEnd
     ? `${vencida ? 'Venció' : 'Vence'} el ${fecha(c.periodEnd)}${dias === 0 ? ' (hoy)' : vencida ? ` (hace ${Math.abs(dias)} días)` : ` (en ${dias} días)`}`
     : 'Sin fecha de vencimiento'
   const sucursalesActivas = sucursales.filter(s => s.isActive !== false)
@@ -300,6 +321,7 @@ export default function AdminCuenta() {
       acciones={
         <>
           <Boton tamano="sm" variante="primario" onClick={() => setModal('pago')}>Registrar pago</Boton>
+          <Boton tamano="sm" onClick={renovarRapido} disabled={procesando}>Renovar con el mismo plan</Boton>
           <Boton tamano="sm" onClick={() => setModal('plan')}>Cambiar plan</Boton>
           <Boton tamano="sm" onClick={() => setModal('vencimiento')}>Cambiar vencimiento</Boton>
           <Boton tamano="sm" onClick={abrirWhatsApp}>Recordar por WhatsApp</Boton>
@@ -311,7 +333,6 @@ export default function AdminCuenta() {
           {(c.status === 'suspended' || vencida || c.archived) && (
             <Boton tamano="sm" onClick={() => archivar(!c.archived)}>{c.archived ? 'Desarchivar' : 'Archivar'}</Boton>
           )}
-          <Boton tamano="sm" variante="peligro" onClick={() => setModal('eliminar')}>Eliminar</Boton>
         </>
       }
     >
@@ -351,13 +372,13 @@ export default function AdminCuenta() {
             <Dato etiqueta="Dirección" recortar={false}>{c.address}</Dato>
             <Dato etiqueta="Ubicación">{[c.district, c.province, c.department].filter(Boolean).join(', ')}</Dato>
             <Dato etiqueta="Teléfono del local">{c.phone}</Dato>
-            <Dato etiqueta="Modo">{MODOS[c.businessMode] || c.businessMode}</Dato>
+            <Dato etiqueta="Modo">{nombreModo(c.businessMode)}</Dato>
             <Dato etiqueta="Rubro" recortar={false}>
               <span className="inline-flex items-center gap-2">
                 {!c.rubro && c.rubroSugerido && <Pastilla tono="punteado" title="Sugerido por la herramienta; falta confirmarlo">sugerido: {nombreRubro(c.rubroSugerido)}</Pastilla>}
                 <Selector value={c.rubro || ''} onChange={e => guardarRubro(e.target.value)} className="h-7 w-44 text-[12px]">
                   <option value="">Sin rubro</option>
-                  {RUBROS.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+                  {RUBROS_ALFABETICOS.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
                 </Selector>
               </span>
             </Dato>
@@ -390,7 +411,11 @@ export default function AdminCuenta() {
             <Dato etiqueta="Plan">{c.planName || PLANS[c.plan]?.name || customPlans[c.plan]?.name || c.plan}<span className="ml-1.5 font-mono text-[11px] text-gray-400">{c.plan}</span></Dato>
             <Dato etiqueta="Precio pactado">{c.renewalPrice != null ? moneda(c.renewalPrice) : null}</Dato>
             <Dato etiqueta="Precio mensual del plan">{c.monthlyPrice ? moneda(c.monthlyPrice) : null}</Dato>
-            <Dato etiqueta="Periodo actual">{c.currentPeriodStart ? `${fecha(c.currentPeriodStart)} → ${fecha(c.periodEnd)}` : fecha(c.periodEnd)}</Dato>
+            <Dato etiqueta="Periodo actual">
+              {c.nuncaVence
+                ? 'Sin vencimiento'
+                : c.currentPeriodStart ? `${fecha(c.currentPeriodStart)} → ${fecha(c.periodEnd)}` : fecha(c.periodEnd)}
+            </Dato>
             <Dato etiqueta="Comprobantes este mes"><span className={!ilimitado && c.limit > 0 && usados / c.limit >= 0.9 ? 'text-red-600 font-medium' : ''}>{entero(usados)} / {ilimitado ? '∞' : entero(c.limit)}</span></Dato>
             <Dato etiqueta="Comprobantes extra (bonus)">{c.bonusInvoices ? entero(c.bonusInvoices) : '0'}</Dato>
             <Dato etiqueta="Clientes permitidos">{limite(c.limits?.maxCustomers)}</Dato>
@@ -468,7 +493,7 @@ export default function AdminCuenta() {
             datos={[
               ['Dirección', c.address],
               ['Teléfono', c.phone],
-              ['Modo', MODOS[c.businessMode] || c.businessMode],
+              ['Modo', nombreModo(c.businessMode)],
               ['Creada', fecha(c.createdAt)],
             ]}
           />
@@ -479,7 +504,7 @@ export default function AdminCuenta() {
               datos={[
                 ['Dirección', s.address],
                 ['Teléfono', s.phone],
-                ['Modo', s.businessMode ? MODOS[s.businessMode] || s.businessMode : 'Hereda'],
+                ['Modo', s.businessMode ? nombreModo(s.businessMode) : 'Hereda'],
                 ['Creada', fecha(s.createdAt)],
               ]}
             />
@@ -501,7 +526,7 @@ export default function AdminCuenta() {
               <Td className="font-medium">{c.mainBranchName || 'Sucursal Principal'} <span className="text-gray-400 font-normal">· principal</span></Td>
               <Td apagado className="whitespace-normal">{c.address || '—'}</Td>
               <Td apagado>{c.phone || '—'}</Td>
-              <Td apagado>{MODOS[c.businessMode] || c.businessMode}</Td>
+              <Td apagado>{nombreModo(c.businessMode)}</Td>
               <Td numero apagado>{fecha(c.createdAt)}</Td>
             </Fila>
             {sucursalesActivas.map(s => (
@@ -509,7 +534,7 @@ export default function AdminCuenta() {
                 <Td className="font-medium">{s.name}</Td>
                 <Td apagado className="whitespace-normal">{s.address || '—'}</Td>
                 <Td apagado>{s.phone || '—'}</Td>
-                <Td apagado>{s.businessMode ? MODOS[s.businessMode] || s.businessMode : 'Hereda'}</Td>
+                <Td apagado>{s.businessMode ? nombreModo(s.businessMode) : 'Hereda'}</Td>
                 <Td numero apagado>{fecha(s.createdAt)}</Td>
               </Fila>
             ))}
@@ -643,6 +668,11 @@ export default function AdminCuenta() {
             {guardandoNotas ? 'Guardando…' : 'Guardar notas'}
           </Boton>
         </div>
+      </Seccion>
+
+      {/* Al final y aparte: borrar una cuenta no se deshace. */}
+      <Seccion titulo="Eliminar la cuenta" descripcion="Se borra el negocio con todos sus comprobantes, clientes y productos. No se puede deshacer.">
+        <Boton tamano="sm" variante="peligro" onClick={() => setModal('eliminar')}>Eliminar esta cuenta</Boton>
       </Seccion>
 
       {modal === 'pago' && (

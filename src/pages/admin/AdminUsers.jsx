@@ -1,28 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { doc, updateDoc, serverTimestamp, Timestamp } from 'firebase/firestore'
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { PLANS, SELLABLE_PLAN_IDS, registerPayment } from '@/services/subscriptionService'
+import { PLANS, SELLABLE_PLAN_IDS } from '@/services/subscriptionService'
 import { getCustomPlans } from '@/services/customPlanService'
 import { getVendedores } from '@/services/vendedorService'
-import { cargarCuentas, diasParaVencer, enlaceRecordatorioWhatsapp } from '@/services/adminCuentasService'
-import { RUBROS, nombreRubro } from '@/data/rubros'
+import { cargarCuentas, diasParaVencer } from '@/services/adminCuentasService'
+import { RUBROS_ALFABETICOS, nombreRubro } from '@/data/rubros'
+import { MODOS_NEGOCIO } from '@/utils/businessModes'
 import { useToast } from '@/contexts/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { matchesPrebuilt } from '@/lib/utils'
 import { origenDeCuenta, ORIGEN_DIRECTO, ORIGEN_RESELLER, ORIGEN_VENDEDOR } from '@/utils/subscriptionOwnership'
 import { buildAccountHaystack } from '@/utils/adminSearch'
-import UserDetailsModal from '@/components/admin/UserDetailsModal'
-import SunatModal from '@/components/admin/cuenta/SunatModal'
-import FuncionesModal from '@/components/admin/cuenta/FuncionesModal'
-import SucursalesModal from '@/components/admin/cuenta/SucursalesModal'
-import ContactoModal from '@/components/admin/cuenta/ContactoModal'
-import AsignarVendedorModal from '@/components/admin/cuenta/AsignarVendedorModal'
-import EliminarCuentaModal from '@/components/admin/cuenta/EliminarCuentaModal'
 import VendedoresModal from '@/components/admin/cuenta/VendedoresModal'
 import {
   Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Filtros, FiltroSelect, Buscador, Estado, Pastilla, Boton,
-  useMenuDeFila, BotonDeFila, CajaMenu, ItemMenu, SeparadorMenu,
+  useMenuDeFila, BotonDeFila, CajaMenu, ItemMenu,
 } from '@/components/admin/ui'
 
 // Lista de cuentas: buscador, filtros y tabla. Clic en una fila abre la ficha
@@ -108,7 +102,6 @@ export default function AdminUsers() {
 
   // Un solo modal abierto a la vez: { tipo, cuenta }
   const [modal, setModal] = useState(null)
-  const [processingPayment, setProcessingPayment] = useState(false)
 
   // Menu de acciones de una fila. Es `position: fixed` (para salir del
   // overflow de la tabla), asi que al hacer scroll se recalcula contra su boton.
@@ -323,35 +316,7 @@ export default function AdminUsers() {
   }
 
   // Cobra el precio PACTADO del cliente (congelado en su suscripcion); el del
-  // catalogo solo si no tiene uno.
-  async function renovarRapido(user) {
-    menu.cerrar()
-    const planConfig = PLANS[user.plan] || customPlans[user.plan]
-    if (!planConfig) {
-      toast.error('Esta cuenta no tiene un plan válido')
-      return
-    }
-    const monto = user.renewalPrice != null ? user.renewalPrice : planConfig.totalPrice
-    if (!window.confirm(`¿Renovar ${user.businessName} con ${planConfig.name} por S/ ${monto}?`)) return
-    try {
-      await registerPayment(user.id, monto, 'Admin - Renovación rápida', user.plan)
-      toast.success('Renovación registrada')
-      loadUsers()
-    } catch (error) {
-      console.error('Error al renovar:', error)
-      toast.error('No se pudo renovar')
-    }
-  }
 
-  function abrirWhatsApp(user) {
-    menu.cerrar()
-    const url = enlaceRecordatorioWhatsapp(user)
-    if (!url) {
-      toast.error('Esta cuenta no tiene teléfono registrado')
-      return
-    }
-    window.open(url, '_blank', 'noopener')
-  }
 
   // Archivar = dejar de contar la cuenta en vencimientos y tasas de renovacion.
   async function archivar(user, valor) {
@@ -369,40 +334,6 @@ export default function AdminUsers() {
     }
   }
 
-  // El cobro vive en registerPayment() del servicio (congela precio pactado,
-  // respeta limites personalizados y levanta bloqueos). Aqui solo se avisa.
-  async function handleRegisterPayment(userId, amount, method, planKey, customEndDate = null, options = {}) {
-    setProcessingPayment(true)
-    try {
-      const resultado = await registerPayment(userId, parseFloat(amount), method, planKey, customEndDate, options)
-      const vence = resultado?.newPeriodEnd
-      toast.success(vence ? `Pago registrado. Nuevo vencimiento: ${vence.toLocaleDateString('es-PE')}` : 'Pago registrado')
-      cerrarModal()
-      loadUsers()
-    } catch (error) {
-      console.error('Error al registrar pago:', error)
-      toast.error(error.message || 'No se pudo registrar el pago')
-    } finally {
-      setProcessingPayment(false)
-    }
-  }
-
-  async function handleChangePlan(userId, newPlanKey) {
-    const plan = PLANS[newPlanKey] || customPlans[newPlanKey]
-    if (!plan) {
-      toast.error('Plan no válido')
-      return
-    }
-    try {
-      await updateDoc(doc(db, 'subscriptions', userId), { plan: newPlanKey, planName: plan.name, limits: plan.limits, updatedAt: Timestamp.now() })
-      toast.success(`Plan cambiado a ${plan.name}`)
-      cerrarModal()
-      loadUsers()
-    } catch (error) {
-      console.error('Error al cambiar plan:', error)
-      toast.error('No se pudo cambiar el plan')
-    }
-  }
 
   function exportToCSV() {
     const headers = ['Código', 'Email', 'Negocio', 'Rubro', 'RUC', 'Plan', 'Estado', 'Creado', 'Uso', 'Límite']
@@ -471,19 +402,6 @@ export default function AdminUsers() {
   // Es una funcion y no un componente para que no se remonte en cada render.
   const menuAcciones = (user, vencida) => (
             <CajaMenu posicion={menu.posicion} refMenu={menu.refMenu}>
-              <ItemMenu onClick={() => irAFicha(user)}>Ver ficha</ItemMenu>
-              <ItemMenu onClick={() => abrirModal('pago', user)}>Registrar pago</ItemMenu>
-              <ItemMenu onClick={() => renovarRapido(user)}>Renovar con el mismo plan</ItemMenu>
-              <ItemMenu onClick={() => abrirModal('plan', user)}>Cambiar plan</ItemMenu>
-              <ItemMenu onClick={() => abrirModal('vencimiento', user)}>Cambiar vencimiento</ItemMenu>
-              <ItemMenu onClick={() => abrirWhatsApp(user)}>Recordar por WhatsApp</ItemMenu>
-              <SeparadorMenu />
-              <ItemMenu onClick={() => abrirModal('contacto', user)}>Contacto del dueño</ItemMenu>
-              <ItemMenu onClick={() => abrirModal('vendedor', user)}>Vendedor</ItemMenu>
-              <ItemMenu onClick={() => abrirModal('sunat', user)}>Emisión electrónica</ItemMenu>
-              <ItemMenu onClick={() => abrirModal('funciones', user)}>Funciones especiales</ItemMenu>
-              <ItemMenu onClick={() => abrirModal('sucursales', user)}>Sucursales</ItemMenu>
-              <SeparadorMenu />
               {user.status !== 'suspended' ? (
                 <ItemMenu onClick={() => toggleUserAccess(user.id, true)}>Suspender</ItemMenu>
               ) : (
@@ -492,7 +410,6 @@ export default function AdminUsers() {
               {(user.status === 'suspended' || vencida || user.archived) && (
                 <ItemMenu onClick={() => archivar(user, !user.archived)}>{user.archived ? 'Desarchivar' : 'Archivar'}</ItemMenu>
               )}
-              <ItemMenu rojo onClick={() => abrirModal('eliminar', user)}>Eliminar cuenta</ItemMenu>
             </CajaMenu>
   )
 
@@ -572,16 +489,19 @@ export default function AdminUsers() {
         </FiltroSelect>
         <FiltroSelect value={modeFilter} onChange={e => setModeFilter(e.target.value)}>
           <option value="all">Modo</option>
-          <option value="retail">General ({users.filter(u => u.businessMode === 'retail' || !u.businessMode).length})</option>
-          <option value="restaurant">Restaurante ({users.filter(u => u.businessMode === 'restaurant').length})</option>
-          <option value="pharmacy">Farmacia ({users.filter(u => u.businessMode === 'pharmacy').length})</option>
-          <option value="real_estate">Inmobiliaria ({users.filter(u => u.businessMode === 'real_estate').length})</option>
-          <option value="transport">Transporte ({users.filter(u => u.businessMode === 'transport').length})</option>
+          {/* Generado del catalogo: escrita a mano, la lista se quedo en cinco
+              de los nueve modos y las cuentas de hotel, veterinaria, logistica
+              y prestamos no se podian filtrar. */}
+          {MODOS_NEGOCIO.map(m => {
+            // Una cuenta sin modo guardado es General, como en el resto del panel.
+            const cuantos = users.filter(u => (u.businessMode || 'retail') === m.id).length
+            return <option key={m.id} value={m.id}>{m.nombre} ({cuantos})</option>
+          })}
         </FiltroSelect>
         <FiltroSelect value={rubroFilter} onChange={e => setRubroFilter(e.target.value)}>
           <option value="all">Rubro</option>
           <option value="none">Sin rubro ({users.filter(u => !u.rubroEfectivo).length})</option>
-          {RUBROS.map(r => {
+          {RUBROS_ALFABETICOS.map(r => {
             const cuantos = users.filter(u => u.rubroEfectivo === r.id).length
             return cuantos > 0 ? <option key={r.id} value={r.id}>{r.nombre} ({cuantos})</option> : null
           })}
@@ -629,7 +549,9 @@ export default function AdminUsers() {
                   <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-gray-500">
                     <Estado valor={user.status} etiqueta={STATUS_LABELS[user.status] || user.status} />
                     <span>{getPlanDisplay(user)}</span>
-                    {user.periodEnd && <span className={vencida ? 'text-red-600 font-medium' : ''}>Vence {formatDate(user.periodEnd)}</span>}
+                    {user.nuncaVence
+                      ? <span>Sin vencimiento</span>
+                      : user.periodEnd && <span className={vencida ? 'text-red-600 font-medium' : ''}>Vence {formatDate(user.periodEnd)}</span>}
                     <span>{usados}/{ilimitado ? '∞' : user.limit}</span>
                     {user.rubroEfectivo && <span>{nombreRubro(user.rubroEfectivo)}{user.rubro ? '' : ' (sugerido)'}</span>}
                   </div>
@@ -698,14 +620,14 @@ export default function AdminUsers() {
                             className="h-6 w-36 rounded-md border border-gray-300 bg-white px-1.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-primary-500/40"
                           >
                             <option value="">Sin rubro</option>
-                            {RUBROS.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+                            {RUBROS_ALFABETICOS.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
                           </select>
                         ) : (
                           <button
                             type="button"
                             onClick={() => setEditandoRubro(user.id)}
-                            className="max-w-[150px] shrink-0 text-left"
-                            title={user.rubro ? 'Rubro confirmado. Clic para cambiarlo' : user.rubroSugerido ? `Sugerido: ${nombreRubro(user.rubroSugerido)}. Clic para confirmarlo o cambiarlo` : 'Sin rubro. Clic para ponerle uno'}
+                            className="min-w-0 text-left"
+                            title={user.rubro ? `${nombreRubro(user.rubro)}. Clic para cambiarlo` : user.rubroSugerido ? `Sugerido: ${nombreRubro(user.rubroSugerido)}. Clic para confirmarlo o cambiarlo` : 'Sin rubro. Clic para ponerle uno'}
                           >
                             {user.rubro ? (
                               <Pastilla tono="neutro" className="max-w-full truncate">{nombreRubro(user.rubro)}</Pastilla>
@@ -717,7 +639,7 @@ export default function AdminUsers() {
                           </button>
                         )}
                         {(user.createdByReseller || nombreVendedor) && (
-                          <span className="truncate">
+                          <span className="min-w-0 truncate">
                             {user.createdByReseller ? `· ${user.resellerName}` : ''}
                             {nombreVendedor ? ` · ${nombreVendedor}` : ''}
                           </span>
@@ -753,7 +675,7 @@ export default function AdminUsers() {
                       className={vencida ? 'text-red-600 font-medium' : dias !== null && dias <= 7 ? 'text-gray-900 font-medium' : 'text-gray-500'}
                       title={dias === null ? undefined : vencida ? `Venció hace ${Math.abs(dias)} días` : dias === 0 ? 'Vence hoy' : `Vence en ${dias} días`}
                     >
-                      <div>{formatDate(user.periodEnd)}</div>
+                      <div>{user.nuncaVence ? 'Sin vencimiento' : formatDate(user.periodEnd)}</div>
                       <div className="text-[11.5px] font-normal text-gray-400">alta {formatDate(user.createdAt)}</div>
                     </Td>
                     <Td alinear="centro" onClick={e => e.stopPropagation()}>
@@ -782,31 +704,6 @@ export default function AdminUsers() {
 
       {menu.abiertoEn && <div className="fixed inset-0 z-40" onClick={menu.cerrar} />}
 
-      {modal?.tipo === 'pago' && (
-        <UserDetailsModal user={modal.cuenta} type="payment" onClose={cerrarModal} onRegisterPayment={handleRegisterPayment} loading={processingPayment} toast={toast} customPlans={customPlans} />
-      )}
-      {modal?.tipo === 'plan' && (
-        <UserDetailsModal user={modal.cuenta} type="edit" onClose={cerrarModal} onChangePlan={handleChangePlan} loading={processingPayment} toast={toast} customPlans={customPlans} />
-      )}
-      {modal?.tipo === 'vencimiento' && (
-        <UserDetailsModal user={modal.cuenta} type="expiry" onClose={cerrarModal} onUserUpdated={() => loadUsers()} toast={toast} />
-      )}
-      {modal?.tipo === 'sunat' && <SunatModal cuenta={modal.cuenta} onClose={cerrarModal} onGuardado={() => loadUsers()} />}
-      {modal?.tipo === 'funciones' && (
-        <FuncionesModal cuenta={modal.cuenta} onClose={cerrarModal} onGuardado={features => actualizarCuenta(modal.cuenta.id, { features })} />
-      )}
-      {modal?.tipo === 'sucursales' && (
-        <SucursalesModal cuenta={modal.cuenta} onClose={cerrarModal} onCambio={cambios => actualizarCuenta(modal.cuenta.id, cambios)} />
-      )}
-      {modal?.tipo === 'contacto' && (
-        <ContactoModal cuenta={modal.cuenta} onClose={cerrarModal} onGuardado={cambios => actualizarCuenta(modal.cuenta.id, cambios)} />
-      )}
-      {modal?.tipo === 'vendedor' && (
-        <AsignarVendedorModal cuenta={modal.cuenta} vendedores={vendedores} onClose={cerrarModal} onGuardado={cambios => actualizarCuenta(modal.cuenta.id, cambios)} />
-      )}
-      {modal?.tipo === 'eliminar' && (
-        <EliminarCuentaModal cuenta={modal.cuenta} onClose={cerrarModal} onEliminada={id => setUsers(prev => prev.filter(u => u.id !== id))} />
-      )}
       {modal?.tipo === 'vendedores' && <VendedoresModal vendedores={vendedores} cuentas={users} onClose={cerrarModal} onCambio={loadVendedores} />}
     </Pagina>
   )

@@ -1,3 +1,4 @@
+import { MODOS_NEGOCIO } from '@/utils/businessModes'
 import React, { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { createCampaign, sendCampaign, getCampaigns, getUsersWithTokens, previewAudience } from '@/services/pushCampaignService'
@@ -58,16 +59,8 @@ const SUB_STATUS_OPTIONS = [
   { value: 'suspended', label: 'Suspendida' }
 ]
 
-const BUSINESS_MODE_OPTIONS = [
-  { value: 'retail', label: 'General' },
-  { value: 'restaurant', label: 'Restaurante' },
-  { value: 'pharmacy', label: 'Farmacia' },
-  { value: 'hotel', label: 'Hotel' },
-  { value: 'veterinary', label: 'Veterinaria' },
-  { value: 'real_estate', label: 'Inmobiliaria' },
-  { value: 'transport', label: 'Transporte' },
-  { value: 'logistics', label: 'Logística' }
-]
+// Del catalogo comun: aqui faltaba `lending` y sobraba mantener la copia.
+const BUSINESS_MODE_OPTIONS = MODOS_NEGOCIO.map(m => ({ value: m.id, label: m.nombre }))
 
 const ACCOUNT_TYPE_OPTIONS = [
   { value: 'all', label: 'Todas' },

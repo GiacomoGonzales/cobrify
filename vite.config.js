@@ -2,6 +2,30 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
+import { execSync } from 'child_process'
+import { readFileSync } from 'fs'
+
+/**
+ * SELLO DE VERSION.
+ *
+ * Se calcula al compilar y queda escrito dentro del bundle. Sirve para que el
+ * cliente pueda decir "tengo la 4.7.0 del 3 de setiembre" y para saber si su
+ * navegador se quedo con una version vieja en cache.
+ *
+ * El commit avanza en cada push: en Vercel viene en VERCEL_GIT_COMMIT_SHA, y
+ * compilando en local sale de git. Si las dos fallan (un zip sin repo) queda
+ * en blanco y la app muestra solo el numero de version, sin romperse.
+ */
+const versionDelPaquete = JSON.parse(readFileSync('./package.json', 'utf-8')).version
+
+const commitDelBuild = (() => {
+  if (process.env.VERCEL_GIT_COMMIT_SHA) return process.env.VERCEL_GIT_COMMIT_SHA.slice(0, 7)
+  try {
+    return execSync('git rev-parse --short=7 HEAD').toString().trim()
+  } catch {
+    return ''
+  }
+})()
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -114,6 +138,11 @@ export default defineConfig(({ mode }) => ({
         }
       }
     }
+  },
+  define: {
+    __APP_VERSION__: JSON.stringify(versionDelPaquete),
+    __APP_COMMIT__: JSON.stringify(commitDelBuild),
+    __APP_BUILD_DATE__: JSON.stringify(new Date().toISOString()),
   },
   esbuild: {
     // Eliminar console.log en producción
