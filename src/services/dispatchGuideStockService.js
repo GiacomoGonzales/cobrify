@@ -21,7 +21,7 @@ import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { updateProductStockTransaction, updateDispatchGuide } from './firestoreService'
 import { createStockMovement } from './warehouseService'
-import { computeBatchDeduction, computeProductBatchMetadata } from '@/utils/batchStock'
+import { computeBatchDeduction, computeProductBatchMetadata, normalizeBn } from '@/utils/batchStock'
 
 /**
  * Descuenta stock de una guía de remisión. Devuelve el desglose por ítem para que

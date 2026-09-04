@@ -12,7 +12,10 @@
 //                           aplica FEFO (lo más próximo a vencer primero) para el resto.
 //   computeProductBatchMetadata: recalcula los campos rápidos batchNumber/expirationDate.
 
-const normalizeBn = (s) => String(s || '').trim().toLowerCase()
+// Comparar numeros de lote sin que un espacio o una mayuscula los haga distintos.
+// Se exporta porque dispatchGuideStockService compara los mismos lotes al
+// restaurar: si cada archivo trae su copia, un dia dejan de normalizar igual.
+export const normalizeBn = (s) => String(s || '').trim().toLowerCase()
 
 // Calcula los lotes nuevos tras descontar `quantityToDeduct` del producto, respetando
 // el lote seleccionado por el usuario (si lo hay) y cayendo a FEFO para el remanente.
