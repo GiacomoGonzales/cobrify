@@ -52,6 +52,27 @@ const configDe = (business) => {
   }
 }
 
+/**
+ * Duración (minutos) del servicio elegido, leída de la ficha del producto.
+ * Sin ficha o sin duración, null: un solo turno.
+ */
+const duracionDelServicio = async (db, businessId, serviceId) => {
+  if (!serviceId) return null
+  try {
+    const prod = await db.doc(`businesses/${businessId}/products/${serviceId}`).get()
+    const d = Number(prod.exists ? prod.data().duration : 0)
+    return d > 0 ? d : null
+  } catch (e) {
+    return null
+  }
+}
+
+/** 'HH:MM' de un minuto del día. */
+const aHHMM = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+
+/** Minuto del día ('HH:MM' → 570). */
+const aMinutos = (hhmm) => { const [h, m] = String(hhmm).split(':').map(Number); return h * 60 + (m || 0) }
+
 /** ¿Este negocio puede recibir reservas públicas? Devuelve {ok, business, config} o {error}. */
 const validarNegocio = async (db, businessId) => {
   if (!businessId || typeof businessId !== 'string' || businessId.length > 60) {
@@ -122,28 +143,34 @@ export const getPublicAgenda = onRequest(
         : []
       const staffValido = staffId && catalogoStaff.some((x) => x && x.id === staffId)
 
+      // Servicio (opcional): con su duración, una hora está libre solo si el
+      // servicio ENTERO cabe desde ahí. Sin servicio, un turno.
+      const serviceId = String(req.query.serviceId || req.body?.serviceId || '').slice(0, 60)
+      const paso = v.config.stepMinutes
+      const duracion = (await duracionDelServicio(db, businessId, serviceId)) || paso
+
       const citas = await citasDelDia(db, businessId, date)
       const delProfesional = staffValido
         ? citas.filter((a) => (a.staffId || '') === staffId)
         : citas
-      // Set para no repetir: dos citas del negocio a la misma hora son UNA
-      // hora ocupada para el público. Una cita con duración (la suma de lo
-      // que duran sus servicios) ocupa también los huecos siguientes.
-      const paso = v.config.stepMinutes
-      const aHHMM = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+      // Huecos tomados: dos citas a la misma hora son UNA hora ocupada para el
+      // público, y una cita con duración ocupa también los huecos siguientes.
       const ocupadas = new Set()
       for (const a of delProfesional) {
-        const inicio = horaLima(a.scheduledDate)
-        ocupadas.add(inicio)
-        const dur = Number(a.duration) || 0
-        if (dur <= paso) continue
-        const [h, m] = inicio.split(':').map(Number)
-        const desde = h * 60 + m
-        for (let s = desde - (desde % paso) + paso; s < desde + dur; s += paso) ocupadas.add(aHHMM(s))
+        const desde = aMinutos(horaLima(a.scheduledDate))
+        const dur = Number(a.duration) || paso
+        for (let s = desde - (desde % paso); s < desde + dur; s += paso) ocupadas.add(aHHMM(s))
       }
-      const busy = [...ocupadas].sort()
+      // Una hora de inicio se ofrece solo si TODOS los huecos que ocuparía el
+      // servicio están libres y no se pasa del cierre.
+      const busy = []
+      for (let s = v.config.startHour * 60; s < v.config.endHour * 60; s += paso) {
+        let cabe = s + duracion <= v.config.endHour * 60
+        for (let t = s; cabe && t < s + duracion; t += paso) if (ocupadas.has(aHHMM(t))) cabe = false
+        if (!cabe) busy.push(aHHMM(s))
+      }
 
-      res.status(200).json({ date, config: v.config, busy })
+      res.status(200).json({ date, config: v.config, busy, serviceDuration: duracion })
     } catch (error) {
       console.error('getPublicAgenda:', error)
       res.status(500).json({ error: 'Error al consultar la disponibilidad' })
@@ -202,14 +229,7 @@ export const bookPublicAppointment = onRequest(
 
       // Duración del servicio (ficha del producto): la cita ocupa sus huecos
       // en la agenda del negocio. Sin ficha o sin duración, un solo turno.
-      let duracion = null
-      if (servicioElegido?.id) {
-        try {
-          const prod = await db.doc(`businesses/${businessId}/products/${servicioElegido.id}`).get()
-          const d = Number(prod.exists ? prod.data().duration : 0)
-          if (d > 0) duracion = d
-        } catch (e) { /* sin duración: un turno */ }
-      }
+      const duracion = await duracionDelServicio(db, businessId, servicioElegido?.id)
 
       // El hueco tiene que ser uno que el negocio ofrece: día abierto, dentro
       // del horario y alineado al paso. Sin esto, un curl reservaría a las
@@ -227,6 +247,10 @@ export const bookPublicAppointment = onRequest(
         || minutos >= config.endHour * 60
         || minutos % config.stepMinutes !== 0) {
         res.status(400).json({ error: 'Esa hora no está disponible para reservas' }); return
+      }
+      const durReserva = duracion || config.stepMinutes
+      if (minutos + durReserva > config.endHour * 60) {
+        res.status(400).json({ error: 'A esa hora el servicio no alcanza a terminar antes del cierre. Elige una más temprano.' }); return
       }
       // Con media hora de anticipación como mínimo: una reserva "para ahora
       // mismo" le llega al negocio cuando el cliente ya está en la puerta.
@@ -249,17 +273,18 @@ export const bookPublicAppointment = onRequest(
         res.status(429).json({ error: 'Ya tienes varias citas pendientes con este teléfono. Contáctanos para agendar otra.' }); return
       }
 
-      // ¿El negocio ya tiene una cita propia a esa hora? Las suyas no usan
-      // candado (puede sobre-agendarse a propósito), así que se miran aparte.
-      // Igualdad por un solo campo: sin índice compuesto.
-      const mismas = await db.collection(`businesses/${businessId}/appointments`)
-        .where('scheduledDate', '==', Timestamp.fromDate(slot)).get()
+      // ¿El negocio ya tiene una cita propia que se CRUCE con este tramo? Las
+      // suyas no usan candado (puede sobre-agendarse a propósito), así que se
+      // miran aparte. Se compara por tramo y no por hora exacta: una cita de
+      // 60 minutos a las 10:00 también ocupa las 10:30.
       // Con profesionales, solo choca lo de ESE profesional; sin ellos,
-      // cualquier cita del negocio a esa hora.
-      const chocan = mismas.docs.filter((d) => {
-        if (!ESTADOS_ACTIVOS.includes(d.data().status)) return false
-        if (!staffId) return true
-        return (d.data().staffId || '') === staffId
+      // cualquier cita del negocio.
+      const citasDia = await citasDelDia(db, businessId, date)
+      const chocan = citasDia.filter((a) => {
+        if (staffId && (a.staffId || '') !== staffId) return false
+        const ini = aMinutos(horaLima(a.scheduledDate))
+        const fin = ini + (Number(a.duration) || config.stepMinutes)
+        return ini < minutos + durReserva && minutos < fin
       })
       if (chocan.length > 0) {
         res.status(409).json({ error: 'Esa hora acaba de ocuparse. Elige otra.' }); return

@@ -66,12 +66,16 @@ export default function ReservarCitaSection({ business, accent = '#2563eb', them
 
   const diaReservable = (d) => d >= hoy && d <= limite && days.includes(d.getDay())
 
-  const cargarHoras = useCallback(async (ymd, staffId) => {
+  const cargarHoras = useCallback(async (ymd, staffId, serviceId) => {
     setCargandoHoras(true)
     setError('')
     try {
       const qs = new URLSearchParams({ businessId: business.id, date: ymd })
       if (staffId) qs.set('staffId', staffId)
+      // Con el servicio, el servidor devuelve solo las horas donde ENTRA
+      // entero (un láser de 60 minutos no se ofrece a las 18:30 si cierran a
+      // las 19:00 ni si las 19:00 ya están tomadas).
+      if (serviceId) qs.set('serviceId', serviceId)
       const r = await fetch(`${FN_BASE}/getPublicAgenda?${qs.toString()}`)
       const data = await r.json()
       if (!r.ok) throw new Error(data.error || 'No se pudo consultar la disponibilidad')
@@ -102,8 +106,8 @@ export default function ReservarCitaSection({ business, accent = '#2563eb', them
   useEffect(() => {
     // Cerrada no se consulta nada: seria una llamada al servidor por cada
     // visita del catalogo, para un panel que nadie abrio.
-    if (abierto && fecha) cargarHoras(fecha, profesional?.id)
-  }, [abierto, fecha, profesional, cargarHoras])
+    if (abierto && fecha) cargarHoras(fecha, profesional?.id, servicio?.id)
+  }, [abierto, fecha, profesional, servicio, cargarHoras])
 
   const huecosLibres = []
   if (fecha) {

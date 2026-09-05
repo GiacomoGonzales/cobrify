@@ -202,6 +202,10 @@ export default {
           ],
         },
         {
+          type: 'texto',
+          text: 'Si tus servicios tienen **Duración (minutos)**, el catálogo ofrece solo las horas donde el servicio entra entero: un tratamiento de 60 minutos no se puede reservar a las 18:30 si cierras a las 19:00, ni sobre una hora que ya está tomada. La reserva llega a tu Agenda con esa duración.',
+        },
+        {
           type: 'ojo',
           text: 'El cliente solo ve horas **libres** — nunca los datos de otros clientes ni cuántas citas tienes. Y una misma hora no puede reservarse dos veces desde el catálogo: el segundo recibe "esa hora acaba de ocuparse". Tú, en cambio, sí puedes sobre-agendar a mano desde tu Agenda, como siempre.',
         },

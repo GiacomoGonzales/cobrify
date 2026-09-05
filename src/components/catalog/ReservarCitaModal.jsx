@@ -103,11 +103,14 @@ export default function ReservarCitaModal({ business, accent = '#2563eb', isOpen
     if (days.includes(d.getDay())) diasDisponibles.push(d)
   }
 
-  const cargarHoras = useCallback(async (ymd) => {
+  const cargarHoras = useCallback(async (ymd, serviceId) => {
     setCargandoHoras(true)
     setError('')
     try {
-      const r = await fetch(`${FN_BASE}/getPublicAgenda?businessId=${encodeURIComponent(business.id)}&date=${ymd}`)
+      // Con el servicio, el servidor devuelve solo las horas donde entra entero.
+      const qs = new URLSearchParams({ businessId: business.id, date: ymd })
+      if (serviceId) qs.set('serviceId', serviceId)
+      const r = await fetch(`${FN_BASE}/getPublicAgenda?${qs.toString()}`)
       const data = await r.json()
       if (!r.ok) throw new Error(data.error || 'No se pudo consultar la disponibilidad')
       setBusy(data.busy || [])
@@ -120,8 +123,8 @@ export default function ReservarCitaModal({ business, accent = '#2563eb', isOpen
   }, [business?.id])
 
   useEffect(() => {
-    if (isOpen && fecha) cargarHoras(fecha)
-  }, [isOpen, fecha, cargarHoras])
+    if (isOpen && fecha) cargarHoras(fecha, servicio?.id)
+  }, [isOpen, fecha, servicio, cargarHoras])
 
   // Reset al cerrar, para que la próxima apertura arranque limpia.
   useEffect(() => {
