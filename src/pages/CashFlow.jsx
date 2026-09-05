@@ -9,6 +9,8 @@ import { getWarehouses } from '@/services/warehouseService'
 import { getDocumentTotalInBase, convertToBase } from '@/utils/currency'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { isPendingInvoice, getPendingAmount } from '@/utils/receivables'
+import { esDeSucursal } from '@/utils/branchScope'
+import { almacenesDeSucursal, esDeSucursalLaCompra } from '@/utils/purchaseBranch'
 import {
   TrendingUp,
   TrendingDown,
@@ -380,13 +382,10 @@ export default function CashFlow() {
   }
 
   // Helper: Obtener IDs de almacenes para una sucursal
-  const getWarehouseIdsForBranch = useMemo(() => {
-    if (branchFilter === 'all') return null // No filtrar
-    if (branchFilter === 'main') {
-      return warehouses.filter(w => !w.branchId).map(w => w.id)
-    }
-    return warehouses.filter(w => w.branchId === branchFilter).map(w => w.id)
-  }, [warehouses, branchFilter])
+  const getWarehouseIdsForBranch = useMemo(
+    () => (branchFilter === 'all' ? null : almacenesDeSucursal(warehouses, branchFilter)),
+    [warehouses, branchFilter]
+  )
 
   // Seguridad: ¿hay restricción activa por ubicación para este usuario? (usuarios secundarios)
   const locationRestricted = !isBusinessOwner && !isAdmin &&
@@ -420,53 +419,21 @@ export default function CashFlow() {
     return canAccess(item)
   }
 
-  // Helper: Filtrar por sucursal según el tipo de documento
+  // Helper: Filtrar por sucursal según el tipo de documento.
+  //
+  // Son dos criterios, los dos compartidos con el resto del sistema:
+  //   - las COMPRAS no guardan sucursal, sale del ALMACÉN donde entró la
+  //     mercadería (utils/purchaseBranch, el mismo que usa la página Compras);
+  //   - todo lo demás (ventas, gastos, movimientos, préstamos) la tiene en
+  //     `branchId` (utils/branchScope, el del selector del header).
+  //
+  // Antes esto era un switch con los dos criterios escritos a mano cinco veces.
   const filterByBranch = (item, type) => {
     // Seguridad: siempre respetar los permisos del usuario, sin importar el filtro de UI
     if (!hasLocationAccess(item, type)) return false
-    if (branchFilter === 'all') return true
-
-    switch (type) {
-      case 'invoice':
-        // Facturas: filtrar por branchId
-        if (branchFilter === 'main') {
-          return !item.branchId || item.branchId === 'main'
-        }
-        return item.branchId === branchFilter
-
-      case 'expense':
-        // Gastos: filtrar por branchId
-        if (branchFilter === 'main') {
-          return !item.branchId || item.branchId === '' || item.branchId === 'main'
-        }
-        return item.branchId === branchFilter
-
-      case 'purchase':
-        // Compras: filtrar por warehouseId
-        const purchaseWarehouseId = item.warehouseId || item.items?.[0]?.warehouseId
-        if (!purchaseWarehouseId) {
-          return branchFilter === 'main'
-        }
-        return getWarehouseIdsForBranch?.includes(purchaseWarehouseId)
-
-      case 'cashMovement':
-      case 'financialMovement':
-        // Movimientos: filtrar por branchId
-        if (branchFilter === 'main') {
-          return !item.branchId || item.branchId === '' || item.branchId === 'main'
-        }
-        return item.branchId === branchFilter
-
-      case 'loan':
-        // Préstamos: filtrar por branchId
-        if (branchFilter === 'main') {
-          return !item.branchId || item.branchId === '' || item.branchId === 'main'
-        }
-        return item.branchId === branchFilter
-
-      default:
-        return true
-    }
+    return type === 'purchase'
+      ? esDeSucursalLaCompra(item, branchFilter, getWarehouseIdsForBranch)
+      : esDeSucursal(item, branchFilter)
   }
 
   // Calcular flujo de caja
