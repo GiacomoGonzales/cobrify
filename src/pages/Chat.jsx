@@ -314,6 +314,25 @@ export default function Chat() {
   const bajarAlMandar = () => { pegadoAlFondo.current = true }
 
   /**
+   * La flecha de "ir al ultimo mensaje".
+   *
+   * Va en onPointerDown y no en onClick: si el hilo todavia viene deslizandose
+   * por inercia, el primer toque lo FRENA y el navegador puede no llegar a
+   * generar el clic — la flecha parecia no responder (reporte de Giacomo).
+   * Pulsar ya cuenta.
+   *
+   * Y se remata sin animacion: un scroll suave lanzado mientras el hilo todavia
+   * se movia queda a mitad de camino. La segunda pasada solo corre si el
+   * usuario no volvio a subir mientras tanto.
+   */
+  const bajarDelTodo = () => {
+    pegadoAlFondo.current = true
+    setLejosDelFondo(false)
+    irAlFondo(true)
+    setTimeout(() => { if (pegadoAlFondo.current) irAlFondo(false) }, 400)
+  }
+
+  /**
    * Devolver el cursor al cuadro para poder encadenar mensajes sin tocar el
    * mouse.
    *
@@ -1572,7 +1591,8 @@ export default function Chat() {
             {lejosDelFondo && (
               <button
                 type="button"
-                onClick={() => irAlFondo(true)}
+                onPointerDown={bajarDelTodo}
+                onClick={bajarDelTodo}
                 className="absolute bottom-4 right-4 z-10 h-9 w-9 grid place-items-center rounded-full bg-white border border-gray-300 shadow-md text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                 title="Ir al último mensaje"
                 aria-label="Ir al último mensaje"
