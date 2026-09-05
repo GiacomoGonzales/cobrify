@@ -5,3 +5,4 @@ DerivedData/
 build/
 # Derived data de las compilaciones por CLI (simulador y archive)
 DD/
+DD.nosync/

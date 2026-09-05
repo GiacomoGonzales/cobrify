@@ -26,6 +26,8 @@ struct ConversationView: View {
     @State private var mostrarFicha = false
     @State private var respondiendoA: Mensaje?
     @State private var lejosDelFondo = false
+    /// El UIScrollView de debajo, para frenar la inercia antes de saltar.
+    @State private var espia = EspiaDeScroll()
     /// La primera tanda de mensajes todavía no llega. Solo sirve para no
     /// mover el scroll al abrir; nunca para esconder la conversación.
     @State private var primeraCarga = true
@@ -42,6 +44,7 @@ struct ConversationView: View {
     @State private var saltarA: String?
 
     var body: some View {
+      VStack(spacing: 0) {
         ScrollViewReader { proxy in
           ZStack(alignment: .bottomTrailing) {
             ScrollView {
@@ -83,6 +86,7 @@ struct ConversationView: View {
                 // Un respiro antes del compositor: sin esto la última burbuja
                 // queda pegada al cuadro de escribir.
                 .padding(.bottom, 8)
+                .background(SondaDeScroll(espia: espia))
             }
             // OJO: aquí NO va `defaultScrollAnchor(.bottom)`. Reajusta el
             // desplazamiento cada vez que cambia el alto del contenido, eso
@@ -92,7 +96,12 @@ struct ConversationView: View {
             // a mano, saltando a la marca `anclaFinal`.
             // Al subir por la conversación aparece la flecha para volver al
             // final, como WhatsApp.
-            .alAlejarseDelFondo { lejos in
+            .alMoverseLaLista { distancia in
+                espia.distanciaAlFondo = distancia
+                let lejos = distancia > 260
+                // Mientras la lista viaja al final por orden nuestra, los
+                // avisos intermedios (todavía lejos) no la vuelven a encender.
+                guard lejos != lejosDelFondo, !espia.viajando else { return }
                 withAnimation(.easeOut(duration: 0.18)) { lejosDelFondo = lejos }
             }
             // Arrastrar hacia abajo va cerrando el teclado, como WhatsApp.
@@ -151,6 +160,12 @@ struct ConversationView: View {
             }
           }
         }
+        // El compositor va DEBAJO de la lista y no como franja encima de
+        // ella: la lista termina donde empieza el cuadro, las burbujas se
+        // cortan ahí sobre el mismo fondo, y no hace falta ninguna barra ni
+        // raya de por medio (la que hubo se leía como un segundo contenedor).
+        barraDeRespuesta
+      }
         .background(Apariencia.shared.fondoView())
         .navigationTitle(conv.titulo)
         .navigationBarTitleDisplayMode(.inline)
@@ -303,7 +318,6 @@ struct ConversationView: View {
             }
             .presentationDetents([.medium, .large])
         }
-        .safeAreaInset(edge: .bottom) { barraDeRespuesta }
         .photosPicker(isPresented: $mostrarGaleria, selection: $fotoSeleccionada, matching: .images)
         .onChange(of: fotoSeleccionada) {
             guard let item = fotoSeleccionada else { return }
@@ -394,7 +408,20 @@ struct ConversationView: View {
         // cuando el contenido terminaba de asentarse sin más movimiento.
         if lejosDelFondo { withAnimation(.easeOut(duration: 0.18)) { lejosDelFondo = false } }
         if animado {
+            // Primero frenar la inercia: con la lista deslizándose, el salto
+            // se perdía en la desaceleración y la flecha se apagaba sin haber
+            // llegado a ningún lado.
+            espia.frenar()
+            espia.viajando = true
             withAnimation { proxy.scrollTo(Self.anclaFinal, anchor: .bottom) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                espia.viajando = false
+                // Si aun así no llegó, la flecha vuelve en vez de quedarse
+                // apagada con la lista a mitad de camino.
+                if espia.distanciaAlFondo > 260 {
+                    withAnimation(.easeOut(duration: 0.18)) { lejosDelFondo = true }
+                }
+            }
         } else {
             proxy.scrollTo(Self.anclaFinal, anchor: .bottom)
         }
@@ -631,13 +658,7 @@ struct ConversationView: View {
                     }
                 }
             }
-            .padding(.top, 6)
-            // Una barra de verdad detrás del compositor, como WhatsApp: al
-            // desplazar, los mensajes se meten DEBAJO de ella y desaparecen,
-            // no se asoman entre las cápsulas ni quedan a la vista por debajo
-            // del cuadro. Cubre también la franja del indicador de inicio.
-            .background(.bar)
-            .overlay(alignment: .top) { Divider() }
+            .padding(.top, 4)
         }
     }
 
@@ -833,6 +854,50 @@ private struct PanelAtajos: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .contentShape(Rectangle())
+    }
+}
+
+/// El UIScrollView que SwiftUI esconde debajo de la lista, y lo único que se
+/// le pide: frenar la inercia. Si la lista viene deslizándose,
+/// `proxy.scrollTo` se pierde (la desaceleración manda), así que tocar la
+/// flecha apagaba el botón y la lista seguía donde estaba. Clavar el offset
+/// actual mata la inercia al instante, y ahí sí el salto al final obedece.
+@MainActor
+private final class EspiaDeScroll {
+    weak var scroll: UIScrollView?
+    /// Cuánto falta para el fondo, según el último aviso de geometría.
+    var distanciaAlFondo: CGFloat = 0
+    /// Mientras la lista viaja al final por orden nuestra.
+    var viajando = false
+
+    func frenar() {
+        guard let s = scroll, s.isDecelerating else { return }
+        s.setContentOffset(s.contentOffset, animated: false)
+    }
+}
+
+/// Una vista vacía dentro del ScrollView: desde ahí se sube por los
+/// superviews hasta dar con el UIScrollView. Si algún día SwiftUI lo
+/// esconde de otra forma, no pasa nada: la flecha sigue funcionando como
+/// antes, solo sin el freno.
+private struct SondaDeScroll: UIViewRepresentable {
+    let espia: EspiaDeScroll
+
+    func makeUIView(context: Context) -> UIView {
+        let v = UIView(frame: .zero)
+        v.isUserInteractionEnabled = false
+        return v
+    }
+
+    func updateUIView(_ v: UIView, context: Context) {
+        guard espia.scroll == nil else { return }
+        DispatchQueue.main.async {
+            var actual = v.superview
+            while let s = actual {
+                if let sv = s as? UIScrollView { espia.scroll = sv; return }
+                actual = s.superview
+            }
+        }
     }
 }
 

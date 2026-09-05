@@ -38,15 +38,18 @@ extension View {
 }
 
 extension View {
-    /// Avisa cuando la conversación está lejos del final, para sacar la
-    /// flecha de "bajar". Necesita iOS 18; en versiones previas simplemente
-    /// no aparece el botón.
-    @ViewBuilder func alAlejarseDelFondo(_ accion: @escaping (Bool) -> Void) -> some View {
+    /// Avisa, en cada movimiento, cuántos puntos faltan para el final de la
+    /// lista; con eso se decide la flecha de "bajar". Va la distancia y no
+    /// un sí/no a propósito: el sí/no solo avisaba al cambiar, y si la
+    /// flecha se apagaba a mano sin haber llegado, no había aviso nuevo que
+    /// la volviera a encender. Necesita iOS 18; en versiones previas
+    /// simplemente no aparece el botón.
+    @ViewBuilder func alMoverseLaLista(_ accion: @escaping (CGFloat) -> Void) -> some View {
         if #available(iOS 18.0, *) {
-            self.onScrollGeometryChange(for: Bool.self) { geo in
-                geo.contentSize.height - (geo.contentOffset.y + geo.containerSize.height) > 260
-            } action: { _, lejos in
-                accion(lejos)
+            self.onScrollGeometryChange(for: CGFloat.self) { geo in
+                geo.contentSize.height - (geo.contentOffset.y + geo.containerSize.height)
+            } action: { _, distancia in
+                accion(distancia)
             }
         } else {
             self

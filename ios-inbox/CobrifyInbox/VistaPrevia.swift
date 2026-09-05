@@ -36,7 +36,13 @@ enum VistaPrevia {
                 "timestamp": Timestamp(date: ahora.addingTimeInterval(Double(i - 10) * 60)),
             ])
         }
-        return [
+        // Un buen tramo de charla corta antes: así un impulso fuerte deja la
+        // lista deslizándose un rato, y se puede probar la flecha en movimiento.
+        let relleno = (0..<30).map { i in
+            m(-40 + i, i % 2 == 0 ? "entrante" : "saliente",
+              i % 2 == 0 ? "Consulta \(i / 2 + 1): ¿el plan incluye la app del celular?" : "Sí, todos los planes la incluyen.")
+        }
+        return relleno + [
             m(1, "entrante", "Hola, me pasas info de los planes? https://cobrifyperu.com/planes"),
             m(2, "saliente", """
                 Hola! Claro, te cuento qué incluye Cobrify:
