@@ -294,13 +294,14 @@ function App() {
             <Suspense fallback={<PantallaCargando />}>
             <Routes>
             {/* Landing Page - En móvil redirige a dashboard, en web usa LandingRouter.
-                En chat.cobrifyperu.com la raiz ES el chat: quien entra por esa
-                puerta viene a la bandeja, no a la pagina de marketing. */}
+                En chat.cobrifyperu.com la raiz ES el chat, y se PINTA aca: antes
+                se saltaba a /chat y la direccion quedaba con esa cola sin sentido
+                —el dominio ya dice que es el chat—. */}
             <Route
               path="/"
               element={
                 esDominioDelChat()
-                  ? <Navigate to="/chat" replace />
+                  ? <Chat />
                   : isNative
                     ? <Navigate to="/app/dashboard" replace />
                     : <LandingRouter />
@@ -316,7 +317,10 @@ function App() {
             {/* Bandeja de WhatsApp: a pantalla completa y FUERA del panel, para que
                 abrirla sea entrar al chat y nada mas. Es lo que va a servir el
                 subdominio tal cual. El acceso lo controla la propia pagina. */}
-            <Route path="/chat" element={<Chat />} />
+            {/* En el subdominio del chat esta ruta manda a la raiz: una sola
+                direccion para la bandeja y no dos. En los demas dominios
+                —cobrifyperu.com/chat y la app nativa— sigue siendo la puerta. */}
+            <Route path="/chat" element={esDominioDelChat() ? <Navigate to="/" replace /> : <Chat />} />
             <Route path="/pricing" element={<Pricing />} />
             {/* Manual PUBLICO: se comparte por WhatsApp y abre sin sesion.
                 Ver el porque en src/pages/PublicManual.jsx */}

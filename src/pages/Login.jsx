@@ -35,7 +35,7 @@ export default function Login() {
   // se cae en la bandeja: quien entra por esa puerta no viene a facturar.
   useEffect(() => {
     if (isAuthenticated && !isAuthLoading && rolesResolved && isBusinessUser) {
-      navigate(esDominioDelChat() ? '/chat' : '/app/dashboard', { replace: true })
+      navigate(esDominioDelChat() ? '/' : '/app/dashboard', { replace: true })
     }
   }, [isAuthenticated, isAuthLoading, rolesResolved, isBusinessUser, navigate])
 

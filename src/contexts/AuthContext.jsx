@@ -675,7 +675,7 @@ export const AuthProvider = ({ children }) => {
         // chat.cobrifyperu.com no viene a facturar. Si la cuenta no es admin, la
         // propia pagina del chat la manda al panel.
         if (esDominioDelChat()) {
-          navigate('/chat')
+          navigate('/')
           return { success: true }
         }
 
