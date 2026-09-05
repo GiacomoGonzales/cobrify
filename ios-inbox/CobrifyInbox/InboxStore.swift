@@ -66,6 +66,13 @@ final class MensajesStore: ObservableObject {
 
     func empezar(conversationId: String) {
         guard listener == nil else { return }
+        #if DEBUG
+        if VistaPrevia.activa {
+            mensajes = VistaPrevia.mensajes
+            cargando = false
+            return
+        }
+        #endif
         listener = Firestore.firestore()
             .collection("whatsappConversations").document(conversationId)
             .collection("messages")

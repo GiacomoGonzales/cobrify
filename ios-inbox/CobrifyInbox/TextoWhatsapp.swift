@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Texto de un mensaje con el formato de WhatsApp.
 ///
@@ -108,10 +109,22 @@ enum TextoWhatsapp {
                 if let url = URL(string: t) {
                     a.link = url
                     a.underlineStyle = .single
+                    a.foregroundColor = .enlace
                 }
                 salida += a
             }
         }
         return salida
     }
+}
+
+extension Color {
+    /// El azul de los enlaces, el de WhatsApp: oscuro de día, claro de noche.
+    /// Va puesto a mano y no por el tinte: en la burbuja propia el tinte era
+    /// blanco, y sobre su fondo pastel el enlace no se veía.
+    static let enlace = Color(uiColor: UIColor { rasgos in
+        rasgos.userInterfaceStyle == .dark
+            ? UIColor(red: 0.325, green: 0.741, blue: 0.922, alpha: 1)   // #53BDEB
+            : UIColor(red: 0.008, green: 0.494, blue: 0.710, alpha: 1)   // #027EB5
+    })
 }

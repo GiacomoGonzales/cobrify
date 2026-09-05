@@ -29,6 +29,18 @@ struct RootView: View {
     @EnvironmentObject private var session: SessionStore
 
     var body: some View {
+        #if DEBUG
+        if VistaPrevia.activa {
+            VistaPrevia.pantalla
+        } else {
+            pantallaReal
+        }
+        #else
+        pantallaReal
+        #endif
+    }
+
+    @ViewBuilder private var pantallaReal: some View {
         if !FirebaseBootstrap.isConfigured {
             SetupNeededView()
         } else if session.user != nil {

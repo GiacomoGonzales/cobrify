@@ -524,37 +524,9 @@ struct ConversationView: View {
                     } else {
                     if !sugerenciasSlash.isEmpty {
                         // Escribir "/" abre los atajos, como WhatsApp Business.
-                        VStack(spacing: 0) {
-                            ForEach(Array(sugerenciasSlash.prefix(4).enumerated()), id: \.element.id) { i, r in
-                                Button {
-                                    elegirSugerencia(r)
-                                } label: {
-                                    HStack(spacing: 10) {
-                                        Image(systemName: r.media?.icono ?? "bolt.fill")
-                                            .font(.caption)
-                                            .foregroundStyle(.tint)
-                                            .frame(width: 18)
-                                        Text("/" + r.atajo)
-                                            .font(.subheadline.weight(.semibold))
-                                        Text(r.texto)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                        Spacer()
-                                    }
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 10)
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                if i < min(3, sugerenciasSlash.count - 1) {
-                                    Divider().padding(.leading, 42)
-                                }
-                            }
-                        }
-                        .vidrioRedondeado(16)
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 2)
+                        PanelAtajos(atajos: sugerenciasSlash, alElegir: elegirSugerencia)
+                            .padding(.horizontal, 12)
+                            .padding(.bottom, 2)
                     }
                     if let m = mediaPendiente {
                         HStack(spacing: 10) {
@@ -627,7 +599,12 @@ struct ConversationView: View {
                             .focused($cuadroEnfocado)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
-                            .vidrioCapsula()
+                            // Radio fijo y no cápsula: con una línea se ve
+                            // igual, pero al crecer a varias la cápsula se
+                            // volvía medio círculo y lo que hubiera dentro
+                            // (la selección del texto) asomaba por fuera de
+                            // las esquinas.
+                            .vidrioRedondeado(20)
 
                         if puedeEnviar {
                             Button(action: enviar) {
@@ -654,6 +631,13 @@ struct ConversationView: View {
                     }
                 }
             }
+            .padding(.top, 6)
+            // Una barra de verdad detrás del compositor, como WhatsApp: al
+            // desplazar, los mensajes se meten DEBAJO de ella y desaparecen,
+            // no se asoman entre las cápsulas ni quedan a la vista por debajo
+            // del cuadro. Cubre también la franja del indicador de inicio.
+            .background(.bar)
+            .overlay(alignment: .top) { Divider() }
         }
     }
 
@@ -740,23 +724,16 @@ struct ConversationView: View {
         etiquetasLocal ?? Set(conv.etiquetas)
     }
 
-    /// Una respuesta rápida con adjunto sale directo (el archivo ya está
-    /// guardado); una de solo texto cae al borrador para retocarla antes.
     /// La respuesta rápida cae SIEMPRE en el cuadro (con su archivo esperando
-    /// al lado, si lo lleva) y queda seleccionada, como WhatsApp: se puede
-    /// retocar, sobrescribir de un tirón o enviar tal cual.
+    /// al lado, si lo lleva), con el cursor al final, como WhatsApp Business:
+    /// se retoca o se manda tal cual. Antes quedaba toda seleccionada para
+    /// poder escribir encima, y ese sombreado sobre varias líneas molestaba a
+    /// la vista.
     private func usarRapida(_ r: RespuestaRapida) {
         errorEnvio = nil
         mediaPendiente = r.media
         borrador = r.texto
         cuadroEnfocado = true
-        guard !r.texto.isEmpty else { return }
-        // Seleccionar todo el texto recién puesto: así escribir encima lo
-        // reemplaza de una, sin tener que borrarlo.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-            UIApplication.shared.sendAction(#selector(UIResponder.selectAll(_:)),
-                                            to: nil, from: nil, for: nil)
-        }
     }
 
     private func enviar() {
@@ -796,6 +773,66 @@ struct ConversationView: View {
                 if borrador.isEmpty { borrador = texto }
             }
         }
+    }
+}
+
+/// Los atajos que calzan con lo escrito tras el "/". Van TODOS, con scroll:
+/// a la vista caben cuatro filas y media, y la media cortada es la pista de
+/// que hay más abajo. Antes se cortaba en cuatro y el resto no existía.
+private struct PanelAtajos: View {
+    let atajos: [RespuestaRapida]
+    let alElegir: (RespuestaRapida) -> Void
+    /// El alto real de la lista entera, medido; hasta que llega, un cálculo.
+    @State private var altoLista: CGFloat = 0
+
+    private static let filasALaVista: CGFloat = 4.5
+    private static let altoFilaEstimado: CGFloat = 40
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                ForEach(Array(atajos.enumerated()), id: \.element.id) { i, r in
+                    Button { alElegir(r) } label: { fila(r) }
+                        .buttonStyle(.plain)
+                    if i < atajos.count - 1 {
+                        Divider().padding(.leading, 42)
+                    }
+                }
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { altoLista = $0 }
+        }
+        // Deslizar la lista no cierra el teclado: por defecto un scroll lo
+        // baja, y con él se iría lo escrito tras el "/".
+        .scrollDismissesKeyboard(.never)
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(height: alto)
+        .vidrioRedondeado(16)
+    }
+
+    private var alto: CGFloat {
+        let n = CGFloat(max(1, atajos.count))
+        let todo = altoLista > 0 ? altoLista : n * Self.altoFilaEstimado
+        guard n > Self.filasALaVista else { return todo }
+        return todo / n * Self.filasALaVista
+    }
+
+    private func fila(_ r: RespuestaRapida) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: r.media?.icono ?? "bolt.fill")
+                .font(.caption)
+                .foregroundStyle(.tint)
+                .frame(width: 18)
+            Text("/" + r.atajo)
+                .font(.subheadline.weight(.semibold))
+            Text(r.texto)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
     }
 }
 
@@ -854,10 +891,12 @@ private struct BurbujaMensaje: View {
             }
             .padding(.horizontal, esStickerSuelto ? 0 : 12)
             .padding(.vertical, esStickerSuelto ? 0 : 8)
-            // Los enlaces toman el color del tinte. Dentro de la burbuja propia
-            // —que ya es del color de la marca— el azul de siempre se pierde,
-            // asi que ahi van en blanco y subrayados.
-            .tint(mensaje.esSaliente ? Color.white : Color.accentColor)
+            // El tinte pinta los iconos de adjuntos y la onda ya escuchada. En
+            // la burbuja propia iba en blanco, de cuando el fondo era el color
+            // de la marca a pleno; sobre el pastel de ahora no se veía nada.
+            // Los enlaces no dependen de esto: llevan su azul puesto a mano
+            // (Color.enlace), el mismo en los dos lados.
+            .tint(mensaje.esSaliente ? apariencia.colorBurbuja : Color.accentColor)
             .background(esStickerSuelto ? AnyShapeStyle(.clear) : AnyShapeStyle(fondo),
                         in: RoundedRectangle(cornerRadius: 16))
             .contextMenu { menuContextual }
