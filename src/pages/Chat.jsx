@@ -109,6 +109,12 @@ export default function Chat() {
   // Sin esto la pantalla queda vacia 2 o 3 segundos entre que uno manda y que
   // el mensaje vuelve del servidor, y se siente como si no hubiera salido.
   const [pendientes, setPendientes] = useState([])
+  // Medidas de las fotos que llegaron SIN ellas: las plantillas no las
+  // guardan y los mensajes viejos tampoco. Se leen del propio archivo al
+  // cargar y se recuerdan por direccion, asi la burbuja tambien se ciñe a
+  // esas. Es un pelin peor que las guardadas —el ajuste ocurre cuando la
+  // foto baja, no antes— pero es la unica forma de que se vean igual.
+  const [medidasMedidas, setMedidasMedidas] = useState({})
   const [busqueda, setBusqueda] = useState('')
   // Organización (Fase 1): pestaña por estado, filtro por etiqueta, catálogo.
   const [tab, setTab] = useState('abierta')
@@ -1299,7 +1305,11 @@ export default function Chat() {
                 // La foto y su tamano exacto. Cuando se conoce, la burbuja se
                 // CINE a la foto —como en WhatsApp— en vez de estirarse con el
                 // texto: asi lo que queda a los lados es un hilo, no un margen.
-                const medidas = m.tipo === 'image' || m.tipo === 'template' ? medidasDeImagen(m.media) : null
+                const esFoto = m.tipo === 'image' || m.tipo === 'template'
+                const urlFoto = m.media?.thumbUrl || m.media?.url
+                const medidas = esFoto
+                  ? medidasDeImagen(m.media?.ancho ? m.media : medidasMedidas[urlFoto])
+                  : null
                 const conFoto = Boolean(m.media?.url && medidas && !sinBurbuja)
                 // Con pie de foto la burbuja no baja de 260: una foto vertical
                 // angosta dejaria el texto en una columna de dos palabras.
@@ -1434,10 +1444,17 @@ export default function Chat() {
                             alt={m.texto || 'Imagen'}
                             loading="lazy"
                             decoding="async"
-                            // Con las medidas guardadas se pinta al tamaño exacto
-                            // y el espacio queda reservado antes de que la imagen
-                            // baje: sin salto y sin hueco al costado. Sin medidas
-                            // —mensajes viejos— se pinta como siempre.
+                            // Con las medidas se pinta al tamaño exacto y el espacio
+                            // queda reservado antes de que la imagen baje: sin salto y
+                            // sin hueco al costado. Si el mensaje no las trae se leen
+                            // del archivo al cargar (ver `medidasMedidas`).
+                            onLoad={(e) => {
+                              // Solo para las que no traian medidas: se anotan una vez.
+                              if (m.media?.ancho || m.tipo === 'sticker') return
+                              const { naturalWidth: ancho, naturalHeight: alto } = e.currentTarget
+                              if (!ancho || !alto) return
+                              setMedidasMedidas((v) => (v[urlFoto] ? v : { ...v, [urlFoto]: { ancho, alto } }))
+                            }}
                             style={m.tipo === 'sticker' ? undefined : medidas || undefined}
                             className={`rounded-lg bg-black/5 ${conFoto ? 'mb-0.5' : 'mb-1'} ${
                               m.tipo === 'sticker'
