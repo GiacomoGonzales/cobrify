@@ -605,6 +605,31 @@ function estadoDeEnvio(resultado, { pendienteManual = false } = {}) {
   return isTransientSunatError(codigo, mensaje) ? 'pending' : 'rejected'
 }
 
+/**
+ * El código de SUNAT sin ceros a la izquierda: **'0098' y '98' son el MISMO
+ * código**. QPse lo devuelve a veces relleno y a veces no, y comparar el texto
+ * crudo contra '98' hacía que un "en proceso" se leyera como fallo definitivo.
+ *
+ * Pasó de verdad (Productos y Soluciones Tecnológicas SAC, 5-set-2026): tres
+ * intentos de anular la boleta B001-00000063 quedaron guardados como `failed`
+ * con `responseCode: '0098'`, que es justamente "SUNAT todavía está
+ * procesando". Al usuario le salía "Error de estado en SUNAT" y la boleta se
+ * quedaba emitida.
+ *
+ * Lo que no es un número se devuelve tal cual en mayúsculas ('PROCESANDO', '').
+ */
+function codigoSunat(valor) {
+  const s = String(valor ?? '').trim()
+  if (!/^\d+$/.test(s)) return s.toUpperCase()
+  return String(Number(s))
+}
+
+/** ¿SUNAT dice que TODAVÍA está procesando? (98 o el literal PROCESANDO) */
+function sunatEnProceso(valor) {
+  const c = codigoSunat(valor)
+  return c === '98' || c === 'PROCESANDO'
+}
+
 function isTransientSunatError(responseCode, description) {
   const code = String(responseCode || '').toLowerCase()
   const desc = String(description || '').toLowerCase()
@@ -5937,7 +5962,7 @@ export const checkVoidStatus = onRequest(
             voidedAt: FieldValue.serverTimestamp()
           })
           res.status(200).json({ status: 'voided', message: 'Documento anulado exitosamente' })
-        } else if (codigo === '98' || codigo === 'PROCESANDO' || codigo === '') {
+        } else if (sunatEnProceso(codigo) || codigo === '') {
           // OJO: 99 NO es "procesando" — en SUNAT 99 = el proceso terminó CON ERRORES.
           // El flujo anterior trataba el 99 como pendiente y la factura quedaba en
           // 'voiding' PARA SIEMPRE (mismo bug ya corregido en voidInvoiceQPse).
@@ -6875,7 +6900,7 @@ export const voidBoletaQPse = onRequest(
         action: 'void',
         method: 'qpse',
         reason: reason || 'ANULACION DE OPERACION',
-        status: qpseResult.accepted ? 'accepted' : (qpseResult.responseCode === '98' ? 'pending' : 'failed'),
+        status: qpseResult.accepted ? 'accepted' : (sunatEnProceso(qpseResult.responseCode) ? 'pending' : 'failed'),
         ticket: qpseResult.ticket || null,
         responseCode: qpseResult.responseCode || null,
         responseDescription: qpseResult.description || null,
@@ -6945,7 +6970,7 @@ export const voidBoletaQPse = onRequest(
 
       // Si está pendiente (código 98 - SUNAT aún procesando).
       // OJO: 99 NO es "procesando" — en SUNAT 99 = el proceso terminó CON ERRORES.
-      if (!isBoletaAlreadyVoided && (qpseResult.responseCode === '98' || qpseResult.responseCode === 'PROCESANDO')) {
+      if (!isBoletaAlreadyVoided && sunatEnProceso(qpseResult.responseCode)) {
         await boletaRef.update({
           sunatStatus: 'voiding',
           voidingTicket: qpseResult.ticket || null,
@@ -7286,7 +7311,7 @@ export const voidInvoiceQPse = onRequest(
         action: 'void',
         method: 'qpse',
         reason: reason || 'ANULACION DE OPERACION',
-        status: qpseResult.accepted ? 'accepted' : (qpseResult.responseCode === '98' ? 'pending' : 'failed'),
+        status: qpseResult.accepted ? 'accepted' : (sunatEnProceso(qpseResult.responseCode) ? 'pending' : 'failed'),
         ticket: qpseResult.ticket || null,
         responseCode: qpseResult.responseCode || null,
         responseDescription: qpseResult.description || null,
@@ -7443,7 +7468,7 @@ export const voidInvoiceQPse = onRequest(
 
       // Si está pendiente (código 98 - SUNAT aún procesando).
       // OJO: 99 NO es "procesando" — en SUNAT 99 = el proceso terminó CON ERRORES.
-      if (!isAlreadyVoided && (qpseResult.responseCode === '98' || qpseResult.responseCode === 'PROCESANDO')) {
+      if (!isAlreadyVoided && sunatEnProceso(qpseResult.responseCode)) {
         await invoiceRef.update({
           sunatStatus: 'voiding',
           voidingTicket: qpseResult.ticket || null,
