@@ -1428,7 +1428,7 @@ export default function Chat() {
                         <audio src={m.media.url} controls className="mb-1 max-w-full" />
                       )}
                       {m.tipo === 'document' && m.media?.url && (
-                        <BurbujaDocumento media={m.media} mio={mio} />
+                        <BurbujaDocumento media={m.media} />
                       )}
                       {['image', 'sticker', 'video', 'audio', 'document'].includes(m.tipo) && !m.media?.url && (
                         <p className="text-[13px] italic opacity-75 mb-1">
@@ -1921,7 +1921,7 @@ function Avatar({ nombre, waId, cliente }) {
  * se rasteriza en el navegador desde nuestra copia en R2 — vale igual para
  * enviados y recibidos, incluso los de antes de este cambio.
  */
-function BurbujaDocumento({ media, mio }) {
+function BurbujaDocumento({ media }) {
   const [info, setInfo] = useState(null)
   const esPdf = /\.pdf($|\?)/i.test(media.url) || media.mimeType === 'application/pdf'
 
@@ -1930,7 +1930,7 @@ function BurbujaDocumento({ media, mio }) {
       href={media.url}
       target="_blank"
       rel="noopener noreferrer"
-      className={`block rounded-lg overflow-hidden mb-1 ${'bg-white/70'}`}
+      className="block rounded-lg overflow-hidden mb-1 bg-white/70"
     >
       {esPdf && <MiniaturaPdf url={media.url} onDatos={setInfo} />}
       <div className="flex items-center gap-2.5 px-3 py-2.5">
@@ -1938,10 +1938,12 @@ function BurbujaDocumento({ media, mio }) {
           <FileText className="w-5 h-5 text-white" />
         </div>
         <div className="min-w-0">
-          <p className={`text-[13px] font-medium truncate ${'text-gray-900'}`}>
+          <p className="text-[13px] font-medium truncate text-gray-900">
             {media.filename || 'Documento'}
           </p>
-          <p className={`text-[11.5px] ${mio ? 'text-gray-500' : 'text-gray-500'}`}>
+          {/* gray-600 y no gray-500: en modo oscuro el 500 se queda en 3,6:1
+              sobre la tarjeta, corto para una linea de 11,5 px. */}
+          <p className="text-[11.5px] text-gray-600">
             {info ? `${info.paginas} pagina${info.paginas === 1 ? '' : 's'} · ` : ''}
             {esPdf ? 'PDF' : 'Archivo'}
             {info?.tamano ? ` · ${formatoKB(info.tamano)}` : ''}
@@ -1969,9 +1971,19 @@ function BurbujaDocumento({ media, mio }) {
  * de que la imagen baje.
  *
  * Sin medidas devuelve null y se pinta como siempre.
+ *
+ * La BURBUJA sigue a la foto, no al reves: estos topes mandan y el contenedor
+ * se cine a ellos, asi que el hueco al costado ya no depende de lo largo que
+ * sea el texto (reporte de Giacomo, 05-sep-2026). El tope de ALTO es el que
+ * decide cuanto ocupa una foto VERTICAL: una 9:16 solo puede ser ancha si se
+ * la deja alta.
+ *
+ * Las medidas son comodas de leer, no grandes, a proposito: la foto se ve de
+ * un vistazo y quien quiera mirarla de verdad la abre con un clic.
  */
-const TOPE_ANCHO = 320
-const TOPE_ALTO = 288 // max-h-72
+const BORDE_FOTO = 4 // el hilo entre la foto y el borde de la burbuja (p-1)
+const TOPE_ANCHO = 360 // 22.5rem
+const TOPE_ALTO = 336 // 21rem
 
 const medidasDeImagen = (media) => {
   const { ancho, alto } = media || {}

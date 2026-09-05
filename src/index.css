@@ -622,6 +622,15 @@
 .chat-cobrify.oscuro .border-primary-200,
 .chat-cobrify.oscuro .border-primary-300,
 .chat-cobrify.oscuro .hover\:border-primary-300:hover { border-color: var(--ch-verde-borde); }
+/* Las tarjetas DENTRO de la burbuja propia —documento, mensaje citado, vista
+   previa de un enlace— se pintan con bg-white/70. Sobre el verde claro del
+   modo dia queda un panel blancuzco correcto; sobre el verde oscuro quedaba
+   casi blanco, y encima le caia el texto ya aclarado por el modo oscuro: gris
+   claro sobre gris claro, ilegible (el nombre del PDF, reportado el
+   05-sep-2026). Un velo blanco tenue levanta la tarjeta sobre la burbuja sin
+   perder el tinte verde, igual que la de los mensajes recibidos (bg-gray-100).
+   La burbuja recibida no sufria esto porque su bg-gray-100 si estaba mapeado. */
+.chat-cobrify.oscuro .bg-white\/70 { background-color: rgb(255 255 255 / 0.09); }
 /* El ambar del semaforo de cuentas: en claro es marron oscuro y sobre una
    tarjeta oscura no se lee. Se aclara con el mismo tono ambar del panel. */
 :is(.admin, .chat-cobrify).oscuro .text-amber-700,
