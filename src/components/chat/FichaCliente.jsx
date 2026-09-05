@@ -5,6 +5,7 @@ import {
   CalendarClock,
   CreditCard,
   FilePlus2,
+  FileText,
   Link2,
   Link2Off,
   Lock,
@@ -30,6 +31,8 @@ import {
   formatearNumero,
 } from '@/services/whatsappChatService'
 import { registerPayment, suspendUser, reactivateUser, PLANS } from '@/services/subscriptionService'
+import { METODOS_DE_COBRO as METODOS } from '@/services/comprobanteChatService'
+import ModalEmitirComprobante from '@/components/chat/EmitirComprobante'
 
 /**
  * La segunda línea de un resultado de búsqueda: lo que permite distinguir dos
@@ -37,9 +40,6 @@ import { registerPayment, suspendUser, reactivateUser, PLANS } from '@/services/
  */
 const detalleDelNegocio = (n) =>
   [n.comercial, n.ruc && `RUC ${n.ruc}`, n.email].filter(Boolean).join(' · ')
-
-/** Los mismos métodos de cobro que ofrece el panel. */
-const METODOS = ['Yape', 'Plin', 'Transferencia', 'Efectivo', 'Tarjeta']
 
 /** Por donde emite la cuenta. Es la primera pregunta cuando "no puede facturar". */
 const ETIQUETA_EMISION = {
@@ -66,6 +66,7 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
   const [renovarAbierto, setRenovarAbierto] = useState(false)
   const [reactivarAbierto, setReactivarAbierto] = useState(false)
   const [comprobantesAbierto, setComprobantesAbierto] = useState(false)
+  const [emitirAbierto, setEmitirAbierto] = useState(false)
   const [verTodosLosPagos, setVerTodosLosPagos] = useState(false)
   const [trabajando, setTrabajando] = useState(false)
 
@@ -110,6 +111,7 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
     setRenovarAbierto(false)
     setReactivarAbierto(false)
     setComprobantesAbierto(false)
+    setEmitirAbierto(false)
     setVerTodosLosPagos(false)
     if (!businessId) return
     setCargando(true)
@@ -280,6 +282,17 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
                 </div>
               )}
             </div>
+
+            {/* Un lead que ya pagó (una cuenta nueva, por ejemplo) también
+                necesita su comprobante, y todavía no hay a quién vincularlo:
+                el RUC se escribe a mano y se completa desde SUNAT. */}
+            <button
+              onClick={() => setEmitirAbierto(true)}
+              className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2 text-[12px] font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Emitir comprobante
+            </button>
           </div>
         )}
 
@@ -512,6 +525,16 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
               Registrar renovación
             </button>
 
+            {/* Factura, boleta o nota de venta, emitida desde la cuenta del
+                admin y mandada como PDF en esta misma conversación. */}
+            <button
+              onClick={() => setEmitirAbierto(true)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white text-gray-700 border border-gray-300 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors"
+            >
+              <FileText className="w-4 h-4" />
+              Emitir comprobante
+            </button>
+
             {/* Cortar y devolver el acceso. Son las dos acciones que antes
                 obligaban a salir del chat y abrir el panel. */}
             {ficha.accessBlocked ? (
@@ -593,6 +616,15 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
           ficha={ficha}
           onCerrar={() => setComprobantesAbierto(false)}
           onListo={() => { setComprobantesAbierto(false); releerFicha() }}
+        />
+      )}
+
+      {emitirAbierto && (
+        <ModalEmitirComprobante
+          conversacion={conversacion}
+          ficha={ficha}
+          onCerrar={() => setEmitirAbierto(false)}
+          onEmitido={() => setEmitirAbierto(false)}
         />
       )}
     </aside>

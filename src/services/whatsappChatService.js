@@ -356,6 +356,8 @@ export const obtenerFichaCliente = async (businessId) => {
     modo: nombreModo(biz.businessMode || 'retail'),
     ubicacion: [biz.department, biz.province].filter(Boolean).join(' · ') || null,
     telefono: biz.contactPhone || biz.phone || null,
+    // Para el comprobante que se emite desde el chat.
+    direccion: biz.address || null,
     // Es LA pregunta de soporte: "no puedo facturar". Con esto se sabe si la
     // cuenta siquiera esta configurada para emitir, y por que via.
     emision: metodoDeEmision(biz),
