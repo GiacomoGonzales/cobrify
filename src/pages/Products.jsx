@@ -49,7 +49,7 @@ import {
   filterProductsForBranch, filterCategoriesForBranch, getBranchScopeLabel,
 } from '@/utils/branchCatalog'
 import { needsRestock } from '@/utils/stockAlerts'
-import { isPharmaLikeMode, recuerdaServicios } from '@/utils/businessModes'
+import { isPharmaLikeMode, recuerdaServicios, atiendeConCita } from '@/utils/businessModes'
 import { buildProductIndex, findExistingProduct, indexProduct } from '@/utils/productImportMatch'
 import SunatProductCodeField from '@/components/SunatProductCodeField'
 import { getRateForDate } from '@/services/exchangeRateService'
@@ -1111,6 +1111,7 @@ export default function Products() {
       batchNumber: product.batchNumber || '',
       minStock: product.minStock != null ? product.minStock.toString() : '',
       reminderDays: product.reminderDays != null ? product.reminderDays.toString() : '',
+      duration: product.duration != null ? product.duration.toString() : '',
     })
 
     // Cargar códigos de barra adicionales existentes (si los hay)
@@ -1270,6 +1271,7 @@ export default function Products() {
       batchNumber: product.batchNumber || '',
       minStock: product.minStock != null ? product.minStock.toString() : '',
       reminderDays: product.reminderDays != null ? product.reminderDays.toString() : '',
+      duration: product.duration != null ? product.duration.toString() : '',
     })
 
     setIsModalOpen(true)
@@ -1500,9 +1502,17 @@ export default function Products() {
         minStock: data.minStock && data.minStock !== '' ? Math.max(0, parseInt(data.minStock)) : null,
         // Veterinaria: días para volver a recordar este servicio. Al cobrarlo,
         // el POS programa el recordatorio de la mascota con este número.
-        reminderDays: data.reminderDays && data.reminderDays !== ''
-          ? Math.max(1, parseInt(data.reminderDays))
-          : null,
+        // El 0 vale: significa "este producto no se recuerda" (ver vetReminders.js).
+        // Antes `data.reminderDays &&` lo tiraba a null, que es "usa el plazo del
+        // negocio": justo lo contrario de lo que el usuario escribió.
+        reminderDays: (data.reminderDays === '' || data.reminderDays == null)
+          ? null
+          : Math.max(0, parseInt(data.reminderDays)),
+        // Cuánto dura el servicio (minutos): la Agenda lo usa para que la cita
+        // ocupe sus huecos. Vacío o 0 = un solo turno.
+        duration: (data.duration === '' || data.duration == null)
+          ? null
+          : (Math.max(0, parseInt(data.duration)) || null),
         taxAffectation: taxAffectation, // '10' = Gravado, '20' = Exonerado, '30' = Inafecto (SUNAT Catálogo 07)
         // Código de Producto SUNAT (Catálogo 25). Opcional; se guarda con su
         // descripción para no depender del catálogo al mostrarlo.
@@ -8294,7 +8304,22 @@ export default function Products() {
                     placeholder="30"
                     error={errors.reminderDays?.message}
                     {...register('reminderDays')}
-                    helperText="Vacío = usa el plazo del negocio (Configuración > Ventas). Pon un número para darle su propio plazo (ej: desparasitación 90) o 0 para que este producto no genere recordatorio."
+                    helperText="Vacío = usa el plazo del negocio (Configuración > Punto de venta). Pon un número para darle su propio plazo (ej: desparasitación 90) o 0 para que este producto no genere recordatorio."
+                  />
+                )}
+
+                {/* Duración del servicio, para los rubros con Agenda: la cita
+                    ocupa tantos huecos como dure. Vacío = un solo turno. */}
+                {atiendeConCita(businessMode, businessSettings) && (
+                  <Input
+                    label="Duración (minutos)"
+                    type="number"
+                    min="0"
+                    step="5"
+                    placeholder="30"
+                    error={errors.duration?.message}
+                    {...register('duration')}
+                    helperText="Lo que dura este servicio en la Agenda: la cita ocupa esos minutos en el panel del día. Vacío = un solo turno."
                   />
                 )}
 

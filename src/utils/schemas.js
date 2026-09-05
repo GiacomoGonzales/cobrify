@@ -355,11 +355,28 @@ export const productSchema = z.object({
     ])
     .nullable()
     .optional(),
-  // Veterinaria: cada cuántos días recordar este servicio después de darlo.
-  // Vacío/null = no genera recordatorio. Mismo tratamiento que minStock.
+  // Cada cuántos días recordar este servicio después de darlo (veterinaria y
+  // clínica). Vacío/null = el plazo del negocio; 0 = NO se recuerda. El 0 se
+  // conserva a propósito: antes el transform lo convertía en null y el
+  // producto volvía al plazo del negocio, lo contrario de lo pedido.
   reminderDays: z
     .union([
-      z.number().int().positive('Los días deben ser mayores a cero'),
+      z.number().int().nonnegative('Los días no pueden ser negativos'),
+      z
+        .string()
+        .transform(val => {
+          if (val === '' || val === null || val === undefined) return null
+          const num = parseInt(val)
+          return isNaN(num) || num < 0 ? null : num
+        })
+        .nullable(),
+    ])
+    .nullable()
+    .optional(),
+  // Duración del servicio en minutos, para la Agenda. Vacío/0 = un turno.
+  duration: z
+    .union([
+      z.number().int().nonnegative('La duración no puede ser negativa'),
       z
         .string()
         .transform(val => {

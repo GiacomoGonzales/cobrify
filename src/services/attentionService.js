@@ -3,9 +3,111 @@
  * se escriben en la ficha. La FORMA de cada atención sale de
  * src/utils/fichaAtencion.js; acá solo hay lecturas y escrituras.
  */
-import { updateCustomer } from './firestoreService'
+import { doc, getDoc, collection, query, where, limit, getDocs, Timestamp } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
+import { updateCustomer, createCustomer } from './firestoreService'
 import { createAppointment, updateAppointment } from './appointmentService'
 import { sucursalParaGuardar } from '@/utils/branchScope'
+import {
+  nuevaAtencion, normalizarAtenciones, limpiarAtenciones, camposLegadoDeFicha, hoyYMD,
+} from '@/utils/fichaAtencion'
+
+/**
+ * Una cita sin paciente registrado (las reservas del catálogo público nacen
+ * así: el cliente deja nombre y teléfono, nada más) se vincula recién cuando
+ * hace falta escribir en su ficha. Se busca por teléfono y, si no existe, se
+ * crea con lo que trajo la reserva. El id queda guardado en la cita para la
+ * próxima vez.
+ *
+ * @returns {Promise<string>} customerId
+ */
+const vincularPaciente = async (businessId, appointment) => {
+  if (!appointment?.id) throw new Error('La cita no está vinculada a un paciente registrado')
+  const telefono = String(appointment.phone || '').replace(/\D/g, '')
+  let customerId = null
+  if (telefono) {
+    const q = query(collection(db, 'businesses', businessId, 'customers'), where('phone', '==', appointment.phone), limit(1))
+    const snap = await getDocs(q)
+    if (!snap.empty) customerId = snap.docs[0].id
+  }
+  if (!customerId) {
+    const nombre = String(appointment.customerName || '').trim()
+    if (!nombre) throw new Error('La cita no tiene nombre ni paciente registrado')
+    const r = await createCustomer(businessId, {
+      documentType: 'DNI',
+      documentNumber: '',
+      name: nombre,
+      phone: appointment.phone || '',
+    })
+    if (!r?.success) throw new Error(r?.error || 'No se pudo crear la ficha del paciente')
+    customerId = r.id
+  }
+  await updateAppointment(businessId, appointment.id, { customerId })
+  return customerId
+}
+
+/**
+ * Registrar en la ficha del paciente la atención de una cita, desde la Agenda.
+ *
+ * Es el mismo historial que se edita en Clientes: acá solo se le agrega la
+ * entrada de HOY con lo que trae la cita (procedimiento, quién atendió) y lo
+ * que escribe el profesional al terminar (tratamiento, recomendaciones,
+ * próximo control). Si la misma cita se registra dos veces, la entrada se
+ * REEMPLAZA en vez de duplicarse: la ficha no puede decir que hubo dos
+ * atenciones cuando hubo una.
+ *
+ * El próximo control se agenda igual que desde Clientes (una sola cita, con
+ * su id guardado en la atención).
+ *
+ * @param {string} businessId
+ * @param {object} appointment la cita (id, customerId, serviceName, specialistName)
+ * @param {{ service?: string, treatment?: string, recommendations?: string,
+ *           specialist?: string, nextControlDate?: string, nextControlTime?: string }} campos
+ * @param {string|null} branchScope sucursal activa, para el control agendado
+ * @returns {Promise<{ controlesAgendados: number }>}
+ */
+export const registrarAtencionDesdeCita = async (businessId, appointment, campos, branchScope) => {
+  const customerId = appointment?.customerId || await vincularPaciente(businessId, appointment)
+
+  const ref = doc(db, 'businesses', businessId, 'customers', customerId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) throw new Error('No se encontró la ficha del paciente')
+  const cliente = { id: snap.id, ...snap.data() }
+
+  const previas = normalizarAtenciones(cliente)
+  // Si esta cita ya dejó su atención, se conserva su id (y la cita del
+  // control que ya hubiera agendado) y se pisa el contenido.
+  const anterior = previas.find(a => a.appointmentId === appointment.id) || null
+  const entrada = nuevaAtencion({
+    ...(anterior || {}),
+    date: anterior?.date || hoyYMD(),
+    service: campos.service ?? appointment.serviceName ?? '',
+    treatment: campos.treatment ?? '',
+    recommendations: campos.recommendations ?? '',
+    // La reserva pública guarda staffName; la agenda, specialistName.
+    specialist: campos.specialist ?? appointment.specialistName ?? appointment.staffName ?? '',
+    nextControlDate: campos.nextControlDate ?? '',
+    nextControlTime: campos.nextControlTime ?? '',
+    appointmentId: appointment.id,
+  })
+  const atenciones = limpiarAtenciones([entrada, ...previas.filter(a => a !== anterior)])
+
+  const r = await updateCustomer(businessId, customerId, {
+    attentions: atenciones,
+    ...camposLegadoDeFicha(atenciones),
+  })
+  if (!r?.success) throw new Error(r?.error || 'No se pudo guardar la ficha')
+
+  const controlesAgendados = await sincronizarProximosControles(
+    businessId, customerId, { name: cliente.name, phone: cliente.phone }, atenciones, branchScope,
+  )
+
+  // La marca en la cita es lo que deja ver, en la Agenda, que esta atención
+  // ya quedó en la ficha.
+  await updateAppointment(businessId, appointment.id, { attentionRegisteredAt: Timestamp.now() })
+
+  return { controlesAgendados }
+}
 
 /**
  * Agenda en la Agenda de Citas los próximos controles de la ficha.

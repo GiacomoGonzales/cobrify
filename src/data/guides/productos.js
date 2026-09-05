@@ -59,6 +59,10 @@ export default {
         },
         {
           type: 'texto',
+          text: 'Si tu negocio atiende con **Agenda de Citas**, el servicio tiene además **Duración (minutos)**: la cita ocupa esos minutos en el panel del día. Vacío = un solo turno.',
+        },
+        {
+          type: 'texto',
           text: 'Al lado del costo está la **fecha de compra**: cuándo entró esa mercadería. No hace falta que la llenes — cada vez que registres una compra, el sistema la escribe solo con la fecha de la factura del proveedor.',
         },
         {

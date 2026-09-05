@@ -62,6 +62,21 @@ export default function DaySlotPicker({
     ponerEnHueco(hueco, a)
   })
 
+  // Una cita con DURACIÓN (la suma de lo que dura cada servicio, según la
+  // ficha del producto) sigue ocupando los huecos siguientes. Se muestran
+  // ocupados pero siguen pudiendo elegirse: la agenda avisa, no bloquea.
+  const continuaDe = {}
+  activas.forEach(a => {
+    const dur = Number(a.duration) || 0
+    if (dur <= stepMinutes) return
+    const inicio = aMinutos(horaDe(a))
+    const fin = inicio + dur
+    for (let s = inicio - (inicio % stepMinutes) + stepMinutes; s < fin; s += stepMinutes) {
+      if (!continuaDe[s]) continuaDe[s] = []
+      continuaDe[s].push({ a, hasta: aHHMM(fin) })
+    }
+  })
+
   const huecos = []
   for (let m = startHour * 60; m < endHour * 60; m += stepMinutes) huecos.push(m)
 
@@ -70,8 +85,13 @@ export default function DaySlotPicker({
   const TarjetaCita = ({ a }) => (
     <div className="border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 mb-1.5">
       <div className="flex items-center gap-2 text-sm">
-        <PawPrint className="w-4 h-4 text-primary-500 flex-shrink-0" />
+        {a.petName
+          ? <PawPrint className="w-4 h-4 text-primary-500 flex-shrink-0" />
+          : <User className="w-4 h-4 text-primary-500 flex-shrink-0" />}
         <span className="font-semibold text-gray-900 flex-shrink-0">{horaDe(a)}</span>
+        {Number(a.duration) > 0 && (
+          <span className="text-xs text-gray-400 flex-shrink-0">{a.duration} min</span>
+        )}
         {showDetails ? (
           <span className="text-gray-700 truncate min-w-0">
             {a.serviceName || 'Cita'}
@@ -146,6 +166,21 @@ export default function DaySlotPicker({
                 )}
                 {citas.length > 0 ? (
                   citas.map(a => <TarjetaCita key={a.id} a={a} />)
+                ) : (continuaDe[m] || []).length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => onPickSlot?.(aHHMM(m))}
+                    className="group flex items-center gap-2 w-full border border-gray-200 bg-gray-50 hover:border-primary-400 rounded-lg px-3 py-1.5 mb-1.5 text-sm text-gray-400 transition-colors"
+                    title="Hora ocupada por una cita en curso; puedes agendar igual"
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>{aHHMM(m)}</span>
+                    <span className="ml-auto text-xs text-gray-400 truncate min-w-0">
+                      {showDetails
+                        ? `${continuaDe[m][0].a.serviceName || 'Cita'} hasta ${continuaDe[m][0].hasta}`
+                        : `Ocupado hasta ${continuaDe[m][0].hasta}`}
+                    </span>
+                  </button>
                 ) : (
                   <button
                     type="button"

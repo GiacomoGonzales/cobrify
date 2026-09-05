@@ -54,14 +54,18 @@ import {
   Edit,
   Search,
   MapPin,
+  ClipboardList,
+  ClipboardCheck,
 } from 'lucide-react'
 import { filtrarPorSucursal, nombreDeSucursal, sucursalParaGuardar } from '@/utils/branchScope'
+import { tieneFichaDeAtencion } from '@/utils/businessModes'
+import { registrarAtencionDesdeCita } from '@/services/attentionService'
 import GuideLink from '@/components/guide/GuideLink'
 import { getSellers } from '@/services/sellerService'
 
 export default function VeterinaryAgenda() {
   const navigate = useNavigate()
-  const { user, getBusinessId, isDemoMode, businessMode, branchScope, branches } = useAppContext()
+  const { user, getBusinessId, isDemoMode, businessMode, businessSettings, branchScope, branches } = useAppContext()
 
   /**
    * La agenda nació para veterinarias, pero cualquier negocio que atienda con
@@ -75,6 +79,18 @@ export default function VeterinaryAgenda() {
    */
   const esVeterinaria = businessMode === 'veterinary'
   const toast = useToast()
+
+  /**
+   * Registrar la atención en la ficha del paciente al terminar la cita. Solo
+   * donde la ficha existe (Clínica, o General con la ficha encendida); en
+   * veterinaria el historial va por la historia clínica de la mascota.
+   */
+  const conFicha = tieneFichaDeAtencion(businessMode, businessSettings)
+  const [atencionDe, setAtencionDe] = useState(null) // la cita cuya atención se registra
+  const [atencionForm, setAtencionForm] = useState({
+    service: '', treatment: '', recommendations: '', specialist: '', nextControlDate: '', nextControlTime: '',
+  })
+  const [savingAtencion, setSavingAtencion] = useState(false)
 
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [currentMonth, setCurrentMonth] = useState(new Date())
@@ -305,6 +321,39 @@ export default function VeterinaryAgenda() {
         {config.label}
       </span>
     )
+  }
+
+  const abrirRegistroDeAtencion = (appointment) => {
+    setAtencionForm({
+      service: appointment.serviceName || '',
+      treatment: '',
+      recommendations: '',
+      // La reserva pública guarda staffName; la agenda, specialistName.
+      specialist: appointment.specialistName || appointment.staffName || '',
+      nextControlDate: '',
+      nextControlTime: '',
+    })
+    setAtencionDe(appointment)
+  }
+
+  const guardarAtencion = async ({ cobrar = false } = {}) => {
+    if (!atencionDe) return
+    setSavingAtencion(true)
+    try {
+      const { controlesAgendados } = await registrarAtencionDesdeCita(getBusinessId(), atencionDe, atencionForm, branchScope)
+      toast.success(controlesAgendados > 0
+        ? 'Atención registrada en la ficha y próximo control agendado'
+        : 'Atención registrada en la ficha del paciente')
+      const cita = atencionDe
+      setAtencionDe(null)
+      loadInProgress()
+      if (cobrar) handleComplete(cita)
+    } catch (e) {
+      console.error('Error al registrar la atención:', e)
+      toast.error(e?.message || 'No se pudo registrar la atención')
+    } finally {
+      setSavingAtencion(false)
+    }
   }
 
   // Acciones
@@ -609,9 +658,16 @@ export default function VeterinaryAgenda() {
       // resumen (nombres unidos con " + " y suma) para las tarjetas y el POS,
       // que ya consume el array services[] (un ítem de carrito por servicio).
       const services = walkInServices
-        .map(s => ({ name: (s.serviceName || '').trim(), price: parseFloat(s.price) || 0 }))
+        .map(s => ({
+          name: (s.serviceName || '').trim(),
+          price: parseFloat(s.price) || 0,
+          ...(Number(s.duration) > 0 ? { duration: Number(s.duration) } : {}),
+        }))
         .filter(s => s.name)
       const price = services.reduce((sum, s) => sum + s.price, 0)
+      // Cuánto ocupa la cita en el panel del día: la suma de lo que dura cada
+      // servicio (ficha del producto). Sin duraciones, un solo turno.
+      const duration = services.reduce((sum, s) => sum + (s.duration || 0), 0) || null
       const svcName = services.map(s => s.name).join(' + ')
       const now = new Date()
       const dateStr = isSchedule
@@ -630,6 +686,7 @@ export default function VeterinaryAgenda() {
         serviceName: svcName,
         servicePrice: price,
         services,
+        ...(duration ? { duration } : {}),
         scheduledDate: dateStr,
         scheduledTime: timeStr,
         notes: isSchedule ? '' : 'Atención directa (walk-in)',
@@ -781,6 +838,15 @@ export default function VeterinaryAgenda() {
             </button>
           </>
         )}
+        {conFicha && (appointment.status === 'in_progress' || appointment.status === 'completed') && (
+          <button
+            onClick={() => abrirRegistroDeAtencion(appointment)}
+            className={`p-1.5 rounded-lg transition-colors ${appointment.attentionRegisteredAt ? 'text-green-600 hover:bg-green-50' : 'text-gray-500 hover:text-primary-600 hover:bg-primary-50'}`}
+            title={appointment.attentionRegisteredAt ? 'Atención registrada en la ficha (editar)' : 'Registrar atención'}
+          >
+            {appointment.attentionRegisteredAt ? <ClipboardCheck className="w-4 h-4" /> : <ClipboardList className="w-4 h-4" />}
+          </button>
+        )}
         {appointment.status === 'in_progress' && (
           <button
             onClick={() => handleComplete(appointment)}
@@ -891,7 +957,14 @@ export default function VeterinaryAgenda() {
                     {appt.servicePrice > 0 && (
                       <p className="text-sm font-semibold text-primary-600 mt-1">S/ {appt.servicePrice.toFixed(2)}</p>
                     )}
-                    <Button size="sm" className="w-full mt-3 gap-1" onClick={() => handleComplete(appt)}>
+                    {conFicha && (
+                      <Button size="sm" variant="outline" className="w-full mt-3 gap-1" onClick={() => abrirRegistroDeAtencion(appt)}>
+                        {appt.attentionRegisteredAt
+                          ? <><ClipboardCheck className="w-4 h-4" /> Atención registrada</>
+                          : <><ClipboardList className="w-4 h-4" /> Registrar atención</>}
+                      </Button>
+                    )}
+                    <Button size="sm" className={`w-full gap-1 ${conFicha ? 'mt-2' : 'mt-3'}`} onClick={() => handleComplete(appt)}>
                       <ShoppingCart className="w-4 h-4" /> Finalizar y Cobrar
                     </Button>
                   </CardContent>
@@ -1009,6 +1082,107 @@ export default function VeterinaryAgenda() {
 
       </>
       )}
+
+      {/* Registrar la atención en la ficha del paciente (Clínica, o General
+          con la ficha de atención encendida). El historial es el mismo que se
+          edita en Clientes; ver attentionService.registrarAtencionDesdeCita. */}
+      <Modal
+        isOpen={!!atencionDe}
+        onClose={() => !savingAtencion && setAtencionDe(null)}
+        title="Registrar atención"
+        size="lg"
+      >
+        {atencionDe && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Queda en la ficha de <strong>{atencionDe.customerName || 'el paciente'}</strong> como la atención de hoy.
+              {atencionDe.attentionRegisteredAt && ' Esta cita ya tiene una atención registrada: lo que guardes la reemplaza.'}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Procedimiento</label>
+                <input
+                  type="text"
+                  value={atencionForm.service}
+                  onChange={(e) => setAtencionForm(f => ({ ...f, service: e.target.value }))}
+                  placeholder="Ej: Limpieza facial"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Especialista</label>
+                <input
+                  type="text"
+                  value={atencionForm.specialist}
+                  onChange={(e) => setAtencionForm(f => ({ ...f, specialist: e.target.value }))}
+                  placeholder="Quién atendió"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Tratamiento / medicación</label>
+              <input
+                type="text"
+                value={atencionForm.treatment}
+                onChange={(e) => setAtencionForm(f => ({ ...f, treatment: e.target.value }))}
+                placeholder="Ej: Ácido hialurónico 1 ml en labios"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Recomendaciones</label>
+              <textarea
+                rows={3}
+                value={atencionForm.recommendations}
+                onChange={(e) => setAtencionForm(f => ({ ...f, recommendations: e.target.value }))}
+                placeholder="Qué se le indicó al paciente para los próximos días"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 resize-y"
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Próximo control</label>
+                <input
+                  type="date"
+                  value={atencionForm.nextControlDate}
+                  onChange={(e) => setAtencionForm(f => ({ ...f, nextControlDate: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Hora</label>
+                <input
+                  type="time"
+                  value={atencionForm.nextControlTime}
+                  onChange={(e) => setAtencionForm(f => ({ ...f, nextControlTime: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                />
+              </div>
+            </div>
+            {atencionForm.nextControlDate && (
+              <p className="text-[11px] text-primary-700">Al guardar, el control se agenda solo en la Agenda.</p>
+            )}
+            <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setAtencionDe(null)} disabled={savingAtencion}>
+                Volver
+              </Button>
+              <Button
+                variant={atencionDe.status === 'in_progress' ? 'outline' : undefined}
+                onClick={() => guardarAtencion()}
+                disabled={savingAtencion}
+              >
+                {savingAtencion ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar'}
+              </Button>
+              {atencionDe.status === 'in_progress' && (
+                <Button onClick={() => guardarAtencion({ cobrar: true })} disabled={savingAtencion} className="gap-1">
+                  <ShoppingCart className="w-4 h-4" /> Guardar y cobrar
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Modal de cancelación */}
       <Modal
@@ -1348,7 +1522,7 @@ export default function VeterinaryAgenda() {
                     <input
                       type="text"
                       value={svc.serviceName}
-                      onChange={(e) => updateWalkInService(idx, { serviceName: e.target.value, serviceId: '' })}
+                      onChange={(e) => updateWalkInService(idx, { serviceName: e.target.value, serviceId: '', duration: null })}
                       onFocus={() => setActiveSvcIdx(idx)}
                       onBlur={() => setActiveSvcIdx(i => (i === idx ? null : i))}
                       placeholder="Busca el servicio o escríbelo (ej. Baño y corte)"
@@ -1368,6 +1542,7 @@ export default function VeterinaryAgenda() {
                                 serviceId: p.id,
                                 serviceName: p.name,
                                 price: p.price != null ? String(p.price) : svc.price,
+                                duration: Number(p.duration) > 0 ? Number(p.duration) : null,
                               })
                               setActiveSvcIdx(null)
                             }}

@@ -82,6 +82,7 @@ export default {
             'Ve a **Tratamientos y productos** y presiona **Nuevo Producto**.',
             'Escribe el nombre (Limpieza facial profunda, Consulta de evaluación) y el precio.',
             'Marca **No manejar stock**: un tratamiento es un servicio, no se descuenta de ningún almacén.',
+            'Pon la **Duración (minutos)**: la Agenda ocupa esos huecos cuando lo agendas.',
             'Si el tratamiento se repite cada cierto tiempo, pon los días en **Recordar servicio (días)**. Guarda.',
           ],
         },
@@ -143,7 +144,8 @@ export default {
             'En **Agenda**, toca el día y luego una hora libre, o presiona **Agendar cita**.',
             'Elige al paciente (o créalo ahí mismo), los tratamientos y, si corresponde, el Especialista.',
             'Cuando llega, **Iniciar atención**. Si viene sin cita, **Atender ahora**.',
-            'Al terminar, **Finalizar y Cobrar**: el Punto de Venta se abre con el paciente y los tratamientos ya cargados.',
+            'Al terminar, **Registrar atención**: tratamiento, recomendaciones y próximo control quedan en la ficha.',
+            '**Finalizar y Cobrar** (o **Guardar y cobrar** desde el mismo registro): el Punto de Venta se abre con el paciente y los tratamientos ya cargados.',
           ],
         },
         {

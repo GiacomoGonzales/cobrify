@@ -127,8 +127,21 @@ export const getPublicAgenda = onRequest(
         ? citas.filter((a) => (a.staffId || '') === staffId)
         : citas
       // Set para no repetir: dos citas del negocio a la misma hora son UNA
-      // hora ocupada para el público.
-      const busy = [...new Set(delProfesional.map((a) => horaLima(a.scheduledDate)))].sort()
+      // hora ocupada para el público. Una cita con duración (la suma de lo
+      // que duran sus servicios) ocupa también los huecos siguientes.
+      const paso = v.config.stepMinutes
+      const aHHMM = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+      const ocupadas = new Set()
+      for (const a of delProfesional) {
+        const inicio = horaLima(a.scheduledDate)
+        ocupadas.add(inicio)
+        const dur = Number(a.duration) || 0
+        if (dur <= paso) continue
+        const [h, m] = inicio.split(':').map(Number)
+        const desde = h * 60 + m
+        for (let s = desde - (desde % paso) + paso; s < desde + dur; s += paso) ocupadas.add(aHHMM(s))
+      }
+      const busy = [...ocupadas].sort()
 
       res.status(200).json({ date, config: v.config, busy })
     } catch (error) {
@@ -185,6 +198,17 @@ export const bookPublicAppointment = onRequest(
         if (!servicioElegido) {
           res.status(400).json({ error: 'Elige uno de los servicios disponibles' }); return
         }
+      }
+
+      // Duración del servicio (ficha del producto): la cita ocupa sus huecos
+      // en la agenda del negocio. Sin ficha o sin duración, un solo turno.
+      let duracion = null
+      if (servicioElegido?.id) {
+        try {
+          const prod = await db.doc(`businesses/${businessId}/products/${servicioElegido.id}`).get()
+          const d = Number(prod.exists ? prod.data().duration : 0)
+          if (d > 0) duracion = d
+        } catch (e) { /* sin duración: un turno */ }
       }
 
       // El hueco tiene que ser uno que el negocio ofrece: día abierto, dentro
@@ -288,6 +312,7 @@ export const bookPublicAppointment = onRequest(
           : [],
         staffId: profesional ? profesional.id : '',
         staffName: profesional ? String(profesional.name || '').slice(0, 80) : '',
+        ...(duracion ? { duration: duracion } : {}),
         scheduledDate: Timestamp.fromDate(slot),
         scheduledTime: time,
         status: 'scheduled',

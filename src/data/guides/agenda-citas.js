@@ -63,6 +63,10 @@ export default {
         },
         { type: 'enlace', to: '/app/vendedores', label: 'Ir a Vendedores' },
         {
+          type: 'texto',
+          text: 'Si en la ficha del servicio pusiste su **Duración (minutos)**, la cita ocupa esos huecos en el panel del día: los siguientes aparecen en gris con "hasta las HH:MM". Se pueden elegir igual, la agenda avisa pero no bloquea.',
+        },
+        {
           type: 'consejo',
           text: 'Si dos clientes piden la misma hora, el sistema te avisa pero no te bloquea: tú decides si tu equipo puede atender a dos a la vez.',
         },
@@ -100,6 +104,37 @@ export default {
       ],
     },
 
+    // ─────────────────────────────────────────────────────────────────────
+    {
+      id: 'registrar-atencion',
+      title: 'Registrar la atención en la ficha',
+      // La ficha de atención existe en Clínica y en General con la ficha
+      // encendida; en veterinaria el historial es la historia clínica.
+      soloModos: ['clinic', 'retail'],
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Lo que se le hizo al paciente queda en su **Ficha de atención** sin salir de la Agenda: en la tarjeta de la cita (pestaña **En atención**, o el ícono de portapapeles en el panel del día) presiona **Registrar atención**.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Revisa el **Procedimiento** (viene con el servicio de la cita) y quién atendió en **Especialista**.',
+            'Escribe el **Tratamiento / medicación** y las **Recomendaciones**.',
+            'Si toca volver, pon el **Próximo control** con su hora: al guardar se agenda solo.',
+            'Presiona **Guardar**, o **Guardar y cobrar** para pasar directo al Punto de Venta.',
+          ],
+        },
+        {
+          type: 'consejo',
+          text: 'La cita queda marcada con un portapapeles verde: la atención ya está en la ficha. Si la abres de nuevo, lo que guardes reemplaza lo anterior, no lo duplica.',
+        },
+        {
+          type: 'ojo',
+          text: 'En modo General esto aparece solo con **Ficha de atención en el cliente** encendida (Configuración > Punto de venta). En Clínica viene de fábrica. Una reserva hecha desde el catálogo no trae paciente registrado: al registrar su atención, el sistema lo busca por teléfono y, si no existe, lo crea.',
+        },
+      ],
+    },
     // ─────────────────────────────────────────────────────────────────────
     {
       id: 'walkin',
