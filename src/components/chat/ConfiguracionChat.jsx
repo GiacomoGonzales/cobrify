@@ -309,6 +309,29 @@ function SeccionAutomaticos() {
   )
 }
 
+/**
+ * Un cuadro de texto que crece con lo que tiene dentro.
+ *
+ * Las respuestas rapidas son parrafos enteros —la de los planes son veinte
+ * lineas— y en un cuadro de dos filas habia que desplazarse adentro de una
+ * ventanita para leer o corregir. Se lee lo que hay, sin scroll, y al escribir
+ * el cuadro acompana (reporte de Giacomo).
+ */
+function AreaQueCrece({ value, className, ...props }) {
+  const ref = useRef(null)
+
+  // Al alto natural del contenido: primero 'auto' para que al BORRAR tambien
+  // se encoja; sin eso scrollHeight devuelve el alto viejo y solo crece.
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [value])
+
+  return <textarea ref={ref} rows={1} value={value} className={className} {...props} />
+}
+
 /* ============================ RÁPIDAS ============================ */
 function SeccionRapidas() {
   const toast = useToast()
@@ -407,15 +430,14 @@ function SeccionRapidas() {
           <div key={r.atajo} className="bg-white border border-gray-200 rounded-lg p-3">
             <div className="flex items-start gap-3">
               <span className="font-mono text-[13px] font-semibold text-primary-700 bg-primary-50 px-2 py-0.5 rounded flex-none">/{r.atajo}</span>
-              <textarea
-                rows={2}
+              <AreaQueCrece
                 value={r.texto}
                 onChange={(e) => {
                   const copia = [...lista]
                   copia[i] = { ...r, texto: e.target.value }
                   setLista(copia)
                 }}
-                className="flex-1 text-[13px] bg-transparent focus:outline-none resize-none"
+                className="flex-1 text-[13px] bg-transparent focus:outline-none resize-none overflow-hidden leading-snug"
               />
               <button
                 onClick={() => pedirArchivo(i)}
@@ -462,12 +484,11 @@ function SeccionRapidas() {
             className="flex-1 text-[13px] px-3 py-1.5 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
-        <textarea
-          rows={2}
+        <AreaQueCrece
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
           placeholder="Texto de la respuesta"
-          className="w-full text-[13px] px-3 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+          className="w-full text-[13px] px-3 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none overflow-hidden leading-snug min-h-[3.5rem]"
         />
         <div className="flex justify-end">
           <button onClick={agregar} disabled={!atajo.trim() || !texto.trim()} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-semibold text-primary-700 hover:bg-primary-50 rounded-lg disabled:opacity-40">
