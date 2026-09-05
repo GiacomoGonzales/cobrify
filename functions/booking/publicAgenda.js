@@ -63,7 +63,10 @@ const validarNegocio = async (db, businessId) => {
   const config = configDe(business)
   // El modo se re-valida en el servidor aunque la UI ya lo filtre: el front
   // nunca es la fuente de verdad de quién puede recibir reservas.
+  // Mismo criterio que atiendeConCita() en src/utils/businessModes.js: la
+  // function no puede importarlo, asi que si cambia alla, cambia aca.
   const modoConAgenda = business.businessMode === 'veterinary'
+    || business.businessMode === 'clinic'
     || (business.businessMode === 'retail' && business.appointmentsEnabled === true)
   if (!config.enabled || !modoConAgenda) {
     return { error: { code: 403, msg: 'Este negocio no recibe reservas por el catálogo' } }

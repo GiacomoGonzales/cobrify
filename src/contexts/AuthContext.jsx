@@ -28,6 +28,7 @@ const enIframe = () => {
 import { isUserAdmin, isBusinessAdmin, setAsBusinessOwner } from '@/services/adminService'
 import { getSubscription, hasActiveAccess } from '@/services/subscriptionService'
 import { getUserData } from '@/services/userManagementService'
+import { MODOS_NEGOCIO } from '@/utils/businessModes'
 import { getActiveBranches } from '@/services/branchService'
 import { initializePushNotifications, cleanupPushNotifications } from '@/services/notificationService'
 import { setBusinessInfo, clearBusinessInfo } from '@/plugins/businessStorage'
@@ -397,7 +398,7 @@ export const AuthProvider = ({ children }) => {
               console.log('🏢 dispatchGuidesEnabled:', businessData.dispatchGuidesEnabled)
 
               // Validar que el modo sea uno de los permitidos
-              const validModes = ['retail', 'restaurant', 'pharmacy', 'real_estate', 'transport', 'hotel', 'logistics', 'veterinary', 'lending']
+              const validModes = MODOS_NEGOCIO.map((m) => m.id)
               const mode = validModes.includes(businessData.businessMode)
                 ? businessData.businessMode
                 : 'retail'
@@ -800,7 +801,7 @@ export const AuthProvider = ({ children }) => {
       if (businessDoc.exists()) {
         const businessData = businessDoc.data()
         setBusinessSettings(withFeatureDefaults(businessData))
-        const validModes = ['retail', 'restaurant', 'pharmacy', 'real_estate', 'transport', 'hotel', 'logistics', 'veterinary', 'lending']
+        const validModes = MODOS_NEGOCIO.map((m) => m.id)
         const mode = validModes.includes(businessData.businessMode) ? businessData.businessMode : 'retail'
         setBusinessMode(mode)
       }

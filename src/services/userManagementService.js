@@ -167,6 +167,25 @@ export const VETERINARY_PAGES = [
   { id: 'purchase-history', name: 'Historial de Compras', path: '/ingredientes/historial', category: 'compras' },
 ]
 
+// ============ PÁGINAS MODO CLÍNICA ============
+// Estética, dental, consultorio. La agenda y los recordatorios son las mismas
+// pantallas de veterinaria (sin mascota), así que llevan el mismo id de
+// permiso: un sub-usuario que ya las tenía las conserva. El resto es el
+// subconjunto de General que una clínica usa; lo que no está acá tampoco
+// está en su menú.
+export const CLINIC_PAGES = [
+  { id: 'vet-agenda', name: 'Agenda', path: '/agenda', category: 'operaciones' },
+  { id: 'vet-alerts', name: 'Recordatorios', path: '/recordatorios', category: 'operaciones' },
+  { id: 'sellers', name: 'Profesionales', path: '/vendedores', category: 'equipo' },
+  { id: 'promotions', name: 'Promociones', path: '/promociones', category: 'ventas' },
+  { id: 'online-orders', name: 'Pedidos Online', path: '/pedidos-online', category: 'ventas' },
+  { id: 'quotations', name: 'Cotizaciones', path: '/cotizaciones', category: 'documentos' },
+  { id: 'inventory', name: 'Inventario', path: '/inventario', category: 'inventario' },
+  { id: 'stock-movements', name: 'Movimientos de Stock', path: '/movimientos', category: 'inventario' },
+  { id: 'purchases', name: 'Compras', path: '/compras', category: 'compras' },
+  { id: 'suppliers', name: 'Proveedores', path: '/proveedores', category: 'compras' },
+]
+
 // ============ PÁGINAS MODO HOTEL ============
 export const HOTEL_PAGES = [
   // Operaciones hoteleras
@@ -259,6 +278,7 @@ export const AVAILABLE_PAGES = [
   ...HOTEL_PAGES,
   ...LOGISTICS_PAGES,
   ...VETERINARY_PAGES,
+  ...CLINIC_PAGES,
 ]
 
 /**
@@ -301,6 +321,8 @@ export const getAvailablePagesByMode = (businessMode, opciones = {}) => {
     return [...COMMON_PAGES, ...LOGISTICS_PAGES]
   } else if (businessMode === 'veterinary') {
     return [...COMMON_PAGES, ...VETERINARY_PAGES]
+  } else if (businessMode === 'clinic') {
+    return [...COMMON_PAGES, ...CLINIC_PAGES]
   } else if (businessMode === 'lending') {
     return [...COMMON_PAGES, ...LENDING_PAGES]
   } else {

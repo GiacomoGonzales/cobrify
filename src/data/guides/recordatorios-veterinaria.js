@@ -1,5 +1,5 @@
 /**
- * GUÍA DE USO: Recordatorios (Alertas de Veterinaria)
+ * GUÍA DE USO: Recordatorios (veterinaria y clínica)
  *
  * Documenta la pantalla /app/alertas-veterinaria. La fuente son las VENTAS:
  * ver src/services/salesRemindersService.js. Reglas de redacción en pos.js.
@@ -8,7 +8,7 @@ export default {
   id: 'recordatorios-veterinaria',
   actualizado: '02/09/2026',
   intro:
-    'El baño, el alimento y la desparasitación se repiten cada tanto, pero el cliente no lleva la cuenta: el que tiene que acordarse eres tú. Esta pantalla toma tus ventas y te dice a quién llamar — qué se llevó cada cliente, cuándo, y a quién ya se le pasó la fecha.',
+    'El baño, el alimento y la desparasitación —o la limpieza facial y el retoque, en una clínica— se repiten cada tanto, pero el cliente no lleva la cuenta: el que tiene que acordarse eres tú. Esta pantalla toma tus ventas y te dice a quién llamar — qué se llevó cada cliente, cuándo, y a quién ya se le pasó la fecha.',
 
   sections: [
     {
@@ -29,7 +29,7 @@ export default {
         },
         {
           type: 'consejo',
-          text: 'Si el mismo cliente vuelve a comprar lo mismo, el recordatorio se corre solo a partir de la compra nueva. No se acumulan avisos repetidos del mismo perro.',
+          text: 'Si el mismo cliente vuelve a comprar lo mismo, el recordatorio se corre solo a partir de la compra nueva. No se acumulan avisos repetidos del mismo cliente.',
         },
       ],
     },
@@ -40,7 +40,7 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'De fábrica son **30 días** para todo. Ese número lo cambias en **Configuración > Ventas**, en "Recordar cada venta a los ___ días".',
+          text: 'De fábrica son **30 días** para todo. Ese número lo cambias en **Configuración > Punto de venta**, en "Recordar cada venta a los (días)".',
         },
         {
           type: 'texto',
@@ -147,6 +147,8 @@ export default {
     {
       id: 'vacunas',
       title: 'Vacunas y controles del historial',
+      // La ficha con vacunas es de veterinaria; en clínica todo sale de las ventas.
+      soloModos: ['veterinary'],
       blocks: [
         {
           type: 'texto',
@@ -179,7 +181,7 @@ export default {
     },
     {
       q: 'No quiero recordatorios de nada, solo de lo que yo elija.',
-      a: 'Pon **0** en Configuración > Ventas, en "Recordar cada venta a los ___ días". Ahí solo aparecerán los productos a los que les hayas puesto su propio plazo.',
+      a: 'Pon **0** en Configuración > Punto de venta, en "Recordar cada venta a los (días)". Ahí solo aparecerán los productos a los que les hayas puesto su propio plazo.',
     },
     {
       q: 'El cliente tiene dos mascotas, ¿se mezclan?',

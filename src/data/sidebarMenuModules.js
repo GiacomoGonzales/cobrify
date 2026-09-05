@@ -263,6 +263,30 @@ const VETERINARY = [
   { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
 ]
 
+// Modo Clínica (estética, dental, consultorio). Agenda y Recordatorios llevan
+// el id de veterinaria porque son la misma pantalla. Lo que no figura acá no
+// está en el menú de la clínica: nace corto a propósito.
+const CLINIC = [
+  { id: 'vet-agenda', label: 'Agenda', description: 'Calendario de citas: agendar, atender y cobrar' },
+  { id: 'vet-alerts', label: 'Recordatorios', description: 'A quién le toca volver, según lo que se llevó' },
+  { id: 'public-catalog', label: 'Mi Catálogo Online', description: 'Página pública para compartir y recibir reservas de citas' },
+  { id: 'online-orders', label: 'Pedidos Online', description: 'Bandeja de pedidos que llegan desde tu catálogo digital' },
+  { id: 'cash-register', label: 'Control de Caja', description: 'Apertura y cierre de caja diario' },
+  { id: 'quotations', label: 'Cotizaciones', description: 'Presupuestos de tratamiento' },
+  { id: 'sellers', label: 'Profesionales', description: 'Quién atiende cada cita y sus comisiones' },
+  { id: 'promotions', label: 'Promociones', description: 'Tarjeta de sellos, combos y cupones de descuento' },
+  { id: 'inventory', label: 'Inventario', description: 'Control de stock de productos' },
+  { id: 'stock-movements', label: 'Movimientos', description: 'Historial de entradas y salidas' },
+  { id: 'purchases', label: 'Compras', description: 'Registro de compras' },
+  { id: 'suppliers', label: 'Proveedores', description: 'Listado de proveedores' },
+  { id: 'reports', label: 'Reportes', description: 'Estadísticas y análisis' },
+  { id: 'expenses', label: 'Gastos', description: 'Control de gastos del negocio' },
+  { id: 'cash-flow', label: 'Flujo de Caja', description: 'Liquidez total del negocio' },
+  { id: 'accounting', label: 'Contabilidad', description: 'Control de comprobantes electrónicos SUNAT' },
+  { id: 'attendance', label: 'Personal', description: 'Directorio, asistencia y datos de los empleados' },
+  { id: 'complaints', label: 'Libro de Reclamos', description: 'Quejas y reclamaciones de clientes' },
+]
+
 // Modo Préstamos: el menú es mínimo a propósito (ver `lendingMenuItems` en el
 // Sidebar): Préstamos, Clientes, Control de Caja y Configuración. Lo único que
 // tiene sentido apagar es la caja — sin Clientes no hay a quién prestarle.
@@ -282,6 +306,7 @@ const MENU_MODULE_GROUPS = {
   transport: [{ items: TRANSPORT }],
   logistics: [{ items: LOGISTICS }],
   veterinary: [{ items: VETERINARY }],
+  clinic: [{ items: CLINIC }],
   lending: [{ items: LENDING }],
 }
 

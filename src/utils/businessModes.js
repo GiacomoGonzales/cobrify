@@ -46,6 +46,7 @@ export const MODOS_NEGOCIO = [
   { id: 'restaurant', nombre: 'Restaurante' },
   { id: 'pharmacy', nombre: 'Farmacia' },
   { id: 'veterinary', nombre: 'Veterinaria' },
+  { id: 'clinic', nombre: 'Clínica' },
   { id: 'hotel', nombre: 'Hotel' },
   { id: 'transport', nombre: 'Transporte' },
   { id: 'logistics', nombre: 'Logística' },
@@ -56,3 +57,36 @@ export const MODOS_NEGOCIO = [
 /** El nombre de un modo, con el id como respaldo si aparece uno desconocido. */
 export const nombreModo = (id) =>
   MODOS_NEGOCIO.find((m) => m.id === id)?.nombre || id || '—'
+
+/**
+ * ¿Este negocio ATIENDE CON CITA?
+ *
+ * Decide si la Agenda está en el menú y si el catálogo online puede recibir
+ * reservas. Veterinaria y Clínica la traen de fábrica; General la enciende
+ * con `appointmentsEnabled`, porque la mayoría de las tiendas no agenda nada.
+ *
+ * El mismo criterio vive en el servidor, en functions/booking/publicAgenda.js:
+ * la function pública no puede importar esto, así que si cambia acá, cambia
+ * allá. Antes estaba copiado en el Sidebar y en Configuración > Catálogo, y
+ * el modo Clínica lo habría tenido que agregar en tres lugares.
+ *
+ * @param {string} businessMode
+ * @param {object} [businessSettings]
+ * @returns {boolean}
+ */
+export const atiendeConCita = (businessMode, businessSettings) =>
+  businessMode === 'veterinary' ||
+  businessMode === 'clinic' ||
+  (businessMode === 'retail' && businessSettings?.appointmentsEnabled === true)
+
+/**
+ * ¿Este rubro RECUERDA sus servicios? El baño al mes, la limpieza facial a
+ * los treinta días. Gobierna el plazo por defecto de Configuración > Punto de
+ * venta y el campo "Recordar servicio (días)" de la ficha del producto: los
+ * dos alimentan la pantalla de Recordatorios, que solo está en estos menús.
+ *
+ * @param {string} businessMode
+ * @returns {boolean}
+ */
+export const recuerdaServicios = (businessMode) =>
+  businessMode === 'veterinary' || businessMode === 'clinic'

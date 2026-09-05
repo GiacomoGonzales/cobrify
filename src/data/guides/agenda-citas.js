@@ -1,5 +1,5 @@
 /**
- * GUÍA DE USO: Agenda de Citas (veterinaria y modo General con la agenda activada)
+ * GUÍA DE USO: Agenda de Citas (veterinaria, clínica y modo General con la agenda activada)
  *
  * Auditada contra src/pages/VeterinaryAgenda.jsx el 17/08/2026, el mismo día
  * que se agregó "Agendar cita" desde la propia agenda (antes solo se podía
@@ -17,6 +17,8 @@ export default {
     {
       id: 'activar',
       title: 'Activarla en modo General',
+      // Solo General la tiene apagada: en veterinaria y clínica viene de fábrica.
+      soloModos: ['retail'],
       requiereOpcion: {
         flag: 'appointmentsEnabled',
         nombre: 'Agenda de Citas',
@@ -27,7 +29,7 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'En veterinaria la agenda viene de fábrica. En los demás rubros está apagada, porque la mayoría de los negocios no atiende con cita. Si el tuyo sí (consultorio, podología, estética, taller, asesoría), enciéndela y aparece como una página más en el menú.',
+          text: 'En veterinaria y en clínica la agenda viene de fábrica. En los demás rubros está apagada, porque la mayoría de los negocios no atiende con cita. Si el tuyo sí (consultorio, podología, estética, taller, asesoría), enciéndela y aparece como una página más en el menú.',
         },
         {
           type: 'pasos',

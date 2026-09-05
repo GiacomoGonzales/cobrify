@@ -78,12 +78,15 @@ import {
   HandCoins,
   Gift,
   FileSpreadsheet,
+  // Iconos para modo clinica
+  Sparkles,
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
 import { esDominioReseller } from '@/utils/resellerDomain'
 import { prefijoDeRuta } from '@/utils/demoRoutes'
+import { atiendeConCita } from '@/utils/businessModes'
 import VersionApp from '@/components/VersionApp'
 
 function Sidebar() {
@@ -2037,6 +2040,234 @@ function Sidebar() {
     },
   ]
 
+  // === MODO CLÍNICA (estética, dental, consultorio) ===
+  // Nació para una clínica estética que venía usando General. Es el menú de
+  // veterinaria sin mascotas ni lotes y con el vocabulario del rubro: el que
+  // viene a la cita es el paciente, lo que se vende es el tratamiento y quien
+  // atiende es el profesional. Las páginas son las de siempre —Clientes,
+  // Productos, Vendedores— con otro nombre en el menú; por eso los pageId no
+  // cambian y los permisos de un sub-usuario siguen valiendo.
+  //
+  // Corto a propósito: lo que una clínica no usa se queda fuera, en vez de
+  // nacer visible y tener que apagarse desde Configuración > Módulos.
+  const clinicMenuItems = [
+    {
+      path: '/dashboard',
+      icon: LayoutDashboard,
+      label: 'Dashboard',
+      pageId: 'dashboard',
+    },
+    // Misma pantalla que la agenda veterinaria, con URL propia: una clínica
+    // estética no tiene por qué ver "veterinaria" en su navegador.
+    {
+      path: '/agenda',
+      icon: Calendar,
+      label: 'Agenda',
+      pageId: 'vet-agenda',
+      menuId: 'vet-agenda',
+    },
+    {
+      path: '/clientes',
+      icon: Users,
+      label: 'Pacientes',
+      pageId: 'customers',
+    },
+    {
+      path: '/productos',
+      icon: Sparkles,
+      label: 'Tratamientos y productos',
+      pageId: 'products',
+    },
+    {
+      path: '/pos',
+      icon: ShoppingCart,
+      label: 'Punto de Venta',
+      badge: 'POS',
+      pageId: 'pos',
+    },
+    {
+      path: '/facturas',
+      icon: FileText,
+      label: 'Ventas',
+      pageId: 'invoices',
+    },
+    {
+      path: '/caja',
+      icon: Wallet,
+      label: 'Control de Caja',
+      pageId: 'cash-register',
+      menuId: 'cash-register',
+    },
+    {
+      path: '/recordatorios',
+      icon: Bell,
+      label: 'Recordatorios',
+      pageId: 'vet-alerts',
+      menuId: 'vet-alerts',
+    },
+    {
+      path: '/configuracion?tab=catalogo',
+      icon: Globe,
+      label: 'Mi Catálogo Online',
+      pageId: 'settings',
+      menuId: 'public-catalog',
+      activePathMatch: '/configuracion',
+    },
+    {
+      path: '/pedidos-online',
+      icon: ShoppingBag,
+      label: 'Pedidos Online',
+      pageId: 'online-orders',
+      menuId: 'online-orders',
+    },
+    // Presupuestos de tratamiento: la pantalla se llama Cotizaciones y el
+    // menú también, para que la guía y el botón digan lo mismo.
+    {
+      path: '/cotizaciones',
+      icon: FileCheck,
+      label: 'Cotizaciones',
+      pageId: 'quotations',
+      menuId: 'quotations',
+    },
+
+    // === GRUPO: Inventario y compras (cremas, ampollas, lo que sí tiene stock) ===
+    {
+      groupId: 'inventario',
+      icon: Package,
+      label: 'Inventario y compras',
+      children: [
+        {
+          path: '/inventario',
+          icon: ClipboardList,
+          label: 'Inventario',
+          pageId: 'inventory',
+          menuId: 'inventory',
+        },
+        {
+          path: '/movimientos',
+          icon: History,
+          label: 'Movimientos',
+          pageId: 'stock-movements',
+          menuId: 'stock-movements',
+        },
+        {
+          path: '/compras',
+          icon: ShoppingBasket,
+          label: 'Compras',
+          pageId: 'purchases',
+          menuId: 'purchases',
+        },
+        {
+          path: '/proveedores',
+          icon: Truck,
+          label: 'Proveedores',
+          pageId: 'suppliers',
+          menuId: 'suppliers',
+        },
+      ],
+    },
+
+    // === GRUPO: Equipo (profesionales + asistencia) ===
+    {
+      groupId: 'equipo',
+      icon: Briefcase,
+      label: 'Equipo',
+      children: [
+        {
+          path: '/vendedores',
+          icon: Stethoscope,
+          label: 'Profesionales',
+          pageId: 'sellers',
+          menuId: 'sellers',
+        },
+        ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+          ? [{
+              path: '/asistencia',
+              icon: UserCheck,
+              label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
+              menuId: 'attendance',
+              pageId: 'attendance',
+            }]
+          : []),
+        ...((!isBusinessOwner && !isAdmin)
+          ? [{
+              path: '/mi-horario',
+              icon: Calendar,
+              label: 'Mi Horario',
+              menuId: 'my-schedule',
+            }]
+          : []),
+      ],
+    },
+
+    // === GRUPO: Reportes & Finanzas ===
+    {
+      groupId: 'finanzas',
+      icon: BarChart3,
+      label: 'Reportes & Finanzas',
+      children: [
+        {
+          path: '/reportes',
+          icon: BarChart3,
+          label: 'Reportes',
+          pageId: 'reports',
+          menuId: 'reports',
+        },
+        {
+          path: '/gastos',
+          icon: Receipt,
+          label: 'Gastos',
+          pageId: 'expenses',
+          menuId: 'expenses',
+        },
+        {
+          path: '/flujo-caja',
+          icon: TrendingUp,
+          label: 'Flujo de Caja',
+          pageId: 'cash-flow',
+          menuId: 'cash-flow',
+        },
+        {
+          path: '/contabilidad',
+          icon: FileCheck,
+          label: 'Contabilidad',
+          pageId: 'accounting',
+          menuId: 'accounting',
+        },
+      ],
+    },
+
+    // === GRUPO: Otros ===
+    {
+      groupId: 'otros',
+      icon: BookOpen,
+      label: 'Otros',
+      children: [
+        {
+          path: '/promociones',
+          icon: Gift,
+          label: 'Promociones',
+          pageId: 'promotions',
+          menuId: 'promotions',
+        },
+        {
+          path: '/reclamos',
+          icon: BookOpen,
+          label: 'Libro de Reclamos',
+          pageId: 'complaints',
+          menuId: 'complaints',
+        },
+      ],
+    },
+
+    {
+      path: '/configuracion',
+      icon: Settings,
+      label: 'Configuración',
+      pageId: 'settings',
+    },
+  ]
+
   // === MODO PRÉSTAMOS (lending): menú mínimo a propósito ===
   // El negocio PRESTA dinero: sin POS, sin productos, sin inventario. La
   // cartera es la página central; clientes y caja se reutilizan tal cual.
@@ -2084,6 +2315,8 @@ function Sidebar() {
             ? logisticsMenuItems
             : businessMode === 'veterinary'
               ? veterinaryMenuItems
+              : businessMode === 'clinic'
+                ? clinicMenuItems
               : businessMode === 'lending'
                 ? lendingMenuItems
               : (businessMode === 'retail' || businessMode === 'transport')
@@ -2188,8 +2421,9 @@ function Sidebar() {
       if (businessSettings?.serviciosEnabled !== true && !saltarFiltros) return false
     }
     if (item.requiresAppointments) {
-      const appointmentsEnabled = businessSettings?.appointmentsEnabled === true
-      if (!appointmentsEnabled && !saltarFiltros) return false
+      // El mismo criterio con el que Configuracion > Catalogo ofrece las
+      // reservas online: si la agenda no esta en el menu, tampoco se reserva.
+      if (!atiendeConCita(businessMode, businessSettings) && !saltarFiltros) return false
     }
     if (item.businessOwnerOnly && !isBusinessOwner) return false
     if (item.hideInDemo && isDemoMode) return false

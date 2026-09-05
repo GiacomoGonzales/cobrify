@@ -199,6 +199,7 @@ export default function Modulos() {
             <option value="restaurant">Restaurante — Mesas, mozos, órdenes, cocina, menú, caja</option>
             <option value="pharmacy">Farmacia — Medicamentos, laboratorios, lotes, alertas de vencimiento</option>
             <option value="veterinary">Veterinaria — Pacientes, servicios, medicamentos, control de lotes</option>
+            <option value="clinic">Clínica — Agenda de citas, pacientes, tratamientos y reservas online (estética, dental, consultorio)</option>
             <option value="lending">Préstamos — Cartera de préstamos a clientes, cuotas e intereses</option>
             <option value="hotel">Hotelería — Habitaciones, reservas, check-in/out, housekeeping</option>
             <option value="transport">Transporte — Vehículos, rutas, servicios de transporte</option>

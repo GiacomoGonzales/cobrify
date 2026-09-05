@@ -213,7 +213,7 @@ function calcularAlertas(subsSnap) {
 }
 
 const NOMBRE_METODO = { qpse: 'QPse', sunat_direct: 'SUNAT directo', none: 'Sin configurar' }
-const NOMBRE_MODO = { retail: 'Retail', restaurant: 'Restaurante', pharmacy: 'Farmacia', real_estate: 'Inmobiliaria', transport: 'Transporte', hotel: 'Hotel', veterinary: 'Veterinaria', logistics: 'Logística', lending: 'Préstamos', unknown: 'No definido' }
+const NOMBRE_MODO = { retail: 'Retail', restaurant: 'Restaurante', pharmacy: 'Farmacia', real_estate: 'Inmobiliaria', transport: 'Transporte', hotel: 'Hotel', veterinary: 'Veterinaria', clinic: 'Clínica', logistics: 'Logística', lending: 'Préstamos', unknown: 'No definido' }
 
 function calcularAnalytics(subsSnap, negocios) {
   const emissionMethods = {}

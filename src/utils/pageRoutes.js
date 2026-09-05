@@ -58,6 +58,9 @@ export const routeToPageId = {
   '/app/nota-debito': 'invoices',
   '/app/alertas-veterinaria': 'vet-alerts',
   '/app/agenda-veterinaria': 'vet-agenda',
+  // Modo clinica: las mismas dos pantallas con URL propia.
+  '/app/agenda': 'vet-agenda',
+  '/app/recordatorios': 'vet-alerts',
   '/app/contabilidad': 'accounting',
   '/app/asistencia': 'attendance',
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, memo } from 'react'
-import { Bell, User, LogOut, Menu, Download, ChevronDown, Check, Store, UtensilsCrossed, Pill, BedDouble, PawPrint, Truck, HardHat, Home, LayoutGrid, HelpCircle, HandCoins } from 'lucide-react'
+import { Bell, User, LogOut, Menu, Download, ChevronDown, Check, Store, UtensilsCrossed, Pill, BedDouble, PawPrint, Truck, HardHat, Home, LayoutGrid, HelpCircle, HandCoins, Stethoscope } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
@@ -19,6 +19,7 @@ const MODE_META = {
   pharmacy: { label: 'Farmacia', icon: Pill },
   hotel: { label: 'Hotel', icon: BedDouble },
   veterinary: { label: 'Veterinaria', icon: PawPrint },
+  clinic: { label: 'Clínica', icon: Stethoscope },
   transport: { label: 'Transporte', icon: Truck },
   logistics: { label: 'Logística', icon: HardHat },
   real_estate: { label: 'Inmobiliaria', icon: Home },

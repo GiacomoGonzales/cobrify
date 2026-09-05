@@ -47,6 +47,7 @@ import CatalogThemePreview from '@/components/CatalogThemePreview'
 import { CATALOG_THEMES, getCatalogThemesList } from '@/themes/catalogThemes'
 import Button from '@/components/ui/Button'
 import { uploadImage } from '@/services/imageUploadService'
+import { atiendeConCita } from '@/utils/businessModes'
 import {
   compressForLogoSquare,
   compressForLogoLandscape,
@@ -74,7 +75,6 @@ export default function Catalogo() {
   // consulta (el logo como respaldo del suyo, la agenda para saber si puede
   // ofrecer reservas) pero nunca los escribe.
   const logoUrl = businessSettings?.logoUrl || ''
-  const appointmentsEnabled = businessSettings?.appointmentsEnabled || false
 
   // Preview de tema del catálogo
   const [previewThemeId, setPreviewThemeId] = useState(null)
@@ -2263,11 +2263,11 @@ export default function Catalogo() {
                   </div>
                   <div className="px-5 py-5 space-y-5">
                   {/* Reservas de citas desde el catalogo. Solo para los modos que
-                      tienen agenda: veterinaria (de fabrica) y General con la
-                      agenda activada en el menu. El horario que se define aca es el
-                      que el SERVIDOR usa para validar cada reserva publica — el
-                      catalogo solo lo pinta. */}
-                  {(businessMode === 'veterinary' || (businessMode === 'retail' && appointmentsEnabled)) && (
+                      tienen agenda (atiendeConCita: veterinaria y clinica de
+                      fabrica, General con la agenda activada en el menu). El
+                      horario que se define aca es el que el SERVIDOR usa para
+                      validar cada reserva publica — el catalogo solo lo pinta. */}
+                  {atiendeConCita(businessMode, businessSettings) && (
                     <div>
                       <h3 className="text-base font-semibold text-gray-900 mb-1">Reservas de citas</h3>
                       <p className="text-sm text-gray-600 mb-4">

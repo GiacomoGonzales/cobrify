@@ -214,6 +214,8 @@ const RUTAS_DEMO = (
               <Route path="alertas-vencimiento" element={<ExpiryAlerts />} />
               <Route path="laboratorios" element={<Laboratories />} />
               <Route path="agenda-veterinaria" element={<VeterinaryAgenda />} />
+              <Route path="agenda" element={<VeterinaryAgenda />} />
+              <Route path="recordatorios" element={<VeterinaryAlerts />} />
               <Route path="certificados" element={<Certificates />} />
               <Route path="prestamos" element={<Loans />} />
               <Route path="prestamos-cartera" element={<LendingPortfolio />} />
@@ -658,6 +660,10 @@ function App() {
               {/* Rutas de modo veterinaria */}
               <Route path="agenda-veterinaria" element={<VeterinaryAgenda />} />
               <Route path="alertas-veterinaria" element={<VeterinaryAlerts />} />
+              {/* Modo clinica: las mismas dos pantallas con una URL sin
+                  "veterinaria" (una clinica estetica no tiene por que verla). */}
+              <Route path="agenda" element={<VeterinaryAgenda />} />
+              <Route path="recordatorios" element={<VeterinaryAlerts />} />
 
               {/* Rutas de administración legacy eliminadas - usar /app/admin/dashboard */}
             </Route>

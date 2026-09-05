@@ -52,6 +52,7 @@ import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import { formatCurrency, matchesPrebuilt } from '@/lib/utils'
 import { filtrarVendibles } from '@/utils/productSale'
+import { recuerdaServicios } from '@/utils/businessModes'
 import { buildProductHaystack } from '@/utils/productSearch'
 import { getProducts, getProductCategories } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
@@ -269,7 +270,8 @@ export default function PuntoDeVenta() {
   const { guardar, guardando } = useGuardado()
 
   const esRestaurante = businessMode === 'restaurant'
-  const esVeterinaria = businessMode === 'veterinary'
+  // Veterinaria y clinica recuerdan sus servicios: el plazo por defecto vive aca.
+  const conRecordatorios = recuerdaServicios(businessMode)
   const esFarmacia = businessMode === 'pharmacy'
 
   // ── Estado ──────────────────────────────────────────────────────────────────
@@ -565,7 +567,7 @@ export default function PuntoDeVenta() {
       payload.customOrderSources = cfg.customOrderSources
       payload.defaultDeliveryFee = Math.max(0, Math.round((Number(cfg.defaultDeliveryFee) || 0) * 100) / 100)
     }
-    if (esVeterinaria) {
+    if (conRecordatorios) {
       payload.vetReminderDefaultDays = Number(cfg.vetReminderDefaultDays) || 0
     }
     await guardar(payload, 'Punto de venta guardado')
@@ -1652,14 +1654,14 @@ export default function PuntoDeVenta() {
             </>
           )}
 
-          {/* ══ Veterinaria ════════════════════════════════════════════════ */}
-          {/* Solo donde hay pacientes: el recordatorio se guarda en la ficha del cliente. */}
-          {esVeterinaria && (
+          {/* ══ Recordatorios ══════════════════════════════════════════════ */}
+          {/* Solo en los rubros que recuerdan sus servicios: veterinaria y clinica. */}
+          {conRecordatorios && (
             <>
               <Separador />
               <Seccion
                 id="veterinaria"
-                titulo="Veterinaria"
+                titulo="Recordatorios"
                 descripcion="Los recordatorios que nacen de cada venta a un cliente registrado."
               >
                 <Campo

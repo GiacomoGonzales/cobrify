@@ -40,7 +40,11 @@ import {
 const TOPE_FICHAS_AUTOMATICAS = 250
 
 export default function VeterinaryAlerts() {
-  const { user, getBusinessId, isDemoMode, businessSettings } = useAppContext()
+  const { user, getBusinessId, isDemoMode, businessSettings, businessMode } = useAppContext()
+  // Las vacunas y controles de la ficha son de veterinaria. En clinica la
+  // pantalla es la misma, pero todo sale de las ventas: no hay fichas que
+  // recorrer ni mascota por la que buscar.
+  const esVeterinaria = businessMode === 'veterinary'
   const toast = useToast()
   // Las DOS fuentes viven separadas en el estado y se juntan al renderizar.
   // Así el tramo lento (las fichas de los pacientes) puede llegar después sin
@@ -218,6 +222,7 @@ export default function VeterinaryAlerts() {
       // tope, el barrido no arranca solo: queda detrás de un botón, porque
       // dejar al navegador haciendo miles de consultas de fondo hace que toda
       // la pantalla se sienta trabada aunque las filas ya estén pintadas.
+      if (!esVeterinaria) return
       if (fichasCargadas.current && !recargarFichas) return
       const n = cuantosClientes ?? await contarClientes(businessId)
       setCuantosClientes(n)
@@ -604,7 +609,7 @@ export default function VeterinaryAlerts() {
                   type="text"
                   value={buscaCliente}
                   onChange={(e) => { setBuscaCliente(e.target.value); setPagina(1) }}
-                  placeholder="Nombre, mascota o telefono"
+                  placeholder={esVeterinaria ? 'Nombre, mascota o telefono' : 'Nombre o telefono'}
                   className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
@@ -755,14 +760,13 @@ export default function VeterinaryAlerts() {
                 ? 'Prueba quitando el filtro de servicio o de cliente, o amplía el rango de ventas.'
                 : totalAlerts > 0
                   ? 'Prueba con un periodo más amplio.'
-                  : 'Aquí aparecen las ventas hechas a un cliente con nombre, pasado el plazo que definas en Configuración > Ventas. Las ventas de mostrador, sin cliente, no generan recordatorio.'}
+                  : 'Aquí aparecen las ventas hechas a un cliente con nombre, pasado el plazo que definas en Configuración > Punto de venta. Las ventas de mostrador, sin cliente, no generan recordatorio.'}
             </p>
             {/* El rango de ventas es el que sorprende: un plazo de 365 días no
                 puede aparecer si solo se leyeron 90 días de ventas. */}
             {!hayFiltros && totalAlerts === 0 && rango !== 'todo' && (
               <p className="text-sm text-gray-500 max-w-md mx-auto mt-3">
-                Ojo con <strong>Ventas desde</strong>: si tus plazos son largos (una vacuna
-                anual, por ejemplo), amplía el rango para que esas ventas entren.
+                Ojo con <strong>Ventas desde</strong>: si tus plazos son largos ({esVeterinaria ? 'una vacuna' : 'un tratamiento'} anual, por ejemplo), amplía el rango para que esas ventas entren.
               </p>
             )}
           </CardContent>

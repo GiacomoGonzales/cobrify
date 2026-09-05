@@ -119,6 +119,16 @@ export const GUIDES = [
     load: () => import('./dashboard.js'),
   },
   {
+    id: 'clinica',
+    route: null, // recorrido del modo: no pertenece a una pantalla
+    title: 'Modo Clínica: cómo empezar',
+    category: 'Primeros pasos',
+    description: 'Qué trae el menú de una clínica, cómo cargar tratamientos y profesionales, agendar, cobrar y recibir reservas online.',
+    keywords: 'clinica estetica dental consultorio odontologo podologia paciente pacientes tratamiento tratamientos profesional profesionales agenda cita citas reserva online recordatorio empezar modo cambiar de modo',
+    modos: ['clinic'],
+    load: () => import('./clinica.js'),
+  },
+  {
     id: 'pos',
     route: '/app/pos',
     title: 'Punto de Venta (POS)',
@@ -145,7 +155,7 @@ export const GUIDES = [
     category: 'Ventas',
     description: 'Fidelizar y vender más: tarjeta de sellos digital, combos a precio especial y cupones de descuento.',
     keywords: 'promociones marketing fidelizacion tarjeta de sellos sello premio canjear meta wallet apple google combo precio especial ahorro cupon codigo descuento porcentaje monto vencimiento limite de usos VERANO10 campaña redes whatsapp hora feliz happy hour descuento programado por horario dia oferta 2x1',
-    modos: ['retail', 'restaurant', 'pharmacy', 'veterinary'],
+    modos: ['retail', 'restaurant', 'pharmacy', 'veterinary', 'clinic'],
     load: () => import('./promociones.js'),
   },
   {
@@ -358,7 +368,8 @@ export const GUIDES = [
     category: 'Operación',
     description: 'Agendar citas viendo la disponibilidad del día, atender walk-ins y cobrar cada atención en el POS.',
     keywords: 'agenda cita citas agendar programar calendario disponibilidad horario mascota paciente veterinaria consultorio podologia estetica taller confirmar no asistio walk-in atender ahora en atencion finalizar y cobrar recordatorio whatsapp reservar reservas catalogo online',
-    modos: ['veterinary', 'retail'],
+    modos: ['veterinary', 'retail', 'clinic'],
+    aliases: ['/app/agenda'],
     load: () => import('./agenda-citas.js'),
   },
   {
@@ -367,8 +378,9 @@ export const GUIDES = [
     title: 'Recordatorios',
     category: 'Operación',
     description: 'A quién llamar: lo que cada cliente se llevó y ya toca repetir. Se arma solo con tus ventas.',
-    keywords: 'recordatorio recordatorios alerta alertas veterinaria mascota bano spa desparasitacion alimento vacuna refuerzo vencido proximo hoy semana mes whatsapp frecuencia dias plazo servicio recurrente cada cuanto repetir volver a comprar fidelizar llamar cliente',
-    modos: ['veterinary'],
+    keywords: 'recordatorio recordatorios alerta alertas veterinaria mascota bano spa desparasitacion alimento vacuna refuerzo vencido proximo hoy semana mes whatsapp frecuencia dias plazo servicio recurrente cada cuanto repetir volver a comprar fidelizar llamar cliente clinica estetica tratamiento sesion',
+    modos: ['veterinary', 'clinic'],
+    aliases: ['/app/recordatorios'],
     load: () => import('./recordatorios-veterinaria.js'),
   },
   {
@@ -481,9 +493,10 @@ const normalizePath = (pathname = '') => pathname.replace(/^\/demo[a-z]*(\/|$)/,
  */
 export const getGuideByPath = (pathname) => {
   const path = normalizePath(pathname)
-  return (
-    GUIDES.find(g => g.route && (g.route === path || path.startsWith(g.route + '/'))) || null
-  )
+  const cubre = (ruta) => Boolean(ruta) && (ruta === path || path.startsWith(ruta + '/'))
+  // `aliases`: otras rutas que montan la misma pantalla (la agenda vive en
+  // /app/agenda-veterinaria y, para el modo clinica, tambien en /app/agenda).
+  return GUIDES.find(g => cubre(g.route) || (g.aliases || []).some(cubre)) || null
 }
 
 export const getGuideById = (id) => GUIDES.find(g => g.id === id) || null

@@ -49,7 +49,7 @@ import {
   filterProductsForBranch, filterCategoriesForBranch, getBranchScopeLabel,
 } from '@/utils/branchCatalog'
 import { needsRestock } from '@/utils/stockAlerts'
-import { isPharmaLikeMode } from '@/utils/businessModes'
+import { isPharmaLikeMode, recuerdaServicios } from '@/utils/businessModes'
 import { buildProductIndex, findExistingProduct, indexProduct } from '@/utils/productImportMatch'
 import SunatProductCodeField from '@/components/SunatProductCodeField'
 import { getRateForDate } from '@/services/exchangeRateService'
@@ -8284,9 +8284,9 @@ export default function Products() {
                   helperText="Cuando el stock baje de este valor, aparece en amarillo y se notifica. Vacío = usa el default (3)."
                 />
 
-                {/* Veterinaria: recordatorio del servicio. Solo tiene sentido
-                    en este rubro, que es donde vive la pantalla de Alertas. */}
-                {businessMode === 'veterinary' && (
+                {/* Recordatorio del servicio. Solo en los rubros que tienen la
+                    pantalla de Recordatorios: veterinaria y clinica. */}
+                {recuerdaServicios(businessMode) && (
                   <Input
                     label="Recordar servicio (días)"
                     type="number"

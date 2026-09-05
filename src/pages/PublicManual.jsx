@@ -42,6 +42,7 @@ const NOMBRE_MODO = {
   restaurant: 'Restaurante',
   pharmacy: 'Farmacia',
   veterinary: 'Veterinaria',
+  clinic: 'Clínica',
   hotel: 'Hotelería',
   transport: 'Transporte',
   logistics: 'Logística',
