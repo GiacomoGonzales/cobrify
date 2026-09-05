@@ -2,9 +2,14 @@
  * Galería de ANTES y DESPUÉS de un paciente.
  *
  * Es lo que una clínica estética le enseña a la paciente para que vea el
- * resultado, así que la pantalla gira alrededor de eso: subir la foto con
- * su etiqueta, y **Comparar** una de antes con una de después lado a lado.
- * Lo demás (filtro por tratamiento, ver grande, borrar) es lo mínimo.
+ * resultado, así que la pantalla gira alrededor de eso: apenas hay una foto
+ * de antes y una de después, se ven JUNTAS arriba, sin apretar nada (la más
+ * reciente de después con la de antes del mismo tratamiento). Tocar otra
+ * foto de la galería cambia el lado que le corresponde. Lo demás (filtro
+ * por tratamiento, ver grande, borrar) es lo mínimo.
+ *
+ * Antes había un modo "Comparar" con dos recuadros vacíos que había que
+ * llenar a mano: se veía roto.
  *
  * Vive en dos lugares: como pestaña de la ficha del paciente (Clínica) y,
  * en General con la ficha de atención, como modal desde la lista (el botón
@@ -13,7 +18,7 @@
  * patientPhotoService.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, Loader2, Trash2, X, Columns2, Plus } from 'lucide-react'
+import { Camera, Loader2, Trash2, X, Maximize2, Plus } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Modal from '@/components/ui/Modal'
@@ -42,10 +47,9 @@ export function GaleriaPaciente({ customer, activo = true }) {
   const [preview, setPreview] = useState('')
   const [form, setForm] = useState({ label: 'antes', takenAt: hoyYMD(), treatment: '', note: '' })
   const [subiendo, setSubiendo] = useState(false)
-  // Ver grande / comparar
+  // Ver grande, y qué par se compara (null = el que sale por defecto)
   const [grande, setGrande] = useState(null)
-  const [comparando, setComparando] = useState(false)
-  const [par, setPar] = useState({ antes: null, despues: null })
+  const [eleccion, setEleccion] = useState({ antes: null, despues: null })
   const [borrando, setBorrando] = useState(null)
   const inputRef = useRef(null)
 
@@ -56,8 +60,7 @@ export function GaleriaPaciente({ customer, activo = true }) {
     let vivo = true
     setCargando(true)
     setFiltro('')
-    setComparando(false)
-    setPar({ antes: null, despues: null })
+    setEleccion({ antes: null, despues: null })
     setGrande(null)
     getPatientPhotos(getBusinessId(), customerId)
       .then(lista => { if (vivo) setFotos(lista) })
@@ -75,11 +78,22 @@ export function GaleriaPaciente({ customer, activo = true }) {
     [fotos],
   )
   const visibles = useMemo(
-    () => (filtro ? fotos.filter(f => f.treatment === filtro) : fotos),
+    () => (filtro ? fotos.filter(f => f.treatment === filtro) : fotos)
+      .slice()
+      .sort((a, b) => String(b.takenAt || '').localeCompare(String(a.takenAt || ''))),
     [fotos, filtro],
   )
-  const fotoAntes = fotos.find(f => f.id === par.antes) || null
-  const fotoDespues = fotos.find(f => f.id === par.despues) || null
+  // El par por defecto: la foto de después más reciente y la de antes del
+  // mismo tratamiento (o la de antes más reciente, si no hay del mismo).
+  const porDefecto = useMemo(() => {
+    const despues = visibles.find(f => f.label === 'despues') || null
+    const antes = (despues && visibles.find(f => f.label !== 'despues' && f.treatment === despues.treatment))
+      || visibles.find(f => f.label !== 'despues') || null
+    return { antes, despues }
+  }, [visibles])
+  const fotoAntes = fotos.find(f => f.id === eleccion.antes) || porDefecto.antes
+  const fotoDespues = fotos.find(f => f.id === eleccion.despues) || porDefecto.despues
+  const hayPar = Boolean(fotoAntes && fotoDespues)
 
   const elegirArchivo = (e) => {
     const f = e.target.files?.[0]
@@ -117,7 +131,7 @@ export function GaleriaPaciente({ customer, activo = true }) {
     try {
       await deletePatientPhoto(getBusinessId(), customerId, foto.id)
       setFotos(prev => prev.filter(f => f.id !== foto.id))
-      setPar(prev => ({
+      setEleccion(prev => ({
         antes: prev.antes === foto.id ? null : prev.antes,
         despues: prev.despues === foto.id ? null : prev.despues,
       }))
@@ -131,12 +145,9 @@ export function GaleriaPaciente({ customer, activo = true }) {
     }
   }
 
-  // En modo comparar, tocar una foto la pone en su lado según su etiqueta.
-  const tocarFoto = (foto) => {
-    if (!comparando) { setGrande(foto); return }
-    setPar(prev => foto.label === 'despues'
-      ? { ...prev, despues: prev.despues === foto.id ? null : foto.id }
-      : { ...prev, antes: prev.antes === foto.id ? null : foto.id })
+  // Tocar una foto la pone en su lado de la comparación, según su etiqueta.
+  const elegir = (foto) => {
+    setEleccion(prev => (foto.label === 'despues' ? { ...prev, despues: foto.id } : { ...prev, antes: foto.id }))
   }
 
   const Leyenda = ({ foto }) => (
@@ -156,16 +167,6 @@ export function GaleriaPaciente({ customer, activo = true }) {
             {fotos.length > 0 && <span className="text-gray-400"> · {fotos.length} {fotos.length === 1 ? 'foto' : 'fotos'}</span>}
           </p>
           <div className="flex items-center gap-2">
-            {fotos.length > 1 && (
-              <Button
-                size="sm"
-                variant={comparando ? undefined : 'outline'}
-                onClick={() => { setComparando(v => !v); setPar({ antes: null, despues: null }) }}
-                className="gap-1"
-              >
-                <Columns2 className="w-4 h-4" /> {comparando ? 'Dejar de comparar' : 'Comparar'}
-              </Button>
-            )}
             <input ref={inputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={elegirArchivo} />
             {!archivo && (
               <Button size="sm" onClick={() => inputRef.current?.click()} className="gap-1">
@@ -232,29 +233,32 @@ export function GaleriaPaciente({ customer, activo = true }) {
           </div>
         )}
 
-        {/* Comparación lado a lado */}
-        {comparando && (
+        {/* Antes y después, juntas: aparece solo cuando hay una de cada lado */}
+        {hayPar ? (
           <div className="border border-gray-200 rounded-lg p-3">
-            <p className="text-xs text-gray-500 mb-2">
-              Toca una foto de <strong>Antes</strong> y una de <strong>Después</strong> en la galería para verlas juntas.
-            </p>
             <div className="grid grid-cols-2 gap-3">
-              {[['antes', fotoAntes], ['despues', fotoDespues]].map(([lado, foto]) => (
+              {[['Antes', fotoAntes], ['Después', fotoDespues]].map(([lado, foto]) => (
                 <div key={lado} className="min-w-0">
-                  {foto ? (
-                    <>
-                      <img src={foto.url} alt={nombreEtiqueta(lado)} className="w-full aspect-square object-cover rounded-lg bg-gray-100" />
-                      <div className="mt-1"><Leyenda foto={foto} /></div>
-                    </>
-                  ) : (
-                    <div className="w-full aspect-square rounded-lg border-2 border-dashed border-gray-200 flex items-center justify-center text-sm text-gray-400">
-                      {nombreEtiqueta(lado)}
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => setGrande(foto)}
+                    className="block w-full rounded-lg overflow-hidden bg-gray-100"
+                    title="Ver grande"
+                  >
+                    <img src={foto.url} alt={lado} className="w-full aspect-[4/5] max-h-80 object-cover" />
+                  </button>
+                  <div className="mt-1"><Leyenda foto={foto} /></div>
                 </div>
               ))}
             </div>
+            {visibles.length > 2 && (
+              <p className="text-xs text-gray-500 mt-2">Toca otra foto de la galería para cambiar el lado que le corresponde.</p>
+            )}
           </div>
+        ) : visibles.length > 0 && (
+          <p className="text-xs text-gray-500">
+            Sube una foto de <strong>{visibles.some(f => f.label === 'despues') ? 'Antes' : 'Después'}</strong> y acá se verán juntas.
+          </p>
         )}
 
         {/* Filtro por tratamiento, solo si hay más de uno */}
@@ -283,25 +287,34 @@ export function GaleriaPaciente({ customer, activo = true }) {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {visibles.map(foto => {
-              const elegida = par.antes === foto.id || par.despues === foto.id
+              const enComparacion = foto.id === fotoAntes?.id || foto.id === fotoDespues?.id
               return (
-                <div key={foto.id} className="group relative">
+                <div key={foto.id} className="relative">
                   <button
                     type="button"
-                    onClick={() => tocarFoto(foto)}
+                    onClick={() => (hayPar ? elegir(foto) : setGrande(foto))}
                     className={`block w-full aspect-square rounded-lg overflow-hidden bg-gray-100 ring-offset-2 transition-shadow ${
-                      elegida ? 'ring-2 ring-primary-600' : comparando ? 'hover:ring-2 hover:ring-primary-300' : ''
+                      enComparacion ? 'ring-2 ring-primary-600' : 'hover:ring-2 hover:ring-primary-300'
                     }`}
-                    title={comparando ? 'Elegir para comparar' : 'Ver grande'}
+                    title={hayPar ? 'Usar en la comparación' : 'Ver grande'}
                   >
                     <img src={foto.url} alt={foto.treatment || nombreEtiqueta(foto.label)} loading="lazy" className="w-full h-full object-cover" />
                   </button>
                   <div className="mt-1"><Leyenda foto={foto} /></div>
+                  {/* Siempre visibles: en el celular no hay hover. */}
+                  <button
+                    type="button"
+                    onClick={() => setGrande(foto)}
+                    className="absolute top-1.5 left-1.5 p-1.5 rounded-lg bg-white/90 text-gray-600 hover:text-primary-700 shadow-sm"
+                    title="Ver grande"
+                  >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                  </button>
                   <button
                     type="button"
                     onClick={() => borrar(foto)}
                     disabled={borrando === foto.id}
-                    className="absolute top-1.5 right-1.5 p-1.5 rounded-lg bg-white/90 text-gray-500 hover:text-red-600 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                    className="absolute top-1.5 right-1.5 p-1.5 rounded-lg bg-white/90 text-gray-500 hover:text-red-600 shadow-sm"
                     title="Eliminar foto"
                   >
                     {borrando === foto.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}

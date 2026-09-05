@@ -288,7 +288,7 @@ export default {
             'Presiona **Agregar foto**. En el celular abre la cámara directo.',
             'Marca **Antes** o **Después**, revisa la fecha y escribe el tratamiento (la lista recuerda los que ya usaste).',
             'Presiona **Subir**. La foto se comprime sola antes de guardarse.',
-            'Para verlas juntas, presiona **Comparar** y toca una de Antes y una de Después.',
+            'Apenas hay una foto de Antes y una de Después, se ven juntas arriba de la galería. Toca otra foto para cambiar el lado que le corresponde.',
           ],
         },
         {

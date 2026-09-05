@@ -108,7 +108,7 @@ export default {
             'En la pestaña **Anamnesis** marcas enfermedades, alergias, medicación y hábitos, y presionas **Guardar anamnesis**. La alergia sale en rojo en la lista; embarazo y lactancia, como aviso.',
             'Para cambiar datos de contacto, presiona **Editar**.',
             'Cada visita, **Agregar atención** (en la pestaña Atenciones o al terminar la cita en la Agenda). La más reciente queda primero.',
-            'Las fotos del antes y el después van en la pestaña **Galería**: **Agregar foto**, y **Comparar** para verlas juntas.',
+            'Las fotos del antes y el después van en la pestaña **Galería**: **Agregar foto** con su etiqueta; apenas hay una de cada lado, se ven juntas arriba.',
             '**Agendar cita** abre la Agenda con el paciente ya elegido; **WhatsApp** abre el chat.',
           ],
         },
