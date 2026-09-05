@@ -5,8 +5,8 @@
 #   Uso:  scripts/release-ios.sh <marketingVersion> <buildNumber>
 #   Ej:   scripts/release-ios.sh 4.28.4 54
 #
-# Hace: build web → cap sync ios → sube versión en el pbxproj → archiva →
-#       exporta .ipa firmado para distribución → valida → sube a App Store Connect.
+# Hace: sube la versión (package.json + pbxproj) → build web → cap sync ios →
+#       archiva → exporta .ipa firmado → sube a App Store Connect.
 #
 # Requisitos:
 #   - La API key .p8 en ~/.appstoreconnect/private_keys/AuthKey_<KEY_ID>.p8
@@ -35,17 +35,21 @@ export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 
 [ -f "$P8" ] || { echo "❌ No existe la API key: $P8"; exit 1; }
 
-echo "▶ 1/6  Build web (vite)…"
-npm run build
-
-echo "▶ 2/6  cap sync ios…"
-npx cap sync ios
-
-echo "▶ 3/6  Versión → ${MKT} (build ${BUILD})…"
+# La versión se sube ANTES de compilar: vite lee package.json al compilar y
+# graba el número dentro del bundle (es el que muestra el pie del menú). Si se
+# subiera después, la web saldría con el número anterior.
+echo "▶ 1/6  Versión → ${MKT} (build ${BUILD})…"
+npm version --no-git-tag-version --allow-same-version "$MKT" > /dev/null
 /usr/bin/sed -i '' -E \
   -e "s/MARKETING_VERSION = [^;]+;/MARKETING_VERSION = ${MKT};/g" \
   -e "s/CURRENT_PROJECT_VERSION = [^;]+;/CURRENT_PROJECT_VERSION = ${BUILD};/g" \
   "$PBXPROJ"
+
+echo "▶ 2/6  Build web (vite)…"
+npm run build
+
+echo "▶ 3/6  cap sync ios…"
+npx cap sync ios
 
 echo "▶ 4/6  Archivando…"
 xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Release \

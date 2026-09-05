@@ -3,8 +3,10 @@ import { Capacitor } from '@capacitor/core'
 /**
  * La versión de Cobrify que está corriendo ahora mismo en este navegador.
  *
- * Los tres valores los escribe vite.config.js al compilar, así que cambian con
- * cada push sin que nadie tenga que acordarse de subir un número a mano.
+ * Los tres valores los escribe vite.config.js al compilar. El commit y la fecha
+ * cambian con cada push; el número de versión sale de package.json y lo sube el
+ * script de release de iOS, así que la web dice el mismo número que la app de
+ * la tienda y no uno viejo que nadie recuerda subir.
  *
  * Para qué sirve: cuando un cliente reporta algo raro, lo primero es saber qué
  * versión tiene abierta. Un navegador puede quedarse pegado a una compilación
