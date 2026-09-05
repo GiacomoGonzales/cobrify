@@ -71,6 +71,7 @@ import {
 } from 'recharts'
 import { CHART_COLORS, CHART_MUTED, colorForKey, assignColors, capSeries } from '@/utils/chartColors'
 import { getSaleSeller } from '@/utils/saleSeller'
+import { esDeSucursal } from '@/utils/branchScope'
 import MonthSelect from '@/components/MonthSelect'
 import { getInvoiceCommission, buildSellerIndex, ventaCobrada } from '@/utils/commissions'
 import { getSellers } from '@/services/sellerService'
@@ -668,14 +669,12 @@ export default function Reports() {
         || invoice.sunatStatus === 'voiding' || invoice.sunatStatus === 'voided') {
         return false
       }
-      // Filtrar por sucursal
-      if (filterBranch !== 'all') {
-        if (filterBranch === 'main') {
-          if (invoice.branchId) return false // Solo sucursal principal (sin branchId)
-        } else {
-          if (invoice.branchId !== filterBranch) return false
-        }
-      }
+      // Sucursal: el criterio compartido del selector del header
+      // (utils/branchScope), el mismo que usan Ventas y el Dashboard. Escrito
+      // acá a mano, "Principal" aceptaba SOLO las ventas sin sucursal grabada y
+      // dejaba fuera las que la tienen en 'main': Reportes daba menos que Ventas
+      // para el mismo periodo.
+      if (!esDeSucursal(invoice, filterBranch)) return false
       return true
     })
 
@@ -2437,15 +2436,11 @@ export default function Reports() {
       return movementDate >= periodStart
     }
 
-    // Función para filtrar por sucursal
+    // Función para filtrar por sucursal (mismo criterio compartido que las ventas)
     const filterByBranch = (movement) => {
       // Seguridad (defensa adicional): respetar siempre los permisos de ubicación del usuario.
       if (!canAccess(movement)) return false
-      if (filterBranch === 'all') return true
-      if (filterBranch === 'main') {
-        return !movement.branchId
-      }
-      return movement.branchId === filterBranch
+      return esDeSucursal(movement, filterBranch)
     }
 
     // Filtrar movimientos financieros (Aporte Capital, Venta Activo, Retiro Dueño, etc.)
