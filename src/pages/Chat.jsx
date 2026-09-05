@@ -40,6 +40,7 @@ import { useGrabadora, relojDeGrabacion } from '@/components/chat/grabadoraDeVoz
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { MARCA_CHAT } from '@/utils/dominioChat'
+import { useAvisosDelChat } from '@/hooks/useAvisosDelChat'
 import { useTema } from '@/utils/temaOscuro'
 import BotonTema from '@/components/BotonTema'
 import { Capacitor } from '@capacitor/core'
@@ -94,6 +95,9 @@ export default function Chat() {
   const toast = useToast()
 
   const [conversaciones, setConversaciones] = useState([])
+  // Copia viva para los oyentes del navegador, que no ven el estado de React.
+  const conversacionesRef = useRef([])
+  conversacionesRef.current = conversaciones
   const [cargando, setCargando] = useState(true)
   const [sinPermiso, setSinPermiso] = useState(false)
   const [activaId, setActivaId] = useState(null)
@@ -292,9 +296,31 @@ export default function Chat() {
     reciénAbierta.current = true
     if (!activaId) { setMensajes([]); return undefined }
     const parar = suscribirMensajes(activaId, setMensajes)
-    marcarComoLeida(activaId)
     return parar
   }, [activaId])
+
+  // El contador de la conversacion ABIERTA se limpia siempre, no solo al
+  // entrar: si llega un mensaje mientras uno la esta mirando, el servidor sube
+  // el contador igual y quedaba un "1" sobre algo ya leido (reporte de
+  // Giacomo). Se exige que la pestaña este a la vista: con la ventana de lado
+  // el mensaje NO esta leido, y ahi el contador y el aviso son lo correcto.
+  const abiertaSinLeer = conversaciones.find((c) => c.id === activaId)?.sinLeer || 0
+  useEffect(() => {
+    if (!activaId) return undefined
+    const limpiar = () => {
+      if (document.visibilityState !== 'visible') return
+      if ((conversacionesRef.current.find((c) => c.id === activaId)?.sinLeer || 0) > 0) {
+        marcarComoLeida(activaId)
+      }
+    }
+    limpiar()
+    document.addEventListener('visibilitychange', limpiar)
+    return () => document.removeEventListener('visibilitychange', limpiar)
+  }, [activaId, abiertaSinLeer])
+
+  // Titulo de la pestaña con lo que falta leer, y aviso del sistema cuando
+  // entra un mensaje con la ventana de lado.
+  useAvisosDelChat(conversaciones, activaId, setActivaId)
 
   const irAlFondo = (suave) => {
     const c = contenedorHilo.current
