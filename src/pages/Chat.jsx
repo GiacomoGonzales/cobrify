@@ -100,6 +100,11 @@ export default function Chat() {
   const [mensajes, setMensajes] = useState([])
   const [texto, setTexto] = useState('')
   const [enviando, setEnviando] = useState(false)
+  // Los envios de texto salen DE A UNO y en el orden en que se escribieron.
+  // El compositor no espera —se puede escribir y mandar el siguiente al
+  // instante— pero las peticiones se encadenan: dos en paralelo pueden
+  // llegarle a Meta al reves y el cliente veria los mensajes desordenados.
+  const colaDeEnvios = useRef(Promise.resolve())
   // Mensajes recien enviados que todavia no volvieron por la suscripcion.
   // Sin esto la pantalla queda vacia 2 o 3 segundos entre que uno manda y que
   // el mensaje vuelve del servidor, y se siente como si no hubiera salido.
@@ -580,12 +585,19 @@ export default function Chat() {
     return m.reacciones?.mia || ''
   }
 
-  const handleEnviar = async (e) => {
+  // Mandar NO bloquea el compositor: se puede escribir el siguiente mensaje
+  // mientras el anterior viaja, y mandarlo tambien. Cada envio es
+  // independiente —su propia burbuja provisional, su propia peticion— y la
+  // conversacion los ordena por la hora que les pone el servidor.
+  //
+  // Antes el cuadro se deshabilitaba mientras duraba el envio. Deshabilitar un
+  // campo ademas le quita el foco al navegador, asi que al volver habia que
+  // hacer clic otra vez para seguir escribiendo (reporte de Giacomo).
+  const handleEnviar = (e) => {
     e.preventDefault()
     const limpio = texto.trim()
-    if (!limpio || !activaId || enviando) return
+    if (!limpio || !activaId) return
 
-    setEnviando(true)
     const previo = texto
     const conArchivo = adjuntoGuardado
     const citado = respondiendoA
@@ -608,29 +620,39 @@ export default function Chat() {
       timestamp: { toDate: () => new Date() },
     }])
 
-    try {
-      const idToken = await getAuth().currentUser?.getIdToken()
-      const { waMessageId } = conArchivo
-        ? await enviarArchivoGuardado(activaId, conArchivo, limpio, idToken, citado ? idDeWhatsapp(citado) : null)
-        : await enviarMensaje(activaId, limpio, idToken, citado ? idDeWhatsapp(citado) : null)
-      setPendientes((p) => p.map((m) => (m.id === tempId ? { ...m, waMessageId } : m)))
-    } catch (error) {
-      // Devolver el texto al cuadro: perder lo que uno escribió por un error de
-      // red es la peor forma de enterarse de que algo falló.
-      setPendientes((p) => p.filter((m) => m.id !== tempId))
-      setTexto(previo)
-      setAdjuntoGuardado(conArchivo)
-      setRespondiendoA(citado)
-      toast.error(error.message || 'No se pudo enviar el mensaje')
-    } finally {
-      setEnviando(false)
-      // El boton de enviar se queda con el cursor; devolverlo permite encadenar
-      // mensajes sin volver a hacer clic.
-      if (cuadroTexto.current) cuadroTexto.current.style.height = 'auto'
-      if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
-        cuadroTexto.current?.focus()
-      }
+    // El cuadro vuelve a su alto y recupera el cursor YA, no cuando termine la
+    // red: el boton de enviar se queda con el foco y encadenar mensajes sin
+    // volver a hacer clic es media conversacion.
+    if (cuadroTexto.current) cuadroTexto.current.style.height = 'auto'
+    if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
+      cuadroTexto.current?.focus()
     }
+
+    colaDeEnvios.current = colaDeEnvios.current.then(async () => {
+      try {
+        const idToken = await getAuth().currentUser?.getIdToken()
+        const { waMessageId } = conArchivo
+          ? await enviarArchivoGuardado(activaId, conArchivo, limpio, idToken, citado ? idDeWhatsapp(citado) : null)
+          : await enviarMensaje(activaId, limpio, idToken, citado ? idDeWhatsapp(citado) : null)
+        setPendientes((p) => p.map((m) => (m.id === tempId ? { ...m, waMessageId } : m)))
+      } catch (error) {
+        // Con el cuadro vacio se devuelve el texto: perder lo que uno escribió
+        // por un error de red es la peor forma de enterarse de que algo falló.
+        // Pero si ya se escribió otra cosa —ahora se puede, mientras el anterior
+        // viaja— pisarla seria peor: ahi la burbuja queda marcada como fallida.
+        setTexto((actual) => {
+          if (actual.trim()) {
+            setPendientes((p) => p.map((m) => (m.id === tempId ? { ...m, estado: 'failed' } : m)))
+            return actual
+          }
+          setPendientes((p) => p.filter((m) => m.id !== tempId))
+          setAdjuntoGuardado(conArchivo)
+          setRespondiendoA(citado)
+          return previo
+        })
+        toast.error(error.message || 'No se pudo enviar el mensaje')
+      }
+    })
   }
 
   const handleGrabar = async () => {
@@ -1542,7 +1564,6 @@ export default function Chat() {
                   <button
                     type="button"
                     onClick={() => selectorArchivo.current?.click()}
-                    disabled={enviando}
                     className="p-2.5 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-40"
                     title="Adjuntar imagen o PDF"
                   >
@@ -1553,7 +1574,6 @@ export default function Chat() {
                   <button
                     type="button"
                     onClick={() => selectorCamara.current?.click()}
-                    disabled={enviando}
                     className="p-2.5 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-40"
                     title="Tomar una foto"
                   >
@@ -1699,7 +1719,6 @@ export default function Chat() {
                     }
                   }}
                   placeholder={respuestasRapidas.length ? 'Escribe un mensaje, o / para una respuesta rápida' : 'Escribe un mensaje'}
-                  disabled={enviando}
                   className="flex-1 px-4 py-2.5 bg-gray-100 rounded-2xl text-[14px] focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-60 resize-none leading-5 max-h-[132px]"
                 />
                 )}
@@ -1709,7 +1728,7 @@ export default function Chat() {
                   <button
                     type={grabadora.grabando ? 'button' : 'submit'}
                     onClick={grabadora.grabando ? handleEnviarNota : undefined}
-                    disabled={enviando || (!grabadora.grabando && !texto.trim())}
+                    disabled={!grabadora.grabando && !texto.trim()}
                     className="p-2.5 bg-primary-600 text-white rounded-full hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     aria-label={grabadora.grabando ? 'Enviar la nota de voz' : 'Enviar'}
                   >
@@ -1719,7 +1738,6 @@ export default function Chat() {
                   <button
                     type="button"
                     onClick={handleGrabar}
-                    disabled={enviando}
                     className="p-2.5 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-40"
                     title="Grabar una nota de voz"
                     aria-label="Grabar una nota de voz"
