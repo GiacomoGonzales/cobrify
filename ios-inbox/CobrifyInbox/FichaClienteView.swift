@@ -99,6 +99,11 @@ struct FichaClienteView: View {
             }
 
             Section("Suscripción") {
+                if f.sinSuscripcion {
+                    Label("Sin suscripción: no hay plan, vencimiento ni pagos que mostrar", systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.red)
+                }
                 if f.accessBlocked {
                     VStack(alignment: .leading, spacing: 4) {
                         Label("SUSPENDIDO", systemImage: "lock.fill")
@@ -119,6 +124,9 @@ struct FichaClienteView: View {
                         .foregroundStyle(.red)
                 }
                 LabeledContent("Plan", value: f.planName ?? "—")
+                if f.nuncaVence {
+                    LabeledContent("Vencimiento", value: "Sin vencimiento (cuenta interna)")
+                }
                 if let vence = f.vence {
                     LabeledContent("Vence") {
                         Text(vence, style: .date)

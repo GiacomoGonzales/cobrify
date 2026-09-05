@@ -41,6 +41,11 @@ enum PlanCatalogo {
         guard let id else { return nil }
         return planes.first { $0.id == id }
     }
+
+    /// ¿La cuenta NUNCA vence? Espejo de `nuncaVence` de la web: solo
+    /// Enterprise (cuentas internas) lleva `neverExpires` en el catálogo. La
+    /// fecha y el precio que tenga guardados son restos de antes y confunden.
+    static func nuncaVence(_ id: String?) -> Bool { id == "enterprise" }
 }
 
 struct FichaCliente {
@@ -61,6 +66,10 @@ struct FichaCliente {
     var registradoEl: Date?
     var blockReason: String?
     var blockedAt: Date?
+    /// Cuenta interna: sin vencimiento ni precio pactado.
+    var nuncaVence: Bool = false
+    /// El negocio existe pero su suscripción no: se dice, en vez de rayas.
+    var sinSuscripcion: Bool = false
 
     var vencido: Bool { (diasParaVencer ?? 1) < 0 }
 
@@ -86,11 +95,16 @@ final class FichaStore: ObservableObject {
         error = nil
         let db = Firestore.firestore()
         do {
-            async let subSnap = db.collection("subscriptions").document(businessId).getDocument()
-            async let bizSnap = db.collection("businesses").document(businessId).getDocument()
+            // Del servidor, nunca de la caché: una lectura servida desde la
+            // caché puede devolver la suscripción como inexistente aunque exista
+            // (pasó en la web el 04-sep-2026). Para una ficha de soporte, un
+            // error honesto es mejor que una ficha vacía que parece real.
+            async let subSnap = db.collection("subscriptions").document(businessId).getDocument(source: .server)
+            async let bizSnap = db.collection("businesses").document(businessId).getDocument(source: .server)
             let (sub, biz) = try await (subSnap, bizSnap)
             let s = sub.data() ?? [:]
             let b = biz.data() ?? [:]
+            let interna = PlanCatalogo.nuncaVence(s["plan"] as? String)
             guard sub.exists || biz.exists else {
                 error = "El negocio ya no existe."
                 cargando = false
@@ -103,8 +117,8 @@ final class FichaStore: ObservableObject {
                 email: s["email"] as? String ?? b["email"] as? String,
                 plan: s["plan"] as? String,
                 planName: s["planName"] as? String ?? s["plan"] as? String,
-                vence: (s["currentPeriodEnd"] as? Timestamp)?.dateValue(),
-                renewalPrice: s["renewalPrice"] as? Double ?? (s["renewalPrice"] as? Int).map(Double.init),
+                vence: interna ? nil : (s["currentPeriodEnd"] as? Timestamp)?.dateValue(),
+                renewalPrice: interna ? nil : (s["renewalPrice"] as? Double ?? (s["renewalPrice"] as? Int).map(Double.init)),
                 accessBlocked: s["accessBlocked"] as? Bool ?? false,
                 monthlyPrice: s["monthlyPrice"] as? Double,
                 pagos: ((s["paymentHistory"] as? [[String: Any]]) ?? []).reversed(),
@@ -114,7 +128,9 @@ final class FichaStore: ObservableObject {
                 registradoEl: ((s["createdAt"] as? Timestamp) ?? (s["startDate"] as? Timestamp)
                                ?? (b["createdAt"] as? Timestamp))?.dateValue(),
                 blockReason: s["blockReason"] as? String,
-                blockedAt: (s["blockedAt"] as? Timestamp)?.dateValue()
+                blockedAt: (s["blockedAt"] as? Timestamp)?.dateValue(),
+                nuncaVence: interna,
+                sinSuscripcion: !sub.exists
             )
         } catch {
             self.error = "No se pudo cargar la ficha."
@@ -507,6 +523,7 @@ struct CuentaResumen: Identifiable, Equatable {
     /// Quién la trajo, que es como se agrupan: el reseller o el vendedor.
     var resellerId: String?
     var vendedorId: String?
+    var nuncaVence: Bool = false
 
     var diasParaVencer: Int? {
         guard let vence else { return nil }
@@ -554,11 +571,12 @@ final class GrupoCuentasStore: ObservableObject {
     }
 
     private func leerCuenta(_ id: String) async -> CuentaResumen? {
-        async let sub = db.collection("subscriptions").document(id).getDocument()
-        async let biz = db.collection("businesses").document(id).getDocument()
+        async let sub = db.collection("subscriptions").document(id).getDocument(source: .server)
+        async let biz = db.collection("businesses").document(id).getDocument(source: .server)
         guard let (s, b) = try? await (sub, biz), s.exists || b.exists else { return nil }
         let sd = s.data() ?? [:]
         let bd = b.data() ?? [:]
+        let interna = PlanCatalogo.nuncaVence(sd["plan"] as? String)
         return CuentaResumen(
             id: id,
             nombre: bd["businessName"] as? String ?? sd["businessName"] as? String ?? "(sin nombre)",
@@ -567,10 +585,11 @@ final class GrupoCuentasStore: ObservableObject {
             planName: PlanCatalogo.plan(sd["plan"] as? String)?.nombre
                 ?? sd["planName"] as? String
                 ?? sd["plan"] as? String,
-            vence: (sd["currentPeriodEnd"] as? Timestamp)?.dateValue(),
+            vence: interna ? nil : (sd["currentPeriodEnd"] as? Timestamp)?.dateValue(),
             accessBlocked: sd["accessBlocked"] as? Bool ?? false,
             resellerId: sd["resellerId"] as? String,
-            vendedorId: sd["vendedorId"] as? String
+            vendedorId: sd["vendedorId"] as? String,
+            nuncaVence: interna
         )
     }
 

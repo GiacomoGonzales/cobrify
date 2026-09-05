@@ -175,6 +175,7 @@ private struct FilaCuenta: View {
     }
     private var detalle: String {
         if cuenta.accessBlocked { return "Suspendida" }
+        if cuenta.nuncaVence { return "\(cuenta.planName ?? "—") · sin vencimiento" }
         guard let d = cuenta.diasParaVencer else { return cuenta.planName ?? "—" }
         let plan = cuenta.planName ?? "—"
         if d < 0 { return "\(plan) · venció hace \(-d) día\(d == -1 ? "" : "s")" }
