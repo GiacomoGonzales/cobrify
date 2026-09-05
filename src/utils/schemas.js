@@ -388,6 +388,23 @@ export const productSchema = z.object({
     ])
     .nullable()
     .optional(),
+  // "Sesiones incluidas": el servicio se vende por paquete (6 sesiones). Al
+  // cobrarlo a un paciente registrado, el POS deja el paquete en su ficha.
+  // Vacío, 0 o 1 = no es paquete.
+  sessions: z
+    .union([
+      z.number().int().nonnegative('Las sesiones no pueden ser negativas'),
+      z
+        .string()
+        .transform(val => {
+          if (val === '' || val === null || val === undefined) return null
+          const num = parseInt(val)
+          return isNaN(num) || num <= 1 ? null : num
+        })
+        .nullable(),
+    ])
+    .nullable()
+    .optional(),
   noStock: z.boolean().optional(),
   marca: z.string().optional(),
   brandId: z.string().optional().nullable(), // Marca administrada (ID). Sin esto, zodResolver descartaba brandId del form al guardar.

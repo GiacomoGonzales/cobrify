@@ -56,10 +56,12 @@ import {
   MapPin,
   ClipboardList,
   ClipboardCheck,
+  Package,
 } from 'lucide-react'
 import { filtrarPorSucursal, nombreDeSucursal, sucursalParaGuardar } from '@/utils/branchScope'
 import { tieneFichaDeAtencion } from '@/utils/businessModes'
 import { registrarAtencionDesdeCita } from '@/services/attentionService'
+import { getPackages, usarSesion, estaActivo, sesionesDisponibles } from '@/services/packageService'
 import GuideLink from '@/components/guide/GuideLink'
 import { getSellers } from '@/services/sellerService'
 
@@ -91,6 +93,13 @@ export default function VeterinaryAgenda() {
     service: '', treatment: '', recommendations: '', specialist: '', nextControlDate: '', nextControlTime: '',
   })
   const [savingAtencion, setSavingAtencion] = useState(false)
+
+  // Paquetes de sesiones ACTIVOS de los pacientes en atención, por cliente.
+  // La tarjeta muestra "Usar sesión del paquete" solo si le quedan sesiones:
+  // así la cita se completa sin volver a cobrar lo que ya se pagó.
+  const [paquetesPorCliente, setPaquetesPorCliente] = useState({})
+  const [usoDe, setUsoDe] = useState(null) // cita que va a consumir una sesión
+  const [usandoSesion, setUsandoSesion] = useState(null)
 
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [currentMonth, setCurrentMonth] = useState(new Date())
@@ -406,6 +415,44 @@ export default function VeterinaryAgenda() {
     navigate('/app/pos')
   }
 
+  // Los paquetes con sesiones de cada paciente en atención (una lectura por
+  // paciente; son los de la tarde, no el padrón entero).
+  const cargarPaquetesDe = async (appts) => {
+    const ids = [...new Set(appts.map(a => a.customerId).filter(Boolean))]
+    if (ids.length === 0) { setPaquetesPorCliente({}); return }
+    const businessId = getBusinessId()
+    const entradas = await Promise.all(ids.map(async (id) => {
+      try {
+        return [id, (await getPackages(businessId, id)).filter(estaActivo)]
+      } catch (e) {
+        return [id, []]
+      }
+    }))
+    setPaquetesPorCliente(Object.fromEntries(entradas))
+  }
+
+  // Descontar una sesión y dar la cita por completada, sin comprobante.
+  const confirmarUsoDeSesion = async (paquete) => {
+    if (!usoDe) return
+    setUsandoSesion(paquete.id)
+    try {
+      const businessId = getBusinessId()
+      const r = await usarSesion(businessId, usoDe.customerId, paquete.id, { appointmentId: usoDe.id })
+      await completeAppointment(businessId, usoDe.id, null)
+      await updateAppointment(businessId, usoDe.id, { packageId: paquete.id, packageName: paquete.productName, paidWithPackage: true })
+      toast.success(r.yaUsada
+        ? 'Esta cita ya había descontado su sesión. Cita completada.'
+        : `Sesión descontada: quedan ${sesionesDisponibles(r)} de ${r.sessionsTotal}. Cita completada.`)
+      setUsoDe(null)
+      loadInProgress()
+    } catch (e) {
+      console.error('Error al usar la sesión:', e)
+      toast.error(e?.message || 'No se pudo usar la sesión')
+    } finally {
+      setUsandoSesion(null)
+    }
+  }
+
   // ===== Tablero "En atención" + walk-in (atender ahora) =====
   const loadInProgress = async () => {
     if (!user?.uid || isDemoMode) return
@@ -416,7 +463,9 @@ export default function VeterinaryAgenda() {
       const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0)
       const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
       const appts = await getAppointmentsByDateRange(businessId, start, end)
-      setInProgress(filtrarPorSucursal(appts, branchScope).filter(a => a.status === 'in_progress'))
+      const enAtencion = filtrarPorSucursal(appts, branchScope).filter(a => a.status === 'in_progress')
+      setInProgress(enAtencion)
+      cargarPaquetesDe(enAtencion)
     } catch (e) {
       console.error('Error al cargar en atención:', e)
     }
@@ -964,7 +1013,15 @@ export default function VeterinaryAgenda() {
                           : <><ClipboardList className="w-4 h-4" /> Registrar atención</>}
                       </Button>
                     )}
-                    <Button size="sm" className={`w-full gap-1 ${conFicha ? 'mt-2' : 'mt-3'}`} onClick={() => handleComplete(appt)}>
+                    {(paquetesPorCliente[appt.customerId] || []).length > 0 && (
+                      <Button size="sm" variant="outline" className="w-full mt-2 gap-1" onClick={() => setUsoDe(appt)}>
+                        <Package className="w-4 h-4" /> Usar sesión del paquete
+                        <span className="text-xs text-gray-500">
+                          ({paquetesPorCliente[appt.customerId].reduce((s, p) => s + sesionesDisponibles(p), 0)} disp.)
+                        </span>
+                      </Button>
+                    )}
+                    <Button size="sm" className={`w-full gap-1 ${conFicha || (paquetesPorCliente[appt.customerId] || []).length > 0 ? 'mt-2' : 'mt-3'}`} onClick={() => handleComplete(appt)}>
                       <ShoppingCart className="w-4 h-4" /> Finalizar y Cobrar
                     </Button>
                   </CardContent>
@@ -1179,6 +1236,31 @@ export default function VeterinaryAgenda() {
                   <ShoppingCart className="w-4 h-4" /> Guardar y cobrar
                 </Button>
               )}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Usar una sesión de un paquete: completa la cita sin pasar por el POS */}
+      <Modal isOpen={!!usoDe} onClose={() => !usandoSesion && setUsoDe(null)} title="Usar sesión del paquete">
+        {usoDe && (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">
+              La cita de <strong>{usoDe.customerName}</strong> se completa descontando una sesión, sin cobrar en el Punto de Venta.
+            </p>
+            {(paquetesPorCliente[usoDe.customerId] || []).map(p => (
+              <div key={p.id} className="flex items-center justify-between gap-3 border border-gray-200 rounded-lg p-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 truncate">{p.productName}</p>
+                  <p className="text-xs text-gray-500">{sesionesDisponibles(p)} de {p.sessionsTotal} disponibles</p>
+                </div>
+                <Button size="sm" onClick={() => confirmarUsoDeSesion(p)} disabled={!!usandoSesion} className="gap-1 flex-shrink-0">
+                  {usandoSesion === p.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Package className="w-4 h-4" />} Usar 1 sesión
+                </Button>
+              </div>
+            ))}
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => setUsoDe(null)} disabled={!!usandoSesion}>Volver</Button>
             </div>
           </div>
         )}

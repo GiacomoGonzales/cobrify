@@ -1112,6 +1112,7 @@ export default function Products() {
       minStock: product.minStock != null ? product.minStock.toString() : '',
       reminderDays: product.reminderDays != null ? product.reminderDays.toString() : '',
       duration: product.duration != null ? product.duration.toString() : '',
+      sessions: product.sessions != null ? product.sessions.toString() : '',
     })
 
     // Cargar códigos de barra adicionales existentes (si los hay)
@@ -1272,6 +1273,7 @@ export default function Products() {
       minStock: product.minStock != null ? product.minStock.toString() : '',
       reminderDays: product.reminderDays != null ? product.reminderDays.toString() : '',
       duration: product.duration != null ? product.duration.toString() : '',
+      sessions: product.sessions != null ? product.sessions.toString() : '',
     })
 
     setIsModalOpen(true)
@@ -1513,6 +1515,12 @@ export default function Products() {
         duration: (data.duration === '' || data.duration == null)
           ? null
           : (Math.max(0, parseInt(data.duration)) || null),
+        // "Sesiones incluidas": el servicio se vende por paquete. Al cobrarlo a
+        // un paciente registrado, el POS deja el paquete en su ficha (ver
+        // packageService). Vacío, 0 o 1 = no es paquete.
+        sessions: (data.sessions === '' || data.sessions == null)
+          ? null
+          : (parseInt(data.sessions) > 1 ? parseInt(data.sessions) : null),
         taxAffectation: taxAffectation, // '10' = Gravado, '20' = Exonerado, '30' = Inafecto (SUNAT Catálogo 07)
         // Código de Producto SUNAT (Catálogo 25). Opcional; se guarda con su
         // descripción para no depender del catálogo al mostrarlo.
@@ -8320,6 +8328,21 @@ export default function Products() {
                     error={errors.duration?.message}
                     {...register('duration')}
                     helperText="Lo que dura este servicio en la Agenda: la cita ocupa esos minutos en el panel del día. Vacío = un solo turno."
+                  />
+                )}
+
+                {/* Paquete de sesiones: se cobra una vez y se consume cita por
+                    cita desde la Agenda. Ver packageService. */}
+                {atiendeConCita(businessMode, businessSettings) && (
+                  <Input
+                    label="Sesiones incluidas"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="Ej: 6"
+                    error={errors.sessions?.message}
+                    {...register('sessions')}
+                    helperText="Si este tratamiento se vende por paquete, cuántas sesiones incluye. Al cobrarlo a un paciente registrado, el paquete queda en su ficha y cada cita descuenta una. Vacío = no es paquete."
                   />
                 )}
 

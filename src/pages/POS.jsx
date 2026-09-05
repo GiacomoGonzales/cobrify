@@ -132,6 +132,7 @@ import { markOrderAsPaid, updateOrder, updateOrderStatus, claimOrderForInvoicing
 import { cerrarVinculoDeOrigen } from '@/services/documentLinking'
 import { completeAppointment } from '@/services/appointmentService'
 import { programarRecordatoriosDeVenta } from '@/services/veterinaryService'
+import { crearPaquetesDeVenta } from '@/services/packageService'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { savePendingSale } from '@/services/offlineQueueService'
 import * as CustomerDisplay from '@/services/customerDisplayService'
@@ -8993,6 +8994,23 @@ ${textoDeErrores(revision.errores)}`, 9000)
                 console.log(`✅ Recordatorios veterinarios programados: ${programados}`)
               } catch (recordatorioError) {
                 console.error('Error al programar recordatorios:', recordatorioError)
+              }
+            }
+
+            // 6.6. Paquetes de sesiones: cada ítem con "Sesiones incluidas" deja
+            // un paquete en la ficha del cliente ELEGIDO. Va al final por lo
+            // mismo que los recordatorios: no debe demorar el cobro, y si falla
+            // el paquete se carga a mano desde la ficha.
+            if (bgCustomerIdVet) {
+              try {
+                const creados = await crearPaquetesDeVenta(businessId, bgCustomerIdVet, bgCart, bgProducts, {
+                  invoiceId: bgInvoiceId,
+                  invoiceNumber: bgNumberResult?.number || '',
+                  createdBy: bgUserUid,
+                })
+                if (creados > 0) console.log(`✅ Paquetes de sesiones creados: ${creados}`)
+              } catch (paqueteError) {
+                console.error('Error al crear paquetes de sesiones:', paqueteError)
               }
             }
 

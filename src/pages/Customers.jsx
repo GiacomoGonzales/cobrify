@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, FileText, Printer, Upload, CalendarClock, Cake, Columns3, PawPrint, ClipboardList, Eye, EyeOff, X, ChevronDown, Stamp, Camera } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, FileText, Printer, Upload, CalendarClock, Cake, Columns3, PawPrint, ClipboardList, Eye, EyeOff, X, ChevronDown, Stamp, Camera, Package } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { crearClienteDemo, actualizarClienteDemo, eliminarClienteDemo } from '@/data/demo/operaciones'
 import { useDataPermissions } from '@/hooks/useDataPermissions'
@@ -28,6 +28,7 @@ import ImportCustomersModal from '@/components/ImportCustomersModal'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import MedicalHistoryModal from '@/components/veterinary/MedicalHistoryModal'
 import GaleriaPacienteModal from '@/components/clinic/GaleriaPacienteModal'
+import PaquetesPacienteModal from '@/components/clinic/PaquetesPacienteModal'
 import { normalizePets, createEmptyPet } from '@/utils/petUtils'
 import DeliveryAddressesEditor, { limpiarDireccionesParaGuardar } from '@/components/customer/DeliveryAddressesEditor'
 import LoyaltyManager from '@/components/loyalty/LoyaltyManager'
@@ -765,6 +766,8 @@ export default function Customers() {
   const [medicalHistoryCustomer, setMedicalHistoryCustomer] = useState(null)
   // Paciente cuya galería de antes/después está abierta (ficha de atención)
   const [galeriaCustomer, setGaleriaCustomer] = useState(null)
+  // Paciente cuyos paquetes de sesiones se están viendo
+  const [paquetesCustomer, setPaquetesCustomer] = useState(null)
   // Cliente cuyo historial de pedidos se está viendo (click en el contador)
   const [ordersCustomer, setOrdersCustomer] = useState(null)
   // Estado para múltiples mascotas (veterinaria)
@@ -1574,8 +1577,22 @@ export default function Customers() {
                       {conFicha && ultimaAtencion(customer) && (
                         <p className="text-xs text-gray-500">Últ. atención: {fechaCorta(ultimaAtencion(customer))}</p>
                       )}
+                      {conFicha && customer.packagesSummary?.remaining > 0 && (
+                        <span className="chip-info inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium">
+                          {customer.packagesSummary.remaining} {customer.packagesSummary.remaining === 1 ? 'sesión disponible' : 'sesiones disponibles'}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                      {conFicha && (
+                        <button
+                          onClick={() => setPaquetesCustomer(customer)}
+                          className="p-1.5 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                          title="Paquetes de sesiones"
+                        >
+                          <Package className="w-4 h-4" />
+                        </button>
+                      )}
                       {conFicha && (
                         <button
                           onClick={() => setGaleriaCustomer(customer)}
@@ -1785,6 +1802,11 @@ export default function Customers() {
                             Alergia: {customer.allergies}
                           </span>
                         )}
+                        {conFicha && customer.packagesSummary?.remaining > 0 && (
+                          <span className="chip-info inline-block mt-0.5 ml-1 px-1.5 py-0.5 rounded text-[10px] font-medium" title="Sesiones de paquete disponibles">
+                            {customer.packagesSummary.remaining} {customer.packagesSummary.remaining === 1 ? 'sesión' : 'sesiones'}
+                          </span>
+                        )}
                       </TableCell>
                     )}
                     {visibleColumns.document && (
@@ -1929,6 +1951,15 @@ export default function Customers() {
                     )}
                     <TableCell className="py-1.5">
                       <div className="flex items-center justify-end gap-0.5">
+                        {conFicha && (
+                          <button
+                            onClick={() => setPaquetesCustomer(customer)}
+                            className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                            title="Paquetes de sesiones"
+                          >
+                            <Package className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         {conFicha && (
                           <button
                             onClick={() => setGaleriaCustomer(customer)}
@@ -2588,6 +2619,15 @@ export default function Customers() {
         isOpen={!!galeriaCustomer}
         onClose={() => setGaleriaCustomer(null)}
         customer={galeriaCustomer}
+      />
+
+      {/* Paquetes de sesiones (ficha de atención). Al cambiar algo se relee la
+          lista, que muestra las sesiones disponibles junto al nombre. */}
+      <PaquetesPacienteModal
+        isOpen={!!paquetesCustomer}
+        onClose={() => setPaquetesCustomer(null)}
+        customer={paquetesCustomer}
+        onChanged={loadCustomers}
       />
 
       {/* Modal de pedidos del cliente (click en el contador de Pedidos) */}

@@ -99,6 +99,10 @@ export default {
         },
         {
           type: 'texto',
+          text: 'Si el cliente compró un **paquete de sesiones**, en su tarjeta de **En atención** aparece **Usar sesión del paquete**: la cita se completa descontando una sesión, sin pasar por el Punto de Venta. Solo se muestra cuando le quedan sesiones.',
+        },
+        {
+          type: 'texto',
           text: 'Si el cliente no vino, márcala como "No asistió" (queda en el historial del paciente). Si avisó antes, cancélala con su motivo. Las citas programadas, canceladas o no asistidas también se pueden eliminar con el tacho.',
         },
       ],

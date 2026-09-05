@@ -510,6 +510,13 @@ service cloud.firestore {
           allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
           allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
         }
+
+        // Subcollection: Packages (paquetes de sesiones del paciente).
+        // Ver src/services/packageService.js.
+        match /packages/{packageId} {
+          allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+          allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        }
       }
 
       // Subcollection: Products (Productos)

@@ -63,6 +63,10 @@ export default {
         },
         {
           type: 'texto',
+          text: 'Y **Sesiones incluidas**, para lo que se vende por paquete (6 sesiones de láser): al cobrarlo a un cliente elegido, el paquete queda en su ficha y cada cita descuenta una sesión desde la Agenda.',
+        },
+        {
+          type: 'texto',
           text: 'Al lado del costo está la **fecha de compra**: cuándo entró esa mercadería. No hace falta que la llenes — cada vez que registres una compra, el sistema la escribe solo con la fecha de la factura del proveedor.',
         },
         {

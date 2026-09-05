@@ -120,6 +120,30 @@ export default {
     },
 
     {
+      id: 'paquetes',
+      title: 'Paquetes de sesiones',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Un paquete ("6 sesiones de láser") se cobra una vez y se va usando cita por cita. Para que el sistema lo lleve por ti:',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'En el tratamiento, pon **Sesiones incluidas** (por ejemplo 6) y guarda.',
+            'Cóbralo en el Punto de Venta con el paciente **elegido**: el paquete queda en su ficha.',
+            'En cada cita, desde **En atención**, presiona **Usar sesión del paquete**: la cita se completa sin volver a cobrar.',
+            'En **Pacientes**, el botón del paquete muestra cuántas sesiones le quedan; ahí también se descuenta a mano (**Usar sesión**) o se carga con **Agregar paquete** uno que venía de antes.',
+          ],
+        },
+        {
+          type: 'consejo',
+          text: 'La lista de Pacientes muestra las sesiones disponibles junto al nombre, así en recepción se sabe sin abrir nada.',
+        },
+      ],
+    },
+
+    {
       id: 'profesionales',
       title: 'Quién atiende',
       blocks: [

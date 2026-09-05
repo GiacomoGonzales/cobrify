@@ -276,6 +276,30 @@ export default {
         },
       ],
     },
+
+    {
+      id: 'paquetes',
+      title: 'Paquetes de sesiones',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Con la ficha de atención activa, el botón del paquete en la lista abre los **paquetes de sesiones** del cliente: qué compró, cuántas sesiones usó y cuántas le quedan. Los que se cobran en el Punto de Venta (un producto con **Sesiones incluidas**, al cliente elegido) llegan solos.',
+        },
+        {
+          type: 'tabla',
+          encabezados: ['Botón', 'Qué hace'],
+          filas: [
+            ['**Usar sesión**', 'Descuenta una, con la fecha de hoy. Para quien no pasa por la Agenda.'],
+            ['**Deshacer última**', 'Devuelve la última sesión descontada por error.'],
+            ['**Agregar paquete**', 'Un paquete que venía de otro sistema o un regalo: nombre, sesiones que incluye y cuántas ya usó.'],
+          ],
+        },
+        {
+          type: 'consejo',
+          text: 'Junto al nombre, la lista muestra cuántas sesiones tiene disponibles. Desde la Agenda, **Usar sesión del paquete** completa la cita descontando una.',
+        },
+      ],
+    },
   ],
 
   preguntas: [
