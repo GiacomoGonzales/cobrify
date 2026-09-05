@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Users as UsersIcon, Plus, Edit2, Shield, Loader2, Eye, EyeOff, UserCheck, Warehouse, Store, CheckCircle2, XCircle, ChevronDown, ChevronRight, DollarSign, Briefcase, Bell, Key, Trash2, AlertTriangle, Archive, ArchiveRestore } from 'lucide-react'
+import { Users as UsersIcon, Plus, Shield, Loader2, Eye, EyeOff, UserCheck, Warehouse, Store, CheckCircle2, XCircle, ChevronDown, ChevronRight, DollarSign, Briefcase, Bell, Key, Trash2, AlertTriangle, Archive } from 'lucide-react'
 import { EMPLOYMENT_TYPES, HR_STATUSES } from '@/services/personnelService'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -23,6 +23,7 @@ import {
   deleteManagedUser,
   CATEGORY_NAMES,
 } from '@/services/userManagementService'
+import DetalleUsuarioModal from '@/components/usuarios/DetalleUsuarioModal'
 import { getWarehouses } from '@/services/warehouseService'
 import { getActiveBranches } from '@/services/branchService'
 import { getSellers } from '@/services/sellerService'
@@ -47,6 +48,10 @@ export default function Users() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
   const [selectedUser, setSelectedUser] = useState(null)
+  // Ficha del usuario: se abre tocando su fila y ahí están el detalle y TODAS
+  // las acciones con su nombre. Reemplaza a los cinco íconos de colores que
+  // había al final de cada fila, donde desactivar y eliminar quedaban pegados.
+  const [detalleUsuario, setDetalleUsuario] = useState(null)
   // Modal de reset de contraseña (admin → sub-usuario sin email real)
   const [resetTargetUser, setResetTargetUser] = useState(null)
   const [resetPassword, setResetPassword] = useState('')
@@ -882,58 +887,15 @@ export default function Users() {
                       : '-'}
                   </p>
 
-                  {/* Acciones */}
-                  <div className="flex items-center justify-end gap-1 pt-3 border-t border-gray-100">
-                    <button
-                      onClick={() => handleToggleStatus(userItem.id, userItem.isActive)}
-                      className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg transition-colors ${
-                        userItem.isActive
-                          ? 'text-yellow-600 hover:bg-yellow-50'
-                          : 'text-green-600 hover:bg-green-50'
-                      }`}
-                    >
-                      {userItem.isActive ? (
-                        <><EyeOff className="w-3.5 h-3.5" /> Desactivar</>
-                      ) : (
-                        <><Eye className="w-3.5 h-3.5" /> Activar</>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => openResetPasswordModal(userItem)}
-                      className="flex items-center gap-1 px-3 py-1.5 text-xs text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                      title="Resetear contraseña del usuario"
-                    >
-                      <Key className="w-3.5 h-3.5" /> Contraseña
-                    </button>
-                    <button
-                      onClick={() => openEditModal(userItem)}
-                      className="flex items-center gap-1 px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" /> Editar
-                    </button>
-                    {userItem.archived ? (
-                      <button
-                        onClick={() => handleUnarchiveUser(userItem)}
-                        className="flex items-center gap-1 px-3 py-1.5 text-xs text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                      >
-                        <ArchiveRestore className="w-3.5 h-3.5" /> Desarchivar
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleArchiveUser(userItem)}
-                        className="flex items-center gap-1 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                      >
-                        <Archive className="w-3.5 h-3.5" /> Archivar
-                      </button>
-                    )}
-                    <button
-                      onClick={() => openDeleteModal(userItem)}
-                      className="flex items-center gap-1 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Eliminar usuario"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" /> Eliminar
-                    </button>
-                  </div>
+                  {/* Una sola puerta: la ficha, donde cada acción dice qué hace */}
+                  <button
+                    type="button"
+                    onClick={() => setDetalleUsuario(userItem)}
+                    className="w-full flex items-center justify-center gap-1.5 pt-3 border-t border-gray-100 text-sm font-medium text-primary-600 hover:text-primary-700"
+                  >
+                    Ver ficha y acciones
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
                 </div>
               ))}
             </div>
@@ -957,7 +919,11 @@ export default function Users() {
                 </TableHeader>
                 <TableBody>
                   {visibleUsers.map((userItem) => (
-                    <TableRow key={userItem.id}>
+                    <TableRow
+                      key={userItem.id}
+                      onClick={() => setDetalleUsuario(userItem)}
+                      className="cursor-pointer hover:bg-gray-50"
+                    >
                       <TableCell className="font-medium">{userItem.displayName}</TableCell>
                       <TableCell>{userItem.email}</TableCell>
                       <TableCell>
@@ -1001,61 +967,10 @@ export default function Users() {
                           : '-'}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handleToggleStatus(userItem.id, userItem.isActive)}
-                            className={`p-2 rounded-lg transition-colors ${
-                              userItem.isActive
-                                ? 'hover:bg-yellow-100 text-yellow-600'
-                                : 'hover:bg-green-100 text-green-600'
-                            }`}
-                            title={userItem.isActive ? 'Desactivar' : 'Activar'}
-                          >
-                            {userItem.isActive ? (
-                              <EyeOff className="w-4 h-4" />
-                            ) : (
-                              <Eye className="w-4 h-4" />
-                            )}
-                          </button>
-                          <button
-                            onClick={() => openResetPasswordModal(userItem)}
-                            className="p-2 hover:bg-purple-100 text-purple-600 rounded-lg transition-colors"
-                            title="Resetear contraseña"
-                          >
-                            <Key className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => openEditModal(userItem)}
-                            className="p-2 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
-                            title="Editar"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          {userItem.archived ? (
-                            <button
-                              onClick={() => handleUnarchiveUser(userItem)}
-                              className="p-2 hover:bg-green-100 text-green-600 rounded-lg transition-colors"
-                              title="Desarchivar (volver a la lista)"
-                            >
-                              <ArchiveRestore className="w-4 h-4" />
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => handleArchiveUser(userItem)}
-                              className="p-2 hover:bg-gray-200 text-gray-600 rounded-lg transition-colors"
-                              title="Archivar (personal que ya no trabaja)"
-                            >
-                              <Archive className="w-4 h-4" />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => openDeleteModal(userItem)}
-                            className="p-2 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
-                            title="Eliminar usuario"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                        <span className="inline-flex items-center gap-1 text-sm font-medium text-primary-600">
+                          Ver ficha
+                          <ChevronRight className="w-4 h-4" />
+                        </span>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1065,6 +980,22 @@ export default function Users() {
           )}
         </CardContent>
       </Card>
+
+      {/* Ficha del usuario: el detalle y todas las acciones, cada una con su nombre */}
+      <DetalleUsuarioModal
+        usuario={detalleUsuario}
+        onClose={() => setDetalleUsuario(null)}
+        paginasDisponibles={availablePages}
+        almacenes={warehouses}
+        formatearFecha={formatDate}
+        esInmobiliaria={isRealEstateMode}
+        onToggleEstado={(u) => { setDetalleUsuario(null); handleToggleStatus(u.id, u.isActive) }}
+        onResetPassword={(u) => { setDetalleUsuario(null); openResetPasswordModal(u) }}
+        onEditar={(u) => { setDetalleUsuario(null); openEditModal(u) }}
+        onArchivar={(u) => { setDetalleUsuario(null); handleArchiveUser(u) }}
+        onDesarchivar={(u) => { setDetalleUsuario(null); handleUnarchiveUser(u) }}
+        onEliminar={(u) => { setDetalleUsuario(null); openDeleteModal(u) }}
+      />
 
       {/* Modal de Crear/Editar Usuario - Amplio y organizado */}
       <Modal
@@ -2050,10 +1981,13 @@ export default function Users() {
             <div className="text-sm text-amber-900">
               <p className="font-medium">Esta acción no se puede deshacer.</p>
               <p className="mt-1 text-amber-800">
-                Por seguridad, el sistema <strong>no elimina la cuenta de acceso (Firebase Auth)</strong>,
-                solo borra los permisos y datos del usuario. Por eso <strong>no podrás volver a crear
-                un usuario con el mismo correo</strong> ({deleteTargetUser?.email}). Si más adelante
-                necesitas un usuario para esta persona, deberás usar un correo distinto.
+                Se borran sus permisos y su acceso al sistema. El correo
+                ({deleteTargetUser?.email}) queda libre, así que más adelante puedes volver a crear
+                un usuario con él.
+              </p>
+              <p className="mt-2 text-amber-800">
+                Si solo quieres que <strong>deje de entrar</strong>, usa <strong>Desactivar</strong>:
+                conserva todo y lo puedes volver a activar cuando quieras.
               </p>
             </div>
           </div>
@@ -2066,7 +2000,7 @@ export default function Users() {
               className="mt-0.5 w-4 h-4 text-red-600 rounded border-gray-300 focus:ring-red-500"
             />
             <span className="text-sm text-gray-700">
-              Entiendo que es permanente y que no podré reutilizar este correo.
+              Entiendo que se borra para siempre y que no es lo mismo que desactivarlo.
             </span>
           </label>
 

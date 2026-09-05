@@ -5,7 +5,6 @@ import {
   getDocs,
   setDoc,
   updateDoc,
-  deleteDoc,
   query,
   where,
   serverTimestamp
@@ -530,22 +529,27 @@ export const toggleUserStatus = async (userId, isActive) => {
 }
 
 /**
- * Eliminar un usuario
- * @param {string} userId - ID del usuario a eliminar
- * @returns {Promise<object>}
+ * Eliminar un sub-usuario: su documento de permisos Y su cuenta de acceso.
+ *
+ * Va por la Cloud Function `deleteSubUser` porque borrar una cuenta de acceso
+ * ajena solo se puede desde el servidor. Antes esto borraba nada más el
+ * documento y la cuenta quedaba viva: la persona podía seguir entrando (a una
+ * pantalla sin acceso) y el correo quedaba ocupado para siempre, así que
+ * volver a crear al mismo empleado fallaba.
+ *
+ * @param {string} userId - UID del sub-usuario a eliminar
  */
 export const deleteManagedUser = async (userId) => {
   try {
-    const userDocRef = doc(db, 'users', userId)
-    await deleteDoc(userDocRef)
-
-    // Nota: No eliminamos el usuario de Firebase Auth por seguridad
-    // Solo lo removemos de Firestore
-
+    const fn = httpsCallable(functions, 'deleteSubUser')
+    const result = await fn({ targetUid: userId })
+    if (!result.data?.success) {
+      return { success: false, error: 'No se pudo eliminar el usuario' }
+    }
     return { success: true, message: 'Usuario eliminado' }
   } catch (error) {
     console.error('Error al eliminar usuario:', error)
-    return { success: false, error: error.message }
+    return { success: false, error: error.message || 'Error al eliminar el usuario' }
   }
 }
 

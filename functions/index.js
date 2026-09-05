@@ -11779,6 +11779,69 @@ export const resetSubUserPassword = onCall(
 )
 
 /**
+ * Eliminar un sub-usuario DE VERDAD: su documento de permisos y su cuenta de
+ * acceso.
+ *
+ * Antes se borraba solo el documento y la cuenta de acceso quedaba viva. Eso
+ * dejaba dos problemas que el dueño no podía resolver solo:
+ *   - la persona seguía pudiendo autenticarse y caía en una pantalla sin
+ *     acceso, sin negocio ni permisos;
+ *   - el correo quedaba ocupado, así que volver a crear al mismo empleado con
+ *     su correo fallaba con "este correo ya está registrado".
+ * Pasó de verdad (JM FARMA, 4-set-2026): tres intentos de crear a la misma
+ * persona y dos cuentas muertas.
+ *
+ * Solo el DUEÑO del sub-usuario puede hacerlo, y se comprueba contra Firestore
+ * antes de tocar nada.
+ */
+export const deleteSubUser = onCall(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 30,
+    memory: '256MiB',
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Debe estar autenticado')
+    }
+    const callerUid = request.auth.uid
+    const { targetUid } = request.data || {}
+
+    if (!targetUid || typeof targetUid !== 'string') {
+      throw new HttpsError('invalid-argument', 'targetUid requerido')
+    }
+    if (targetUid === callerUid) {
+      throw new HttpsError('failed-precondition', 'No puedes eliminarte a ti mismo')
+    }
+
+    // La relación dueño → sub-usuario es la única autorización que vale.
+    const targetDoc = await db.collection('users').doc(targetUid).get()
+    if (!targetDoc.exists) {
+      throw new HttpsError('not-found', 'Usuario no encontrado')
+    }
+    if (targetDoc.data().ownerId !== callerUid) {
+      throw new HttpsError('permission-denied', 'No tienes permiso para eliminar este usuario')
+    }
+
+    // Primero la cuenta de acceso: si fallara después de borrar el documento,
+    // quedaría otra vez una cuenta huérfana, que es justo lo que se quiere evitar.
+    try {
+      await auth.deleteUser(targetUid)
+    } catch (error) {
+      // Si la cuenta ya no existía, seguimos: el documento igual debe irse.
+      if (error?.code !== 'auth/user-not-found') {
+        console.error('Error al eliminar la cuenta de acceso:', error)
+        throw new HttpsError('internal', `No se pudo eliminar la cuenta de acceso: ${error.message}`)
+      }
+    }
+
+    await db.collection('users').doc(targetUid).delete()
+    console.log(`🗑️ Owner ${callerUid} eliminó al sub-usuario ${targetUid} (documento y acceso)`)
+    return { success: true }
+  }
+)
+
+/**
  * Descontar el stock de una venta + registrar movimientos, todo EN EL SERVIDOR en una sola
  * transacción atómica. Reemplaza las N transacciones del cliente (lentas con muchos ítems).
  * Los insumos (recetas) se siguen descontando en el cliente.

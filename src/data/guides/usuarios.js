@@ -6,7 +6,7 @@
  */
 export default {
   id: 'usuarios',
-  actualizado: '12/08/2026',
+  actualizado: '05/09/2026',
   intro:
     'Acá creas las cuentas de tu equipo y decides qué puede ver y hacer cada uno. Es la pantalla que evita que un cajero vea tus márgenes o cambie tus precios.',
 
@@ -99,6 +99,38 @@ export default {
         },
       ],
     },
+
+    {
+      id: 'ficha-y-acciones',
+      title: 'Desactivar, archivar o eliminar',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Toca la fila de un usuario y se abre su **ficha**: ahí ves de un vistazo qué páginas y almacenes tiene, si comparte tu caja o abre la suya, y desde ahí haces todo lo demás.',
+        },
+        {
+          type: 'tabla',
+          encabezados: ['Acción', 'Qué hace'],
+          filas: [
+            ['Desactivar', 'Deja de entrar al sistema. Conserva todo y lo puedes volver a activar cuando quieras.'],
+            ['Archivar', 'Sale de la lista para no estorbar, pero sigue existiendo. Para personal que ya no trabaja.'],
+            ['Eliminar', 'Borra su acceso y sus permisos para siempre. No se puede deshacer.'],
+          ],
+        },
+        {
+          type: 'consejo',
+          text: 'Casi siempre lo que quieres es **Desactivar**. Si el empleado se fue, desactívalo o archívalo: su historial de ventas y cierres de caja se conserva igual.',
+        },
+        {
+          type: 'ojo',
+          text: 'Un usuario **desactivado** te va a decir que "no puede entrar", porque efectivamente no puede. Si te pasa, revisa su ficha: si dice Desactivado, con **Activar** vuelve a entrar al instante, con su mismo correo y contraseña.',
+        },
+        {
+          type: 'texto',
+          text: 'Al **Eliminar**, el correo queda libre: si más adelante necesitas volver a crear a esa persona, puedes usar el mismo correo de siempre.',
+        },
+      ],
+    },
   ],
 
   preguntas: [
@@ -112,7 +144,11 @@ export default {
     },
     {
       q: 'Un empleado se fue, ¿lo elimino?',
-      a: 'Desactívalo. Así ya no puede entrar, pero su historial de ventas y cierres de caja se conserva íntegro.',
+      a: 'Desactívalo o archívalo. Así ya no puede entrar, pero su historial de ventas y cierres de caja se conserva íntegro. Eliminar es para cuando te equivocaste al crearlo.',
+    },
+    {
+      q: 'Mi cajero dice que no puede entrar y su cuenta existe.',
+      a: 'Abre su ficha desde la lista. Si aparece como **Desactivado**, toca **Activar** y listo. Es lo que pasa casi siempre: alguien lo desactivó sin querer.',
     },
     {
       q: '¿El sub-usuario ve mi suscripción o mis datos de facturación?',
