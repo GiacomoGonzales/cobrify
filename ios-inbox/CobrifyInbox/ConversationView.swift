@@ -38,6 +38,9 @@ struct ConversationView: View {
     @State private var mostrarVincular = false
     @State private var mostrarBuscar = false
     @State private var mostrarArchivosDelChat = false
+    /// La foto abierta en el visor (por id de mensaje): el visor vive aquí,
+    /// no en la burbuja, para poder pasar a las demás fotos del chat.
+    @State private var fotoAbierta: FotoAbierta?
     /// Mensaje al que hay que saltar cuando se cierra una hoja. Se guarda en vez
     /// de saltar desde dentro: mientras la hoja se va, el scroll de abajo no
     /// esta listo para recibir la orden.
@@ -308,6 +311,12 @@ struct ConversationView: View {
         .sheet(isPresented: $mostrarVincular) {
             VincularSheet(conversationId: conv.id)
         }
+        .fullScreenCover(item: $fotoAbierta) { f in
+            let fotos = fotosDelHilo
+            VisorFotos(fotos: fotos,
+                       indiceInicial: fotos.firstIndex { $0.id == f.id } ?? 0,
+                       nombreContacto: conv.titulo)
+        }
         .sheet(isPresented: $mostrarPlantilla) {
             EnviarPlantillaSheet(conversationId: conv.id)
         }
@@ -383,8 +392,14 @@ struct ConversationView: View {
                     withAnimation { proxy.scrollTo(id, anchor: .center) }
                 }
             },
+            alAbrirFoto: { fotoAbierta = FotoAbierta(id: m.id) },
             previaLocal: store.previasLocales[m.id]
         )
+    }
+
+    /// Todas las fotos del hilo, en orden: por ellas pasea el visor.
+    private var fotosDelHilo: [Mensaje] {
+        store.mensajes.filter { $0.tipo == "image" && $0.media?.url != nil }
     }
 
     /// Salta al mensaje que se eligió en una hoja.
@@ -901,6 +916,11 @@ private struct SondaDeScroll: UIViewRepresentable {
     }
 }
 
+/// La foto que está abierta en el visor.
+struct FotoAbierta: Identifiable {
+    let id: String
+}
+
 private enum ElementoChat: Identifiable {
     case separador(id: String, titulo: String)
     case mensaje(Mensaje, cambiaDeLado: Bool)
@@ -923,6 +943,8 @@ private struct BurbujaMensaje: View {
     var alResponder: (() -> Void)? = nil
     var alReaccionar: ((String) -> Void)? = nil
     var alTocarCita: (() -> Void)? = nil
+    /// Abrir la foto en el visor de la conversación (con todas las demás).
+    var alAbrirFoto: (() -> Void)? = nil
     var previaLocal: Data? = nil
     @State private var verAdjunto = false
 
@@ -1055,7 +1077,9 @@ private struct BurbujaMensaje: View {
             case "image":
                 VStack(alignment: .leading, spacing: 6) {
                     miniatura
-                        .onTapGesture { verAdjunto = true }
+                        .onTapGesture {
+                            if let alAbrirFoto { alAbrirFoto() } else { verAdjunto = true }
+                        }
                     if !mensaje.texto.isEmpty {
                         Text(TextoWhatsapp.atribuido(mensaje.texto))
                             .frame(maxWidth: 230, alignment: .leading)

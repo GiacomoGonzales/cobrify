@@ -28,12 +28,38 @@ enum VistaPrevia {
         "ultimoMensajeAt": Timestamp(date: Date()),
     ])
 
+    /// Conversaciones de mentira para el selector de "Reenviar a…".
+    static var conversaciones: [Conversacion] {
+        let abierta = Timestamp(date: Date().addingTimeInterval(20 * 3600))
+        let cerrada = Timestamp(date: Date().addingTimeInterval(-3600))
+        return [
+            ("c1", "Pollería El Buen Sabor", "51987654321", abierta),
+            ("c2", "Ferretería Lima Norte", "51912345678", abierta),
+            ("c3", "Dra. Rojas", "51955500123", cerrada),
+            ("c4", "Bodega Don Pepe", "51933322211", abierta),
+            ("c5", "Minimarket La Esquina", "51944455566", abierta),
+        ].map { id, nombre, waId, vence in
+            Conversacion(id: id, data: ["nombre": nombre, "waId": waId, "ultimoMensaje": "Gracias!",
+                                        "ventanaVenceAt": vence, "ultimoMensajeAt": Timestamp(date: Date())])
+        }
+    }
+
     static var mensajes: [Mensaje] {
         let ahora = Date()
         func m(_ i: Int, _ direccion: String, _ texto: String, estado: String = "read") -> Mensaje {
             Mensaje(id: "vp-\(i)", data: [
                 "direccion": direccion, "tipo": "text", "texto": texto, "estado": estado,
                 "timestamp": Timestamp(date: ahora.addingTimeInterval(Double(i - 10) * 60)),
+            ])
+        }
+        /// Una foto (de un banco público) con sus medidas, para el visor.
+        func foto(_ i: Int, _ direccion: String, _ semilla: String, _ ancho: Int, _ alto: Int, _ texto: String = "") -> Mensaje {
+            Mensaje(id: "vp-foto-\(i)", data: [
+                "direccion": direccion, "tipo": "image", "texto": texto, "estado": "read",
+                "timestamp": Timestamp(date: ahora.addingTimeInterval(Double(i - 10) * 60)),
+                "media": ["url": "https://picsum.photos/seed/\(semilla)/\(ancho)/\(alto)",
+                          "thumbUrl": "https://picsum.photos/seed/\(semilla)/\(ancho / 4)/\(alto / 4)",
+                          "mimeType": "image/jpeg", "ancho": ancho, "alto": alto],
             ])
         }
         // Un buen tramo de charla corta antes: así un impulso fuerte deja la
@@ -43,6 +69,9 @@ enum VistaPrevia {
               i % 2 == 0 ? "Consulta \(i / 2 + 1): ¿el plan incluye la app del celular?" : "Sí, todos los planes la incluyen.")
         }
         return relleno + [
+            foto(-9, "entrante", "local", 900, 1200, "Así quedó el local, ¿qué te parece?"),
+            foto(-8, "saliente", "menu", 1200, 800),
+            foto(-7, "entrante", "ticket", 800, 800, "El ticket de ayer"),
             m(1, "entrante", "Hola, me pasas info de los planes? https://cobrifyperu.com/planes"),
             m(2, "saliente", """
                 Hola! Claro, te cuento qué incluye Cobrify:

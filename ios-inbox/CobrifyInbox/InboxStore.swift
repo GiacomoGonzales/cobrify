@@ -14,6 +14,13 @@ final class InboxStore: ObservableObject {
 
     func empezar() {
         guard listener == nil else { return }
+        #if DEBUG
+        if VistaPrevia.activa {
+            conversaciones = VistaPrevia.conversaciones
+            cargando = false
+            return
+        }
+        #endif
         listener = Firestore.firestore()
             .collection("whatsappConversations")
             .order(by: "ultimoMensajeAt", descending: true)
