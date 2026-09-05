@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { scanBarcode, scannerDisponible } from '@/utils/scanBarcode'
+import { esDeSucursal, sedeCoincide } from '@/utils/branchScope'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
@@ -277,11 +278,7 @@ export default function StockMovements() {
   }
 
   // Obtener almacenes filtrados por sucursal seleccionada
-  const filteredWarehouses = warehouses.filter(w => {
-    if (filterBranch === 'all') return true
-    if (filterBranch === 'main') return !w.branchId
-    return w.branchId === filterBranch
-  })
+  const filteredWarehouses = warehouses.filter(w => esDeSucursal(w, filterBranch))
 
   // Resetear filtro de almacén cuando cambia la sucursal
   // El almacen elegido pertenece a una sede: al cambiar de sucursal en el
@@ -310,15 +307,25 @@ export default function StockMovements() {
     // Búsqueda insensible a acentos/tildes y mayúsculas
     const matchesSearch = matchesPrebuilt(deferredSearchTerm, movementSearchIndex.get(movement.id) || '')
 
-    // Filtro de sucursal
-    let matchesBranch = true
-    if (filterBranch !== 'all') {
-      const targetBranchId = filterBranch === 'main' ? null : filterBranch
-      matchesBranch =
-        movement.warehouseBranchId === targetBranchId ||
-        movement.fromWarehouseBranchId === targetBranchId ||
-        movement.toWarehouseBranchId === targetBranchId
-    }
+    // Filtro de sucursal. Un movimiento toca la sede de SU almacén y, si es una
+    // transferencia, la de origen y la de destino.
+    //
+    // Antes se miraban los tres campos siempre, y en un movimiento simple los de
+    // origen y destino quedan en `null` — que es justo el valor con el que se
+    // comparaba la Principal. Resultado: con el selector en Principal aparecían
+    // TODOS los movimientos, también los de las otras sedes. Ahora solo se mira
+    // la sede de los almacenes que el movimiento realmente usa.
+    const sedesDelMovimiento = [
+      movement.warehouseId ? movement.warehouseBranchId : undefined,
+      movement.fromWarehouse ? movement.fromWarehouseBranchId : undefined,
+      movement.toWarehouse ? movement.toWarehouseBranchId : undefined,
+    ].filter(sede => sede !== undefined)
+
+    const matchesBranch = sedesDelMovimiento.length === 0
+      // Sin almacén conocido no se sabe de dónde salió: cuenta como Principal,
+      // igual que cualquier registro sin sucursal en el resto del sistema.
+      ? sedeCoincide(null, filterBranch)
+      : sedesDelMovimiento.some(sede => sedeCoincide(sede, filterBranch))
 
     const matchesWarehouse =
       filterWarehouse === 'all' ||

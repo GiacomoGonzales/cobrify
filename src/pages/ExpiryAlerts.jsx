@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { AlertTriangle, Calendar, Package, Clock, CheckCircle, XCircle, Filter, Download, Search, ChevronDown, ChevronUp, Pill, FlaskConical } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import { sedeCoincide } from '@/utils/branchScope'
 import Badge from '@/components/ui/Badge'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -165,8 +166,8 @@ function ExpiryAlerts() {
     if (!branchScope || branchScope === 'all') return true
     if (!p.isBatch || !p.batchWarehouseId) return true
     const wh = warehouses.find(w => w.id === p.batchWarehouseId)
-    const whBranch = wh?.branchId || null
-    return branchScope === 'main' ? whBranch === null : whBranch === branchScope
+    // Criterio compartido del selector del header (utils/branchScope).
+    return sedeCoincide(wh?.branchId || null, branchScope)
   }
   const productsInScope = products.filter(enSede)
 

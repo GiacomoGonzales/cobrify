@@ -43,6 +43,7 @@ import {
 } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { scanBarcode, scannerDisponible } from '@/utils/scanBarcode'
+import { esDeSucursal } from '@/utils/branchScope'
 import { useAppContext } from '@/hooks/useAppContext'
 import { transferirStockDemo, descontarStockDemo } from '@/data/demo/operaciones'
 import { useAuth } from '@/contexts/AuthContext'
@@ -493,15 +494,11 @@ export default function Inventory() {
   }, [filterBranch])
 
   // Obtener almacenes filtrados por sucursal seleccionada
-  const getFilteredWarehouses = React.useCallback(() => {
-    if (filterBranch === 'all') {
-      return warehouses
-    }
-    if (filterBranch === 'main') {
-      return warehouses.filter(w => !w.branchId)
-    }
-    return warehouses.filter(w => w.branchId === filterBranch)
-  }, [warehouses, filterBranch])
+  // (criterio compartido del selector del header, utils/branchScope)
+  const getFilteredWarehouses = React.useCallback(
+    () => warehouses.filter(w => esDeSucursal(w, filterBranch)),
+    [warehouses, filterBranch]
+  )
 
   const filteredWarehouses = React.useMemo(() => getFilteredWarehouses(), [getFilteredWarehouses])
 

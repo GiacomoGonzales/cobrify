@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { Package, Search, Calendar, AlertTriangle, Plus, Edit2, Trash2, Filter, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Pill, Layers, Warehouse, Store } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import { esDeSucursal } from '@/utils/branchScope'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
@@ -306,11 +307,7 @@ function BatchControl() {
 
   // Formatear fecha
   // Almacenes filtrados por sucursal (sobre la base de almacenes permitidos)
-  const filteredWarehouses = filterBranch === 'all'
-    ? accessibleWarehouses
-    : filterBranch === 'main'
-      ? accessibleWarehouses.filter(w => !w.branchId)
-      : accessibleWarehouses.filter(w => w.branchId === filterBranch)
+  const filteredWarehouses = accessibleWarehouses.filter(w => esDeSucursal(w, filterBranch))
 
   // Obtener stock de un producto según filtros de almacén/sucursal
   const getFilteredStock = (product) => {

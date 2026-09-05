@@ -26,6 +26,7 @@ import {
   Box,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { esDeSucursal } from '@/utils/branchScope'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -153,17 +154,8 @@ export default function Warehouses() {
     // Filtrar por búsqueda
     const matchesSearch = matchesSearchQuery(searchTerm, warehouse.name, warehouse.location)
 
-    // Filtrar por sucursal
-    let matchesBranch = true
-    if (filterBranch !== 'all') {
-      if (filterBranch === 'main') {
-        matchesBranch = !warehouse.branchId
-      } else {
-        matchesBranch = warehouse.branchId === filterBranch
-      }
-    }
-
-    return matchesSearch && matchesBranch
+    // Sucursal: el criterio compartido del selector del header (utils/branchScope).
+    return matchesSearch && esDeSucursal(warehouse, filterBranch)
   })
 
   // Helper para obtener nombre de sucursal

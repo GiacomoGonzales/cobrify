@@ -13,13 +13,20 @@
  * `where('branchId','==','main')` dejaría fuera para siempre todo lo viejo.
  */
 
-/** ¿Este registro se ve con el alcance elegido? */
-export function esDeSucursal(registro, alcance) {
+/**
+ * El criterio sobre un id de sucursal SUELTO, para cuando el dato no viene en un
+ * registro: la sede de un movimiento se deduce de su almacén, por ejemplo.
+ */
+export function sedeCoincide(branchId, alcance) {
   const scope = alcance || 'all'
   if (scope === 'all') return true
-  const suya = registro?.branchId
-  if (scope === 'main') return !suya || suya === 'main'
-  return suya === scope
+  if (scope === 'main') return !branchId || branchId === 'main'
+  return branchId === scope
+}
+
+/** ¿Este registro se ve con el alcance elegido? */
+export function esDeSucursal(registro, alcance) {
+  return sedeCoincide(registro?.branchId, alcance)
 }
 
 /** El mismo criterio sobre una lista. */
