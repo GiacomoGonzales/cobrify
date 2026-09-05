@@ -905,8 +905,15 @@ export default function Chat() {
                       <span className="font-semibold text-gray-900 text-[13px] truncate">
                         {c.nombre || formatearNumero(c.waId)}
                       </span>
+                      {/* El rol de quien escribe cuando no es el titular
+                          ("Secretaria"): sin esto se atiende a ciegas. */}
+                      {c.rolContacto && (
+                        <span className="text-[11.5px] text-gray-400 truncate max-w-[7rem]">
+                          {c.rolContacto}
+                        </span>
+                      )}
                       {c.linkedBusinessId && (
-                        <span title={c.linkedBusinessName || 'Cliente de Cobrify'}>
+                        <span title={[c.linkedBusinessName || 'Cliente de Cobrify', c.rolContacto].filter(Boolean).join(' · ')}>
                           <UserCircle className="w-3.5 h-3.5 text-primary-600 flex-none" />
                         </span>
                       )}
@@ -1000,6 +1007,9 @@ export default function Chat() {
                 </h2>
                 <p className="text-[11.5px] text-gray-500 truncate">
                   {formatearNumero(activa.waId)}
+                  {/* El rol antes que la empresa: mientras uno escribe la
+                      respuesta, lo que importa es a QUIEN le habla. */}
+                  {activa.rolContacto && <span> · {activa.rolContacto}</span>}
                   {activa.linkedBusinessName && (
                     <span className="text-primary-700"> · {activa.linkedBusinessName}</span>
                   )}
@@ -1793,6 +1803,7 @@ export default function Chat() {
             <FichaCliente
               conversacion={activa}
               onCerrar={() => setFichaVisible(false)}
+              onAbrirConversacion={(id) => setActivaId(id)}
             />
           </div>
         </div>

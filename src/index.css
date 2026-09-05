@@ -622,6 +622,11 @@
 .chat-cobrify.oscuro .border-primary-200,
 .chat-cobrify.oscuro .border-primary-300,
 .chat-cobrify.oscuro .hover\:border-primary-300:hover { border-color: var(--ch-verde-borde); }
+/* El ambar del semaforo de cuentas: en claro es marron oscuro y sobre una
+   tarjeta oscura no se lee. Se aclara con el mismo tono ambar del panel. */
+:is(.admin, .chat-cobrify).oscuro .text-amber-700,
+:is(.admin, .chat-cobrify).oscuro .text-amber-600 { color: var(--ad-ambar); }
+
 .chat-cobrify.oscuro .text-primary-600,
 .chat-cobrify.oscuro .text-primary-700,
 .chat-cobrify.oscuro .text-primary-800,

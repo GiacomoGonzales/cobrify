@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
+  ArrowLeft,
   Building2,
   CalendarClock,
   CreditCard,
@@ -16,12 +17,26 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Modal, Campo, Entrada, Selector, Boton, ListaDatos, Dato, Aviso } from '@/components/admin/ui'
 import {
   obtenerFichaCliente,
+  cuentasDeLaConversacion,
+  agregarCuentaAlContacto,
+  quitarCuentaDelContacto,
+  sugerirCuentasDelContacto,
   buscarNegocios,
   vincularConversacion,
   desvincularConversacion,
+  guardarRolDelContacto,
+  otrosContactosDelNegocio,
   agregarComprobantes,
+  formatearNumero,
 } from '@/services/whatsappChatService'
 import { registerPayment, suspendUser, reactivateUser, PLANS } from '@/services/subscriptionService'
+
+/**
+ * La segunda línea de un resultado de búsqueda: lo que permite distinguir dos
+ * negocios de nombre parecido sin abrir ninguno.
+ */
+const detalleDelNegocio = (n) =>
+  [n.comercial, n.ruc && `RUC ${n.ruc}`, n.email].filter(Boolean).join(' · ')
 
 /** Los mismos métodos de cobro que ofrece el panel. */
 const METODOS = ['Yape', 'Plin', 'Transferencia', 'Efectivo', 'Tarjeta']
@@ -41,7 +56,7 @@ const ETIQUETA_EMISION = {
  * renovar ahí mismo. Si no, ofrece vincularla a mano — el que escribe desde
  * otro número sigue siendo cliente aunque el cruce automático no lo vea.
  */
-export default function FichaCliente({ conversacion, onCerrar }) {
+export default function FichaCliente({ conversacion, onCerrar, onAbrirConversacion }) {
   const toast = useToast()
   const { isAdmin } = useAuth()
   const [ficha, setFicha] = useState(null)
@@ -54,7 +69,41 @@ export default function FichaCliente({ conversacion, onCerrar }) {
   const [verTodosLosPagos, setVerTodosLosPagos] = useState(false)
   const [trabajando, setTrabajando] = useState(false)
 
-  const businessId = conversacion?.linkedBusinessId || null
+  // Una empresa puede tener VARIOS numeros escribiendo: el dueno, su
+  // secretaria, su contador. El rol dice quien es quien, y la lista de otros
+  // contactos evita atender a la secretaria creyendo que es el dueno.
+  const [otros, setOtros] = useState([])
+  const [editandoRol, setEditandoRol] = useState(false)
+  const [rolBorrador, setRolBorrador] = useState('')
+
+  // UN numero puede tener VARIAS empresas: un reseller que escribe por sus
+  // clientes, un vendedor, o alguien con dos negocios en cuentas distintas.
+  // El iPhone ya lo guardaba y la web lo ignoraba, asi que mostraba una sola
+  // sin avisar que habia mas.
+  const cuentas = useMemo(() => cuentasDeLaConversacion(conversacion), [conversacion])
+  const [cuentaVista, setCuentaVista] = useState(null)
+  const [nombres, setNombres] = useState({})
+  const [gestorAbierto, setGestorAbierto] = useState(false)
+
+  // Con VARIAS cuentas se abre en la lista y se entra a la que uno elija, con
+  // vuelta atras — como en el iPhone. Con una sola no hay lista que mostrar:
+  // se entra directo, igual que siempre.
+  useEffect(() => {
+    setCuentaVista(cuentas.length === 1 ? cuentas[0] : null)
+  }, [conversacion?.id, cuentas])
+
+  const enLista = cuentas.length > 1 && !cuentaVista
+  const businessId = cuentaVista || (cuentas.length === 1 ? cuentas[0] : null)
+
+  // Los nombres para el selector: la ficha abierta solo trae la suya.
+  useEffect(() => {
+    let vivo = true
+    const faltan = cuentas.filter((id) => !nombres[id])
+    if (!faltan.length) return undefined
+    Promise.all(faltan.map((id) => obtenerFichaCliente(id).then((f) => [id, f?.nombre || id]).catch(() => [id, id])))
+      .then((pares) => { if (vivo) setNombres((n) => ({ ...n, ...Object.fromEntries(pares) })) })
+    return () => { vivo = false }
+  }, [cuentas, nombres])
 
   useEffect(() => {
     setFicha(null)
@@ -80,6 +129,33 @@ export default function FichaCliente({ conversacion, onCerrar }) {
     }, 350)
     return () => clearTimeout(t)
   }, [buscando])
+
+  // Los otros numeros que escriben por esta misma empresa.
+  useEffect(() => {
+    setOtros([])
+    if (!businessId) return undefined
+    let vivo = true
+    otrosContactosDelNegocio(businessId, conversacion?.id)
+      .then((lista) => { if (vivo) setOtros(lista) })
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [businessId, conversacion?.id])
+
+  // El borrador del rol sigue a la conversacion abierta.
+  useEffect(() => {
+    setEditandoRol(false)
+    setRolBorrador(conversacion?.rolContacto || '')
+  }, [conversacion?.id, conversacion?.rolContacto])
+
+  const guardarRol = async () => {
+    try {
+      await guardarRolDelContacto(conversacion.id, rolBorrador)
+      setEditandoRol(false)
+      toast.success(rolBorrador.trim() ? `Anotado: ${rolBorrador.trim()}` : 'Rol quitado')
+    } catch {
+      toast.error('No se pudo guardar')
+    }
+  }
 
   const releerFicha = () => obtenerFichaCliente(businessId).then(setFicha).catch(() => {})
 
@@ -108,16 +184,51 @@ export default function FichaCliente({ conversacion, onCerrar }) {
 
   return (
     <aside className="w-full sm:w-80 bg-white border-l border-gray-200 flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-        <h3 className="font-semibold text-gray-900 text-[13px]">Ficha del cliente</h3>
-        <button onClick={onCerrar} className="text-gray-400 hover:text-gray-600" aria-label="Cerrar ficha">
-          <X className="w-4.5 h-4.5 w-5 h-5" />
+      <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2">
+        {cuentas.length > 1 && !enLista && (
+          <button
+            onClick={() => setCuentaVista(null)}
+            className="-ml-1 p-1 text-gray-500 hover:text-gray-900"
+            title="Volver a las cuentas"
+            aria-label="Volver a las cuentas"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+        )}
+        <h3 className="flex-1 min-w-0 truncate font-semibold text-gray-900 text-[13px]">
+          {enLista ? `Cuentas del cliente (${cuentas.length})` : 'Ficha del cliente'}
+        </h3>
+        <button onClick={onCerrar} className="flex-none text-gray-400 hover:text-gray-600" aria-label="Cerrar ficha">
+          <X className="w-5 h-5" />
         </button>
       </div>
 
+
       <div className="flex-1 overflow-y-auto p-4">
+        {/* ---------- Varias empresas: primero se elige cuál ---------- */}
+        {enLista && (
+          <div className="space-y-3">
+            <p className="text-[11.5px] text-gray-500">
+              Este número maneja varias empresas. Elige cuál quieres ver.
+            </p>
+            <div className="space-y-2">
+              {cuentas.map((id, i) => (
+                <TarjetaCuenta
+                  key={id}
+                  businessId={id}
+                  principal={i === 0}
+                  onAbrir={() => setCuentaVista(id)}
+                />
+              ))}
+            </div>
+            <Boton className="w-full" onClick={() => setGestorAbierto(true)}>
+              Agregar o quitar empresas
+            </Boton>
+          </div>
+        )}
+
         {/* ---------- Sin vínculo: es un lead, o hay que vincular a mano ---------- */}
-        {!businessId && (
+        {!businessId && !enLista && (
           <div>
             <div className="text-center py-4">
               <Building2 className="w-9 h-9 text-gray-300 mx-auto mb-2" />
@@ -138,7 +249,7 @@ export default function FichaCliente({ conversacion, onCerrar }) {
                   type="text"
                   value={buscando}
                   onChange={(e) => setBuscando(e.target.value)}
-                  placeholder="Nombre del negocio"
+                  placeholder="Nombre, RUC o correo"
                   className="w-full pl-9 pr-3 py-2 text-[13px] bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
@@ -151,6 +262,10 @@ export default function FichaCliente({ conversacion, onCerrar }) {
                         try {
                           await vincularConversacion(conversacion.id, r.businessId, r.nombre)
                           setBuscando('')
+                          // Es el unico momento en que se sabe quien es: se
+                          // pregunta ahora o no se anota nunca.
+                          setRolBorrador('')
+                          setEditandoRol(true)
                           toast.success(`Vinculada a ${r.nombre}`)
                         } catch {
                           toast.error('No se pudo vincular')
@@ -159,7 +274,7 @@ export default function FichaCliente({ conversacion, onCerrar }) {
                       className="w-full text-left px-3 py-2 hover:bg-primary-50 transition-colors"
                     >
                       <p className="text-[13px] font-medium text-gray-800 truncate">{r.nombre}</p>
-                      {r.ruc && <p className="text-[11.5px] text-gray-400">RUC {r.ruc}</p>}
+                      <p className="text-[11.5px] text-gray-400 truncate">{detalleDelNegocio(r)}</p>
                     </button>
                   ))}
                 </div>
@@ -181,10 +296,76 @@ export default function FichaCliente({ conversacion, onCerrar }) {
                 {[ficha.ruc && `RUC ${ficha.ruc}`, ficha.codigoCliente].filter(Boolean).join(' · ') || '—'}
               </p>
               {ficha.email && <p className="text-[11.5px] text-gray-500 truncate">{ficha.email}</p>}
-              {conversacion.linkedBy === 'manual' && (
-                <p className="text-[11px] text-gray-400 mt-1">Vinculado a mano</p>
-              )}
             </div>
+
+            {/* Quien escribe NO siempre es el titular. Sin esto, en el chat de
+                la secretaria se leia el nombre del dueno y se la saludaba mal. */}
+            {(conversacion.linkedBy === 'manual' || conversacion.rolContacto || otros.length > 0) && (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5">
+                <p className="text-[11px] text-gray-500">Te escribe</p>
+                <p className="text-[13px] font-medium text-gray-900 truncate">
+                  {conversacion.nombre || formatearNumero(conversacion.waId)}
+                  {conversacion.rolContacto && (
+                    <span className="font-normal text-gray-500"> · {conversacion.rolContacto}</span>
+                  )}
+                </p>
+
+                {editandoRol ? (
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <Entrada
+                      autoFocus
+                      value={rolBorrador}
+                      onChange={(e) => setRolBorrador(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') guardarRol()
+                        if (e.key === 'Escape') { setEditandoRol(false); setRolBorrador(conversacion.rolContacto || '') }
+                      }}
+                      placeholder="Secretaria, contador, almacén…"
+                      className="flex-1 min-w-0"
+                    />
+                    <Boton variante="primario" tamano="sm" onClick={guardarRol}>Guardar</Boton>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setEditandoRol(true)}
+                    className="mt-1 text-[11.5px] text-primary-700 hover:underline"
+                  >
+                    {conversacion.rolContacto ? 'Cambiar quién es' : 'Anotar quién es'}
+                  </button>
+                )}
+
+                {conversacion.linkedBy === 'manual' && (
+                  <p className="text-[11px] text-gray-400 mt-1.5">Vinculado a mano</p>
+                )}
+              </div>
+            )}
+
+            {/* Los otros numeros de la misma empresa, con salto a su chat. */}
+            {otros.length > 0 && (
+              <div>
+                <p className="text-[12px] font-medium text-gray-700 mb-1.5">
+                  También escriben por esta empresa
+                </p>
+                <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 overflow-hidden">
+                  {otros.map((o) => (
+                    <button
+                      key={o.id}
+                      type="button"
+                      onClick={() => { onAbrirConversacion?.(o.id); onCerrar?.() }}
+                      disabled={!onAbrirConversacion}
+                      className="w-full text-left px-3 py-2 hover:bg-primary-50 transition-colors disabled:hover:bg-transparent"
+                    >
+                      <p className="text-[13px] text-gray-800 truncate">
+                        {o.nombre || formatearNumero(o.waId)}
+                        {o.rol && <span className="text-gray-500"> · {o.rol}</span>}
+                      </p>
+                      <p className="text-[11.5px] text-gray-400">{formatearNumero(o.waId)}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* El negocio: a que se dedica y donde. Es lo que evita atender a
                 ciegas cuando el cliente escribe sin presentarse. */}
@@ -301,6 +482,12 @@ export default function FichaCliente({ conversacion, onCerrar }) {
               <Aviso titulo="Nota del equipo">{ficha.notasAdmin}</Aviso>
             )}
 
+            {/* Sin esto, un contacto con UNA sola empresa no tendria como
+                sumar la segunda: la lista solo aparece cuando ya hay varias. */}
+            <Boton className="w-full" onClick={() => setGestorAbierto(true)}>
+              {cuentas.length > 1 ? 'Agregar o quitar empresas' : 'Agregar otra empresa'}
+            </Boton>
+
             {/* Lo que no cabe en 320 px: sucursales, sub-usuarios, historial,
                 funciones. Se abre en otra pestaña a proposito — quien lo mira
                 esta atendiendo una conversacion y no puede perderla de vista.
@@ -371,6 +558,15 @@ export default function FichaCliente({ conversacion, onCerrar }) {
           </div>
         )}
       </div>
+
+      {gestorAbierto && (
+        <GestorDeCuentas
+          conversacion={conversacion}
+          cuentas={cuentas}
+          nombres={nombres}
+          onCerrar={() => setGestorAbierto(false)}
+        />
+      )}
 
       {renovarAbierto && ficha && (
         <ModalRenovar
@@ -600,6 +796,197 @@ function ModalComprobantes({ ficha, onCerrar, onListo }) {
             {METODOS.map((m) => <option key={m} value={m}>{m}</option>)}
           </Selector>
         </Campo>
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * Una empresa, en su propia tarjeta.
+ *
+ * En tarjeta y no en fila para que el nombre entre completo: las razones
+ * sociales peruanas son largas ("GONZALES GONZALEZ GIACOMO JEREMY") y en una
+ * linea se cortaban justo donde se distinguen dos empresas del mismo dueno.
+ *
+ * El punto de color es un semaforo, no decoracion: es el unico dato que hay
+ * que poder leer sin leer. Por eso se permite el ambar aunque la paleta del
+ * panel sean tres colores — un estado con tres niveles necesita tres.
+ */
+const SEMAFORO = {
+  activa: { punto: 'bg-green-500', texto: 'text-gray-500' },
+  aviso: { punto: 'bg-amber-500', texto: 'text-amber-700' },
+  grave: { punto: 'bg-red-500', texto: 'text-red-600' },
+}
+
+function estadoDeCuenta(c) {
+  if (!c) return { nivel: 'activa', detalle: 'Cargando…' }
+  if (c.accessBlocked) return { nivel: 'grave', detalle: 'Suspendida' }
+  const d = c.diasParaVencer
+  const plan = c.planName || '—'
+  if (d == null) return { nivel: 'activa', detalle: plan }
+  if (d < 0) return { nivel: 'aviso', detalle: `Vencida hace ${-d} día${d === -1 ? '' : 's'}` }
+  if (d === 0) return { nivel: 'aviso', detalle: 'Vence hoy' }
+  if (d <= 7) return { nivel: 'aviso', detalle: `Vence en ${d} día${d === 1 ? '' : 's'}` }
+  return { nivel: 'activa', detalle: `${plan} · ${d} días` }
+}
+
+function TarjetaCuenta({ businessId, principal, onAbrir }) {
+  const [c, setC] = useState(null)
+
+  useEffect(() => {
+    let vivo = true
+    obtenerFichaCliente(businessId).then((f) => { if (vivo) setC(f) }).catch(() => {})
+    return () => { vivo = false }
+  }, [businessId])
+
+  const { nivel, detalle } = estadoDeCuenta(c)
+  const tono = SEMAFORO[nivel]
+
+  return (
+    <button
+      type="button"
+      onClick={onAbrir}
+      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-left hover:border-gray-300 hover:bg-gray-50"
+    >
+      <div className="flex items-start gap-2">
+        <span className={`mt-1 h-2 w-2 flex-none rounded-full ${tono.punto}`} />
+        <div className="min-w-0 flex-1">
+          <p className="font-medium text-gray-900 leading-snug break-words">{c?.nombre || 'Cargando…'}</p>
+          {c?.ruc && <p className="text-[11.5px] text-gray-400">RUC {c.ruc}</p>}
+          <p className={`mt-0.5 text-[11.5px] ${tono.texto}`}>{detalle}</p>
+          {principal && <p className="mt-0.5 text-[11px] text-gray-400">Cuenta principal</p>}
+        </div>
+        <span className="flex-none text-gray-300">›</span>
+      </div>
+    </button>
+  )
+}
+
+/**
+ * Las empresas de un mismo contacto: se ven, se suman y se quitan.
+ *
+ * La PRINCIPAL no se toca desde aqui — es la que usan la web y el servidor
+ * para saber de quien es la conversacion, y quitarla es "desvincular", que ya
+ * tiene su propio boton. Aqui se manejan las acompanantes.
+ */
+function GestorDeCuentas({ conversacion, cuentas, nombres, onCerrar }) {
+  const toast = useToast()
+  const [sugeridas, setSugeridas] = useState([])
+  const [busqueda, setBusqueda] = useState('')
+  const [resultados, setResultados] = useState([])
+  const [trabajando, setTrabajando] = useState(false)
+
+  useEffect(() => {
+    sugerirCuentasDelContacto(cuentas).then(setSugeridas).catch(() => setSugeridas([]))
+  }, [cuentas])
+
+  useEffect(() => {
+    if (busqueda.trim().length < 2) { setResultados([]); return undefined }
+    let vivo = true
+    const t = setTimeout(() => {
+      buscarNegocios(busqueda)
+        .then((r) => { if (vivo) setResultados(r.filter((n) => !cuentas.includes(n.businessId))) })
+        .catch(() => {})
+    }, 300)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [busqueda, cuentas])
+
+  const agregar = async (id, nombre) => {
+    setTrabajando(true)
+    try {
+      await agregarCuentaAlContacto(conversacion.id, id)
+      toast.success(`${nombre} sumada al cliente`)
+      setBusqueda('')
+    } catch {
+      toast.error('No se pudo agregar la cuenta')
+    } finally {
+      setTrabajando(false)
+    }
+  }
+
+  const quitar = async (id) => {
+    setTrabajando(true)
+    try {
+      await quitarCuentaDelContacto(conversacion.id, id)
+      toast.success('Cuenta quitada del cliente')
+    } catch {
+      toast.error('No se pudo quitar la cuenta')
+    } finally {
+      setTrabajando(false)
+    }
+  }
+
+  return (
+    <Modal
+      titulo="Cuentas del cliente"
+      subtitulo="Un mismo número puede manejar varias empresas."
+      ancho="sm"
+      onClose={onCerrar}
+      pie={<Boton onClick={onCerrar}>Cerrar</Boton>}
+    >
+      <div className="space-y-4">
+        <div>
+          <p className="mb-1.5 text-[12px] font-medium text-gray-700">En este cliente</p>
+          <div className="rounded-md border border-gray-200 divide-y divide-gray-100">
+            {cuentas.map((id, i) => (
+              <div key={id} className="flex items-center justify-between gap-2 px-3 py-2">
+                <span className="min-w-0 truncate">
+                  {nombres[id] || id}
+                  {i === 0 && <span className="text-gray-400"> · principal</span>}
+                </span>
+                {i > 0 && (
+                  <Boton tamano="sm" variante="peligro" disabled={trabajando} onClick={() => quitar(id)}>
+                    Quitar
+                  </Boton>
+                )}
+              </div>
+            ))}
+          </div>
+          {cuentas.length > 1 && (
+            <p className="mt-1 text-[11.5px] text-gray-500">
+              La principal se cambia desvinculando la conversación.
+            </p>
+          )}
+        </div>
+
+        {sugeridas.length > 0 && (
+          <div>
+            {/* Del mismo reseller o del mismo vendedor: son las candidatas
+                naturales. Solo se proponen — sumarlas la decides tú. */}
+            <p className="mb-1.5 text-[12px] font-medium text-gray-700">
+              Del mismo vendedor o reseller
+            </p>
+            <div className="rounded-md border border-gray-200 divide-y divide-gray-100 max-h-40 overflow-y-auto">
+              {sugeridas.map((c) => (
+                <div key={c.id} className="flex items-center justify-between gap-2 px-3 py-2">
+                  <span className="min-w-0 truncate">{c.nombre}</span>
+                  <Boton tamano="sm" disabled={trabajando} onClick={() => agregar(c.id, c.nombre)}>
+                    Agregar
+                  </Boton>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <Campo etiqueta="Buscar otra empresa" ayuda="Por nombre, nombre comercial, RUC o correo.">
+          <Entrada value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Nombre, RUC o correo" />
+        </Campo>
+        {resultados.length > 0 && (
+          <div className="rounded-md border border-gray-200 divide-y divide-gray-100 max-h-40 overflow-y-auto">
+            {resultados.map((n) => (
+              <div key={n.businessId} className="flex items-center justify-between gap-2 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate">{n.nombre}</p>
+                  <p className="text-[11.5px] text-gray-400 truncate">{detalleDelNegocio(n)}</p>
+                </div>
+                <Boton tamano="sm" disabled={trabajando} onClick={() => agregar(n.businessId, n.nombre)}>
+                  Agregar
+                </Boton>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </Modal>
   )

@@ -122,6 +122,10 @@ service cloud.firestore {
                     // varias; linkedBusinessId sigue siendo la principal para
                     // que la web no cambie.
                     'linkedBusinessIds',
+                    // rolContacto: quien escribe cuando no es el titular
+                    // ("Secretaria", "Contador"). Una empresa puede tener
+                    // varios numeros escribiendo por ella.
+                    'rolContacto',
                     'linkAttempted', 'optOut', 'optOutAt', 'updatedAt']);
       allow create, delete: if false;
 

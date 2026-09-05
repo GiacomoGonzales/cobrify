@@ -12,11 +12,12 @@ import {
   limitToLast,
   serverTimestamp,
   setDoc,
-  startAt,
-  endAt,
   updateDoc,
+  where,
 } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { auth, db } from '@/lib/firebase'
+import { matchesPrebuilt, normalizeText } from '@/lib/utils'
+import { buildAccountHaystack } from '@/utils/adminSearch'
 import { metodoDeEmision } from '@/services/adminCuentasService'
 import { nombreRubro } from '@/data/rubros'
 import { nombreModo } from '@/utils/businessModes'
@@ -407,36 +408,195 @@ export const agregarComprobantes = async (businessId, monto, metodo, cuantos = 5
  * El que escribe desde otro numero sigue siendo cliente: el cruce por telefono
  * no lo ve, el admin si.
  */
-export const buscarNegocios = async (texto) => {
-  const t = texto.trim()
-  if (t.length < 2) return []
-  // La busqueda por prefijo de Firestore distingue mayusculas y los nombres
-  // estan como cada negocio los escribio ("WATON CHIFA", "Kathya Castro").
-  // Se prueba con las tres formas tipicas y se unen los resultados.
-  const variantes = [...new Set([
-    t,
-    t.toUpperCase(),
-    t.charAt(0).toUpperCase() + t.slice(1).toLowerCase(),
-  ])]
-  const resultados = new Map()
-  await Promise.all(variantes.map(async (v) => {
-    const q = query(
-      collection(db, 'businesses'),
-      orderBy('businessName'),
-      startAt(v),
-      endAt(v + '\uf8ff'),
-      limit(8),
-    )
-    const snap = await getDocs(q)
-    for (const d of snap.docs) {
-      resultados.set(d.id, {
-        businessId: d.id,
-        nombre: d.data().businessName || '(sin nombre)',
-        ruc: d.data().ruc || null,
+/**
+ * TODAS las cuentas de un contacto, la principal primero.
+ *
+ * Un mismo numero maneja varias empresas mas seguido de lo que parece: un
+ * reseller que escribe por sus clientes, un vendedor, o alguien con dos
+ * negocios en cuentas distintas.
+ *
+ * La principal vive en `linkedBusinessId` y las demas en `linkedBusinessIds`.
+ * Son dos campos y no uno porque la principal es la que ya usaban la web y el
+ * servidor: convertirla en arreglo habria roto todo lo que la lee.
+ */
+export const cuentasDeLaConversacion = (conversacion) => {
+  const todas = []
+  if (conversacion?.linkedBusinessId) todas.push(conversacion.linkedBusinessId)
+  for (const id of conversacion?.linkedBusinessIds || []) {
+    if (!todas.includes(id)) todas.push(id)
+  }
+  return todas
+}
+
+/** Suma otra cuenta al mismo contacto. La principal no se toca. */
+export const agregarCuentaAlContacto = (conversationId, businessId) =>
+  updateDoc(doc(db, 'whatsappConversations', conversationId), {
+    // arrayUnion y no un arreglo nuevo: dos personas agregando a la vez desde
+    // la web y el iPhone no se pisan.
+    linkedBusinessIds: arrayUnion(businessId),
+    updatedAt: serverTimestamp(),
+  })
+
+export const quitarCuentaDelContacto = (conversationId, businessId) =>
+  updateDoc(doc(db, 'whatsappConversations', conversationId), {
+    linkedBusinessIds: arrayRemove(businessId),
+    updatedAt: serverTimestamp(),
+  })
+
+/**
+ * Cuentas que probablemente son de este mismo contacto: las que trajo su mismo
+ * reseller o su mismo vendedor. Solo se proponen — sumarlas al grupo siempre
+ * es decision de quien atiende.
+ */
+export const sugerirCuentasDelContacto = async (idsActuales) => {
+  if (!idsActuales?.length) return []
+  const yaEstan = new Set(idsActuales)
+
+  const subs = await Promise.all(idsActuales.map((id) => getDoc(doc(db, 'subscriptions', id))))
+  const resellers = new Set()
+  const vendedores = new Set()
+  for (const s of subs) {
+    if (!s.exists()) continue
+    const d = s.data()
+    if (d.resellerId) resellers.add(d.resellerId)
+    if (d.vendedorId) vendedores.add(d.vendedorId)
+  }
+  if (!resellers.size && !vendedores.size) return []
+
+  const consultas = [
+    ...[...resellers].map((r) => query(collection(db, 'subscriptions'), where('resellerId', '==', r), limit(25))),
+    ...[...vendedores].map((v) => query(collection(db, 'subscriptions'), where('vendedorId', '==', v), limit(25))),
+  ]
+  const encontradas = new Map()
+  await Promise.all(consultas.map(async (q) => {
+    const snap = await getDocs(q).catch(() => null)
+    snap?.forEach((d) => {
+      if (yaEstan.has(d.id) || encontradas.has(d.id)) return
+      const s = d.data()
+      encontradas.set(d.id, {
+        id: d.id,
+        nombre: s.businessName || s.email || d.id,
+        plan: s.planName || s.plan || null,
+      })
+    })
+  }))
+  return [...encontradas.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+}
+
+/**
+ * Catalogo liviano de negocios para el buscador del chat.
+ *
+ * Va por REST y no por el SDK porque el SDK baja el documento COMPLETO y un
+ * negocio pesa 27 KB (mas de cien campos de configuracion): los 736 serian
+ * 20 MB. Con la mascara de campos de REST bajan solo los que se buscan.
+ *
+ * El token es el del propio Firebase, asi que las reglas mandan igual que en
+ * el SDK: si quien mira no es admin, no lee nada.
+ */
+const CATALOGO_VIGENCIA_MS = 10 * 60 * 1000
+const CAMPOS_BUSCABLES = [
+  'businessName', 'razonSocial',
+  // El nombre comercial: lo tienen 727 de 736 negocios y muchas veces es el
+  // unico nombre por el que el cliente se presenta ("Mandil Taqueria").
+  'name', 'tradeName', 'nombreComercial',
+  'ruc', 'email', 'phone', 'codigoCliente',
+]
+
+let catalogoNegocios = null
+let catalogoCargadoEn = 0
+let catalogoEnVuelo = null
+
+const REST_DOCS = `https://firestore.googleapis.com/v1/projects/${import.meta.env.VITE_FIREBASE_PROJECT_ID}/databases/(default)/documents`
+
+const texto = (campo) => campo?.stringValue || (campo?.integerValue != null ? String(campo.integerValue) : '')
+
+const descargarCatalogoNegocios = async () => {
+  const idToken = await auth.currentUser?.getIdToken()
+  if (!idToken) return []
+  const mascara = CAMPOS_BUSCABLES.map((c) => `mask.fieldPaths=${c}`).join('&')
+  const lista = []
+  let pagina = ''
+  // El tope de vueltas evita un bucle infinito si el cursor viniera repetido.
+  for (let i = 0; i < 20; i++) {
+    const url = `${REST_DOCS}/businesses?pageSize=300&${mascara}${pagina ? `&pageToken=${encodeURIComponent(pagina)}` : ''}`
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${idToken}` } })
+    if (!res.ok) throw new Error(`No se pudo leer el catálogo de negocios (${res.status})`)
+    const data = await res.json()
+    for (const d of data.documents || []) {
+      const f = d.fields || {}
+      // La razon social manda sobre businessName, igual que en la ficha del panel.
+      const nombre = texto(f.razonSocial) || texto(f.businessName)
+      if (!nombre) continue
+      const comercial = texto(f.tradeName) || texto(f.nombreComercial) || texto(f.name)
+      const ruc = texto(f.ruc)
+      const email = texto(f.email)
+      lista.push({
+        businessId: d.name.split('/').pop(),
+        nombre,
+        comercial: comercial && comercial !== nombre ? comercial : null,
+        ruc: ruc || null,
+        email: email || null,
+        // El mismo criterio que la tabla de Usuarios del panel: se arma una vez
+        // por descarga y despues cada tecla solo compara texto.
+        buscable: buildAccountHaystack({
+          businessName: nombre,
+          contactName: comercial,
+          ruc,
+          email,
+          phone: texto(f.phone),
+          codigoCliente: texto(f.codigoCliente),
+        }),
       })
     }
-  }))
-  return [...resultados.values()].slice(0, 10)
+    pagina = data.nextPageToken
+    if (!pagina) break
+  }
+  return lista
+}
+
+const catalogoDeNegocios = () => {
+  if (catalogoNegocios && Date.now() - catalogoCargadoEn < CATALOGO_VIGENCIA_MS) {
+    return Promise.resolve(catalogoNegocios)
+  }
+  // Una sola descarga aunque se llame varias veces seguidas.
+  if (!catalogoEnVuelo) {
+    catalogoEnVuelo = descargarCatalogoNegocios()
+      .then((lista) => { catalogoNegocios = lista; catalogoCargadoEn = Date.now(); return lista })
+      .finally(() => { catalogoEnVuelo = null })
+  }
+  return catalogoEnVuelo
+}
+
+/**
+ * Busca un negocio para vincularlo a una conversacion.
+ *
+ * Encuentra por lo mismo que la pagina de Usuarios: razon social, nombre
+ * comercial, RUC, correo, telefono y codigo de cliente — por cualquier parte,
+ * en cualquier orden y sin importar tildes ni mayusculas.
+ *
+ * Antes miraba solo el COMIENZO de la razon social, y el 98% de los negocios
+ * tiene nombre de varias palabras; muchos son el nombre de una persona al
+ * reves ("HANCCO SULLCA MARIA ISABEL"), asi que buscar "maria" no traia nada.
+ *
+ * Ordena primero los que EMPIEZAN por lo buscado: escribiendo "vapores",
+ * "VAPORES Y DELICIAS" va antes que "COMERCIAL VAPORES".
+ */
+export const buscarNegocios = async (consulta) => {
+  const t = String(consulta || '').trim()
+  if (t.length < 2) return []
+
+  const lista = await catalogoDeNegocios().catch(() => [])
+  const aguja = normalizeText(t)
+
+  return lista
+    .filter((n) => matchesPrebuilt(t, n.buscable))
+    .sort((a, b) => {
+      const pesoA = normalizeText(a.nombre).startsWith(aguja) ? 0 : 1
+      const pesoB = normalizeText(b.nombre).startsWith(aguja) ? 0 : 1
+      return pesoA - pesoB || a.nombre.localeCompare(b.nombre, 'es')
+    })
+    .slice(0, 10)
+    .map(({ businessId, nombre, comercial, ruc, email }) => ({ businessId, nombre, comercial, ruc, email }))
 }
 
 export const vincularConversacion = (conversationId, businessId, businessName) =>
@@ -448,11 +608,62 @@ export const vincularConversacion = (conversationId, businessId, businessName) =
     updatedAt: serverTimestamp(),
   })
 
+/**
+ * Quien escribe, cuando no es el titular: "Secretaria", "Contador", "Almacen".
+ *
+ * Es texto libre a proposito. Un catalogo cerrado se queda corto al segundo
+ * cliente, y esto lo lee una persona, no un reporte.
+ */
+export const guardarRolDelContacto = (conversationId, rol) =>
+  updateDoc(doc(db, 'whatsappConversations', conversationId), {
+    rolContacto: String(rol || '').trim() || null,
+    updatedAt: serverTimestamp(),
+  })
+
+/**
+ * Los otros numeros que escriben por el mismo negocio.
+ *
+ * Sin esto, vincular a mano el numero de la secretaria funcionaba pero no se
+ * veia desde ningun lado: quien atendia el chat del dueno no tenia como saber
+ * que habia alguien mas escribiendo por esa empresa.
+ *
+ * Hay que mirar los dos campos porque el vinculo vive en `linkedBusinessId`
+ * cuando la empresa es la principal del contacto y en `linkedBusinessIds`
+ * cuando es una de varias.
+ */
+export const otrosContactosDelNegocio = async (businessId, conversacionActualId) => {
+  if (!businessId) return []
+  const conversaciones = collection(db, 'whatsappConversations')
+  const [principales, secundarias] = await Promise.all([
+    getDocs(query(conversaciones, where('linkedBusinessId', '==', businessId), limit(25))).catch(() => null),
+    getDocs(query(conversaciones, where('linkedBusinessIds', 'array-contains', businessId), limit(25))).catch(() => null),
+  ])
+
+  const encontrados = new Map()
+  for (const snap of [principales, secundarias]) {
+    snap?.forEach((d) => {
+      if (d.id === conversacionActualId || encontrados.has(d.id)) return
+      const c = d.data()
+      encontrados.set(d.id, {
+        id: d.id,
+        nombre: c.nombre || null,
+        waId: c.waId || null,
+        rol: c.rolContacto || null,
+        vinculadoAMano: c.linkedBy === 'manual',
+      })
+    })
+  }
+  return [...encontrados.values()].sort((a, b) =>
+    (a.nombre || a.waId || '').localeCompare(b.nombre || b.waId || '', 'es'))
+}
+
 export const desvincularConversacion = (conversationId) =>
   updateDoc(doc(db, 'whatsappConversations', conversationId), {
     linkedBusinessId: null,
     linkedBusinessName: null,
     linkedBy: null,
+    // El rol describe la relacion con ESA empresa: al soltarla, sobra.
+    rolContacto: null,
     updatedAt: serverTimestamp(),
   })
 
