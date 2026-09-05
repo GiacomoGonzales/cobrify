@@ -166,8 +166,11 @@ export default function Dashboard() {
     // dashMultiCurrencyOn en deps: si businessSettings carga tarde y el negocio tiene
     // multi-divisa, hay que recomputar el gráfico por el camino client-side (convierte
     // USD→PEN con el TC congelado; el aggregate server-side no puede).
+    // filterBranch en deps: al elegir una sede el mes ya no se puede resolver con la
+    // suma del servidor y hay que DESCARGARLO para poder filtrarlo (fase 2). El resto
+    // de las tarjetas sí filtra en memoria, pero esa descarga no se puede evitar.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isDemoMode, allowedBranches, allowedWarehouses, dashMultiCurrencyOn, assignedSellerId])
+  }, [user, isDemoMode, allowedBranches, allowedWarehouses, dashMultiCurrencyOn, assignedSellerId, filterBranch])
 
   // El gráfico de 12 meses va en su PROPIO efecto porque también depende de la
   // sede elegida en el header: al cambiarla hay que recalcularlo. El resto del
@@ -481,8 +484,13 @@ export default function Dashboard() {
       //
       // No sirve para todos: con multi-divisa la suma mezclaría dólares con
       // soles, y a un usuario limitado a sucursales o a un vendedor la
-      // agregación no le puede filtrar. Esos siguen descargando, como antes.
-      const puedeAgregar = !restringido && !sellerRestricted && !dashMultiCurrencyOn
+      // agregación no le puede filtrar. Tampoco sirve con una SEDE elegida en el
+      // header, por lo mismo: la suma del servidor abarca el negocio entero.
+      // Faltaba esa condición, así que al elegir una sucursal las tarjetas del
+      // mes —ventas, cantidad, ticket promedio, el gráfico día por día y el
+      // "% vs mes anterior"— seguían mostrando el total de todas juntas.
+      // Esos casos siguen descargando, como antes.
+      const puedeAgregar = !restringido && !sellerRestricted && !dashMultiCurrencyOn && filterBranch === 'all'
       let mesResuelto = false
       if (puedeAgregar) {
         const monthEnd = getEndOfMonthPeru()
@@ -500,6 +508,12 @@ export default function Dashboard() {
             if (alive() && r.ok) setPrevMonthAgg(r)
           })
         }
+      } else {
+        // Sin agregación hay que SOLTAR la del alcance anterior: al pasar de
+        // "Todas" a una sede, las tarjetas seguirían mostrando el total del
+        // negocio guardado de antes, aunque ya no corresponda.
+        setMonthAgg(null)
+        setPrevMonthAgg(null)
       }
 
       // --- Fase 2: resto del mes / últimos 14 días ---
@@ -1064,7 +1078,9 @@ export default function Dashboard() {
 
   // Últimas 5 facturas (memoized)
   const recentInvoices = useMemo(() => {
-    return [...invoices]
+    // Sale de las YA filtradas por sede: con una sucursal elegida, esta lista
+    // mostraba las últimas ventas de todo el negocio.
+    return [...branchFilteredInvoices]
       .sort((a, b) => {
         const dateA = getInvoiceDate(a)
         const dateB = getInvoiceDate(b)
@@ -1072,7 +1088,7 @@ export default function Dashboard() {
         return dateB - dateA
       })
       .slice(0, 5)
-  }, [invoices, getInvoiceDate])
+  }, [branchFilteredInvoices, getInvoiceDate])
 
   const getStatusBadge = status => {
     switch (status) {
