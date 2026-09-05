@@ -228,6 +228,18 @@ export default {
         },
         {
           type: 'texto',
+          text: 'Arriba del historial van las cosas que hay que ver **antes de atender**: **Alergias**, **Antecedentes** (enfermedades, medicación, cirugías previas) y **Recomendado por**. La alergia sale como una etiqueta roja debajo del nombre en la lista, para que nadie tenga que abrir la ficha para enterarse.',
+        },
+        {
+          type: 'texto',
+          text: 'Con la ficha activa, la lista suma la **edad** al lado del cumpleaños y la columna **Últ. atención** con la fecha de la última visita registrada.',
+        },
+        {
+          type: 'consejo',
+          text: 'En modo **Clínica** la ficha viene de fábrica y la página se llama **Pacientes** (el botón dice **Nuevo Paciente**). En los demás rubros se enciende en Configuración > Punto de venta, con "Ficha de atención en el cliente".',
+        },
+        {
+          type: 'texto',
           text: 'Cada atención puede llevar además su **Próximo control** con fecha y hora. Al guardar la ficha, ese control **se agenda solo en la Agenda de Citas** — no tienes que ir al calendario a crearlo. Y si después cambias la fecha u hora desde la ficha, la cita se mueve sola: no se duplica.',
         },
         {
@@ -250,6 +262,10 @@ export default {
     {
       q: 'Tengo el mismo cliente dos veces, ¿cómo lo arreglo?',
       a: 'Elimina el duplicado que no tenga ventas asociadas y deja el que sí las tiene, para no perder su historial de compras.',
+    },
+    {
+      q: 'La ficha dice Antecedentes y Alergias, ¿es obligatorio llenarlos?',
+      a: 'No. Vacío significa "ninguna conocida". Pero si el paciente tiene una alergia, escríbela: es lo único de la ficha que se muestra en rojo en la lista.',
     },
     {
       q: '¿Dónde veo todo lo que me compró un cliente?',

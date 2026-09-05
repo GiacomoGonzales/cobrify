@@ -55,7 +55,7 @@ export default {
           encabezados: ['Entrada', 'Para qué'],
           filas: [
             ['**Agenda**', 'El calendario: agendar, confirmar, atender y cobrar cada cita.'],
-            ['**Pacientes**', 'La ficha de cada persona: documento, teléfono, cumpleaños, direcciones.'],
+            ['**Pacientes**', 'La ficha de cada persona: datos, alergias, antecedentes e historial de atenciones.'],
             ['**Tratamientos y productos**', 'Lo que vendes: tratamientos (sin stock) y productos (con stock).'],
             ['**Punto de Venta**', 'Donde se cobra y se emite la boleta o la factura.'],
             ['**Ventas**', 'Todo lo emitido, con los saldos pendientes y el botón Registrar Pago.'],
@@ -90,6 +90,30 @@ export default {
           text: 'Los productos que sí vendes —una crema, un protector solar— se cargan igual pero con su stock, y el sistema los descuenta al cobrarlos.',
         },
         { type: 'enlace', to: '/app/manual/productos', label: 'Guía completa de Productos' },
+      ],
+    },
+
+    {
+      id: 'ficha',
+      title: 'La ficha del paciente',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Cada paciente lleva su **Ficha de atención**: **Alergias** y **Antecedentes** arriba (lo que hay que saber antes de atender), y debajo el **historial de atenciones**: fecha, procedimiento, tratamiento, recomendaciones, quién atendió y el próximo control, que se agenda solo al guardar.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'En **Pacientes**, presiona **Editar** en la persona.',
+            'Completa **Alergias** y **Antecedentes** la primera vez. La alergia aparece en rojo en la lista.',
+            'Cada visita, **Agregar atención** y guarda. La más reciente queda primero.',
+          ],
+        },
+        {
+          type: 'consejo',
+          text: 'La lista muestra la **edad** junto al cumpleaños y la fecha de la **última atención**, así sabes de un vistazo quién no vuelve hace tiempo.',
+        },
+        { type: 'enlace', to: '/app/manual/clientes', label: 'Guía completa de la ficha' },
       ],
     },
 

@@ -66,6 +66,11 @@ export const customerSchema = z.object({
   // Nacieron de una podóloga que llevaba esto en un Excel aparte (referido,
   // procedimiento, medicación, última atención) y no tenía dónde ponerlo.
   referredBy: z.string().optional().or(z.literal('')),
+  // Lo que hay que ver ANTES de tocar al paciente. Alergias sale como chip
+  // rojo en la lista de Clientes; antecedentes es texto libre (enfermedades,
+  // medicación actual, cirugías previas).
+  allergies: z.string().optional().or(z.literal('')),
+  background: z.string().optional().or(z.literal('')),
   lastService: z.string().optional().or(z.literal('')),
   lastServiceDate: z.string().optional().or(z.literal('')),
   treatment: z.string().optional().or(z.literal('')),

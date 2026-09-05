@@ -31,8 +31,13 @@ import { normalizePets, createEmptyPet } from '@/utils/petUtils'
 import DeliveryAddressesEditor, { limpiarDireccionesParaGuardar } from '@/components/customer/DeliveryAddressesEditor'
 import LoyaltyManager from '@/components/loyalty/LoyaltyManager'
 import GuideLink from '@/components/guide/GuideLink'
-import { sucursalParaGuardar } from '@/utils/branchScope'
 import { CAMPOS_EN_MAYUSCULA, enMayuscula } from '@/utils/posCustomerData'
+import { tieneFichaDeAtencion } from '@/utils/businessModes'
+import {
+  nuevaAtencion, normalizarAtenciones, limpiarAtenciones, camposLegadoDeFicha,
+  ultimaAtencion, edadDesde, fechaCorta,
+} from '@/utils/fichaAtencion'
+import { sincronizarProximosControles } from '@/services/attentionService'
 
 // Etiquetas cortas por tipo de comprobante (para el modal de pedidos)
 const DOC_TYPE_LABELS = {
@@ -707,6 +712,15 @@ function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMod
 export default function Customers() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode, branchScope } = useAppContext()
 
+  // Vocabulario del rubro: en Clínica el cliente es el paciente. Cambia solo
+  // lo que se lee en pantalla; los datos y los permisos son los de Clientes.
+  const esClinica = businessMode === 'clinic'
+  const vocabulario = esClinica
+    ? { plural: 'Pacientes', singular: 'Paciente', minPlural: 'pacientes', minSingular: 'paciente' }
+    : { plural: 'Clientes', singular: 'Cliente', minPlural: 'clientes', minSingular: 'cliente' }
+  // Ficha de atención: alergias, antecedentes e historial de visitas.
+  const conFicha = tieneFichaDeAtencion(businessMode, businessSettings)
+
   // Demo: la lista sigue al estado vivo, así lo que se crea aparece de una.
   useEffect(() => {
     if (!isDemoMode || !demoData) return
@@ -739,6 +753,7 @@ export default function Customers() {
     contact: true,
     address: true,
     birthday: true,
+    lastVisit: true,
     orders: true,
     spent: true,
   })
@@ -786,6 +801,8 @@ export default function Customers() {
       lastServiceDate: '',
       treatment: '',
       referredBy: '',
+      allergies: '',
+      background: '',
       // Campos para mascota (veterinaria)
       petName: '',
       petSpecies: '',
@@ -866,6 +883,8 @@ export default function Customers() {
       lastServiceDate: '',
       treatment: '',
       referredBy: '',
+      allergies: '',
+      background: '',
     })
     setAttentions([])
     // Inicializar con una mascota vacía en veterinaria
@@ -875,106 +894,6 @@ export default function Customers() {
     setDeliveryAddresses([])
     setIsModalOpen(true)
   }
-
-  /**
-   * Historial de atenciones de un cliente, listo para editar.
-   *
-   * Un paciente que ya tenía la ficha de atención vieja (cuatro campos con la
-   * ÚLTIMA atención) estrena su historial con esa entrada: es justo el dato
-   * que la podóloga venía cargando y no se puede perder.
-   */
-  const normalizarAtenciones = (customer) => {
-    const lista = Array.isArray(customer?.attentions) ? customer.attentions : []
-    if (lista.length > 0) return lista.map(a => ({ ...a }))
-    // Sin historial pero con ficha vieja: se convierte en la primera entrada.
-    if (customer?.lastService || customer?.lastServiceDate || customer?.treatment) {
-      return [{
-        id: `at_${Date.now()}`,
-        date: customer.lastServiceDate || '',
-        service: customer.lastService || '',
-        treatment: customer.treatment || '',
-        recommendations: '',
-      }]
-    }
-    return []
-  }
-
-  /**
-   * Agenda en la Agenda de Citas los próximos controles de la ficha.
-   *
-   * Devuelve cuántas citas NUEVAS se crearon. Reglas:
-   *  - Atención con fecha de control y sin cita vinculada → se crea la cita y
-   *    su id se guarda en la atención (por eso el updateCustomer del final).
-   *  - Con cita ya vinculada → se le actualiza fecha/hora (mover el control
-   *    desde la ficha mueve la cita, no crea otra).
-   *  - Sin fecha de control → no se toca nada. Si borró la fecha, la cita
-   *    sigue en la agenda y se cancela desde allá, donde se ve el contexto.
-   */
-  const sincronizarProximosControles = async (businessId, customerId, data, atenciones) => {
-    const conControl = atenciones.filter(a => a.nextControlDate)
-    if (conControl.length === 0 || !customerId) return 0
-
-    const { createAppointment, updateAppointment } = await import('@/services/appointmentService')
-    let creadas = 0
-    let huboVinculosNuevos = false
-
-    for (const at of atenciones) {
-      if (!at.nextControlDate) continue
-      const hora = at.nextControlTime || '09:00'
-      if (at.nextControlAppointmentId) {
-        try {
-          await updateAppointment(businessId, at.nextControlAppointmentId, {
-            scheduledDate: at.nextControlDate,
-            scheduledTime: hora,
-          })
-        } catch (e) {
-          // La cita pudo borrarse desde la agenda: se repone.
-          console.warn('Cita del control no encontrada, se crea de nuevo:', e)
-          at.nextControlAppointmentId = null
-        }
-      }
-      if (!at.nextControlAppointmentId) {
-        at.nextControlAppointmentId = await createAppointment(businessId, {
-          customerId,
-          customerName: data.name || '',
-          phone: data.phone || '',
-          serviceName: at.service ? `Control — ${at.service}` : 'Control',
-          servicePrice: 0,
-          services: [],
-          scheduledDate: at.nextControlDate,
-          scheduledTime: hora,
-          // El control se agenda en el local donde se está atendiendo: si la
-          // cita no llevara sucursal, aparecería en la agenda de los dos.
-          branchId: sucursalParaGuardar(branchScope),
-          notes: 'Agendado desde la ficha de atención',
-        })
-        creadas++
-        huboVinculosNuevos = true
-      }
-    }
-
-    // Persistir los ids de las citas en la ficha: es la marca que evita
-    // duplicar la cita en el siguiente guardado.
-    if (huboVinculosNuevos) {
-      await updateCustomer(businessId, customerId, { attentions: atenciones })
-    }
-    return creadas
-  }
-
-  const nuevaAtencion = () => ({
-    id: `at_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-    date: new Date().toISOString().slice(0, 10),
-    service: '',
-    treatment: '',
-    recommendations: '',
-    specialist: '',
-    // Próximo control: fecha y hora de la siguiente visita. Al guardar se
-    // agenda solo en la Agenda de Citas (pedido de Podología Vital: sin esto
-    // tenía que buscar los controles "uno por uno" en el calendario).
-    nextControlDate: '',
-    nextControlTime: '',
-    nextControlAppointmentId: null,
-  })
 
   const openEditModal = customer => {
     setEditingCustomer(customer)
@@ -1002,6 +921,8 @@ export default function Customers() {
       lastServiceDate: customer.lastServiceDate || '',
       treatment: customer.treatment || '',
       referredBy: customer.referredBy || '',
+      allergies: customer.allergies || '',
+      background: customer.background || '',
       // Campos de mascota legacy (se mantienen para compatibilidad)
       petName: customer.petName || '',
       petSpecies: customer.petSpecies || '',
@@ -1135,38 +1056,12 @@ export default function Customers() {
       // los tramos temporales del selector de ubigeo y las filas sin dirección.
       data.deliveryAddresses = limpiarDireccionesParaGuardar(deliveryAddresses)
 
-      // Historial de atenciones: se descartan las filas vacías y se ordena de
-      // la más reciente a la más antigua, que es como se lee una historia
-      // clínica (lo último primero).
-      const atencionesLimpias = attentions
-        .filter(a => (a.service || '').trim() || (a.treatment || '').trim() || (a.recommendations || '').trim()
-          || (a.specialist || '').trim() || (a.nextControlDate || '').trim())
-        .map(a => ({
-          id: a.id,
-          date: a.date || '',
-          service: cleanText(a.service || ''),
-          treatment: cleanText(a.treatment || ''),
-          recommendations: cleanText(a.recommendations || ''),
-          specialist: cleanText(a.specialist || ''),
-          nextControlDate: a.nextControlDate || '',
-          nextControlTime: a.nextControlTime || '',
-          // Conserva el vínculo con la cita ya creada: es lo que evita
-          // agendar una cita nueva en cada guardado.
-          nextControlAppointmentId: a.nextControlAppointmentId || null,
-        }))
-        .sort((x, y) => String(y.date || '').localeCompare(String(x.date || '')))
+      // Historial de atenciones: filas vacías fuera y la más reciente primero,
+      // como se lee una historia clínica. Los cuatro campos de la ficha vieja
+      // siguen guardando la MÁS RECIENTE (ver camposLegadoDeFicha).
+      const atencionesLimpias = limpiarAtenciones(attentions)
       data.attentions = atencionesLimpias
-
-      // Los cuatro campos de la ficha vieja siguen guardando la atención MÁS
-      // RECIENTE. No son un duplicado por descuido: lo que ya los lee (la
-      // importación masiva, los datos migrados de 794 fichas) sigue andando
-      // sin enterarse de que ahora hay historial.
-      const ultima = atencionesLimpias[0]
-      if (ultima) {
-        data.lastService = ultima.service
-        data.lastServiceDate = ultima.date
-        data.treatment = ultima.treatment
-      }
+      Object.assign(data, camposLegadoDeFicha(atencionesLimpias))
 
       let result
 
@@ -1190,7 +1085,7 @@ export default function Customers() {
         // atención); si la fecha u hora cambian, la cita existente se mueve.
         try {
           const customerId = editingCustomer?.id || result.id
-          const citasCreadas = await sincronizarProximosControles(businessId, customerId, data, atencionesLimpias)
+          const citasCreadas = await sincronizarProximosControles(businessId, customerId, data, atencionesLimpias, branchScope)
           if (citasCreadas > 0) {
             toast.success(`${citasCreadas === 1 ? 'Próximo control agendado' : `${citasCreadas} controles agendados`} en la Agenda de Citas`)
           }
@@ -1202,8 +1097,8 @@ export default function Customers() {
 
         toast.success(
           editingCustomer
-            ? 'Cliente actualizado exitosamente'
-            : 'Cliente creado exitosamente'
+            ? `${vocabulario.singular} actualizado exitosamente`
+            : `${vocabulario.singular} creado exitosamente`
         )
         closeModal()
         loadCustomers()
@@ -1229,7 +1124,7 @@ export default function Customers() {
         : await deleteCustomer(businessId, deletingCustomer.id)
 
       if (result.success) {
-        toast.success('Cliente eliminado exitosamente')
+        toast.success(`${vocabulario.singular} eliminado exitosamente`)
         setDeletingCustomer(null)
         loadCustomers()
       } else {
@@ -1389,7 +1284,7 @@ export default function Customers() {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-primary-600 mx-auto mb-2" />
-          <p className="text-gray-600">Cargando clientes...</p>
+          <p className="text-gray-600">Cargando {vocabulario.minPlural}...</p>
         </div>
       </div>
     )
@@ -1401,11 +1296,11 @@ export default function Customers() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Clientes</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{vocabulario.plural}</h1>
             <GuideLink />
           </div>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
-            Gestiona tu cartera de clientes
+            {esClinica ? 'Datos, alergias e historial de atenciones de cada paciente' : 'Gestiona tu cartera de clientes'}
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
@@ -1437,7 +1332,7 @@ export default function Customers() {
           </Button>
           <Button onClick={openCreateModal} className="w-full sm:w-auto">
             <Plus className="w-4 h-4 mr-2" />
-            Nuevo Cliente
+            Nuevo {vocabulario.singular}
           </Button>
         </div>
       </div>
@@ -1450,7 +1345,7 @@ export default function Customers() {
               <Search className="w-5 h-5 text-gray-500 flex-shrink-0" />
               <input
                 type="text"
-                placeholder="Buscar por nombre, RUC, DNI, alumno..."
+                placeholder={esClinica ? 'Buscar por nombre, DNI o celular' : 'Buscar por nombre, RUC, DNI, alumno...'}
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
@@ -1522,7 +1417,7 @@ export default function Customers() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-600">Total Clientes</p>
+                <p className="text-sm font-medium text-gray-600">Total {vocabulario.plural}</p>
                 <p className="text-2xl font-bold text-gray-900 mt-2">{customers.length}</p>
               </div>
               <User className="w-6 h-6 sm:w-8 sm:h-8 text-primary-600 flex-shrink-0" />
@@ -1574,7 +1469,7 @@ export default function Customers() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-600">Promedio por Cliente</p>
+                  <p className="text-sm font-medium text-gray-600">Promedio por {vocabulario.singular}</p>
                   <p className="text-xl font-bold text-gray-900 mt-2">
                     {showAmounts ? formatCurrency(
                       customers.length > 0
@@ -1641,17 +1536,17 @@ export default function Customers() {
           <CardContent className="p-12 text-center">
             <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">
-              {searchTerm ? 'No se encontraron clientes' : 'No hay clientes registrados'}
+              {searchTerm ? `No se encontraron ${vocabulario.minPlural}` : `No hay ${vocabulario.minPlural} registrados`}
             </h3>
             <p className="text-gray-600 mb-4">
               {searchTerm
                 ? 'Intenta con otros términos de búsqueda'
-                : 'Comienza agregando tu primer cliente'}
+                : `Comienza agregando tu primer ${vocabulario.minSingular}`}
             </p>
             {!searchTerm && (
               <Button onClick={openCreateModal}>
                 <Plus className="w-4 h-4 mr-2" />
-                Crear Primer Cliente
+                Crear Primer {vocabulario.singular}
               </Button>
             )}
           </CardContent>
@@ -1667,6 +1562,14 @@ export default function Customers() {
                       <p className="text-sm font-medium truncate">{customer.name}</p>
                       {customer.businessName && customer.businessName !== customer.name && (
                         <p className="text-xs text-gray-500 truncate">{customer.businessName}</p>
+                      )}
+                      {conFicha && customer.allergies && (
+                        <span className="chip-error inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium truncate max-w-full" title={`Alergias: ${customer.allergies}`}>
+                          Alergia: {customer.allergies}
+                        </span>
+                      )}
+                      {conFicha && ultimaAtencion(customer) && (
+                        <p className="text-xs text-gray-500">Últ. atención: {fechaCorta(ultimaAtencion(customer))}</p>
                       )}
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0 ml-2">
@@ -1791,6 +1694,7 @@ export default function Customers() {
                           { key: 'contact', label: 'Contacto' },
                           { key: 'address', label: 'Dirección' },
                           { key: 'birthday', label: 'Cumpleaños' },
+                          ...(conFicha ? [{ key: 'lastVisit', label: 'Última atención' }] : []),
                           { key: 'orders', label: 'Pedidos' },
                           ...(permisos.verTotales ? [{ key: 'spent', label: 'Total Gastado' }] : []),
                         ].map(col => (
@@ -1845,6 +1749,7 @@ export default function Customers() {
                     </>
                   )}
                   {visibleColumns.birthday && <TableHead className="text-xs py-2">Cumple</TableHead>}
+                  {conFicha && visibleColumns.lastVisit && <TableHead className="text-xs py-2">Últ. atención</TableHead>}
                   {visibleColumns.orders && <TableHead className="text-xs py-2 text-center">Ped.</TableHead>}
                   {visibleColumns.spent && permisos.verTotales && <TableHead className="text-xs py-2 text-right">Gastado</TableHead>}
                   <TableHead className="text-xs py-2 text-right w-20"></TableHead>
@@ -1861,6 +1766,12 @@ export default function Customers() {
                         )}
                         {customer.code && (
                           <p className="text-[10px] text-gray-400 truncate max-w-[180px]">Cód: {customer.code}</p>
+                        )}
+                        {/* Rojo a propósito: es lo único que hay que ver antes de atender. */}
+                        {conFicha && customer.allergies && (
+                          <span className="chip-error inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium truncate max-w-[180px]" title={`Alergias: ${customer.allergies}`}>
+                            Alergia: {customer.allergies}
+                          </span>
                         )}
                       </TableCell>
                     )}
@@ -1963,15 +1874,26 @@ export default function Customers() {
                           const today = new Date()
                           const isBirthdayMonth = parseInt(m) === today.getMonth() + 1
                           const isBirthdayToday = isBirthdayMonth && parseInt(d) === today.getDate()
+                          const edad = conFicha ? edadDesde(customer.birthDate) : null
                           return (
-                            <span className={`text-xs ${isBirthdayToday ? 'font-bold text-pink-600' : isBirthdayMonth ? 'font-medium text-purple-600' : 'text-gray-600'}`}>
-                              {`${d}/${m}`}
-                              {isBirthdayToday && ' 🎂'}
-                            </span>
+                            <>
+                              <span className={`text-xs ${isBirthdayToday ? 'font-bold text-pink-600' : isBirthdayMonth ? 'font-medium text-purple-600' : 'text-gray-600'}`}>
+                                {`${d}/${m}`}
+                                {isBirthdayToday && ' 🎂'}
+                              </span>
+                              {edad != null && (
+                                <span className="text-[10px] text-gray-400 ml-1">{edad} años</span>
+                              )}
+                            </>
                           )
                         })() : (
                           <span className="text-xs text-gray-400">-</span>
                         )}
+                      </TableCell>
+                    )}
+                    {conFicha && visibleColumns.lastVisit && (
+                      <TableCell className="py-1.5">
+                        <span className="text-xs text-gray-600">{fechaCorta(ultimaAtencion(customer)) || '-'}</span>
                       </TableCell>
                     )}
                     {visibleColumns.orders && (
@@ -2037,7 +1959,7 @@ export default function Customers() {
             onClick={() => setVisibleCount(prev => prev + ITEMS_PER_PAGE)}
             className="text-sm text-gray-600 hover:text-primary-600 transition-colors py-2 px-4 hover:bg-gray-50 rounded-lg"
           >
-            Ver más clientes ({filteredCustomers.length - visibleCount} restantes)
+            Ver más {vocabulario.minPlural} ({filteredCustomers.length - visibleCount} restantes)
           </button>
         </div>
       )}
@@ -2059,7 +1981,7 @@ export default function Customers() {
       <Modal
         isOpen={isModalOpen}
         onClose={closeModal}
-        title={editingCustomer ? 'Editar Cliente' : 'Nuevo Cliente'}
+        title={editingCustomer ? `Editar ${vocabulario.singular}` : `Nuevo ${vocabulario.singular}`}
         size="lg"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -2179,9 +2101,35 @@ export default function Customers() {
               `posCustomFields` (alumno, placa, licencia). Por eso se agregan
               acá y en el esquema, y nada más: nadie tiene que tocarlos en el
               POS, el ticket, el PDF ni las impresoras. */}
-          {businessSettings?.posCustomFields?.showServiceCardFields && (
+          {conFicha && (
             <div className="border border-gray-200 rounded-lg p-3 space-y-3">
               <p className="text-sm font-semibold text-gray-900">Ficha de atención</p>
+
+              {/* Lo que hay que ver ANTES de tocar al paciente va arriba del
+                  historial a propósito. */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Input
+                  label="Alergias"
+                  placeholder="Ej: Penicilina, látex. Vacío = ninguna conocida"
+                  error={errors.allergies?.message}
+                  {...register('allergies')}
+                />
+                <Input
+                  label="Recomendado por"
+                  placeholder="Quién lo trajo o lo refirió"
+                  error={errors.referredBy?.message}
+                  {...register('referredBy')}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Antecedentes</label>
+                <textarea
+                  rows={2}
+                  placeholder="Enfermedades, medicación actual, cirugías o tratamientos previos"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 resize-y"
+                  {...register('background')}
+                />
+              </div>
 
               {/* Historial de atenciones. Antes eran cuatro campos planos que
                   guardaban SOLO la última: cada control nuevo pisaba el
@@ -2318,29 +2266,6 @@ export default function Customers() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Input
-                  label="Recomendado por"
-                  placeholder="Quién lo trajo o lo refirió"
-                  error={errors.referredBy?.message}
-                  {...register('referredBy')}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Input
-                  label="Tratamiento / medicación"
-                  placeholder="Ej: Tritri amorolfina"
-                  error={errors.treatment?.message}
-                  {...register('treatment')}
-                />
-                <Input
-                  label="Recomendado por"
-                  placeholder="Quién lo trajo o lo refirió"
-                  error={errors.referredBy?.message}
-                  {...register('referredBy')}
-                />
-              </div>
             </div>
           )}
 
@@ -2585,7 +2510,7 @@ export default function Customers() {
       <Modal
         isOpen={!!deletingCustomer}
         onClose={() => setDeletingCustomer(null)}
-        title="Eliminar Cliente"
+        title={`Eliminar ${vocabulario.singular}`}
         size="sm"
       >
         <div className="space-y-4">
@@ -2595,7 +2520,7 @@ export default function Customers() {
             </div>
             <div>
               <p className="text-sm text-gray-700">
-                ¿Estás seguro de que deseas eliminar al cliente{' '}
+                ¿Estás seguro de que deseas eliminar {esClinica ? 'al paciente' : 'al cliente'}{' '}
                 <strong>{deletingCustomer?.name}</strong>?
               </p>
               <p className="text-sm text-gray-600 mt-2">

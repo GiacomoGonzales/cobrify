@@ -270,6 +270,7 @@ export default function PuntoDeVenta() {
   const { guardar, guardando } = useGuardado()
 
   const esRestaurante = businessMode === 'restaurant'
+  const esClinica = businessMode === 'clinic'
   // Veterinaria y clinica recuerdan sus servicios: el plazo por defecto vive aca.
   const conRecordatorios = recuerdaServicios(businessMode)
   const esFarmacia = businessMode === 'pharmacy'
@@ -1200,14 +1201,19 @@ export default function PuntoDeVenta() {
                   titulo={'Campo "Tarjeta de Propiedad"'}
                   descripcion="Muestra un campo para ingresar la tarjeta de propiedad del vehículo en el POS y comprobantes."
                 />
+                {/* En Clínica la ficha viene de fábrica (ver tieneFichaDeAtencion):
+                    la casilla se muestra encendida y sin interruptor. */}
                 <Ajuste
                   id="opcion-showServiceCardFields"
-                  checked={camposPOS.showServiceCardFields}
+                  checked={esClinica || camposPOS.showServiceCardFields}
+                  disabled={esClinica}
                   onChange={e => ponerCamposPOS({ showServiceCardFields: e.target.checked })}
                   titulo="Ficha de atención en el cliente"
-                  descripcion={camposPOS.showServiceCardFields
-                    ? 'Habilitado: la ficha del cliente suma último procedimiento, fecha de la última atención, tratamiento y quién lo recomendó. Para consultorios, clínicas, salones y todo el que atienda a la misma persona cada tanto.'
-                    : 'Deshabilitado: la ficha del cliente muestra solo los datos básicos.'}
+                  descripcion={esClinica
+                    ? 'En modo Clínica la ficha viene siempre activa: alergias, antecedentes, quién lo recomendó y el historial de atenciones de cada paciente.'
+                    : camposPOS.showServiceCardFields
+                      ? 'Habilitado: la ficha del cliente suma alergias, antecedentes, quién lo recomendó y el historial de atenciones (procedimiento, tratamiento, especialista, próximo control). Para consultorios, clínicas, salones y todo el que atienda a la misma persona cada tanto.'
+                      : 'Deshabilitado: la ficha del cliente muestra solo los datos básicos.'}
                 />
                 <Ajuste
                   id="opcion-showSubscriptionFields"

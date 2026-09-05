@@ -90,3 +90,16 @@ export const atiendeConCita = (businessMode, businessSettings) =>
  */
 export const recuerdaServicios = (businessMode) =>
   businessMode === 'veterinary' || businessMode === 'clinic'
+
+/**
+ * ¿Este negocio lleva FICHA DE ATENCIÓN en el cliente? (alergias, antecedentes
+ * e historial de visitas). En Clínica viene de fábrica; General la enciende
+ * con "Ficha de atención en el cliente" (Configuración > Punto de venta), que
+ * es como la usaban podólogas y consultorios antes de que existiera el modo.
+ *
+ * @param {string} businessMode
+ * @param {object} [businessSettings]
+ * @returns {boolean}
+ */
+export const tieneFichaDeAtencion = (businessMode, businessSettings) =>
+  businessMode === 'clinic' || businessSettings?.posCustomFields?.showServiceCardFields === true
