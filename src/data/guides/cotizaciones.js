@@ -6,7 +6,7 @@
  */
 export default {
   id: 'cotizaciones',
-  actualizado: '02/09/2026',
+  actualizado: '05/09/2026',
   intro:
     'Una cotización es la propuesta de precio que le pasas a un cliente antes de vender. No va a SUNAT ni descuenta stock: es un documento comercial. Si el cliente acepta, se convierte en comprobante con un clic.',
 
@@ -29,6 +29,14 @@ export default {
         {
           type: 'consejo',
           text: 'Pon siempre una fecha de validez. Es tu protección cuando el cliente vuelve tres meses después pidiendo el precio de entonces.',
+        },
+        {
+          type: 'texto',
+          text: 'Si tienes sucursales, la cotización nace en la que tengas puesta en el **selector del encabezado**, igual que en el Punto de Venta. Más abajo del formulario, el bloque **Sucursal** te deja cambiarla: de ahí sale la dirección que aparece impresa, y es la sede por la que después la encuentras al filtrar.',
+        },
+        {
+          type: 'ojo',
+          text: 'Con el selector en **Todas** no hay forma de adivinar cuál quieres, así que la cotización sale a nombre de la Principal. Si es de otra sede, elígela en ese bloque antes de guardar.',
         },
       ],
     },

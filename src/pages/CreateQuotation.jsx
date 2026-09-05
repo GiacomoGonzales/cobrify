@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { isPharmaLikeMode } from '@/utils/businessModes'
+import { sucursalInicial } from '@/utils/branchScope'
 import { Plus, Trash2, Save, Loader2, ArrowLeft, UserPlus, X, Search, Tag, Package, Hash, User, FileText, Store, DollarSign, RefreshCw, CheckCircle } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams, useLocation } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
@@ -48,7 +49,7 @@ const UNITS = UNIDADES_SELECT
 
 export default function CreateQuotation() {
   const { user, filterWarehousesByAccess } = useAuth()
-  const { businessSettings, businessMode, getBusinessId, filterBranchesByAccess, hasMainBranchAccess } = useAppContext()
+  const { businessSettings, businessMode, getBusinessId, filterBranchesByAccess, hasMainBranchAccess, activeBranchId } = useAppContext()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
   const { id: quotationId } = useParams() // Si hay ID, es modo edición
@@ -515,13 +516,17 @@ export default function CreateQuotation() {
   // filtro de ubicación la escondía. Caso real, reportado por un cliente.
   //
   // Cuando los permisos llegan, esto corrige la sucursal elegida.
+  // Además, la cotización nace en la sede del selector del header, como en el
+  // POS: si estás parado en Sede Norte, no debería guardarse en la Principal y
+  // desaparecer al filtrar por Sede Norte. El selector del formulario queda
+  // igual para corregirla.
   useEffect(() => {
     if (quotationId || isEditing) return          // editando manda lo guardado
-    if (hasMainBranchAccess !== false) return     // puede usar la Principal
     if (selectedBranch) return                    // ya hay una elegida
     if (branches.length === 0) return             // todavía no cargaron
-    setSelectedBranch(branches[0])
-  }, [hasMainBranchAccess, branches, selectedBranch, quotationId, isEditing])
+    const inicial = sucursalInicial(activeBranchId, branches, hasMainBranchAccess)
+    if (inicial) setSelectedBranch(inicial)
+  }, [hasMainBranchAccess, branches, selectedBranch, quotationId, isEditing, activeBranchId])
 
   const loadData = async () => {
     if (!user?.uid) return
@@ -565,15 +570,10 @@ export default function CreateQuotation() {
           ? filterBranchesByAccess(branchesResult.data || [])
           : (branchesResult.data || [])
         setBranches(accessibleBranches)
-        // Si no tiene acceso a la Sucursal Principal (branchId null), preseleccionar
-        // su primera sucursal permitida para que la cotización no caiga en Principal.
-        // OJO: esto puede correr ANTES de que lleguen los permisos del
-        // sub-usuario (loadData depende de `user`, no de allowedBranches). Con
-        // los permisos vacíos, hasMainBranchAccess vale true y no se
-        // preselecciona nada: por eso hay un efecto correctivo más abajo.
-        if (!quotationId && hasMainBranchAccess === false && accessibleBranches.length > 0) {
-          setSelectedBranch(accessibleBranches[0])
-        }
+        // La sucursal inicial (la del header, o la primera permitida si no puede
+        // usar la Principal) la pone el efecto de arriba en cuanto hay lista.
+        // Va ahí y no acá porque esto corre ANTES de que lleguen los permisos
+        // del sub-usuario: loadData depende de `user`, no de allowedBranches.
       }
 
       // Cargar vendedores activos

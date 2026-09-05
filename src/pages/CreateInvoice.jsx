@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Trash2, Save, Eye, Loader2, ArrowLeft, DollarSign, RefreshCw } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { sucursalInicial } from '@/utils/branchScope'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -110,7 +111,7 @@ const UNITS = [
 
 export default function CreateInvoice() {
   const { user, getBusinessId } = useAuth()
-  const { businessSettings, filterBranchesByAccess, hasMainBranchAccess } = useAppContext()
+  const { businessSettings, filterBranchesByAccess, hasMainBranchAccess, activeBranchId } = useAppContext()
   const toast = useToast()
   const navigate = useNavigate()
   const [customers, setCustomers] = useState([])
@@ -169,14 +170,15 @@ export default function CreateInvoice() {
     loadData()
   }, [user, currentBusinessId])
 
-  // Red de seguridad: si los permisos llegan tarde, corregir la sucursal en
-  // cuanto están (mismo caso real que en CreateQuotation).
+  // El comprobante nace en la sede del selector del header, como en el POS.
+  // También hace de red de seguridad: si los permisos del sub-usuario llegan
+  // tarde, la sucursal se corrige en cuanto están (caso real reportado).
   useEffect(() => {
-    if (hasMainBranchAccess !== false) return
     if (selectedBranch) return
     if (branches.length === 0) return
-    setSelectedBranch(branches[0])
-  }, [hasMainBranchAccess, branches, selectedBranch])
+    const inicial = sucursalInicial(activeBranchId, branches, hasMainBranchAccess)
+    if (inicial) setSelectedBranch(inicial)
+  }, [hasMainBranchAccess, branches, selectedBranch, activeBranchId])
 
   // Trae el TC del día desde SBS (vía Cloud Function). Si el usuario ya
   // editó el TC a mano, no lo sobrescribe.
@@ -241,11 +243,7 @@ export default function CreateInvoice() {
           ? filterBranchesByAccess(branchesResult.data || [])
           : (branchesResult.data || [])
         setBranches(accessibleBranches)
-        // Sin acceso a la Sucursal Principal: preseleccionar su primera sucursal
-        // permitida para que el comprobante no caiga en Principal (branchId null).
-        if (hasMainBranchAccess === false && accessibleBranches.length > 0) {
-          setSelectedBranch(accessibleBranches[0])
-        }
+        // La sucursal inicial la pone el efecto de arriba en cuanto hay lista.
       }
     } catch (error) {
       console.error('Error al cargar datos:', error)

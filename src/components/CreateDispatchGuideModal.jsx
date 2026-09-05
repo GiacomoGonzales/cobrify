@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { X, Truck, MapPin, User, Package, Calendar, FileText, Plus, Trash2, ChevronDown, ChevronUp, Store, Search, Loader2, AlertTriangle } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
+import { sucursalInicial } from '@/utils/branchScope'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
@@ -90,7 +91,7 @@ const getTomorrowDateString = () => {
 
 export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = null, referenceInvoice = null, selectedBranch = null, cloneData = null }) {
   const toast = useToast()
-  const { getBusinessId, filterBranchesByAccess, filterWarehousesByAccess, allowedBranches, user, businessMode, businessSettings } = useAppContext()
+  const { getBusinessId, filterBranchesByAccess, filterWarehousesByAccess, allowedBranches, user, businessMode, businessSettings, activeBranchId } = useAppContext()
   const isPharmacy = businessMode === 'pharmacy'
   const hasBatchControl = isPharmacy || businessSettings?.posCustomFields?.showBatchExpiryInPurchase
 
@@ -362,19 +363,19 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
       ).slice(0, 5)
     : []
 
-  // Inicializar sucursal seleccionada
+  // Inicializar sucursal seleccionada. El orden importa: la del comprobante que
+  // origina la guía manda sobre todo; después la que llegue por prop; y si no
+  // hay ninguna, la del selector del header (como en el POS).
   useEffect(() => {
     if (referenceInvoice?.branchId) {
       setSelectedBranchId(referenceInvoice.branchId)
     } else if (selectedBranch?.id) {
       setSelectedBranchId(selectedBranch.id)
-    } else if (!hasMainAccess && branches.length > 0) {
-      // Si no tiene acceso a main, auto-seleccionar la primera sucursal permitida
-      setSelectedBranchId(branches[0].id)
     } else {
-      setSelectedBranchId('')
+      const inicial = sucursalInicial(activeBranchId, branches, hasMainAccess)
+      setSelectedBranchId(inicial?.id || '')
     }
-  }, [referenceInvoice?.branchId, selectedBranch?.id, isOpen, hasMainAccess, branches])
+  }, [referenceInvoice?.branchId, selectedBranch?.id, isOpen, hasMainAccess, branches, activeBranchId])
 
   // Pre-llenar datos si hay factura de referencia
   useEffect(() => {

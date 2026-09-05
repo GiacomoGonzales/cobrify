@@ -87,7 +87,7 @@ const cleanUndefined = (obj) => {
 }
 
 export default function CreatePurchase() {
-  const { user, filterWarehousesByAccess } = useAuth()
+  const { user, filterWarehousesByAccess, activeBranchId } = useAuth()
   const { getBusinessId, businessMode, businessSettings, isDemoMode, demoData } = useAppContext()
   // Precios de venta en compras: habilitado para todos por defecto (ya no es una opción configurable).
   const showSalePriceInPurchase = true
@@ -576,10 +576,19 @@ export default function CreatePurchase() {
         activeWarehouses = filterWarehousesByAccess(activeWarehouses)
         setWarehouses(activeWarehouses)
 
-        // Solo seleccionar almacén por defecto si NO estamos en modo edición
+        // Solo seleccionar almacén por defecto si NO estamos en modo edición.
+        //
+        // La compra no guarda sucursal: su sede sale del ALMACÉN donde entra la
+        // mercadería. Por eso el almacén arranca en el de la sede del selector
+        // del header — si estás parado en Sede Norte, la compra entra ahí y no
+        // en la Principal. Con el selector en "Todas" se queda en la Principal,
+        // como antes.
         if (!isEditMode) {
-          const mainBranchWarehouses = activeWarehouses.filter(w => !w.branchId)
-          const defaultWarehouse = mainBranchWarehouses.find(w => w.isDefault) || mainBranchWarehouses[0] || activeWarehouses[0] || null
+          const deLaSede = activeBranchId
+            ? activeWarehouses.filter(w => w.branchId === activeBranchId)
+            : activeWarehouses.filter(w => !w.branchId)
+          const candidatos = deLaSede.length > 0 ? deLaSede : activeWarehouses
+          const defaultWarehouse = candidatos.find(w => w.isDefault) || candidatos[0] || null
           setSelectedWarehouse(defaultWarehouse)
         }
       }

@@ -48,6 +48,32 @@ export function sucursalParaGuardar(alcance) {
   return scope === 'all' || scope === 'main' ? '' : scope
 }
 
+/**
+ * Con qué sucursal debe ABRIR un formulario que crea un documento.
+ *
+ * Manda la sede del selector del header: si el usuario está parado en "Sede
+ * Norte", lo que emita ahí nace en Sede Norte y no en la Principal. Es lo que
+ * ya hacía el POS y le faltaba a los demás formularios.
+ *
+ * Con el selector en "Todas" no hay respuesta obvia (misma razón que
+ * `sucursalParaGuardar`), así que cae en la Principal — o en la primera
+ * permitida, si el usuario no puede usar la Principal.
+ *
+ * @param activeBranchId  el del header ya resuelto: un id real, o null para
+ *                        "Todas"/Principal
+ * @param sucursalesAccesibles  las que el usuario puede usar (ya filtradas)
+ * @returns la sucursal elegida, o null = Principal. El formulario deja su
+ *          selector visible para corregirla.
+ */
+export function sucursalInicial(activeBranchId, sucursalesAccesibles, hasMainBranchAccess) {
+  const lista = sucursalesAccesibles || []
+  const delHeader = activeBranchId ? lista.find(b => b.id === activeBranchId) : null
+  if (delHeader) return delHeader
+  // Sin acceso a la Principal, el documento no puede nacer ahí.
+  if (hasMainBranchAccess === false && lista.length > 0) return lista[0]
+  return null
+}
+
 /** Nombre legible de la sucursal de un registro, para mostrarlo en la lista. */
 export function nombreDeSucursal(branchId, branches = [], nombrePrincipal = 'Principal') {
   if (!branchId || branchId === 'main') return nombrePrincipal
