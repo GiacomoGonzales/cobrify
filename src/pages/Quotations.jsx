@@ -54,6 +54,7 @@ import { preloadLogo } from '@/utils/pdfGenerator'
 import { getActiveBranches } from '@/services/branchService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { useLocationAccess } from '@/utils/locationAccess'
+import { esDeSucursal } from '@/utils/branchScope'
 import GuideLink from '@/components/guide/GuideLink'
 import { vinculoDe } from '@/utils/documentLinks'
 
@@ -530,10 +531,12 @@ export default function Quotations() {
    * mientras la lista salía vacía, y el usuario no entendía dónde estaban sus
    * cotizaciones. Un número que nadie puede abrir es peor que no mostrarlo.
    */
-  const visibleQuotations = quotations.filter(canAccessQuotation).filter(quotation => {
-    if (filterBranch === 'all') return true
-    return filterBranch === 'main' ? !quotation.branchId : quotation.branchId === filterBranch
-  })
+  // El criterio de sede es el compartido (utils/branchScope), el del selector
+  // del header. Escrito acá a mano, "Principal" aceptaba SOLO las cotizaciones
+  // sin sucursal grabada y dejaba fuera las que la tienen en 'main'.
+  const visibleQuotations = quotations
+    .filter(canAccessQuotation)
+    .filter(quotation => esDeSucursal(quotation, filterBranch))
 
   // Filtrar cotizaciones (búsqueda flexible: multi-palabra parcial, sin acentos)
   const filteredQuotations = visibleQuotations.filter(quotation => {

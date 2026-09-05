@@ -24,6 +24,7 @@ import FiltrosDeGuias from '@/components/guias/FiltrosDeGuias'
 import ChipEstadoGuia from '@/components/guias/ChipEstadoGuia'
 import { FILTROS_INICIALES, ESTADOS_DE_GUIA, cumpleFiltros, hayFiltrosActivos, nombreDeZip, etiquetaDeFiltroFecha } from '@/utils/filtroGuias'
 import { descargarZipDePdfs } from '@/utils/zipDePdfs'
+import { esDeSucursal } from '@/utils/branchScope'
 
 const TRANSFER_REASONS = {
   '01': 'Venta',
@@ -652,17 +653,10 @@ export default function DispatchGuides() {
     if (!cumpleFiltros(guide, filtros, hoy)) return false
     const matchesSearch = matchesPrebuilt(deferredSearchTerm, guideSearchIndex.get(guide.id) || '')
 
-    // Filtrar por sucursal
-    let matchesBranch = true
-    if (filterBranch !== 'all') {
-      if (filterBranch === 'main') {
-        matchesBranch = !guide.branchId
-      } else {
-        matchesBranch = guide.branchId === filterBranch
-      }
-    }
-
-    return matchesSearch && matchesBranch
+    // Sucursal: el criterio compartido del selector del header
+    // (utils/branchScope). Escrito acá a mano, "Principal" dejaba fuera las
+    // guías con la sede grabada como 'main'.
+    return matchesSearch && esDeSucursal(guide, filterBranch)
   })
 
   const displayedGuides = filteredGuides.slice(0, visibleCount)
