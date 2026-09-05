@@ -18,7 +18,7 @@
  */
 export default {
   id: 'facturas',
-  actualizado: '14/08/2026',
+  actualizado: '05/09/2026',
   intro:
     'Ventas es el historial de todo lo que emitiste: facturas, boletas, notas de venta, notas de crédito y de débito. Desde acá consultas, cobras lo pendiente, corriges errores, reimprimes y descargas. Es la página a la que vuelves cuando algo de una venta pasada necesita atención.',
 
@@ -260,6 +260,14 @@ export default {
           text: 'El botón **Exportar Excel** abre una ventana para elegir qué incluir: rango de fechas (con accesos rápidos Hoy, Ayer, Esta semana, Este mes), tipos de comprobante, vendedores, formas de pago y estado SUNAT. Puedes incluir el detalle de productos de cada venta y una hoja aparte con el resumen **Por Vendedor**.',
         },
         { type: 'ui', kind: 'botonSecundario', label: 'Exportar Excel' },
+        {
+          type: 'texto',
+          text: 'La ventana **arranca con los filtros que tengas puestos en la lista**: el período, el tipo de comprobante, el estado, el vendedor, la forma de pago y la sucursal. Si venías mirando agosto, el Excel sale de agosto sin que vuelvas a elegirlo. Ahí mismo puedes ampliar o recortar lo que quieras, y **Quitar filtros** deja la ventana lista para exportar todo.',
+        },
+        {
+          type: 'ojo',
+          text: 'Los comprobantes **archivados** no entran en el Excel, igual que no se ven en la lista. Si necesitas exportarlos, marca primero **Ver comprobantes archivados** en la página.',
+        },
         {
           type: 'texto',
           text: 'La casilla **Evitar duplicados por conversión** viene marcada y conviene dejarla así: excluye las notas de venta ya convertidas y deja el comprobante formal, para que la misma venta no aparezca dos veces. Desmárcala solo si necesitas ver todos los documentos tal cual.',

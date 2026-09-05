@@ -101,6 +101,11 @@ const ORDER_TYPE_LABELS = {
   counter: 'En Local',
 }
 
+// Los cinco tipos que sabe exportar el Excel. Están acá porque los leen tres
+// lugares: el estado inicial del export, "Seleccionar todos" y el precargado
+// desde los filtros de la página.
+const TIPOS_EXPORTABLES = ['factura', 'boleta', 'nota_venta', 'nota_credito', 'nota_debito']
+
 export default function InvoiceList() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode, filterBranchesByAccess, hasMainBranchAccess, isBusinessOwner, isAdmin, allowedBranches, allowedWarehouses, assignedSellerId , branchScope } = useAppContext()
   const permisos = useDataPermissions()
@@ -292,7 +297,7 @@ export default function InvoiceList() {
   const [showPendingReport, setShowPendingReport] = useState(false) // Reporte de pagos pendientes por cliente
   // Todos los filtros multi-selección: array vacío = TODOS (sin filtrar).
   const [exportFilters, setExportFilters] = useState({
-    types: ['factura', 'boleta', 'nota_venta', 'nota_credito', 'nota_debito'], // tipos seleccionados
+    types: [...TIPOS_EXPORTABLES], // tipos seleccionados
     sunatStatuses: [], // [] = todos; ej: ['accepted', 'pending', ...]
     sellers: [], // [] = todos; ids de vendedores (createdBy)
     paymentStatuses: [], // [] = todos; ej: ['paid', 'pending', ...]
@@ -2258,8 +2263,10 @@ Gracias por tu preferencia.`
 
   const handleExportToExcel = async () => {
     try {
-      // Filtrar facturas según los criterios seleccionados
-      let filteredInvoices = [...invoices];
+      // Filtrar facturas según los criterios seleccionados.
+      // Los archivados no se ven en la lista, así que tampoco se exportan;
+      // si estás justamente mirando los archivados, se exportan esos.
+      let filteredInvoices = invoices.filter(inv => showArchived ? inv.archived === true : inv.archived !== true);
 
       // Filtrar por tipos seleccionados (array)
       if (exportFilters.types && exportFilters.types.length > 0) {
@@ -2337,14 +2344,13 @@ Gracias por tu preferencia.`
       // garantizado: `invoices` viene saneado por canAccessInvoice y el desplegable
       // solo ofrece sucursales permitidas. Si el usuario está restringido, "Todas"
       // ya equivale a "todas mis sucursales".
+      // El criterio de sucursal es el compartido (utils/branchScope), el mismo
+      // que la lista. Escrito a mano acá, "Principal" solo aceptaba las ventas
+      // SIN branchId y dejaba fuera las que lo tienen en 'main': la lista
+      // mostraba diez y el Excel traía ocho.
       const exportBranch = exportFilters.branch || 'all'
       if (exportBranch !== 'all') {
-        filteredInvoices = filteredInvoices.filter(inv => {
-          if (exportBranch === 'main') {
-            return !inv.branchId
-          }
-          return inv.branchId === exportBranch
-        })
+        filteredInvoices = filteredInvoices.filter(inv => esDeSucursal(inv, exportBranch))
       }
 
       if (filteredInvoices.length === 0) {
@@ -2628,6 +2634,51 @@ Gracias por tu preferencia.`
       return `${formatShortDate(range.start)} - ${formatShortDate(range.end)}`
     }
     return 'Todo el tiempo'
+  }
+
+  // La ventana de exportar arranca con lo que la página ya tiene filtrado:
+  // fechas, tipo, estado de pago, vendedor, forma de pago y sucursal. Antes
+  // abría vacía, así que quien venía mirando agosto y un vendedor tenía que
+  // volver a elegir todo — y si no se daba cuenta, se llevaba el año entero.
+  // Los filtros de la ventana siguen ahí para ampliar o recortar, y
+  // "Quitar filtros" vuelve a exportar todo. Mismo criterio que Compras.
+  const openExportModal = () => {
+    const rango = getDateRange()
+    setExportFilters(prev => ({
+      ...prev,
+      types: filterType === 'all' ? [...TIPOS_EXPORTABLES] : [filterType],
+      // La página no filtra por estado SUNAT: se limpia para que una elección
+      // de un export anterior no siga escondiendo comprobantes sin avisar.
+      sunatStatuses: [],
+      sellers: filterSeller === 'all' ? [] : [filterSeller],
+      paymentStatuses: filterStatus === 'all' ? [] : [filterStatus],
+      paymentMethods: filterPaymentMethod === 'all' ? [] : [filterPaymentMethod],
+      branch: filterBranch,
+      startDate: rango ? toYMD(rango.start) : '',
+      endDate: rango ? toYMD(rango.end) : '',
+    }))
+    // 'Hoy' es el único acceso rápido que significa lo mismo en los dos lados;
+    // el resto (3 días, 30 días, un mes elegido) queda como personalizado con
+    // sus fechas puestas.
+    setExportDatePreset(dateFilter === 'today' ? 'today' : (rango ? 'custom' : ''))
+    setShowExportModal(true)
+  }
+
+  // El caso opuesto: filtré la lista para buscar algo y ahora quiero el Excel
+  // completo. Deja el export como estaba de fábrica, sin tocar la lista.
+  const quitarFiltrosDelExport = () => {
+    setExportFilters(prev => ({
+      ...prev,
+      types: [...TIPOS_EXPORTABLES],
+      sunatStatuses: [],
+      sellers: [],
+      paymentStatuses: [],
+      paymentMethods: [],
+      branch: 'all',
+      startDate: '',
+      endDate: '',
+    }))
+    setExportDatePreset('')
   }
 
   // Búsqueda con haystack pre-construido (perf): re-normaliza solo cuando cambia
@@ -2939,7 +2990,7 @@ Gracias por tu preferencia.`
           {permisos.exportar && (
             <Button
               variant="outline"
-              onClick={() => setShowExportModal(true)}
+              onClick={openExportModal}
               className="w-full sm:w-auto"
             >
               <FileSpreadsheet className="w-4 h-4 mr-2" />
@@ -5534,9 +5585,18 @@ Gracias por tu preferencia.`
         size="3xl"
       >
         <div className="space-y-5">
-          <p className="text-sm text-gray-600">
-            Puedes marcar varias opciones en cada filtro. Si dejas un filtro sin marcar, se incluyen todos.
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+            <p className="text-sm text-gray-600 flex-1 min-w-[16rem]">
+              Arranca con los filtros que tienes puestos en la página. Puedes marcar varias opciones en cada filtro; si dejas uno sin marcar, se incluyen todos.
+            </p>
+            <button
+              type="button"
+              onClick={quitarFiltrosDelExport}
+              className="text-sm text-primary-600 hover:text-primary-700 font-medium whitespace-nowrap"
+            >
+              Quitar filtros
+            </button>
+          </div>
 
           {/* Fila principal: tipos (izquierda) + filtros (derecha) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -5550,10 +5610,10 @@ Gracias por tu preferencia.`
               <label className="flex items-center gap-2 pb-2 border-b border-gray-200">
                 <input
                   type="checkbox"
-                  checked={exportFilters.types.length === 5}
+                  checked={exportFilters.types.length === TIPOS_EXPORTABLES.length}
                   onChange={(e) => {
                     if (e.target.checked) {
-                      setExportFilters({ ...exportFilters, types: ['factura', 'boleta', 'nota_venta', 'nota_credito', 'nota_debito'] })
+                      setExportFilters({ ...exportFilters, types: [...TIPOS_EXPORTABLES] })
                     } else {
                       setExportFilters({ ...exportFilters, types: [] })
                     }
