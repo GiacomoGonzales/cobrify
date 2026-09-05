@@ -495,11 +495,14 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
               <Aviso titulo="Nota del equipo">{ficha.notasAdmin}</Aviso>
             )}
 
-            {/* Sin esto, un contacto con UNA sola empresa no tendria como
-                sumar la segunda: la lista solo aparece cuando ya hay varias. */}
-            <Boton className="w-full" onClick={() => setGestorAbierto(true)}>
-              {cuentas.length > 1 ? 'Agregar o quitar empresas' : 'Agregar otra empresa'}
-            </Boton>
+            {/* Agregar y quitar empresas se hace en la lista de cuentas, no
+                aca. La excepcion es el contacto con UNA sola: no tiene lista,
+                y sin este boton no habria como sumarle la segunda. */}
+            {cuentas.length === 1 && (
+              <Boton className="w-full" onClick={() => setGestorAbierto(true)}>
+                Agregar otra empresa
+              </Boton>
+            )}
 
             {/* Lo que no cabe en 320 px: sucursales, sub-usuarios, historial,
                 funciones. Se abre en otra pestaña a proposito — quien lo mira
