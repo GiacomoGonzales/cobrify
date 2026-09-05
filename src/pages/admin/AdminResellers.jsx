@@ -71,13 +71,14 @@ export default function AdminResellers() {
     phone: '',
     contactName: '',
     discountOverride: '',  // Vacío = usar tier automático
-    balance: 0,
     isActive: true,
     customDomain: '',  // Solo admin puede configurar esto
     pricingModel: 'v2' // Modelo de precios: 'v2' (nuevo) o 'legacy'
   })
 
   const [depositAmount, setDepositAmount] = useState('')
+  // Algunos resellers pagan el monto mas IGV y otros no, asi que va suelto.
+  const [depositoConIgv, setDepositoConIgv] = useState(false)
   const [depositNote, setDepositNote] = useState('')
 
   useEffect(() => {
@@ -161,7 +162,6 @@ export default function AdminResellers() {
       phone: '',
       contactName: '',
       discountOverride: '',
-      balance: 0,
       isActive: true,
       customDomain: '',
       pricingModel: 'v2'
@@ -232,7 +232,6 @@ export default function AdminResellers() {
       discountOverride: reseller.discountOverride !== undefined && reseller.discountOverride !== null
         ? reseller.discountOverride.toString()
         : '',
-      balance: reseller.balance || 0,
       isActive: reseller.isActive !== false,
       customDomain: reseller.customDomain || '',
       pricingModel: reseller.pricingModel || 'legacy'
@@ -288,6 +287,7 @@ export default function AdminResellers() {
     setSelectedReseller(reseller)
     setDepositAmount('')
     setDepositNote('')
+    setDepositoConIgv(false)
     setShowDepositModal(true)
   }
 
@@ -317,7 +317,6 @@ export default function AdminResellers() {
         phone: formData.phone,
         contactName: formData.contactName,
         discountOverride: discountOverride,
-        balance: parseFloat(formData.balance) || 0,
         isActive: formData.isActive,
         // Normalizar SIEMPRE: si se pega la URL del navegador
         // ("https://www.x.com/") no coincidiria con el hostname y el reseller
@@ -327,7 +326,10 @@ export default function AdminResellers() {
       }
 
       if (selectedReseller) {
-        // Actualizar reseller existente
+        // Actualizar reseller existente. Ojo: el saldo NO va aca a proposito.
+        // Escribirlo lo REEMPLAZABA, asi que guardar la ficha con un valor viejo
+        // borraba los consumos hechos mientras estaba abierta. El saldo se mueve
+        // solo por "Recargar saldo", que ademas deja el movimiento registrado.
         await updateDoc(doc(db, 'resellers', selectedReseller.id), {
           ...resellerData,
           updatedAt: Timestamp.now()
@@ -348,6 +350,9 @@ export default function AdminResellers() {
             resellerData: {
               uid: foundUser.user.uid,
               ...resellerData,
+              // Arranca sin saldo: la plata entra por "Recargar saldo", que la
+              // registra como movimiento y por eso aparece en Pagos.
+              balance: 0,
               totalSpent: 0
             }
           })
@@ -378,6 +383,12 @@ export default function AdminResellers() {
       return
     }
 
+    // Con IGV, el monto escrito es lo que entra al saldo y el reseller paga 18%
+    // más. Se guardan los dos: `amount` es lo que pagó (lo que cuenta Pagos como
+    // ingreso) y `baseAmount` lo que se le acreditó. Sin IGV son el mismo número.
+    const igv = depositoConIgv ? Number((amount * 0.18).toFixed(2)) : 0
+    const pagado = Number((amount + igv).toFixed(2))
+
     setSaving(true)
     try {
       // Actualizar balance
@@ -391,10 +402,11 @@ export default function AdminResellers() {
       await setDoc(doc(collection(db, 'resellerTransactions')), {
         resellerId: selectedReseller.id,
         type: 'deposit',
-        amount: amount,
+        amount: pagado,
         description: depositNote || 'Recarga de saldo por admin',
         createdAt: Timestamp.now(),
-        addedBy: 'admin'
+        addedBy: 'admin',
+        ...(depositoConIgv ? { includesIgv: true, baseAmount: amount, igvAmount: igv } : {})
       })
 
       setShowDepositModal(false)
@@ -806,17 +818,6 @@ export default function AdminResellers() {
                         Define el catálogo que ve el reseller. Cambiar uno existente afecta sus próximas renovaciones/altas (sus clientes ya creados no cambian hasta renovar).
                       </p>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Saldo Inicial</label>
-                      <input
-                        type="number"
-                        value={formData.balance}
-                        onChange={e => setFormData({ ...formData, balance: parseFloat(e.target.value) || 0 })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        min="0"
-                        step="0.01"
-                      />
-                    </div>
                     <div className="col-span-2">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
@@ -1053,6 +1054,36 @@ export default function AdminResellers() {
                     min="0"
                     step="0.01"
                   />
+                </div>
+
+                {/* IGV opcional: unos resellers lo pagan y otros no. Lo escrito
+                    arriba es siempre lo que entra al saldo. */}
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={depositoConIgv}
+                      onChange={e => setDepositoConIgv(e.target.checked)}
+                      className="w-4 h-4 text-gray-700 rounded"
+                    />
+                    <span className="text-sm font-medium text-gray-700">Agregar IGV (18%)</span>
+                  </label>
+                  {depositoConIgv && (
+                    <div className="mt-2 text-xs text-gray-600 bg-gray-50 rounded px-3 py-2 space-y-0.5">
+                      <div className="flex justify-between">
+                        <span>Entra al saldo:</span>
+                        <span>S/ {(parseFloat(depositAmount) || 0).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>IGV (18%):</span>
+                        <span>S/ {((parseFloat(depositAmount) || 0) * 0.18).toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between font-semibold text-gray-700 pt-1 border-t border-gray-200">
+                        <span>Paga el reseller:</span>
+                        <span>S/ {((parseFloat(depositAmount) || 0) * 1.18).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

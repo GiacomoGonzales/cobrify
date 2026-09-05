@@ -111,9 +111,14 @@ export default function ResellerBalance() {
     ? transactions
     : transactions.filter(tx => tx.type === filterType)
 
+  // Lo que de verdad entró al saldo. Cuando la recarga se cobró con IGV,
+  // `amount` es lo que pagó y `baseAmount` lo que se le acreditó; mostrarle el
+  // total haría que sus números no cuadren con su propio saldo.
+  const acreditado = tx => Math.abs(tx.baseAmount ?? tx.amount)
+
   const totalDeposits = transactions
     .filter(tx => tx.type === 'deposit')
-    .reduce((sum, tx) => sum + Math.abs(tx.amount), 0)
+    .reduce((sum, tx) => sum + acreditado(tx), 0)
 
   const totalSpent = transactions
     .filter(tx => tx.type !== 'deposit')
@@ -221,8 +226,13 @@ export default function ResellerBalance() {
                 </div>
                 <div className="text-right">
                   <p className={`font-bold text-lg ${tx.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {tx.amount >= 0 ? '+' : ''}S/ {Math.abs(tx.amount).toFixed(2)}
+                    {tx.amount >= 0 ? '+' : ''}S/ {acreditado(tx).toFixed(2)}
                   </p>
+                  {tx.includesIgv && (
+                    <p className="text-xs text-gray-400">
+                      pagaste S/ {Math.abs(tx.amount).toFixed(2)} con IGV
+                    </p>
+                  )}
                   <p className="text-xs text-gray-400 capitalize">
                     {tx.type === 'deposit' ? 'Recarga' :
                      tx.type === 'client_creation' ? 'Nuevo cliente' :

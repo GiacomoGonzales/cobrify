@@ -3406,6 +3406,22 @@ export const createReseller = onRequest(
         updatedAt: FieldValue.serverTimestamp()
       }, { merge: true })
 
+      // Red de seguridad: el panel ya no manda saldo al crear (se carga con
+      // "Recargar saldo"), pero si alguna vez llega uno tiene que dejar rastro.
+      // Sin movimiento, la plata sale en la ficha del reseller pero no en Pagos
+      // ni en el Resumen, que solo miran `resellerTransactions`.
+      const saldoInicial = Number(data.balance) || 0
+      if (isNew && saldoInicial > 0) {
+        await db.collection('resellerTransactions').add({
+          resellerId: uid,
+          type: 'deposit',
+          amount: saldoInicial,
+          description: 'Saldo inicial al crear el reseller',
+          createdAt: FieldValue.serverTimestamp(),
+          addedBy: 'admin'
+        })
+      }
+
       // También actualizar el rol en la suscripción si existe
       const subscriptionRef = db.collection('subscriptions').doc(uid)
       const subscriptionDoc = await subscriptionRef.get()

@@ -301,7 +301,10 @@ export async function getResellerDeposits() {
       planName: 'Recarga de saldo',
       status: 'completed',
       date: t.createdAt?.toDate?.() || (t.createdAt ? new Date(t.createdAt) : null),
-      notes: t.description || '',
+      // `amount` es lo que pagó el reseller. Cuando la recarga llevó IGV, al
+      // saldo entró menos, y conviene verlo acá sin abrir su ficha.
+      notes: [t.description || '', t.includesIgv ? `incluye IGV · S/ ${Number(t.baseAmount || 0).toFixed(2)} al saldo` : '']
+        .filter(Boolean).join(' · '),
     })
   })
   return recargas.filter(r => r.date instanceof Date && !Number.isNaN(r.date.getTime()))
