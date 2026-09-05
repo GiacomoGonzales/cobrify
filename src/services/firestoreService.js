@@ -20,6 +20,7 @@ import { db, auth } from '@/lib/firebase'
 import { generatePetId, normalizePets } from '@/utils/petUtils'
 import { buscarLoteEnAlmacen, cantidadDeLote, idDeLote } from '@/utils/batchLookup'
 import { calcularStockPorAlmacen } from '@/utils/warehouseStockMath'
+import { esDeSucursal } from '@/utils/branchScope'
 
 /**
  * Servicio para interactuar con Firestore
@@ -509,19 +510,17 @@ export const getInvoicesByBranch = async (userId, branchId = null, sinceDate = n
       docs = querySnapshot.docs
     }
 
-    // Filtrar por branchId en el cliente
+    // Filtrar por sucursal EN EL CLIENTE, con el criterio compartido
+    // (utils/branchScope). `branchId` null = Sucursal Principal, que incluye
+    // tanto las ventas sin sucursal grabada como las que la tienen en 'main'.
+    // Escrito a mano acá, estas últimas quedaban fuera del cuadre de caja.
+    const alcance = branchId || 'main'
     const invoices = docs
       .map(doc => ({
         id: doc.id,
         ...doc.data(),
       }))
-      .filter(invoice => {
-        if (branchId) {
-          return invoice.branchId === branchId
-        } else {
-          return !invoice.branchId
-        }
-      })
+      .filter(invoice => esDeSucursal(invoice, alcance))
 
     // Ordenar por fecha de creación (más reciente primero)
     invoices.sort((a, b) => {
@@ -2344,6 +2343,13 @@ export const saveIngredientCategories = async (userId, categories) => {
  */
 export const getCashRegisterSession = async (userId, branchId = null, userUid = null) => {
   try {
+    // 'main' es lo mismo que null: la Sucursal Principal. Hace falta normalizarlo
+    // porque quien llama pasa a veces la sucursal de un COMPROBANTE (al anular una
+    // venta, por ejemplo), y ahí sí puede venir 'main'. Sin esto, la consulta
+    // buscaría sesiones con branchId 'main' —que nadie graba— y no encontraría la
+    // caja abierta: la anulación no dejaría su movimiento.
+    if (branchId === 'main') branchId = null
+
     // Construir query base
     let q
     if (branchId) {
@@ -2366,13 +2372,11 @@ export const getCashRegisterSession = async (userId, branchId = null, userUid = 
       return { success: true, data: null }
     }
 
-    // Filtrar resultados si es sucursal principal (sin branchId)
+    // Filtrar resultados si es sucursal principal, con el criterio compartido
+    // (utils/branchScope): sin sucursal grabada o con 'main'.
     let filteredDocs = snapshot.docs
     if (!branchId) {
-      filteredDocs = snapshot.docs.filter(doc => {
-        const data = doc.data()
-        return !data.branchId || data.branchId === null
-      })
+      filteredDocs = snapshot.docs.filter(doc => esDeSucursal(doc.data(), 'main'))
     }
 
     // Filtrar por usuario
@@ -2427,6 +2431,8 @@ export const getCashRegisterSession = async (userId, branchId = null, userUid = 
  * @returns {Promise<{success: boolean, data?: Array}>}
  */
 export const getOpenCashSessions = async (businessId, branchId = null) => {
+  // 'main' = la Principal, igual que null (ver getCashRegisterSession).
+  if (branchId === 'main') branchId = null
   try {
     const q = query(
       collection(db, 'businesses', businessId, 'cashSessions'),
@@ -2441,7 +2447,7 @@ export const getOpenCashSessions = async (businessId, branchId = null) => {
         if (branchId) {
           return session.branchId === branchId
         } else {
-          return !session.branchId || session.branchId === null
+          return esDeSucursal(session, 'main')
         }
       })
 

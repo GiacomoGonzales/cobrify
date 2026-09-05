@@ -31,6 +31,7 @@ import {
 } from '@/services/firestoreService'
 import { getManagedUsers } from '@/services/userManagementService'
 import { generateCashReportExcel, generateCashReportPDF } from '@/services/cashReportService'
+import { esDeSucursal } from '@/utils/branchScope'
 import CashClosureTicket from '@/components/CashClosureTicket'
 import { aplicarTamanoDeHoja } from '@/utils/printPageSize'
 import { getSessionMoneyTotals } from '@/utils/cashTotals'
@@ -1490,8 +1491,9 @@ export default function CashRegister() {
       const result = await getTables(getBusinessId())
       const abiertas = (result.data || []).filter(t => {
         if (t.status !== 'occupied') return false
-        // Mismo criterio de sede que la pantalla de Mesas: sin branchId = Principal.
-        if ((t.branchId || null) !== (selectedBranch?.id || null)) return false
+        // Mismo criterio de sede que el resto del sistema (utils/branchScope):
+        // sin branchId —o con 'main'— es la Principal.
+        if (!esDeSucursal(t, selectedBranch?.id || 'main')) return false
         // Mesas fusionadas: TODAS las del grupo llevan el monto combinado, así
         // que listar las secundarias sumaría la misma cuenta varias veces. La
         // principal ya representa al grupo entero.
