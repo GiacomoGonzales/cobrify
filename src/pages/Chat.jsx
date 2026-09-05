@@ -42,6 +42,8 @@ import { useToast } from '@/contexts/ToastContext'
 import { MARCA_CHAT } from '@/utils/dominioChat'
 import { useTema } from '@/utils/temaOscuro'
 import BotonTema from '@/components/BotonTema'
+import { Capacitor } from '@capacitor/core'
+import { StatusBar, Style } from '@capacitor/status-bar'
 import {
   suscribirConversaciones,
   suscribirMensajes,
@@ -151,6 +153,14 @@ export default function Chat() {
   const menuTagsConv = useMenuDeFila()
   // Claro u oscuro. Se guarda aparte del panel: son personas distintas.
   const [tema, cambiarTema] = useTema('chatTema')
+
+  // En la app: iconos del status bar segun el tema (la franja de arriba es
+  // blanca u oscura), y al salir se devuelve el estilo de la app principal.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return undefined
+    StatusBar.setStyle({ style: tema === 'oscuro' ? Style.Dark : Style.Light }).catch(() => {})
+    return () => { StatusBar.setStyle({ style: Style.Dark }).catch(() => {}) }
+  }, [tema])
   // La etiqueta del filtro, para nombrarla en el boton del desplegable.
   const etiquetaElegida = etiquetas.find((e) => e.id === filtroEtiqueta) || null
   const [buscarEnChat, setBuscarEnChat] = useState('')
@@ -690,7 +700,16 @@ export default function Chat() {
   if (!isAdmin) return <Navigate to="/app/dashboard" replace />
 
   return (
-    <div className={`chat-cobrify font-admin text-[13px] text-gray-900 antialiased h-screen flex bg-gray-200 overflow-hidden relative ${tema === 'oscuro' ? 'oscuro' : ''}`}>
+    <div className={`chat-cobrify font-admin text-[13px] text-gray-900 antialiased h-screen flex flex-col bg-gray-200 overflow-hidden ${tema === 'oscuro' ? 'oscuro' : ''}`}>
+      {/* En la app el contenido se dibuja debajo del status bar y de la barra
+          de gestos (edge-to-edge): estas dos franjas, del color de las
+          cabeceras, los cubren. En el navegador miden 0. La app principal
+          hace lo mismo en su MainLayout; el chat no lo tenia y la cabecera
+          quedaba debajo del status bar en la tablet. */}
+      {Capacitor.isNativePlatform() && (
+        <div className="bg-white flex-none" style={{ height: 'env(safe-area-inset-top, 0px)' }} />
+      )}
+      <div className="flex-1 min-h-0 flex relative">
 
       {/* ---------- Lista de conversaciones ---------- */}
       <aside
@@ -1853,6 +1872,10 @@ export default function Chat() {
             }
           }}
         />
+      )}
+      </div>
+      {Capacitor.isNativePlatform() && (
+        <div className="bg-white flex-none" style={{ height: 'env(safe-area-inset-bottom, 0px)' }} />
       )}
     </div>
   )

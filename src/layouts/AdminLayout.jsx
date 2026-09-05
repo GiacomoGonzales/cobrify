@@ -92,13 +92,17 @@ export default function AdminLayout() {
   const location = useLocation()
   const navigate = useNavigate()
 
-  // Cabecera blanca: iconos del status bar en oscuro. El color de fondo se
-  // pinta con CSS (setBackgroundColor no hace nada desde Android 15).
+  // Iconos del status bar segun el tema: oscuros sobre la cabecera blanca,
+  // claros en modo oscuro. El fondo lo pinta la franja de abajo con CSS
+  // (setBackgroundColor no hace nada desde Android 15). Al salir se devuelve
+  // el estilo de la app principal (cabecera azul, iconos claros): antes se
+  // quedaba el del panel y la app volvia con los iconos invisibles.
   useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return
-    StatusBar.setStyle({ style: Style.Light })
+    if (!Capacitor.isNativePlatform()) return undefined
+    StatusBar.setStyle({ style: tema === 'oscuro' ? Style.Dark : Style.Light })
       .catch(error => console.warn('Error configurando StatusBar admin:', error))
-  }, [])
+    return () => { StatusBar.setStyle({ style: Style.Dark }).catch(() => {}) }
+  }, [tema])
 
   // "/" enfoca el buscador de cuentas, salvo que ya se este escribiendo en un campo.
   useEffect(() => {
@@ -150,14 +154,26 @@ export default function AdminLayout() {
 
   return (
     <TituloAdminContext.Provider value={contextoTitulo}>
-      <div className={cn('admin min-h-screen bg-gray-50 font-admin text-[13px] text-gray-900 antialiased', tema === 'oscuro' && 'oscuro')}>
-        {/* Franja del status bar (safe-area), del mismo color que la cabecera. */}
+      <div
+        className={cn('admin min-h-screen bg-gray-50 font-admin text-[13px] text-gray-900 antialiased', tema === 'oscuro' && 'oscuro')}
+        // En la app el contenido se dibuja DEBAJO del status bar (edge-to-edge):
+        // este relleno lo baja. En el navegador vale 0.
+        style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+      >
+        {/* Franja FIJA detras del status bar, del color de la cabecera. Fija y
+            no en el flujo: esta pagina se desplaza entera (cabeceras sticky) y
+            una franja normal se iba con el scroll, dejando pasar el contenido
+            por debajo del status bar; el menu lateral, que es fijo, ni la
+            veia y quedaba tapado. Visto en la tablet de Giacomo (Android). */}
         {Capacitor.isNativePlatform() && (
-          <div className="bg-white" style={{ height: 'env(safe-area-inset-top, 0px)' }} />
+          <div className="fixed top-0 inset-x-0 z-50 bg-white" style={{ height: 'env(safe-area-inset-top, 0px)' }} />
         )}
 
         {/* Cabecera movil */}
-        <div className="lg:hidden sticky top-0 z-40 h-12 bg-white border-b border-gray-200 px-3 flex items-center gap-2">
+        <div
+          className="lg:hidden sticky z-40 h-12 bg-white border-b border-gray-200 px-3 flex items-center gap-2"
+          style={{ top: 'env(safe-area-inset-top, 0px)' }}
+        >
           <button
             type="button"
             onClick={() => setMenuAbierto(v => !v)}
@@ -209,7 +225,10 @@ export default function AdminLayout() {
         )}
 
         {/* Menu lateral (escritorio) */}
-        <aside className="hidden lg:flex flex-col fixed inset-y-0 left-0 z-30 w-56 bg-white border-r border-gray-200">
+        <aside
+          className="hidden lg:flex flex-col fixed bottom-0 left-0 z-30 w-56 bg-white border-r border-gray-200"
+          style={{ top: 'env(safe-area-inset-top, 0px)' }}
+        >
           <div className="h-12 flex items-center px-5 border-b border-gray-200">
             <span className="text-[13px] font-semibold text-gray-900">Cobrify</span>
             <span className="text-[13px] text-gray-400 ml-1.5">Admin</span>
@@ -222,7 +241,10 @@ export default function AdminLayout() {
 
         <main className="lg:pl-56 min-h-screen min-w-0">
           {/* Cabecera: titulo de la pagina y buscador global de cuentas */}
-          <header className="hidden lg:flex sticky top-0 z-20 h-12 bg-white border-b border-gray-200 px-5 items-center justify-between gap-4">
+          <header
+            className="hidden lg:flex sticky z-20 h-12 bg-white border-b border-gray-200 px-5 items-center justify-between gap-4"
+            style={{ top: 'env(safe-area-inset-top, 0px)' }}
+          >
             {/* min-w-0: sin el, el titulo no se encoge y empuja al buscador
                 fuera de la pantalla con una razon social larga. */}
             <h1 className="min-w-0 truncate text-[14px] font-semibold text-gray-900" title={titulo}>{titulo}</h1>
@@ -243,7 +265,7 @@ export default function AdminLayout() {
             </div>
           </header>
 
-          <div className="p-3 sm:p-4 lg:p-5 w-full max-w-full overflow-x-hidden">
+          <div className="p-3 sm:p-4 lg:p-5 w-full max-w-full overflow-x-hidden" style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom, 0px))' }}>
             <Outlet />
           </div>
         </main>
