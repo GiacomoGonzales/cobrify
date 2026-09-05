@@ -6,7 +6,7 @@
  */
 export default {
   id: 'compras',
-  actualizado: '02/09/2026',
+  actualizado: '05/09/2026',
   intro:
     'Compras es por donde entra la mercadería: registras lo que le compraste a tu proveedor y el sistema suma el stock y actualiza el costo de cada producto. Es lo que hace que después tus reportes de utilidad digan la verdad.',
 
@@ -175,6 +175,26 @@ export default {
         {
           type: 'texto',
           text: 'Puedes registrar la compra en **US$** con su tipo de cambio (hay un botón para traer el de la **SBS**). También puedes **fijar el precio de venta en dólares** del producto si es mercadería que manejas anclada al dólar.',
+        },
+      ],
+    },
+
+    {
+      id: 'exportar',
+      title: 'Exportar a Excel',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'El botón **Exportar Excel** arma el archivo para tu contador: las hojas **Compras**, **Registro de Compras**, **Detalle de Items**, **Por Proveedor** y **Cuentas por Pagar**.',
+        },
+        { type: 'ui', kind: 'botonSecundario', label: 'Exportar Excel' },
+        {
+          type: 'texto',
+          text: 'La ventana **arranca con los filtros que tengas puestos en la lista**: el período, el tipo de pago y la sucursal. Si venías mirando agosto, el Excel sale de agosto sin que vuelvas a elegirlo. Ahí mismo puedes afinar más — tipo de documento, proveedor, estado de pago — y **Quitar filtros** deja la ventana lista para exportar todo.',
+        },
+        {
+          type: 'consejo',
+          text: 'Para mandarle el mes al contador: en la lista elige el período, abre **Exportar Excel** y confirma. Lo que ves en pantalla es lo que sale en el archivo.',
         },
       ],
     },

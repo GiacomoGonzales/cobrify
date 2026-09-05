@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { isPurchaseFullyPaid, isPurchasePending } from '@/utils/purchasePayment'
+import { almacenesDeSucursal, esDeSucursalLaCompra } from '@/utils/purchaseBranch'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import {
@@ -65,6 +66,11 @@ const formatDateInput = (date) => {
   const d = String(date.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
 }
+
+// Accesos rápidos de fecha que significan lo mismo en la página y en la ventana
+// de exportar. Los demás (3 días, un rango a medida) dejan las fechas puestas
+// sin marcar ningún chip.
+const PRESET_EQUIVALENTE = { today: 'today', '7days': '7days', '30days': '30days' }
 
 const parseLocalDate = (dateValue) => {
   if (dateValue instanceof Date) return dateValue
@@ -1057,13 +1063,10 @@ export default function Purchases() {
   }
 
   // Obtener IDs de almacenes por sucursal
-  const getWarehouseIdsForBranch = useMemo(() => {
-    if (filterBranch === 'all') return null // No filtrar
-    if (filterBranch === 'main') {
-      return warehouses.filter(w => !w.branchId).map(w => w.id)
-    }
-    return warehouses.filter(w => w.branchId === filterBranch).map(w => w.id)
-  }, [warehouses, filterBranch])
+  const getWarehouseIdsForBranch = useMemo(
+    () => (filterBranch === 'all' ? null : almacenesDeSucursal(warehouses, filterBranch)),
+    [warehouses, filterBranch]
+  )
 
   // Seguridad: ¿hay restricción activa por ubicación para este usuario? (usuarios secundarios)
   const locationRestricted = !isBusinessOwner && !isAdmin &&
@@ -1102,13 +1105,7 @@ export default function Purchases() {
   const filterByBranch = (purchase) => {
     // Seguridad: siempre respetar los permisos del usuario, sin importar el filtro de UI
     if (!hasLocationAccess(purchase)) return false
-    if (filterBranch === 'all') return true
-    if (!getWarehouseIdsForBranch || getWarehouseIdsForBranch.length === 0) return false
-
-    // Verificar si el warehouseId de la compra está en los almacenes de la sucursal
-    const purchaseWarehouseId = purchase.warehouseId || purchase.items?.[0]?.warehouseId
-    if (!purchaseWarehouseId) return filterBranch === 'main' // Si no tiene almacén, asumimos sucursal principal
-    return getWarehouseIdsForBranch.includes(purchaseWarehouseId)
+    return esDeSucursalLaCompra(purchase, filterBranch, getWarehouseIdsForBranch)
   }
 
   // Obtener nombre de sucursal para una compra
@@ -1144,19 +1141,49 @@ export default function Purchases() {
   }, [purchases, allowedWarehouseIds, locationRestricted, hasMainBranchAccess])
 
   const openExportModal = () => {
-    // Arrancar con el rango de fechas que el usuario ya tiene puesto en la página:
-    // si vino filtrando por un período, exportar otra cosa lo sorprendería.
+    // La ventana arranca con lo que la página ya tiene filtrado: período, tipo
+    // de pago y sucursal. Si el usuario vino mirando agosto y lo que le falta
+    // pagar, exportarle otra cosa lo sorprendería. Adentro puede ampliar o
+    // recortar, y "Quitar filtros" deja la ventana lista para exportar todo.
     const range = getDateRange()
     const toInput = (d) => (d ? formatDateInput(d) : '')
+    // "Pendientes" en la página es `isPurchasePending`: al crédito con saldo.
+    // Acá eso son DOS estados, pendiente y parcial; con solo 'pending' se caían
+    // del Excel las que ya tienen un abono a cuenta.
+    const soloPendientes = paymentFilter === 'pending'
     setExportFilters(prev => ({
       ...prev,
       branch: filterBranch,
       startDate: range ? toInput(range.start) : '',
       endDate: range ? toInput(range.end) : '',
-      paymentTypes: paymentFilter === 'contado' || paymentFilter === 'credito' ? [paymentFilter] : [],
+      paymentTypes: soloPendientes ? ['credito']
+        : (paymentFilter === 'contado' || paymentFilter === 'credito' ? [paymentFilter] : []),
+      paymentStatuses: soloPendientes ? ['pending', 'partial'] : [],
+      // La página no filtra por tipo de documento, proveedor ni "afecta stock":
+      // se limpian para que una elección de un export anterior no siga
+      // escondiendo compras sin que se note.
+      docTypes: [],
+      suppliers: [],
+      onlyAffectsStock: false,
     }))
-    setExportDatePreset(range ? 'custom' : 'all')
+    setExportDatePreset(PRESET_EQUIVALENTE[dateFilter] || (range ? 'custom' : 'all'))
     setShowExportModal(true)
+  }
+
+  // El caso opuesto: filtré la lista para buscar algo y ahora quiero el Excel
+  // completo. Deja la ventana como estaba de fábrica, sin tocar la lista.
+  const quitarFiltrosDelExport = () => {
+    setExportFilters({
+      docTypes: [],
+      paymentTypes: [],
+      paymentStatuses: [],
+      suppliers: [],
+      branch: 'all',
+      startDate: '',
+      endDate: '',
+      onlyAffectsStock: false,
+    })
+    setExportDatePreset('all')
   }
 
   /** Aplica un rango rápido (últimos N días, este mes, mes anterior) al modal. */
@@ -1187,8 +1214,9 @@ export default function Purchases() {
   const handleExportToExcel = async () => {
     try {
       // Punto de partida: TODAS las compras que el usuario tiene permitido ver,
-      // no `filteredPurchases`. Los filtros del modal son independientes de los de
-      // la página; lo que nunca se relaja es `hasLocationAccess`.
+      // no `filteredPurchases`. La ventana ABRE con los filtros de la página
+      // (openExportModal), pero desde ahí el usuario puede ampliarlos, así que
+      // el filtrado se rehace acá. Lo que nunca se relaja es `hasLocationAccess`.
       let rows = purchases.filter(hasLocationAccess)
 
       if (exportFilters.docTypes.length > 0) {
@@ -1232,16 +1260,11 @@ export default function Purchases() {
       }
 
       // Sucursal: se deriva del almacén, porque las compras no tienen branchId.
+      // Mismo criterio que la lista (esDeSucursalLaCompra, arriba del archivo).
       const exportBranch = exportFilters.branch || 'all'
       if (exportBranch !== 'all') {
-        const ids = exportBranch === 'main'
-          ? warehouses.filter(w => !w.branchId).map(w => w.id)
-          : warehouses.filter(w => w.branchId === exportBranch).map(w => w.id)
-        rows = rows.filter(p => {
-          const whId = p.warehouseId || p.items?.[0]?.warehouseId
-          if (!whId) return exportBranch === 'main' // sin almacén = Sucursal Principal
-          return ids.includes(whId)
-        })
+        const ids = almacenesDeSucursal(warehouses, exportBranch)
+        rows = rows.filter(p => esDeSucursalLaCompra(p, exportBranch, ids))
       }
 
       if (rows.length === 0) {
@@ -2721,9 +2744,18 @@ export default function Purchases() {
         size="3xl"
       >
         <div className="space-y-5">
-          <p className="text-sm text-gray-600">
-            Puedes marcar varias opciones en cada filtro. Si dejas un filtro sin marcar, se incluyen todos.
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+            <p className="text-sm text-gray-600 flex-1 min-w-[16rem]">
+              Arranca con los filtros que tienes puestos en la página. Puedes marcar varias opciones en cada filtro; si dejas uno sin marcar, se incluyen todos.
+            </p>
+            <button
+              type="button"
+              onClick={quitarFiltrosDelExport}
+              className="text-sm text-primary-600 hover:text-primary-700 font-medium whitespace-nowrap"
+            >
+              Quitar filtros
+            </button>
+          </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {/* Tipo de documento */}
