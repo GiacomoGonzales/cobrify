@@ -62,6 +62,7 @@ import { filtrarPorSucursal, nombreDeSucursal, sucursalParaGuardar } from '@/uti
 import { tieneFichaDeAtencion } from '@/utils/businessModes'
 import { registrarAtencionDesdeCita } from '@/services/attentionService'
 import { getPackages, usarSesion, estaActivo, sesionesDisponibles } from '@/services/packageService'
+import { mensajeDeCita, linkWhatsApp } from '@/utils/mensajeCita'
 import GuideLink from '@/components/guide/GuideLink'
 import { getSellers } from '@/services/sellerService'
 
@@ -818,18 +819,14 @@ export default function VeterinaryAgenda() {
       return
     }
 
-    const phone = appointment.phone.replace(/\D/g, '')
-    const formattedPhone = phone.startsWith('51') ? phone : `51${phone}`
-
-    const date = appointment.scheduledDate?.toDate ? appointment.scheduledDate.toDate() : new Date(appointment.scheduledDate)
-    const timeStr = formatTime(appointment.scheduledDate)
-    const dateStr = date.toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' })
-
-    const message = (esVeterinaria && appointment.petName)
-      ? `Hola! Le recordamos su cita para ${appointment.petName}: ${appointment.serviceName} programada para el ${dateStr} a las ${timeStr}. ¿Confirma su asistencia?`
-      : `Hola ${appointment.customerName || ''}! Le recordamos su cita: ${appointment.serviceName} programada para el ${dateStr} a las ${timeStr}. ¿Confirma su asistencia?`
-
-    window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank')
+    // El texto sale de un solo lugar (mensajeCita.js): el mismo que usa
+    // Recordatorios > Citas, con la plantilla que el negocio edita en
+    // Configuración > Punto de venta.
+    const message = mensajeDeCita(appointment, {
+      plantilla: businessSettings?.appointmentReminderTemplate,
+      nombreNegocio: businessSettings?.businessName || '',
+    })
+    window.open(linkWhatsApp(appointment.phone, message), '_blank')
   }
 
   const isToday = selectedDate.toDateString() === new Date().toDateString()

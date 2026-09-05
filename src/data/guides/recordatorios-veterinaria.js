@@ -12,6 +12,32 @@ export default {
 
   sections: [
     {
+      id: 'citas',
+      title: 'Pestaña Citas: confirmar las que vienen',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Donde hay Agenda, Recordatorios tiene dos pestañas. **Citas** muestra las de **Hoy**, **Mañana** o **Esta semana** que todavía no están confirmadas (desmarca **Solo sin confirmar** para ver también las confirmadas). La rutina de cada tarde: abrir Mañana y escribirle a cada uno.',
+        },
+        {
+          type: 'tabla',
+          encabezados: ['Botón', 'Qué hace'],
+          filas: [
+            ['**WhatsApp**', 'Abre el chat con el mensaje listo: servicio, día y hora. Solo aparece si tiene teléfono.'],
+            ['**Marcar como confirmada**', 'Cuando responde que sí. La cita pasa a Confirmada en la Agenda.'],
+          ],
+        },
+        {
+          type: 'texto',
+          text: 'El texto del mensaje se cambia en **Configuración > Punto de venta**, en **Mensaje de recordatorio de cita**. Acepta {nombre}, {servicio}, {fecha}, {hora}, {especialista} y {negocio}; en veterinaria también {mascota}. Es el mismo mensaje que abre el botón verde de la Agenda.',
+        },
+        {
+          type: 'ojo',
+          text: 'No hay "enviar a todos": WhatsApp abre un chat por mensaje y cada uno se revisa antes de salir. Con la lista ordenada por hora, confirmar el día siguiente toma un minuto.',
+        },
+      ],
+    },
+    {
       id: 'de-donde-sale',
       title: 'Se arma solo con tus ventas',
       blocks: [

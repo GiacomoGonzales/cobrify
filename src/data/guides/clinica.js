@@ -60,7 +60,7 @@ export default {
             ['**Punto de Venta**', 'Donde se cobra y se emite la boleta o la factura.'],
             ['**Ventas**', 'Todo lo emitido, con los saldos pendientes y el botón Registrar Pago.'],
             ['**Control de Caja**', 'Apertura y cierre del día.'],
-            ['**Recordatorios**', 'A quién le toca volver, según lo que se llevó y cuándo.'],
+            ['**Recordatorios**', 'Pestaña Citas: confirmar por WhatsApp las de mañana. Pestaña Ventas y servicios: a quién le toca volver.'],
             ['**Mi Catálogo Online**', 'Tu página pública, con reservas de citas si las activas.'],
             ['**Inventario y compras, Equipo, Reportes & Finanzas, Otros**', 'Grupos plegados con lo que se usa de vez en cuando.'],
           ],
@@ -219,7 +219,7 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'La pantalla **Recordatorios** se arma sola con tus ventas: si cobraste una limpieza facial a un paciente registrado, a los 30 días aparece en la lista para que le escribas. El plazo general se cambia en **Configuración > Punto de venta**, en **Recordar cada venta a los (días)**; el de un tratamiento puntual, en su ficha.',
+          text: 'En **Recordatorios**, la pestaña **Citas** lista las de hoy, mañana o la semana que faltan confirmar, con el botón de WhatsApp y **Marcar como confirmada**; el texto del mensaje se edita en **Configuración > Punto de venta** (**Mensaje de recordatorio de cita**). La pestaña **Ventas y servicios** se arma sola con tus ventas: si cobraste una limpieza facial a un paciente registrado, a los 30 días aparece para que le escribas. El plazo general está en **Recordar cada venta a los (días)**; el de un tratamiento puntual, en su ficha.',
         },
         { type: 'enlace', to: '/app/manual/recordatorios-veterinaria', label: 'Guía de Recordatorios' },
       ],

@@ -12,6 +12,8 @@ import { getProducts } from '@/services/firestoreService'
 import Card, { CardContent } from '@/components/ui/Card'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import GuideLink from '@/components/guide/GuideLink'
+import RecordatoriosDeCitas from '@/components/appointments/RecordatoriosDeCitas'
+import { atiendeConCita } from '@/utils/businessModes'
 import {
   Bell,
   ChevronsLeft,
@@ -45,6 +47,11 @@ export default function VeterinaryAlerts() {
   // pantalla es la misma, pero todo sale de las ventas: no hay fichas que
   // recorrer ni mascota por la que buscar.
   const esVeterinaria = businessMode === 'veterinary'
+  // Dos pestañas donde hay Agenda: las CITAS que vienen (confirmar por
+  // WhatsApp) y las VENTAS que ya toca repetir. La clínica vive en la
+  // primera; la veterinaria, en la segunda.
+  const conCitas = atiendeConCita(businessMode, businessSettings)
+  const [pestana, setPestana] = useState(businessMode === 'clinic' ? 'citas' : 'ventas')
   const toast = useToast()
   // Las DOS fuentes viven separadas en el estado y se juntan al renderizar.
   // Así el tramo lento (las fichas de los pacientes) puede llegar después sin
@@ -552,10 +559,30 @@ export default function VeterinaryAlerts() {
           <GuideLink />
         </div>
         <p className="text-sm sm:text-base text-gray-600 mt-1">
-          A quién llamar: lo que cada cliente se llevó y ya toca repetir
+          {conCitas && pestana === 'citas'
+            ? 'Las citas que vienen: confirmar y recordar por WhatsApp'
+            : 'A quién llamar: lo que cada cliente se llevó y ya toca repetir'}
         </p>
       </div>
 
+      {conCitas && (
+        <div className="flex gap-1 border-b border-gray-200">
+          {[{ k: 'citas', label: 'Citas' }, { k: 'ventas', label: 'Ventas y servicios' }].map(t => (
+            <button
+              key={t.k}
+              onClick={() => setPestana(t.k)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${pestana === t.k ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {conCitas && pestana === 'citas' ? (
+        <RecordatoriosDeCitas />
+      ) : (
+      <>
       {/* Filtros.
           El rango de VENTAS es el unico que cuesta: decide cuanto se lee de
           Firestore. Los otros dos recortan lo que ya esta en memoria. */}
@@ -912,6 +939,8 @@ export default function VeterinaryAlerts() {
             </div>
           )}
         </>
+      )}
+      </>
       )}
     </div>
   )

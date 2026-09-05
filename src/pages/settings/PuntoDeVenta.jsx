@@ -52,7 +52,8 @@ import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import { formatCurrency, matchesPrebuilt } from '@/lib/utils'
 import { filtrarVendibles } from '@/utils/productSale'
-import { recuerdaServicios } from '@/utils/businessModes'
+import { recuerdaServicios, atiendeConCita } from '@/utils/businessModes'
+import { PLANTILLA_POR_DEFECTO } from '@/utils/mensajeCita'
 import { buildProductHaystack } from '@/utils/productSearch'
 import { getProducts, getProductCategories } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
@@ -176,6 +177,8 @@ function leerConfig(bs) {
     termsTemplates: Array.isArray(d.termsTemplates) ? d.termsTemplates : [],
     // Veterinaria: días que se recuerda una venta cuando el producto no dice otra cosa
     vetReminderDefaultDays: diasPorDefectoDelNegocio(d),
+    // Mensaje de recordatorio de cita (Agenda y Recordatorios > Citas).
+    appointmentReminderTemplate: d.appointmentReminderTemplate || '',
     // Restaurante: fuentes de pedido y costo de envío sugerido. El costo se
     // guarda como texto mientras se escribe y se redondea al guardar.
     hiddenOrderSources: d.hiddenOrderSources || [],
@@ -273,6 +276,8 @@ export default function PuntoDeVenta() {
   const esClinica = businessMode === 'clinic'
   // Veterinaria y clinica recuerdan sus servicios: el plazo por defecto vive aca.
   const conRecordatorios = recuerdaServicios(businessMode)
+  // Donde hay Agenda hay recordatorio de cita por WhatsApp, y su plantilla.
+  const conAgenda = atiendeConCita(businessMode, businessSettings)
   const esFarmacia = businessMode === 'pharmacy'
 
   // ── Estado ──────────────────────────────────────────────────────────────────
@@ -570,6 +575,9 @@ export default function PuntoDeVenta() {
     }
     if (conRecordatorios) {
       payload.vetReminderDefaultDays = Number(cfg.vetReminderDefaultDays) || 0
+    }
+    if (conAgenda) {
+      payload.appointmentReminderTemplate = String(cfg.appointmentReminderTemplate || '').trim()
     }
     await guardar(payload, 'Punto de venta guardado')
   }
@@ -1662,14 +1670,17 @@ export default function PuntoDeVenta() {
 
           {/* ══ Recordatorios ══════════════════════════════════════════════ */}
           {/* Solo en los rubros que recuerdan sus servicios: veterinaria y clinica. */}
-          {conRecordatorios && (
+          {(conRecordatorios || conAgenda) && (
             <>
               <Separador />
               <Seccion
                 id="veterinaria"
                 titulo="Recordatorios"
-                descripcion="Los recordatorios que nacen de cada venta a un cliente registrado."
+                descripcion={conRecordatorios
+                  ? 'Los recordatorios que nacen de cada venta a un cliente registrado, y el mensaje con el que se recuerda una cita.'
+                  : 'El mensaje con el que se recuerda una cita por WhatsApp.'}
               >
+                {conRecordatorios && (
                 <Campo
                   id="opcion-vetReminderDefaultDays"
                   etiqueta="Recordar cada venta a los (días)"
@@ -1685,6 +1696,22 @@ export default function PuntoDeVenta() {
                     />
                   </div>
                 </Campo>
+                )}
+                {conAgenda && (
+                <Campo
+                  id="opcion-appointmentReminderTemplate"
+                  etiqueta="Mensaje de recordatorio de cita"
+                  ayuda="Es el texto que abre WhatsApp desde la Agenda y desde Recordatorios > Citas. Puedes usar {nombre}, {servicio}, {fecha}, {hora}, {especialista}, {negocio} y, en veterinaria, {mascota}. Vacío = el mensaje de siempre."
+                >
+                  <textarea
+                    rows={3}
+                    value={cfg.appointmentReminderTemplate}
+                    onChange={e => poner('appointmentReminderTemplate', e.target.value)}
+                    placeholder={PLANTILLA_POR_DEFECTO}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 resize-y"
+                  />
+                </Campo>
+                )}
               </Seccion>
             </>
           )}

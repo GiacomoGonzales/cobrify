@@ -378,7 +378,7 @@ export const GUIDES = [
     title: 'Recordatorios',
     category: 'Operación',
     description: 'A quién llamar: lo que cada cliente se llevó y ya toca repetir. Se arma solo con tus ventas.',
-    keywords: 'recordatorio recordatorios alerta alertas veterinaria mascota bano spa desparasitacion alimento vacuna refuerzo vencido proximo hoy semana mes whatsapp frecuencia dias plazo servicio recurrente cada cuanto repetir volver a comprar fidelizar llamar cliente clinica estetica tratamiento sesion',
+    keywords: 'recordatorio recordatorios alerta alertas veterinaria mascota bano spa desparasitacion alimento vacuna refuerzo vencido proximo hoy semana mes whatsapp frecuencia dias plazo servicio recurrente cada cuanto repetir volver a comprar fidelizar llamar cliente clinica estetica tratamiento sesion citas confirmar manana plantilla mensaje whatsapp',
     modos: ['veterinary', 'clinic'],
     aliases: ['/app/recordatorios'],
     load: () => import('./recordatorios-veterinaria.js'),

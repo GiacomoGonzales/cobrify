@@ -165,6 +165,10 @@ export default {
           text: 'El botón verde de WhatsApp en cada cita abre un mensaje listo con el servicio, el día y la hora (y la mascota, en veterinaria), pidiendo confirmación. Solo aparece si el cliente tiene teléfono registrado.',
         },
         {
+          type: 'texto',
+          text: 'Para confirmar las de mañana todas seguidas, usa **Recordatorios**, pestaña **Citas**: la lista de las que vienen, con el mismo botón de WhatsApp y **Marcar como confirmada**. El texto del mensaje se edita en **Configuración > Punto de venta**, en **Mensaje de recordatorio de cita**.',
+        },
+        {
           type: 'consejo',
           text: 'El calendario marca cada día con puntos: azul si tiene citas pendientes, verde si tiene completadas, y el número total. De un vistazo sabes qué días están cargados.',
         },
