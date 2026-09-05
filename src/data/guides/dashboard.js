@@ -6,7 +6,7 @@
  */
 export default {
   id: 'dashboard',
-  actualizado: '12/08/2026',
+  actualizado: '05/09/2026',
   intro:
     'El Dashboard es la primera pantalla al entrar: cómo va el día, cómo va el mes y qué se está vendiendo. Está pensado para mirarlo 30 segundos y saber si todo va bien.',
 
@@ -133,7 +133,11 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Si tienes sucursales, el selector del encabezado cambia todo el Dashboard: puedes ver una sede o la vista consolidada de todas.',
+          text: 'Si tienes sucursales, el selector del encabezado cambia todo el Dashboard: puedes ver una sede o la vista consolidada de todas. Las tarjetas, los gráficos y la curva de **Últimos 12 meses** cuentan lo mismo.',
+        },
+        {
+          type: 'ojo',
+          text: 'Al elegir una sede, la curva de 12 meses tarda unos segundos más en dibujarse: para separar las ventas por sucursal hay que revisar el año completo. Con el selector en **Todas** sale al instante.',
         },
         {
           type: 'texto',

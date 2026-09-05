@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { collection, query, where, getAggregateFromServer, sum } from 'firebase/firestore'
+import { esDeSucursal } from '@/utils/branchScope'
 import { getMonthSalesAggregated, getRangeSalesAggregated } from '@/services/dashboardStatsService'
 import { db } from '@/lib/firebase'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -117,6 +118,9 @@ export default function Dashboard() {
   // Invalida las fases en vuelo si el efecto se vuelve a disparar (cambio de
   // usuario/permisos) o el componente se desmonta.
   const loadTokenRef = useRef(0)
+  // Token propio del gráfico de 12 meses: ahora se recalcula al cambiar de
+  // sede y dos cambios seguidos podrían pintar el de la sede anterior.
+  const monthlyTokenRef = useRef(0)
   // El filtro de sucursal del Dashboard usa el selector GLOBAL del Navbar (branchScope):
   // 'all' = Todas | 'main' = Principal | <branchId>. Ya no hay selector propio aquí.
   const filterBranch = branchScope || 'all'
@@ -154,7 +158,6 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadDashboardData()
-    loadMonthlyAggregates()
     // Al desmontar (o al re-disparar el efecto) invalidamos las fases de carga
     // en vuelo para que no escriban estado de un usuario/permiso ya viejo.
     return () => { loadTokenRef.current++ }
@@ -166,10 +169,21 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, isDemoMode, allowedBranches, allowedWarehouses, dashMultiCurrencyOn, assignedSellerId])
 
+  // El gráfico de 12 meses va en su PROPIO efecto porque también depende de la
+  // sede elegida en el header: al cambiarla hay que recalcularlo. El resto del
+  // Dashboard no se recarga, filtra en memoria lo que ya tiene.
+  useEffect(() => {
+    loadMonthlyAggregates()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isDemoMode, allowedBranches, allowedWarehouses, dashMultiCurrencyOn, assignedSellerId, filterBranch])
+
   // Cargar aggregates mensuales para el gráfico de 12 meses.
   // Server-side: 12 queries paralelas de sum('total'), no descarga los invoices.
   // En demo mode computa desde demoData.invoices en memoria.
   const loadMonthlyAggregates = async () => {
+    // Si la sede cambia mientras esto viaja, lo que llegue tarde no se pinta.
+    const token = ++monthlyTokenRef.current
+    const alive = () => monthlyTokenRef.current === token
     const monthNames = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
     const today = new Date()
     const peruDate = today.toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
@@ -195,8 +209,9 @@ export default function Dashboard() {
 
     // En demo: computar desde demoData.invoices
     if (isDemoMode && demoData?.invoices) {
+      const delaSede = (demoData.invoices || []).filter(inv => esDeSucursal(inv, filterBranch))
       const data = windows.map(w => {
-        const ventas = (demoData.invoices || []).reduce((sum, inv) => {
+        const ventas = delaSede.reduce((sum, inv) => {
           const invDate = inv.emissionDate
             ? new Date(inv.emissionDate + 'T12:00:00')
             : inv.createdAt?.toDate?.() || (inv.createdAt ? new Date(inv.createdAt) : null)
@@ -217,12 +232,18 @@ export default function Dashboard() {
     if (!businessId) return
 
     // OPCIÓN A — Usuario secundario restringido a ciertas sucursales/almacenes,
-    // O negocio con MULTI-DIVISA activa: el aggregate server-side sum('total') no
-    // puede filtrar por ubicación NI convertir USD→PEN con el TC congelado de cada
-    // doc (sumaría USD como si fueran soles). En ambos casos traemos las facturas
+    // negocio con MULTI-DIVISA activa, o una SEDE elegida en el header: el
+    // aggregate server-side sum('total') no puede filtrar por ubicación, ni
+    // convertir USD→PEN con el TC congelado de cada doc (sumaría USD como si
+    // fueran soles), ni filtrar por sucursal — y menos por la Principal, porque
+    // Firestore no indexa los documentos SIN el campo `branchId` y todo lo viejo
+    // se grabó sin él (ver utils/branchScope). En esos casos traemos las facturas
     // de los últimos 12 meses y sumamos en el cliente. Más caro en reads, pero
-    // correcto. El resto sigue usando el aggregate (rápido) del bloque de abajo.
-    if (restringido || sellerRestricted || dashMultiCurrencyOn) {
+    // correcto. Con el selector en "Todas" sigue usando el aggregate (rápido).
+    //
+    // El gráfico ignoraba la sede: con una sucursal elegida, las tarjetas y el
+    // gráfico del mes eran de esa sede y "Últimos 12 meses" era de todo el negocio.
+    if (restringido || sellerRestricted || dashMultiCurrencyOn || filterBranch !== 'all') {
       // El inicio de la ventana más antigua (11 meses atrás) es nuestra fecha "desde".
       const since = windows[0].monthStart
       setMonthlyYearLoading(true)
@@ -236,7 +257,10 @@ export default function Dashboard() {
         if (!result.success) throw new Error(result.error || 'getRecentInvoices falló')
         // Mismo cálculo de fecha que la rama demo (emissionDate → mediodía, sino createdAt)
         // para bucketear coherente con monthStart/monthEnd.
-        const invoicesIn12m = (result.data || []).filter(canAccess).filter(canSeeSale)
+        const invoicesIn12m = (result.data || [])
+          .filter(canAccess)
+          .filter(canSeeSale)
+          .filter(inv => esDeSucursal(inv, filterBranch))
         const data = windows.map(w => {
           const ventas = invoicesIn12m.reduce((acc, inv) => {
             const invDate = inv.emissionDate
@@ -250,13 +274,15 @@ export default function Dashboard() {
           }, 0)
           return { month: w.label, year: w.year, monthNum: w.monthNum, ventas }
         })
+        if (!alive()) return
         setMonthlyYearData(data)
       } catch (error) {
         console.warn('⚠️ No se pudo calcular el gráfico de 12 meses (usuario restringido):', error)
+        if (!alive()) return
         setMonthlyYearData([])
         setMonthlyYearError(true)
       } finally {
-        setMonthlyYearLoading(false)
+        if (alive()) setMonthlyYearLoading(false)
       }
       return
     }
@@ -285,6 +311,7 @@ export default function Dashboard() {
         monthNum: windows[idx].monthNum,
         ventas: res.data().totalSum || 0,
       }))
+      if (!alive()) return
       setMonthlyYearData(data)
     } catch (error) {
       // El error más común es "failed-precondition" cuando falta el índice
@@ -530,18 +557,11 @@ export default function Dashboard() {
       return
     }
 
-    // Misma semántica que branchFilteredInvoices para el selector de sede:
-    // 'all' = todas, 'main' = sin branchId (Principal), <id> = esa sede.
-    const matchesBranch = (t) =>
-      filterBranch === 'all'
-        ? true
-        : filterBranch === 'main'
-          ? !t.branchId
-          : t.branchId === filterBranch
-
+    // El criterio de sede es el compartido (utils/branchScope), el mismo del
+    // selector del header y de branchFilteredInvoices.
     const sumOpen = (list) =>
       (list || [])
-        .filter(t => canAccess(t) && matchesBranch(t) && t.status === 'occupied')
+        .filter(t => canAccess(t) && esDeSucursal(t, filterBranch) && t.status === 'occupied')
         .reduce((acc, t) => acc + (t.amount || 0), 0)
 
     // Modo demo: usar las mesas de demoData
@@ -587,12 +607,11 @@ export default function Dashboard() {
   // re-filtramos por canAccess como red de seguridad (idempotente para usuarios sin
   // restricción).
   const branchFilteredInvoices = useMemo(() => {
-    const base = invoices.filter(canAccess).filter(canSeeSale)
-    return filterBranch === 'all'
-      ? base
-      : filterBranch === 'main'
-        ? base.filter(inv => !inv.branchId)
-        : base.filter(inv => inv.branchId === filterBranch)
+    // El criterio de sede es el compartido (utils/branchScope): escrito acá a
+    // mano, "Principal" aceptaba SOLO las ventas sin sucursal grabada y dejaba
+    // fuera las que la tienen en 'main', que Ventas sí cuenta.
+    return invoices.filter(canAccess).filter(canSeeSale)
+      .filter(inv => esDeSucursal(inv, filterBranch))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoices, filterBranch])
 
