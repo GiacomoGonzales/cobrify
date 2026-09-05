@@ -255,7 +255,9 @@ export default function FichaPacienteModal({ isOpen, onClose, customer, onEdit, 
         </div>
 
         {/* Pestañas */}
-        <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
+        {/* Sin overflow-x: en Windows dibuja una barra de scroll aunque todo
+            entre. Si en un celular no caben, las pestañas pasan a dos líneas. */}
+        <div className="flex flex-wrap gap-1 border-b border-gray-200">
           {PESTANAS.map(t => (
             <button
               key={t.id}
