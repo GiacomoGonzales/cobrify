@@ -2210,13 +2210,24 @@ export default function Customers() {
 
               {/* Lo que hay que ver ANTES de tocar al paciente va arriba del
                   historial a propósito. */}
+              {/* En Clínica, alergias y antecedentes salen de la ANAMNESIS (ficha del
+                  paciente, pestaña Anamnesis): acá no se muestran para que no haya
+                  dos lugares que digan cosas distintas. Los valores igual viajan
+                  sin cambios con el formulario. */}
+              {esClinica && (
+                <p className="text-xs text-gray-500">
+                  Alergias, enfermedades, medicación y hábitos se registran en la ficha del paciente, pestaña <strong>Anamnesis</strong>.
+                </p>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Input
-                  label="Alergias"
-                  placeholder="Ej: Penicilina, látex. Vacío = ninguna conocida"
-                  error={errors.allergies?.message}
-                  {...register('allergies')}
-                />
+                {!esClinica && (
+                  <Input
+                    label="Alergias"
+                    placeholder="Ej: Penicilina, látex. Vacío = ninguna conocida"
+                    error={errors.allergies?.message}
+                    {...register('allergies')}
+                  />
+                )}
                 <Input
                   label="Recomendado por"
                   placeholder="Quién lo trajo o lo refirió"
@@ -2224,15 +2235,17 @@ export default function Customers() {
                   {...register('referredBy')}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Antecedentes</label>
-                <textarea
-                  rows={2}
-                  placeholder="Enfermedades, medicación actual, cirugías o tratamientos previos"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 resize-y"
-                  {...register('background')}
-                />
-              </div>
+              {!esClinica && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Antecedentes</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Enfermedades, medicación actual, cirugías o tratamientos previos"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 resize-y"
+                    {...register('background')}
+                  />
+                </div>
+              )}
 
               {/* Historial de atenciones. Antes eran cuatro campos planos que
                   guardaban SOLO la última: cada control nuevo pisaba el

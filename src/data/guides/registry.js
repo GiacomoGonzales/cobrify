@@ -124,7 +124,7 @@ export const GUIDES = [
     title: 'Modo Clínica: cómo empezar',
     category: 'Primeros pasos',
     description: 'Qué trae el menú de una clínica, cómo cargar tratamientos y profesionales, agendar, cobrar y recibir reservas online.',
-    keywords: 'clinica estetica dental consultorio odontologo podologia paciente pacientes tratamiento tratamientos profesional profesionales agenda cita citas reserva online recordatorio empezar modo cambiar de modo ficha alergias antecedentes galeria fotos antes despues registrar atencion paquete paquetes sesiones',
+    keywords: 'clinica estetica dental consultorio odontologo podologia paciente pacientes tratamiento tratamientos profesional profesionales agenda cita citas reserva online recordatorio empezar modo cambiar de modo ficha alergias antecedentes galeria fotos antes despues registrar atencion paquete paquetes sesiones anamnesis enfermedades medicacion habitos embarazo preguntas propias',
     modos: ['clinic'],
     load: () => import('./clinica.js'),
   },

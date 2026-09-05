@@ -28,9 +28,12 @@ import { prefijoDeRuta } from '@/utils/demoRoutes'
 import { formatCurrency } from '@/lib/utils'
 import { PaquetesPaciente } from './PaquetesPacienteModal'
 import { GaleriaPaciente } from './GaleriaPacienteModal'
+import AnamnesisPaciente from './AnamnesisPaciente'
+import { normalizarAnamnesis, resumenDeAnamnesis, alertasDeAnamnesis, anamnesisTieneDatos, normalizarPreguntas } from '@/utils/anamnesis'
 
 const PESTANAS = [
   { id: 'resumen', label: 'Resumen' },
+  { id: 'anamnesis', label: 'Anamnesis' },
   { id: 'atenciones', label: 'Atenciones' },
   { id: 'paquetes', label: 'Paquetes' },
   { id: 'galeria', label: 'Galería' },
@@ -75,10 +78,11 @@ const Campo = ({ etiqueta, children }) => (
 )
 
 export default function FichaPacienteModal({ isOpen, onClose, customer, onEdit, onDelete, onChanged }) {
-  const { getBusinessId, isDemoMode } = useAppContext()
+  const { getBusinessId, isDemoMode, businessSettings } = useAppContext()
   const location = useLocation()
   const navigate = useNavigate()
   const prefijo = prefijoDeRuta(location.pathname, isDemoMode)
+  const preguntas = normalizarPreguntas(businessSettings?.anamnesisQuestions)
 
   // Todos los hooks antes de cualquier return (React #310).
   const [pestana, setPestana] = useState('resumen')
@@ -125,6 +129,12 @@ export default function FichaPacienteModal({ isOpen, onClose, customer, onEdit, 
   const sesiones = Number(customer?.packagesSummary?.remaining) || 0
   const paquetesActivos = Number(customer?.packagesSummary?.active) || 0
   const edad = edadDesde(customer?.birthDate)
+  // Lo que hay que ver antes de atender sale de la anamnesis; sin anamnesis,
+  // de los dos campos simples de la ficha (alergias, antecedentes).
+  const anamnesis = useMemo(() => normalizarAnamnesis(customer), [customer])
+  const avisos = alertasDeAnamnesis(anamnesis)
+  const resumenAnamnesis = useMemo(() => resumenDeAnamnesis(anamnesis, preguntas), [anamnesis, preguntas])
+  const conAnamnesis = anamnesisTieneDatos(anamnesis, preguntas)
 
   if (!customer) return null
 
@@ -156,6 +166,9 @@ export default function FichaPacienteModal({ isOpen, onClose, customer, onEdit, 
               {customer.allergies && (
                 <span className="chip-error px-2 py-0.5 rounded-full text-xs font-medium">Alergia: {customer.allergies}</span>
               )}
+              {avisos.map(aviso => (
+                <span key={aviso} className="chip-aviso px-2 py-0.5 rounded-full text-xs font-medium">{aviso}</span>
+              ))}
               {sesiones > 0 && (
                 <span className="chip-info px-2 py-0.5 rounded-full text-xs font-medium">
                   {sesiones} {sesiones === 1 ? 'sesión disponible' : 'sesiones disponibles'}
@@ -261,8 +274,20 @@ export default function FichaPacienteModal({ isOpen, onClose, customer, onEdit, 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
             <div className="space-y-4">
               <p className="text-[11px] font-medium tracking-wide text-gray-500 uppercase">Antes de atender</p>
-              <Campo etiqueta="Alergias">{customer.allergies || 'Ninguna conocida'}</Campo>
-              <Campo etiqueta="Antecedentes">{customer.background}</Campo>
+              {resumenAnamnesis.map(fila => (
+                <div key={fila.etiqueta}>
+                  <p className="text-xs font-medium text-gray-500">{fila.etiqueta}</p>
+                  <p className={`text-sm whitespace-pre-line ${fila.importante ? 'text-red-700 font-medium' : 'text-gray-900'}`}>{fila.valor}</p>
+                </div>
+              ))}
+              {!conAnamnesis && (
+                <p className="text-xs text-gray-500">
+                  Todavía no tiene anamnesis: enfermedades, medicación y hábitos se llenan en la pestaña <strong>Anamnesis</strong>.
+                </p>
+              )}
+              <button type="button" onClick={() => setPestana('anamnesis')} className="text-sm font-medium text-primary-600 hover:text-primary-700 inline-flex items-center gap-0.5">
+                {conAnamnesis ? 'Ver o corregir la anamnesis' : 'Llenar la anamnesis'} <ChevronRight className="w-4 h-4" />
+              </button>
               <Campo etiqueta="Recomendado por">{customer.referredBy}</Campo>
             </div>
             <div className="space-y-4">
@@ -272,6 +297,10 @@ export default function FichaPacienteModal({ isOpen, onClose, customer, onEdit, 
               <Campo etiqueta="Dirección">{customer.address}</Campo>
             </div>
           </div>
+        )}
+
+        {pestana === 'anamnesis' && (
+          <AnamnesisPaciente customer={customer} preguntas={preguntas} onSaved={onChanged} />
         )}
 
         {pestana === 'atenciones' && (

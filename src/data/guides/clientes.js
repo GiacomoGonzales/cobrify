@@ -250,6 +250,31 @@ export default {
     },
 
     {
+      id: 'anamnesis',
+      title: 'Anamnesis: lo que hay que saber antes de atender',
+      soloModos: ['clinic'],
+      blocks: [
+        {
+          type: 'texto',
+          text: 'En la ficha del paciente, la pestaña **Anamnesis** reúne lo que cambia una atención: motivo de consulta, enfermedades, alergias, medicación actual, hábitos y tratamientos previos. Se marca con casillas y se guarda con **Guardar anamnesis**.',
+        },
+        {
+          type: 'tabla',
+          encabezados: ['Qué', 'Dónde se ve'],
+          filas: [
+            ['**Alergias**', 'En rojo junto al nombre, en la lista y en la ficha.'],
+            ['**Embarazo / lactancia**', 'Como aviso junto al nombre: cambian qué se puede hacer.'],
+            ['Enfermedades, medicación, hábitos', 'En la pestaña Resumen, bajo "Antes de atender".'],
+          ],
+        },
+        {
+          type: 'consejo',
+          text: 'Las preguntas que hace tu clínica y no están en la lista fija se agregan en **Configuración > Punto de venta**, en **Preguntas propias de la anamnesis**. Pueden ser de Sí / No o de texto.',
+        },
+      ],
+    },
+
+    {
       id: 'galeria',
       title: 'Galería de antes y después',
       blocks: [

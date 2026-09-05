@@ -105,7 +105,8 @@ export default {
         {
           type: 'pasos',
           items: [
-            'Para cambiar datos o cargar **Alergias** y **Antecedentes**, presiona **Editar** en la ficha. La alergia aparece en rojo en la lista.',
+            'En la pestaña **Anamnesis** marcas enfermedades, alergias, medicación y hábitos, y presionas **Guardar anamnesis**. La alergia sale en rojo en la lista; embarazo y lactancia, como aviso.',
+            'Para cambiar datos de contacto, presiona **Editar**.',
             'Cada visita, **Agregar atención** (en la pestaña Atenciones o al terminar la cita en la Agenda). La más reciente queda primero.',
             'Las fotos del antes y el después van en la pestaña **Galería**: **Agregar foto**, y **Comparar** para verlas juntas.',
             '**Agendar cita** abre la Agenda con el paciente ya elegido; **WhatsApp** abre el chat.',
@@ -114,6 +115,10 @@ export default {
         {
           type: 'consejo',
           text: 'La lista muestra teléfono, edad y **última atención**, y se puede ordenar por ella: así sabes de un vistazo quién no vuelve hace tiempo. Fidelización, Importar y Exportar están bajo el botón **Más**.',
+        },
+        {
+          type: 'texto',
+          text: 'Tus propias preguntas de anamnesis ("¿se hizo botox hace poco?", "¿toma isotretinoína?") se arman en **Configuración > Punto de venta**, en **Preguntas propias de la anamnesis**, con **Agregar pregunta**. Aparecen al final de la anamnesis de cada paciente.',
         },
         { type: 'enlace', to: '/app/manual/clientes', label: 'Guía completa de la ficha' },
       ],

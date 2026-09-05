@@ -54,6 +54,7 @@ import { formatCurrency, matchesPrebuilt } from '@/lib/utils'
 import { filtrarVendibles } from '@/utils/productSale'
 import { recuerdaServicios, atiendeConCita } from '@/utils/businessModes'
 import { PLANTILLA_POR_DEFECTO } from '@/utils/mensajeCita'
+import { normalizarPreguntas, TIPOS_DE_PREGUNTA } from '@/utils/anamnesis'
 import { buildProductHaystack } from '@/utils/productSearch'
 import { getProducts, getProductCategories } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
@@ -179,6 +180,8 @@ function leerConfig(bs) {
     vetReminderDefaultDays: diasPorDefectoDelNegocio(d),
     // Mensaje de recordatorio de cita (Agenda y Recordatorios > Citas).
     appointmentReminderTemplate: d.appointmentReminderTemplate || '',
+    // Preguntas propias de la anamnesis (ficha del paciente).
+    anamnesisQuestions: normalizarPreguntas(d.anamnesisQuestions),
     // Restaurante: fuentes de pedido y costo de envío sugerido. El costo se
     // guarda como texto mientras se escribe y se redondea al guardar.
     hiddenOrderSources: d.hiddenOrderSources || [],
@@ -300,6 +303,19 @@ export default function PuntoDeVenta() {
   const ponerCamposPOS = (parcial) => setCfg(prev => ({
     ...prev,
     posCustomFields: { ...prev.posCustomFields, ...parcial },
+  }))
+  // Preguntas propias de la anamnesis: una lista chica que se edita en el lugar.
+  const agregarPregunta = () => setCfg(prev => ({
+    ...prev,
+    anamnesisQuestions: [...prev.anamnesisQuestions, { id: `aq_${Date.now()}`, texto: '', tipo: 'si_no' }],
+  }))
+  const cambiarPregunta = (id, parcial) => setCfg(prev => ({
+    ...prev,
+    anamnesisQuestions: prev.anamnesisQuestions.map(p => (p.id === id ? { ...p, ...parcial } : p)),
+  }))
+  const quitarPregunta = (id) => setCfg(prev => ({
+    ...prev,
+    anamnesisQuestions: prev.anamnesisQuestions.filter(p => p.id !== id),
   }))
   const ponerGrifo = (parcial) => setCfg(prev => ({
     ...prev,
@@ -561,6 +577,7 @@ export default function PuntoDeVenta() {
       // Compras y cotizaciones
       purchaseOrderDefaultNotes: cfg.purchaseOrderDefaultNotes || '',
       termsTemplates: cfg.termsTemplates,
+      anamnesisQuestions: normalizarPreguntas(cfg.anamnesisQuestions),
       // Objetos de los que esta pestaña es dueña. posCustomFields va siempre:
       // "Ocultar productos sin stock" aplica a todos los modos.
       posCustomFields: cfg.posCustomFields,
@@ -1223,6 +1240,44 @@ export default function PuntoDeVenta() {
                       ? 'Habilitado: la ficha del cliente suma alergias, antecedentes, quién lo recomendó y el historial de atenciones (procedimiento, tratamiento, especialista, próximo control). Para consultorios, clínicas, salones y todo el que atienda a la misma persona cada tanto.'
                       : 'Deshabilitado: la ficha del cliente muestra solo los datos básicos.'}
                 />
+                {/* Las preguntas propias de la anamnesis. Lo fijo (enfermedades,
+                    alergias, hábitos) sale de utils/anamnesis.js; acá va lo que
+                    pregunta ESTE negocio. */}
+                {(esClinica || camposPOS.showServiceCardFields) && (
+                  <div id="opcion-anamnesisQuestions" className="ml-1 pl-3 border-l-2 border-gray-100 space-y-2 scroll-mt-24">
+                    <p className="text-sm font-medium text-gray-800">Preguntas propias de la anamnesis</p>
+                    <p className="text-xs text-gray-500">
+                      La anamnesis ya trae enfermedades, alergias, medicación y hábitos. Acá sumas lo que preguntas tú: "¿Se hizo botox en los últimos 6 meses?", "¿Toma isotretinoína?". Aparecen en la ficha de cada paciente.
+                    </p>
+                    {cfg.anamnesisQuestions.map(p => (
+                      <div key={p.id} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={p.texto}
+                          onChange={e => cambiarPregunta(p.id, { texto: e.target.value })}
+                          placeholder="Escribe la pregunta"
+                          className="flex-1 min-w-0 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                        <select
+                          value={p.tipo}
+                          onChange={e => cambiarPregunta(p.id, { tipo: e.target.value })}
+                          className="px-2 py-2 text-sm border border-gray-300 rounded-lg bg-white"
+                        >
+                          {TIPOS_DE_PREGUNTA.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => quitarPregunta(p.id)}
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                          title="Quitar pregunta"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <Button size="sm" variant="outline" onClick={agregarPregunta}>Agregar pregunta</Button>
+                  </div>
+                )}
                 <Ajuste
                   id="opcion-showSubscriptionFields"
                   checked={camposPOS.showSubscriptionFields}

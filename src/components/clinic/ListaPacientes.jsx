@@ -12,10 +12,12 @@
 import { ChevronRight } from 'lucide-react'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { edadDesde, fechaCorta, ultimaAtencion } from '@/utils/fichaAtencion'
+import { alertasDeAnamnesis } from '@/utils/anamnesis'
 
 const Chips = ({ c }) => {
   const sesiones = Number(c.packagesSummary?.remaining) || 0
-  if (!c.allergies && sesiones <= 0) return null
+  const avisos = alertasDeAnamnesis(c.anamnesis)
+  if (!c.allergies && sesiones <= 0 && avisos.length === 0) return null
   return (
     <div className="flex flex-wrap gap-1 mt-1">
       {c.allergies && (
@@ -23,6 +25,9 @@ const Chips = ({ c }) => {
           Alergia: {c.allergies}
         </span>
       )}
+      {avisos.map(aviso => (
+        <span key={aviso} className="chip-aviso px-1.5 py-0.5 rounded text-[10px] font-medium">{aviso}</span>
+      ))}
       {sesiones > 0 && (
         <span className="chip-info px-1.5 py-0.5 rounded text-[10px] font-medium">
           {sesiones} {sesiones === 1 ? 'sesión' : 'sesiones'}
