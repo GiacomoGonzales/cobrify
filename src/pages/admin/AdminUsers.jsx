@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, updateDoc, serverTimestamp, Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { PLANS, SELLABLE_PLAN_IDS } from '@/services/subscriptionService'
 import { getCustomPlans } from '@/services/customPlanService'
@@ -306,7 +306,13 @@ export default function AdminUsers() {
   async function toggleUserAccess(userId, block) {
     menu.cerrar()
     try {
-      await updateDoc(doc(db, 'subscriptions', userId), { accessBlocked: block, status: block ? 'suspended' : 'active' })
+      await updateDoc(doc(db, 'subscriptions', userId), {
+        accessBlocked: block,
+        status: block ? 'suspended' : 'active',
+        // Igual que en la ficha: el motivo se va con la reactivación.
+        blockReason: block ? 'Suspendida por el administrador' : null,
+        blockedAt: block ? Timestamp.now() : null,
+      })
       toast.success(block ? 'Cuenta suspendida' : 'Cuenta reactivada')
       loadUsers()
     } catch (error) {

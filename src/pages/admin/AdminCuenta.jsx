@@ -184,7 +184,14 @@ export default function AdminCuenta() {
   async function cambiarAcceso(bloquear) {
     if (bloquear && !window.confirm(`¿Suspender a ${cuenta.businessName}? Pierde el acceso hasta que se reactive.`)) return
     try {
-      await updateDoc(doc(db, 'subscriptions', id), { accessBlocked: bloquear, status: bloquear ? 'suspended' : 'active' })
+      await updateDoc(doc(db, 'subscriptions', id), {
+        accessBlocked: bloquear,
+        status: bloquear ? 'suspended' : 'active',
+        // El motivo acompaña a la suspensión: al reactivar se borra. Antes se
+        // quedaba grabado y la ficha seguía mostrando el recuadro rojo.
+        blockReason: bloquear ? 'Suspendida por el administrador' : null,
+        blockedAt: bloquear ? Timestamp.now() : null,
+      })
       toast.success(bloquear ? 'Cuenta suspendida' : 'Cuenta reactivada')
       await cargar()
     } catch (error) {
@@ -358,7 +365,7 @@ export default function AdminCuenta() {
           <span className="text-gray-400"> · </span>
           Alta el {fecha(c.createdAt)}
         </p>
-        {c.blockReason && (
+        {c.status === 'suspended' && c.blockReason && (
           <Aviso tono="rojo" titulo="Motivo de la suspensión" className="mt-3">{c.blockReason}</Aviso>
         )}
       </Seccion>
