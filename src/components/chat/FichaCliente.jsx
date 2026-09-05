@@ -311,6 +311,12 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
               {ficha.email && <p className="text-[11.5px] text-gray-500 truncate">{ficha.email}</p>}
             </div>
 
+            {ficha.sinSuscripcion && (
+              <Aviso tono="rojo" titulo="Sin suscripción">
+                Esta cuenta no tiene documento de suscripción: no hay plan, vencimiento ni pagos que mostrar.
+              </Aviso>
+            )}
+
             {/* Quien escribe NO siempre es el titular. Sin esto, en el chat de
                 la secretaria se leia el nombre del dueno y se la saludaba mal. */}
             {(conversacion.linkedBy === 'manual' || conversacion.rolContacto || otros.length > 0) && (
@@ -418,6 +424,13 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
               <div className={`flex items-center gap-2 border rounded-lg px-3 py-2.5 ${vencimiento().clase}`}>
                 <CalendarClock className="w-4 h-4 flex-none" />
                 <span className="text-[13px] font-medium">{vencimiento().texto}</span>
+              </div>
+            )}
+
+            {ficha.nuncaVence && (
+              <div className="flex items-center gap-2 border rounded-lg px-3 py-2.5 bg-gray-50 text-gray-600 border-gray-200">
+                <CalendarClock className="w-4 h-4 flex-none" />
+                <span className="text-[13px] font-medium">Sin vencimiento (cuenta interna)</span>
               </div>
             )}
 
@@ -858,6 +871,7 @@ function estadoDeCuenta(c) {
   if (c.accessBlocked) return { nivel: 'grave', detalle: 'Suspendida' }
   const d = c.diasParaVencer
   const plan = c.planName || '—'
+  if (c.nuncaVence) return { nivel: 'activa', detalle: `${plan} · sin vencimiento` }
   if (d == null) return { nivel: 'activa', detalle: plan }
   if (d < 0) return { nivel: 'aviso', detalle: `Vencida hace ${-d} día${d === -1 ? '' : 's'}` }
   if (d === 0) return { nivel: 'aviso', detalle: 'Vence hoy' }

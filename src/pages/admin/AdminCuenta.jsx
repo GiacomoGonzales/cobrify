@@ -416,7 +416,8 @@ export default function AdminCuenta() {
         <Seccion titulo="Suscripción">
           <ListaDatos>
             <Dato etiqueta="Plan">{c.planName || PLANS[c.plan]?.name || customPlans[c.plan]?.name || c.plan}<span className="ml-1.5 font-mono text-[11px] text-gray-400">{c.plan}</span></Dato>
-            <Dato etiqueta="Precio pactado">{c.renewalPrice != null ? moneda(c.renewalPrice) : null}</Dato>
+            {/* Una cuenta interna no paga: el precio que tenga guardado es un resto de antes. */}
+            <Dato etiqueta="Precio pactado">{c.renewalPrice != null && !c.nuncaVence ? moneda(c.renewalPrice) : null}</Dato>
             <Dato etiqueta="Precio mensual del plan">{c.monthlyPrice ? moneda(c.monthlyPrice) : null}</Dato>
             <Dato etiqueta="Periodo actual">
               {c.nuncaVence

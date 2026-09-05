@@ -4,6 +4,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
   onSnapshot,
   orderBy,
@@ -19,6 +20,7 @@ import { auth, db } from '@/lib/firebase'
 import { matchesPrebuilt, normalizeText } from '@/lib/utils'
 import { buildAccountHaystack } from '@/utils/adminSearch'
 import { metodoDeEmision } from '@/services/adminCuentasService'
+import { nuncaVence } from '@/services/subscriptionService'
 import { nombreRubro } from '@/data/rubros'
 import { nombreModo } from '@/utils/businessModes'
 
@@ -312,20 +314,35 @@ export const guardarEtiquetas = (lista) =>
 const nombreDeRubro = (id) => (id ? nombreRubro(id) : null)
 
 export const obtenerFichaCliente = async (businessId) => {
+  // Del servidor, nunca de la cache. La cache de Firestore es una sola para
+  // todas las pestanas del navegador, y una lectura servida desde ahi puede
+  // devolver la suscripcion como inexistente aunque exista (paso el
+  // 04-sep-2026: la ficha de QUANTIO salio sin plan ni fecha de alta en una
+  // pestana y completa en otra). Para una ficha de soporte, un error honesto
+  // ("no se pudo cargar") es mejor que una ficha vacia que parece real.
   const [subSnap, bizSnap] = await Promise.all([
-    getDoc(doc(db, 'subscriptions', businessId)),
-    getDoc(doc(db, 'businesses', businessId)),
+    getDocFromServer(doc(db, 'subscriptions', businessId)),
+    getDocFromServer(doc(db, 'businesses', businessId)),
   ])
   if (!subSnap.exists() && !bizSnap.exists()) return null
   const sub = subSnap.exists() ? subSnap.data() : {}
   const biz = bizSnap.exists() ? bizSnap.data() : {}
-  const vence = sub.currentPeriodEnd?.toDate?.() || null
+  // Una cuenta interna (Enterprise) no vence ni tiene precio: la fecha y el
+  // `renewalPrice` que tenga en el documento son restos de antes y confunden
+  // ("vence el 11 ene. 2027", "precio pactado S/ 19.90"). El criterio es el
+  // mismo que usa el panel, `nuncaVence`, para que las dos pantallas digan lo
+  // mismo.
+  const interna = nuncaVence(sub)
+  const vence = interna ? null : (sub.currentPeriodEnd?.toDate?.() || null)
   const diasParaVencer = vence
     ? Math.ceil((vence.getTime() - Date.now()) / 86400000)
     : null
   const tope = sub.limits?.maxInvoicesPerMonth
   return {
     businessId,
+    // Si el negocio existe pero la suscripcion no, la ficha lo dice en vez de
+    // mostrar rayas que parecen "sin plan".
+    sinSuscripcion: !subSnap.exists(),
     nombre: biz.businessName || sub.businessName || null,
     ruc: biz.ruc || null,
     email: sub.email || biz.email || null,
@@ -333,7 +350,8 @@ export const obtenerFichaCliente = async (businessId) => {
     planName: sub.planName || sub.plan || null,
     vence,
     diasParaVencer,
-    renewalPrice: sub.renewalPrice ?? null,
+    nuncaVence: interna,
+    renewalPrice: interna ? null : (sub.renewalPrice ?? null),
     accessBlocked: sub.accessBlocked === true,
     motivoBloqueo: sub.blockReason || null,
     bloqueadoEl: sub.blockedAt?.toDate?.() || null,
@@ -379,7 +397,7 @@ export const obtenerFichaCliente = async (businessId) => {
  */
 export const agregarComprobantes = async (businessId, monto, metodo, cuantos = 500) => {
   const ref = doc(db, 'subscriptions', businessId)
-  const snap = await getDoc(ref)
+  const snap = await getDocFromServer(ref)
   if (!snap.exists()) throw new Error('La suscripción no existe')
   const tope = snap.data().limits?.maxInvoicesPerMonth
   if (tope === undefined || tope === null || tope < 0) {
