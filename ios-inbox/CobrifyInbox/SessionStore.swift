@@ -39,7 +39,12 @@ final class SessionStore: ObservableObject {
     /// Errores de Auth en cristiano. Firebase agrupa casi todos los fallos de
     /// credenciales en uno solo para no revelar si el correo existe.
     private static func mensaje(de error: Error) -> String {
-        let code = AuthErrorCode(rawValue: (error as NSError).code)
+        let ns = error as NSError
+        // El mensaje que ve el usuario es corto a proposito, pero sin esta
+        // linea un fallo fuera de la lista era imposible de diagnosticar:
+        // "Intenta de nuevo" no dice si fue la llave, App Check o la red.
+        NSLog("[Auth] fallo %@ code=%d %@", ns.domain, ns.code, String(describing: ns.userInfo))
+        let code = AuthErrorCode(rawValue: ns.code)
         switch code {
         case .invalidEmail:
             return "Ese correo no tiene formato válido."
