@@ -5,6 +5,7 @@ import {
   CircleDot, Coffee, WifiOff,
 } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import { esDeSucursal } from '@/utils/branchScope'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Input from '@/components/ui/Input'
@@ -71,12 +72,10 @@ export default function Motoristas() {
     return branches.find(b => b.id === m.branchId)?.name || ''
   }
 
-  const motoristas = useMemo(() => {
-    if (!branchScope || branchScope === 'all') return motoristasAll
-    return motoristasAll.filter(m =>
-      branchScope === 'main' ? !m.branchId : m.branchId === branchScope
-    )
-  }, [motoristasAll, branchScope])
+  const motoristas = useMemo(
+    () => motoristasAll.filter(m => esDeSucursal(m, branchScope)),
+    [motoristasAll, branchScope]
+  )
   const [stats, setStats] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isFormModalOpen, setIsFormModalOpen] = useState(false)

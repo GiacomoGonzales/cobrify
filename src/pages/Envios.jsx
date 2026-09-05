@@ -6,6 +6,7 @@ import {
   MessageCircle,
 } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import { esDeSucursal } from '@/utils/branchScope'
 import GuideLink from '@/components/guide/GuideLink'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -73,12 +74,10 @@ export default function Envios() {
   // Productos, Inventario, Vencimientos y Mozos. Sin esto, estando en una sede
   // se listaban los repartidores de todo el negocio.
   const [motoristasAll, setMotoristasAll] = useState([])
-  const motoristas = useMemo(() => {
-    if (!branchScope || branchScope === 'all') return motoristasAll
-    return motoristasAll.filter(m =>
-      branchScope === 'main' ? !m.branchId : m.branchId === branchScope
-    )
-  }, [motoristasAll, branchScope])
+  const motoristas = useMemo(
+    () => motoristasAll.filter(m => esDeSucursal(m, branchScope)),
+    [motoristasAll, branchScope]
+  )
   const [stats, setStats] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isFormModalOpen, setIsFormModalOpen] = useState(false)

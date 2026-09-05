@@ -13,6 +13,7 @@ import {
   Timestamp,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { esDeSucursal } from '@/utils/branchScope'
 
 /**
  * Servicio para gestión de motoristas/repartidores
@@ -184,12 +185,9 @@ export const getMotoristasStats = async (businessId, branchFilter = null) => {
     //   null/'all' -> todo el negocio
     //   'main'     -> motoristas SIN branchId (Sucursal Principal)
     //   <branchId> -> solo los de esa sede
-    let motoristas = result.data
-    if (branchFilter && branchFilter !== 'all') {
-      motoristas = motoristas.filter(m =>
-        branchFilter === 'main' ? !m.branchId : m.branchId === branchFilter
-      )
-    }
+    // El criterio es el compartido (utils/branchScope) y ya contempla
+    // null/'all' = todo el negocio.
+    const motoristas = result.data.filter(m => esDeSucursal(m, branchFilter))
     const active = motoristas.filter(m => m.status === 'active')
 
     // Obtener entregas de hoy

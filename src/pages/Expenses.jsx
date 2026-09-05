@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { esDeSucursal } from '@/utils/branchScope'
 import { crearGastoDemo, actualizarGastoDemo, eliminarGastoDemo } from '@/data/demo/operaciones'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { useDataPermissions } from '@/hooks/useDataPermissions'
@@ -335,16 +336,9 @@ export default function Expenses() {
       result = result.filter(e => e.paymentMethod === paymentMethodFilter)
     }
 
-    // Filtro de sucursal
-    if (branchFilter !== 'all') {
-      if (branchFilter === 'main') {
-        // Sucursal principal (sin branchId)
-        result = result.filter(e => !e.branchId || e.branchId === '' || e.branchId === 'main')
-      } else {
-        // Sucursal específica
-        result = result.filter(e => e.branchId === branchFilter)
-      }
-    }
+    // Filtro de sucursal (criterio compartido, utils/branchScope): un gasto SIN
+    // sucursal es general y cuenta en la Principal.
+    result = result.filter(e => esDeSucursal(e, branchFilter))
 
     // Ordenar
     result.sort((a, b) => {

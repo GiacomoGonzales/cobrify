@@ -4,6 +4,7 @@ import {
   Search, FileSpreadsheet, Trophy, X, Receipt, ChevronRight,
 } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import { esDeSucursal } from '@/utils/branchScope'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
@@ -74,13 +75,10 @@ export default function Waiters() {
   //    Inventario y Vencimientos. Sin esto, estando en "Sede Norte" se seguian
   //    listando los mozos de todas las sedes y las tarjetas de arriba sumaban
   //    ventas de gente de otro local.
-  const visibleWaiters = useMemo(() => {
-    const conAcceso = waiters.filter(canAccess)
-    if (!branchScope || branchScope === 'all') return conAcceso
-    return conAcceso.filter(w =>
-      branchScope === 'main' ? !w.branchId : w.branchId === branchScope
-    )
-  }, [waiters, canAccess, branchScope])
+  const visibleWaiters = useMemo(
+    () => waiters.filter(canAccess).filter(w => esDeSucursal(w, branchScope)),
+    [waiters, canAccess, branchScope]
+  )
 
   // ---- Carga de mozos + sedes ----
   useEffect(() => {

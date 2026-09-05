@@ -13,6 +13,7 @@ import {
   increment,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { esDeSucursal } from '@/utils/branchScope'
 import { createOrder, completeOrder, addOrderItems } from './orderService'
 
 /**
@@ -1331,13 +1332,9 @@ export const getTablesStats = async (businessId, branchFilter = null) => {
       return result
     }
 
-    let tables = result.data
-    // Filtrar por la sede solicitada (null/'all' = todas, igual que antes)
-    if (branchFilter && branchFilter !== 'all') {
-      tables = tables.filter(t =>
-        branchFilter === 'main' ? !t.branchId : t.branchId === branchFilter
-      )
-    }
+    // Filtrar por la sede solicitada con el criterio compartido
+    // (utils/branchScope), que ya contempla null/'all' = todas.
+    const tables = result.data.filter(t => esDeSucursal(t, branchFilter))
     const stats = {
       total: tables.length,
       available: tables.filter(t => t.status === 'available').length,

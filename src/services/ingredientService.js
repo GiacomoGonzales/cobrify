@@ -13,6 +13,7 @@ import {
   increment
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { esDeSucursal } from '@/utils/branchScope'
 import { computeBatchDeduction, computeProductBatchMetadata } from '@/utils/batchStock'
 
 /**
@@ -93,13 +94,8 @@ export const getIngredientStockForBranch = (ingredient, warehouses, branchFilter
     return 0
   }
 
-  // Filtrar almacenes según sucursal
-  let filteredWarehouses = warehouses
-  if (branchFilter === 'main') {
-    filteredWarehouses = warehouses.filter(w => !w.branchId)
-  } else if (branchFilter !== 'all') {
-    filteredWarehouses = warehouses.filter(w => w.branchId === branchFilter)
-  }
+  // Filtrar almacenes según sucursal (criterio compartido, utils/branchScope)
+  const filteredWarehouses = (warehouses || []).filter(w => esDeSucursal(w, branchFilter))
 
   const warehouseIds = filteredWarehouses.map(w => w.id)
 
