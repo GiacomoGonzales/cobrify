@@ -236,7 +236,7 @@ export default {
         },
         {
           type: 'consejo',
-          text: 'En modo **Clínica** la ficha viene de fábrica y la página se llama **Pacientes** (el botón dice **Nuevo Paciente**). En los demás rubros se enciende en Configuración > Punto de venta, con "Ficha de atención en el cliente".',
+          text: 'En modo **Clínica** la ficha viene de fábrica y la página se llama **Pacientes** (el botón dice **Nuevo Paciente**): tocar la fila abre la ficha completa, con próxima cita, última atención, sesiones y deuda, y las pestañas Atenciones, Paquetes, Galería y Compras. En los demás rubros se enciende en Configuración > Punto de venta, con "Ficha de atención en el cliente".',
         },
         {
           type: 'texto',
@@ -255,7 +255,7 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Con la ficha de atención activa, cada cliente tiene su **galería de fotos**: el botón de la cámara en la lista la abre. Sirve para guardar el antes y el después de cada tratamiento y enseñárselo a la persona en la siguiente visita.',
+          text: 'Con la ficha de atención activa, cada cliente tiene su **galería de fotos**: el botón de la cámara en la lista la abre (en Clínica, la pestaña **Galería** de la ficha). Sirve para guardar el antes y el después de cada tratamiento y enseñárselo a la persona en la siguiente visita.',
         },
         {
           type: 'pasos',
@@ -283,7 +283,7 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Con la ficha de atención activa, el botón del paquete en la lista abre los **paquetes de sesiones** del cliente: qué compró, cuántas sesiones usó y cuántas le quedan. Los que se cobran en el Punto de Venta (un producto con **Sesiones incluidas**, al cliente elegido) llegan solos.',
+          text: 'Con la ficha de atención activa, el botón del paquete en la lista (en Clínica, la pestaña **Paquetes** de la ficha) abre los **paquetes de sesiones** del cliente: qué compró, cuántas sesiones usó y cuántas le quedan. Los que se cobran en el Punto de Venta (un producto con **Sesiones incluidas**, al cliente elegido) llegan solos.',
         },
         {
           type: 'tabla',

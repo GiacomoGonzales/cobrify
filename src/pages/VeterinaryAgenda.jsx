@@ -3,9 +3,9 @@
  * Vista de citas del día con acciones para completar y generar comprobantes
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { esVendible } from '@/utils/productSale'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import {
@@ -68,6 +68,7 @@ import { getSellers } from '@/services/sellerService'
 
 export default function VeterinaryAgenda() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { user, getBusinessId, isDemoMode, businessMode, businessSettings, branchScope, branches } = useAppContext()
 
   /**
@@ -568,6 +569,24 @@ export default function VeterinaryAgenda() {
   // que se tipeó es un DNI (8 dígitos) o RUC (11) sin coincidencias, un clic
   // lo consulta en RENIEC/SUNAT y deja el formulario de cliente nuevo con
   // documento y nombre ya puestos — solo falta teléfono y mascota.
+  // Llegar desde la ficha del paciente con ?agendar=<id>: se abre "Agendar
+  // cita" con esa persona ya elegida, para no volver a buscarla.
+  const agendarDesdeFicha = useRef(false)
+  useEffect(() => {
+    const id = new URLSearchParams(location.search).get('agendar')
+    if (!id || agendarDesdeFicha.current || isDemoMode || !user?.uid || isLoading) return
+    agendarDesdeFicha.current = true
+    ;(async () => {
+      await openWalkIn('schedule')
+      try {
+        const r = await getCustomers(getBusinessId())
+        const c = r?.success ? (r.data || []).find(x => x.id === id) : null
+        if (c) selectWalkInCustomer(c)
+      } catch (e) { /* se busca a mano */ }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search, user?.uid, isDemoMode, isLoading])
+
   const buscarDocEnPadron = async () => {
     const num = walkInSearch.trim()
     const esDni = /^\d{8}$/.test(num)

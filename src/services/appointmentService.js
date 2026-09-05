@@ -106,6 +106,22 @@ export const getCustomerAppointments = async (businessId, customerId) => {
 }
 
 /**
+ * TODAS las citas de un cliente, ordenadas por fecha.
+ *
+ * Una sola condición (customerId) a propósito: sumar estado y orden en la
+ * consulta exige un índice compuesto, y esto son diez citas por persona
+ * que se filtran igual de bien en memoria. La lee la ficha del paciente
+ * para mostrar la próxima cita.
+ */
+export const getAppointmentsDeCliente = async (businessId, customerId) => {
+  if (!customerId) return []
+  const ref = collection(db, 'businesses', businessId, 'appointments')
+  const snapshot = await getDocs(query(ref, where('customerId', '==', customerId)))
+  const ms = (a) => a.scheduledDate?.toMillis?.() || 0
+  return snapshot.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => ms(a) - ms(b))
+}
+
+/**
  * Crear una nueva cita
  * @param {Object} appointment - Datos de la cita
  * {

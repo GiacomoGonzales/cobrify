@@ -100,20 +100,20 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Cada paciente lleva su **Ficha de atención**: **Alergias** y **Antecedentes** arriba (lo que hay que saber antes de atender), y debajo el **historial de atenciones**: fecha, procedimiento, tratamiento, recomendaciones, quién atendió y el próximo control, que se agenda solo al guardar.',
+          text: 'En **Pacientes**, toca la fila de la persona: se abre su ficha con lo importante arriba —alergia en rojo, **próxima cita**, **última atención**, **sesiones disponibles** y **deuda pendiente**— y debajo las pestañas **Resumen**, **Atenciones**, **Paquetes**, **Galería** y **Compras**.',
         },
         {
           type: 'pasos',
           items: [
-            'En **Pacientes**, presiona **Editar** en la persona.',
-            'Completa **Alergias** y **Antecedentes** la primera vez. La alergia aparece en rojo en la lista.',
-            'Cada visita, **Agregar atención** y guarda. La más reciente queda primero.',
-            'Las fotos del antes y el después van en la **galería** (el botón de la cámara en la lista): **Agregar foto**, y **Comparar** para verlas juntas.',
+            'Para cambiar datos o cargar **Alergias** y **Antecedentes**, presiona **Editar** en la ficha. La alergia aparece en rojo en la lista.',
+            'Cada visita, **Agregar atención** (en la pestaña Atenciones o al terminar la cita en la Agenda). La más reciente queda primero.',
+            'Las fotos del antes y el después van en la pestaña **Galería**: **Agregar foto**, y **Comparar** para verlas juntas.',
+            '**Agendar cita** abre la Agenda con el paciente ya elegido; **WhatsApp** abre el chat.',
           ],
         },
         {
           type: 'consejo',
-          text: 'La lista muestra la **edad** junto al cumpleaños y la fecha de la **última atención**, así sabes de un vistazo quién no vuelve hace tiempo.',
+          text: 'La lista muestra teléfono, edad y **última atención**, y se puede ordenar por ella: así sabes de un vistazo quién no vuelve hace tiempo. Fidelización, Importar y Exportar están bajo el botón **Más**.',
         },
         { type: 'enlace', to: '/app/manual/clientes', label: 'Guía completa de la ficha' },
       ],
@@ -133,7 +133,7 @@ export default {
             'En el tratamiento, pon **Sesiones incluidas** (por ejemplo 6) y guarda.',
             'Cóbralo en el Punto de Venta con el paciente **elegido**: el paquete queda en su ficha.',
             'En cada cita, desde **En atención**, presiona **Usar sesión del paquete**: la cita se completa sin volver a cobrar.',
-            'En **Pacientes**, el botón del paquete muestra cuántas sesiones le quedan; ahí también se descuenta a mano (**Usar sesión**) o se carga con **Agregar paquete** uno que venía de antes.',
+            'En la ficha del paciente, la pestaña **Paquetes** muestra cuántas sesiones le quedan; ahí también se descuenta a mano (**Usar sesión**) o se carga con **Agregar paquete** uno que venía de antes.',
           ],
         },
         {

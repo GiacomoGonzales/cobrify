@@ -6,7 +6,9 @@
  * deshace un descuento equivocado y se carga un paquete que viene de otro
  * sistema. Los que nacen de una venta llegan solos (ver packageService).
  *
- * Se abre desde la lista de Pacientes (el botón del paquete).
+ * Vive en dos lugares: como pestaña de la ficha del paciente (Clínica) y,
+ * en General con la ficha de atención, como modal desde la lista (el botón
+ * del paquete). Por eso el CONTENIDO (PaquetesPaciente) va aparte del modal.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { Package, Loader2, Trash2, Plus, Undo2, Check } from 'lucide-react'
@@ -23,7 +25,7 @@ import { fechaCorta } from '@/utils/fichaAtencion'
 
 const CAMPO = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500'
 
-export default function PaquetesPacienteModal({ isOpen, onClose, customer, onChanged }) {
+export function PaquetesPaciente({ customer, onChanged, activo = true }) {
   const { getBusinessId, user } = useAppContext()
   const toast = useToast()
 
@@ -40,7 +42,7 @@ export default function PaquetesPacienteModal({ isOpen, onClose, customer, onCha
   const customerId = customer?.id
 
   useEffect(() => {
-    if (!isOpen || !customerId) return
+    if (!activo || !customerId) return
     let vivo = true
     setCargando(true)
     setAgregando(false)
@@ -51,7 +53,7 @@ export default function PaquetesPacienteModal({ isOpen, onClose, customer, onCha
       .finally(() => { if (vivo) setCargando(false) })
     return () => { vivo = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, customerId])
+  }, [activo, customerId])
 
   // El catálogo se pide recién al abrir "Agregar paquete".
   useEffect(() => {
@@ -218,7 +220,6 @@ export default function PaquetesPacienteModal({ isOpen, onClose, customer, onCha
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Paquetes de sesiones" size="lg">
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm text-gray-600">
@@ -307,6 +308,14 @@ export default function PaquetesPacienteModal({ isOpen, onClose, customer, onCha
           </div>
         )}
       </div>
+  )
+}
+
+/** Los paquetes como modal, para la lista de Clientes en General con la ficha de atención. */
+export default function PaquetesPacienteModal({ isOpen, onClose, customer, onChanged }) {
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Paquetes de sesiones" size="lg">
+      <PaquetesPaciente customer={customer} onChanged={onChanged} activo={isOpen} />
     </Modal>
   )
 }

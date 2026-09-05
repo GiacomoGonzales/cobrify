@@ -29,6 +29,9 @@ import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import MedicalHistoryModal from '@/components/veterinary/MedicalHistoryModal'
 import GaleriaPacienteModal from '@/components/clinic/GaleriaPacienteModal'
 import PaquetesPacienteModal from '@/components/clinic/PaquetesPacienteModal'
+import ListaPacientes from '@/components/clinic/ListaPacientes'
+import FichaPacienteModal from '@/components/clinic/FichaPacienteModal'
+import { getInvoicesDeCliente } from '@/services/customerInvoiceService'
 import { normalizePets, createEmptyPet } from '@/utils/petUtils'
 import DeliveryAddressesEditor, { limpiarDireccionesParaGuardar } from '@/components/customer/DeliveryAddressesEditor'
 import LoyaltyManager from '@/components/loyalty/LoyaltyManager'
@@ -94,19 +97,8 @@ function CustomerOrdersModal({ customer, businessId, businessSettings, isDemoMod
         return
       }
       try {
-        const { collection, getDocs, query, where } = await import('firebase/firestore')
-        const { db } = await import('@/lib/firebase')
-        const invoicesRef = collection(db, 'businesses', businessId, 'invoices')
-
-        let docs = []
-        const byIdSnap = await getDocs(query(invoicesRef, where('customerId', '==', customer.id)))
-        docs = byIdSnap.docs.map(d => ({ id: d.id, ...d.data() }))
-
-        const docNumber = customer.documentNumber
-        if (docs.length === 0 && docNumber && docNumber !== '00000000') {
-          const byDocSnap = await getDocs(query(invoicesRef, where('customer.documentNumber', '==', docNumber)))
-          docs = byDocSnap.docs.map(d => ({ id: d.id, ...d.data() }))
-        }
+        // La misma consulta que usa la ficha del paciente (customerInvoiceService).
+        const docs = await getInvoicesDeCliente(businessId, customer)
 
         // Más recientes primero (createdAt Timestamp → fallback issueDate/emissionDate)
         const dateOf = (inv) => inv.createdAt?.toDate?.()?.getTime?.()
@@ -768,6 +760,12 @@ export default function Customers() {
   const [galeriaCustomer, setGaleriaCustomer] = useState(null)
   // Paciente cuyos paquetes de sesiones se están viendo
   const [paquetesCustomer, setPaquetesCustomer] = useState(null)
+  // Ficha del paciente (Clínica). Se guarda el ID y no el objeto: al releer la
+  // lista tras un cambio (un paquete usado), la ficha abierta ve lo nuevo.
+  const [fichaCustomerId, setFichaCustomerId] = useState(null)
+  const fichaCustomer = fichaCustomerId ? (customers.find(c => c.id === fichaCustomerId) || null) : null
+  // Menú "Más" del encabezado (Clínica): lo secundario, fuera de la barra.
+  const [showMas, setShowMas] = useState(false)
   // Cliente cuyo historial de pedidos se está viendo (click en el contador)
   const [ordersCustomer, setOrdersCustomer] = useState(null)
   // Estado para múltiples mascotas (veterinaria)
@@ -1261,6 +1259,9 @@ export default function Customers() {
           if (!b.subscriptionExpiry) return -1
           return a.subscriptionExpiry.localeCompare(b.subscriptionExpiry)
         }
+        case 'lastVisit':
+          // La más reciente primero; sin atención, al final.
+          return ultimaAtencion(b).localeCompare(ultimaAtencion(a))
         case 'name':
         default:
           return (a.name || '').localeCompare(b.name || '')
@@ -1310,6 +1311,47 @@ export default function Customers() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          {esClinica ? (
+            // En Clínica la barra queda con lo que recepción usa (buscar y
+            // crear); Fidelización, Exportar e Importar viven bajo "Más".
+            <div className="relative">
+              <Button variant="outline" onClick={() => setShowMas(v => !v)} className="w-full sm:w-auto">
+                Más
+                <ChevronDown className="w-4 h-4 ml-2" />
+              </Button>
+              {showMas && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowMas(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg p-1 min-w-[190px]">
+                    <button
+                      type="button"
+                      onClick={() => { setShowMas(false); setIsLoyaltyOpen(true) }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md"
+                    >
+                      <Stamp className="w-4 h-4" /> Fidelización
+                    </button>
+                    {permisos.exportar && (
+                      <button
+                        type="button"
+                        onClick={() => { setShowMas(false); handleExportToExcel() }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md"
+                      >
+                        <FileSpreadsheet className="w-4 h-4" /> Exportar Excel
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => { setShowMas(false); setIsImportOpen(true) }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md"
+                    >
+                      <Upload className="w-4 h-4" /> Importar Excel
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <>
           <Button
             variant="outline"
             onClick={() => setIsLoyaltyOpen(true)}
@@ -1336,6 +1378,8 @@ export default function Customers() {
             <Upload className="w-4 h-4 mr-2" />
             Importar Excel
           </Button>
+            </>
+          )}
           <Button onClick={openCreateModal} className="w-full sm:w-auto">
             <Plus className="w-4 h-4 mr-2" />
             Nuevo {vocabulario.singular}
@@ -1366,8 +1410,9 @@ export default function Customers() {
                 className="text-sm border-none bg-transparent focus:ring-0 focus:outline-none cursor-pointer"
               >
                 <option value="name">Ordenar por Nombre</option>
-                <option value="orders">Ordenar por Pedidos</option>
-                {permisos.verTotales && <option value="spent">Ordenar por Total Gastado</option>}
+                {esClinica && <option value="lastVisit">Ordenar por Última atención</option>}
+                {!esClinica && <option value="orders">Ordenar por Pedidos</option>}
+                {!esClinica && permisos.verTotales && <option value="spent">Ordenar por Total Gastado</option>}
                 {businessSettings?.posCustomFields?.showSubscriptionFields && (
                   <option value="expiry">Ordenar por Vencimiento</option>
                 )}
@@ -1417,7 +1462,9 @@ export default function Customers() {
         </CardContent>
       </Card>
 
-      {/* Stats */}
+      {/* Stats: métricas de tienda (pedidos, gastado). En Clínica no dicen nada
+          y ocupan media pantalla: el recuento va en la lista. */}
+      {!esClinica && (
       <div className={`grid grid-cols-1 sm:grid-cols-2 ${permisos.verTotales ? 'lg:grid-cols-4' : 'lg:grid-cols-2'} gap-6`}>
         <Card>
           <CardContent className="p-6">
@@ -1496,6 +1543,7 @@ export default function Customers() {
           </Card>
         )}
       </div>
+      )}
 
       {/* Resumen de suscripciones */}
       {businessSettings?.posCustomFields?.showSubscriptionFields && (() => {
@@ -1557,6 +1605,9 @@ export default function Customers() {
             )}
           </CardContent>
         ) : (
+          esClinica ? (
+            <ListaPacientes customers={displayedCustomers} onOpen={(c) => setFichaCustomerId(c.id)} />
+          ) : (
           <>
             {/* Vista de tarjetas para móvil */}
             <div className="lg:hidden divide-y divide-gray-100">
@@ -2000,7 +2051,7 @@ export default function Customers() {
             </Table>
             </div>
           </>
-
+          )
         )}
       </Card>
 
@@ -2627,6 +2678,16 @@ export default function Customers() {
         isOpen={!!paquetesCustomer}
         onClose={() => setPaquetesCustomer(null)}
         customer={paquetesCustomer}
+        onChanged={loadCustomers}
+      />
+
+      {/* La ficha del paciente (Clínica): todo en un solo lugar; se edita con Editar */}
+      <FichaPacienteModal
+        isOpen={!!fichaCustomer}
+        onClose={() => setFichaCustomerId(null)}
+        customer={fichaCustomer}
+        onEdit={(c) => { setFichaCustomerId(null); openEditModal(c) }}
+        onDelete={(c) => { setFichaCustomerId(null); setDeletingCustomer(c) }}
         onChanged={loadCustomers}
       />
 

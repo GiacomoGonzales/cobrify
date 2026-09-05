@@ -6,8 +6,11 @@
  * su etiqueta, y **Comparar** una de antes con una de después lado a lado.
  * Lo demás (filtro por tratamiento, ver grande, borrar) es lo mínimo.
  *
- * Se abre desde la lista de Pacientes (el botón de la cámara). Las fotos
- * viven en la subcolección `photos` del cliente: ver patientPhotoService.
+ * Vive en dos lugares: como pestaña de la ficha del paciente (Clínica) y,
+ * en General con la ficha de atención, como modal desde la lista (el botón
+ * de la cámara). Por eso el CONTENIDO (GaleriaPaciente) va aparte del modal.
+ * Las fotos viven en la subcolección `photos` del cliente: ver
+ * patientPhotoService.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Camera, Loader2, Trash2, X, Columns2, Plus } from 'lucide-react'
@@ -25,7 +28,7 @@ const CAMPO = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:
 const chipDeEtiqueta = (label) =>
   label === 'despues' ? 'chip-ok' : 'chip-neutro'
 
-export default function GaleriaPacienteModal({ isOpen, onClose, customer }) {
+export function GaleriaPaciente({ customer, activo = true }) {
   const { getBusinessId, user } = useAppContext()
   const toast = useToast()
 
@@ -49,7 +52,7 @@ export default function GaleriaPacienteModal({ isOpen, onClose, customer }) {
   const customerId = customer?.id
 
   useEffect(() => {
-    if (!isOpen || !customerId) return
+    if (!activo || !customerId) return
     let vivo = true
     setCargando(true)
     setFiltro('')
@@ -62,7 +65,7 @@ export default function GaleriaPacienteModal({ isOpen, onClose, customer }) {
       .finally(() => { if (vivo) setCargando(false) })
     return () => { vivo = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, customerId])
+  }, [activo, customerId])
 
   // El preview local se libera al cambiar de archivo o cerrar.
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])
@@ -145,7 +148,7 @@ export default function GaleriaPacienteModal({ isOpen, onClose, customer }) {
   )
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Galería antes y después" size="4xl">
+    <>
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <p className="text-sm text-gray-600">
@@ -334,6 +337,15 @@ export default function GaleriaPacienteModal({ isOpen, onClose, customer }) {
           </div>
         </div>
       )}
+    </>
+  )
+}
+
+/** La galería como modal, para la lista de Clientes en General con la ficha de atención. */
+export default function GaleriaPacienteModal({ isOpen, onClose, customer }) {
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Galería antes y después" size="4xl">
+      <GaleriaPaciente customer={customer} activo={isOpen} />
     </Modal>
   )
 }
