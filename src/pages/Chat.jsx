@@ -1274,6 +1274,14 @@ export default function Chat() {
                 // propia forma recortada y el reproductor de audio ya trae su recuadro.
                 // Meterlos en una burbuja era poner un marco sobre otro marco.
                 const sinBurbuja = m.tipo === 'sticker' || (m.tipo === 'audio' && !m.texto && !m.respondeA)
+                // La foto y su tamano exacto. Cuando se conoce, la burbuja se
+                // CINE a la foto —como en WhatsApp— en vez de estirarse con el
+                // texto: asi lo que queda a los lados es un hilo, no un margen.
+                const medidas = m.tipo === 'image' || m.tipo === 'template' ? medidasDeImagen(m.media) : null
+                const conFoto = Boolean(m.media?.url && medidas && !sinBurbuja)
+                // Con pie de foto la burbuja no baja de 260: una foto vertical
+                // angosta dejaria el texto en una columna de dos palabras.
+                const anchoBurbuja = conFoto ? Math.max(medidas.width, m.texto ? 260 : 0) + BORDE_FOTO * 2 : null
                 const citado = m.respondeA ? mensajePorWaId.get(m.respondeA) : null
                 const miReaccion = reaccionDeM(m)
                 const suReaccion = m.reacciones?.cliente || ''
@@ -1342,6 +1350,7 @@ export default function Chat() {
                     <div
                       data-mensaje={m.id}
                       className={`relative ${m.linkPreview || m.tipo === 'document' ? 'w-72 max-w-[85%]' : 'max-w-[min(75%,34rem)]'}`}
+                      style={anchoBurbuja ? { width: anchoBurbuja } : undefined}
                     >
                     <div
                       onClick={(e) => {
@@ -1355,8 +1364,8 @@ export default function Chat() {
                         sinBurbuja
                           ? 'text-gray-900'
                           : mio
-                            ? 'rounded-2xl px-3.5 py-2 bg-primary-50 border border-primary-100 text-gray-900 rounded-br-sm'
-                            : 'rounded-2xl px-3.5 py-2 bg-white border border-gray-200 text-gray-900 rounded-bl-sm'
+                            ? `rounded-2xl ${conFoto ? 'p-1' : 'px-3.5 py-2'} bg-primary-50 border border-primary-100 text-gray-900 rounded-br-sm`
+                            : `rounded-2xl ${conFoto ? 'p-1' : 'px-3.5 py-2'} bg-white border border-gray-200 text-gray-900 rounded-bl-sm`
                       }`}
                     >
                       {m.respondeA && (
@@ -1407,13 +1416,15 @@ export default function Chat() {
                             // y el espacio queda reservado antes de que la imagen
                             // baje: sin salto y sin hueco al costado. Sin medidas
                             // —mensajes viejos— se pinta como siempre.
-                            style={m.tipo === 'sticker' ? undefined : medidasDeImagen(m.media) || undefined}
-                            className={`rounded-lg mb-1 bg-black/5 ${
+                            style={m.tipo === 'sticker' ? undefined : medidas || undefined}
+                            className={`rounded-lg bg-black/5 ${conFoto ? 'mb-0.5' : 'mb-1'} ${
                               m.tipo === 'sticker'
                                 ? 'w-28'
-                                : medidasDeImagen(m.media)
+                                : medidas
                                   ? 'max-w-full h-auto'
-                                  : 'max-w-full max-h-72 object-contain'
+                                  // Sin medidas —plantillas y mensajes viejos— la burbuja no
+                                  // puede cenirse, pero la foto respeta la misma escala.
+                                  : 'max-w-[22.5rem] max-h-[21rem] object-contain'
                             }`}
                           />
                         </button>
@@ -1435,36 +1446,41 @@ export default function Chat() {
                           {m.tipo === 'image' ? 'Imagen' : m.tipo === 'audio' ? 'Audio' : m.tipo === 'video' ? 'Video' : m.tipo === 'document' ? 'Documento' : 'Sticker'} no disponible
                         </p>
                       )}
-                      {m.linkPreview && <TarjetaEnlace vista={m.linkPreview} mio={mio} />}
-                      {m.texto
-                        ? (
-                          <TextoWhatsapp
-                            texto={m.texto}
-                            claseEnlace={`underline break-all ${'text-blue-600'}`}
-                          />
-                        )
-                        : !['image', 'sticker', 'video', 'audio', 'document'].includes(m.tipo)
-                          && <p className="text-[13px] italic opacity-75">[{m.tipo}]</p>}
-                      <div
-                        className={`flex items-center gap-1 justify-end mt-0.5 ${
-                          'text-gray-400'
-                        }`}
-                      >
-                        {fallo && (
-                          <span className="text-[11px] font-semibold text-red-100">No se envió</span>
-                        )}
-                        <span className="text-[11px]">{formatearHora(m.timestamp)}</span>
-                        {mio && (
-                          fallo
-                            ? <AlertCircle className="w-3.5 h-3.5 text-red-100" />
-                            : m.estado === 'enviando'
-                              ? <Clock className="w-3.5 h-3.5 opacity-70" />
-                              : m.estado === 'read'
-                                ? <CheckCheck className="w-3.5 h-3.5 text-blue-200" />
-                                : m.estado === 'delivered'
-                                  ? <CheckCheck className="w-3.5 h-3.5" />
-                                  : <Check className="w-3.5 h-3.5" />
-                        )}
+                      {/* Todo lo que no es la foto lleva su propio margen: con la
+                          burbuja cenida, la foto va al ras y el texto necesita aire
+                          para no pegarse al borde. */}
+                      <div className={conFoto ? 'px-1.5 pb-0.5' : undefined}>
+                        {m.linkPreview && <TarjetaEnlace vista={m.linkPreview} mio={mio} />}
+                        {m.texto
+                          ? (
+                            <TextoWhatsapp
+                              texto={m.texto}
+                              claseEnlace={`underline break-all ${'text-blue-600'}`}
+                            />
+                          )
+                          : !['image', 'sticker', 'video', 'audio', 'document'].includes(m.tipo)
+                            && <p className="text-[13px] italic opacity-75">[{m.tipo}]</p>}
+                        <div
+                          className={`flex items-center gap-1 justify-end mt-0.5 ${
+                            'text-gray-400'
+                          }`}
+                        >
+                          {fallo && (
+                            <span className="text-[11px] font-semibold text-red-100">No se envió</span>
+                          )}
+                          <span className="text-[11px]">{formatearHora(m.timestamp)}</span>
+                          {mio && (
+                            fallo
+                              ? <AlertCircle className="w-3.5 h-3.5 text-red-100" />
+                              : m.estado === 'enviando'
+                                ? <Clock className="w-3.5 h-3.5 opacity-70" />
+                                : m.estado === 'read'
+                                  ? <CheckCheck className="w-3.5 h-3.5 text-blue-200" />
+                                  : m.estado === 'delivered'
+                                    ? <CheckCheck className="w-3.5 h-3.5" />
+                                    : <Check className="w-3.5 h-3.5" />
+                          )}
+                        </div>
                       </div>
                     </div>
                     {conReaccion && (
