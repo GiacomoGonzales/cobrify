@@ -72,6 +72,7 @@ import {
 import { CHART_COLORS, CHART_MUTED, colorForKey, assignColors, capSeries } from '@/utils/chartColors'
 import { getSaleSeller } from '@/utils/saleSeller'
 import { esDeSucursal } from '@/utils/branchScope'
+import { almacenesDeSucursal, esDeSucursalLaCompra } from '@/utils/purchaseBranch'
 import MonthSelect from '@/components/MonthSelect'
 import { getInvoiceCommission, buildSellerIndex, ventaCobrada } from '@/utils/commissions'
 import { getSellers } from '@/services/sellerService'
@@ -487,6 +488,13 @@ export default function Reports() {
         .map(w => w.id)
     )
   }, [warehouses, allowedBranches, allowedWarehouses, hasMainBranchAccess, locationRestricted])
+
+  // Los almacenes de la sucursal ELEGIDA en el header (distinto de los
+  // permitidos de arriba: eso es seguridad, esto es el filtro de la pantalla).
+  const almacenesDelFiltro = useMemo(
+    () => (filterBranch === 'all' ? null : almacenesDeSucursal(warehouses, filterBranch)),
+    [warehouses, filterBranch]
+  )
 
   // ¿El usuario puede ver esta compra según sus permisos? (independiente del filtro de UI)
   const hasPurchaseAccess = useCallback((purchase) => {
@@ -2017,7 +2025,22 @@ export default function Reports() {
 
   // ========== CÁLCULOS DE GASTOS ==========
 
-  // Filtrar gastos por rango de fecha
+  // Los gastos que este usuario ve con la sucursal elegida en el header.
+  //
+  // Antes entraban TODOS los del negocio: con una sede elegida, la Rentabilidad
+  // comparaba las ventas de ESA sede contra los gastos de todas, y el Margen
+  // Bruto salía mal. Los dos criterios son los mismos que usa la página Gastos:
+  //   - un gasto SIN sucursal es GENERAL: cuenta en la Principal y lo puede ver
+  //     cualquier usuario (por eso el permiso no se le aplica);
+  //   - uno de una sede cuenta solo en la suya, y solo si el usuario la tiene.
+  const gastosVisibles = useMemo(
+    () => expenses
+      .filter(e => ((!e?.branchId || e.branchId === 'main') ? true : canAccess(e)))
+      .filter(e => esDeSucursal(e, filterBranch)),
+    [expenses, canAccess, filterBranch]
+  )
+
+  // Y de esos, los del rango de fechas elegido.
   const filteredExpenses = useMemo(() => {
     const now = new Date()
     let filterDate = new Date()
@@ -2025,14 +2048,14 @@ export default function Reports() {
     // Para fechas personalizadas
     if (dateRange === 'custom') {
       if (!customStartDate || !customEndDate) {
-        return expenses
+        return gastosVisibles
       }
       const startDate = parseLocalDate(customStartDate)
       startDate.setHours(0, 0, 0, 0)
       const endDate = parseLocalDate(customEndDate)
       endDate.setHours(23, 59, 59, 999)
 
-      return expenses.filter(expense => {
+      return gastosVisibles.filter(expense => {
         if (!expense.date) return false
         const expenseDate = expense.date instanceof Date ? expense.date : new Date(expense.date)
         return expenseDate >= startDate && expenseDate <= endDate
@@ -2064,17 +2087,17 @@ export default function Reports() {
         filterEndDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999)
         break
       case 'all':
-        return expenses
+        return gastosVisibles
       default:
-        return expenses
+        return gastosVisibles
     }
 
-    return expenses.filter(expense => {
+    return gastosVisibles.filter(expense => {
       if (!expense.date) return false
       const expenseDate = expense.date instanceof Date ? expense.date : new Date(expense.date)
       return expenseDate >= filterDate && expenseDate <= filterEndDate
     })
-  }, [expenses, dateRange, customStartDate, customEndDate])
+  }, [gastosVisibles, dateRange, customStartDate, customEndDate])
 
   // Filtrar compras por rango de fecha (para rentabilidad)
   const filteredPurchases = useMemo(() => {
@@ -2082,8 +2105,16 @@ export default function Reports() {
     let filterDate = new Date()
 
     // Seguridad usuarios secundarios: las compras se derivan por almacén → sucursal.
-    // Saneamos primero por permisos (warehouseId ∈ allowedWarehouseIds) y luego por fecha.
-    const accessiblePurchases = purchases.filter(hasPurchaseAccess)
+    // Saneamos primero por permisos (warehouseId ∈ allowedWarehouseIds), después
+    // por la sucursal del header y al final por fecha.
+    //
+    // La sucursal faltaba: con una sede elegida, la Rentabilidad restaba las
+    // compras de TODAS. El criterio es el compartido con la página Compras y
+    // Flujo de Caja (utils/purchaseBranch): una compra sin almacén es de la
+    // Principal.
+    const accessiblePurchases = purchases
+      .filter(hasPurchaseAccess)
+      .filter(p => esDeSucursalLaCompra(p, filterBranch, almacenesDelFiltro))
 
     // Para fechas personalizadas
     if (dateRange === 'custom') {
@@ -2134,7 +2165,7 @@ export default function Reports() {
       const purchaseDate = getPurchaseDate(purchase)
       return purchaseDate && purchaseDate >= filterDate && purchaseDate <= filterEndDate
     })
-  }, [purchases, dateRange, customStartDate, customEndDate, hasPurchaseAccess])
+  }, [purchases, dateRange, customStartDate, customEndDate, hasPurchaseAccess, filterBranch, almacenesDelFiltro])
 
   // Estadísticas de compras (costo de ventas) — en PEN base.
   const purchaseStats = useMemo(() => {

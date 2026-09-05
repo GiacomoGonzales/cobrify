@@ -15,7 +15,7 @@
  */
 export default {
   id: 'reportes',
-  actualizado: '16/08/2026',
+  actualizado: '05/09/2026',
   intro:
     'Reportes responde las preguntas que no se ven en el día a día: qué se vende de verdad, quién compra, cuánto ganas y en qué se te va el dinero. Son diez reportes distintos, todos calculados sobre tus ventas y gastos ya registrados.',
 
@@ -239,6 +239,10 @@ export default {
             ['Utilidad Operativa', 'Lo anterior menos los gastos'],
             ['Margen Operativo', 'Esa utilidad como porcentaje de la venta'],
           ],
+        },
+        {
+          type: 'texto',
+          text: 'Si eliges una **sucursal** en el encabezado, las seis cifras son de esa sede: sus ventas, sus compras y sus gastos. Los **gastos generales** (los que registraste sin sucursal, como la contabilidad o el alquiler de la oficina) cuentan en la **Principal**, igual que en la página Gastos; no se reparten entre las sedes.',
         },
         {
           type: 'texto',
