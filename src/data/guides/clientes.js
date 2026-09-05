@@ -248,6 +248,34 @@ export default {
         },
       ],
     },
+
+    {
+      id: 'galeria',
+      title: 'Galería de antes y después',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Con la ficha de atención activa, cada cliente tiene su **galería de fotos**: el botón de la cámara en la lista la abre. Sirve para guardar el antes y el después de cada tratamiento y enseñárselo a la persona en la siguiente visita.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Presiona **Agregar foto**. En el celular abre la cámara directo.',
+            'Marca **Antes** o **Después**, revisa la fecha y escribe el tratamiento (la lista recuerda los que ya usaste).',
+            'Presiona **Subir**. La foto se comprime sola antes de guardarse.',
+            'Para verlas juntas, presiona **Comparar** y toca una de Antes y una de Después.',
+          ],
+        },
+        {
+          type: 'consejo',
+          text: 'Tomar siempre la foto con la misma luz y el mismo encuadre es lo que hace que la comparación convenza. El sistema no puede hacer eso por ti.',
+        },
+        {
+          type: 'ojo',
+          text: 'Las fotos se ven solo dentro del sistema, pero el enlace de cada una es público para quien lo tenga: no lo compartas fuera de la clínica.',
+        },
+      ],
+    },
   ],
 
   preguntas: [

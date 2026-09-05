@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, FileText, Printer, Upload, CalendarClock, Cake, Columns3, PawPrint, ClipboardList, Eye, EyeOff, X, ChevronDown, Stamp } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, User, Loader2, AlertTriangle, ShoppingCart, DollarSign, TrendingUp, FileSpreadsheet, FileText, Printer, Upload, CalendarClock, Cake, Columns3, PawPrint, ClipboardList, Eye, EyeOff, X, ChevronDown, Stamp, Camera } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { crearClienteDemo, actualizarClienteDemo, eliminarClienteDemo } from '@/data/demo/operaciones'
 import { useDataPermissions } from '@/hooks/useDataPermissions'
@@ -27,6 +27,7 @@ import { generateCustomersExcel } from '@/services/customerExportService'
 import ImportCustomersModal from '@/components/ImportCustomersModal'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import MedicalHistoryModal from '@/components/veterinary/MedicalHistoryModal'
+import GaleriaPacienteModal from '@/components/clinic/GaleriaPacienteModal'
 import { normalizePets, createEmptyPet } from '@/utils/petUtils'
 import DeliveryAddressesEditor, { limpiarDireccionesParaGuardar } from '@/components/customer/DeliveryAddressesEditor'
 import LoyaltyManager from '@/components/loyalty/LoyaltyManager'
@@ -762,6 +763,8 @@ export default function Customers() {
 
   // Estado para modal de historia clínica (veterinaria)
   const [medicalHistoryCustomer, setMedicalHistoryCustomer] = useState(null)
+  // Paciente cuya galería de antes/después está abierta (ficha de atención)
+  const [galeriaCustomer, setGaleriaCustomer] = useState(null)
   // Cliente cuyo historial de pedidos se está viendo (click en el contador)
   const [ordersCustomer, setOrdersCustomer] = useState(null)
   // Estado para múltiples mascotas (veterinaria)
@@ -1573,6 +1576,15 @@ export default function Customers() {
                       )}
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                      {conFicha && (
+                        <button
+                          onClick={() => setGaleriaCustomer(customer)}
+                          className="p-1.5 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                          title="Galería antes y después"
+                        >
+                          <Camera className="w-4 h-4" />
+                        </button>
+                      )}
                       {businessMode === 'veterinary' && normalizePets(customer).length > 0 && (
                         <button
                           onClick={() => setMedicalHistoryCustomer(customer)}
@@ -1917,6 +1929,15 @@ export default function Customers() {
                     )}
                     <TableCell className="py-1.5">
                       <div className="flex items-center justify-end gap-0.5">
+                        {conFicha && (
+                          <button
+                            onClick={() => setGaleriaCustomer(customer)}
+                            className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                            title="Galería antes y después"
+                          >
+                            <Camera className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         {businessMode === 'veterinary' && normalizePets(customer).length > 0 && (
                           <button
                             onClick={() => setMedicalHistoryCustomer(customer)}
@@ -2561,6 +2582,13 @@ export default function Customers() {
           businessId={getBusinessId()}
         />
       )}
+
+      {/* Galería de antes y después (ficha de atención) */}
+      <GaleriaPacienteModal
+        isOpen={!!galeriaCustomer}
+        onClose={() => setGaleriaCustomer(null)}
+        customer={galeriaCustomer}
+      />
 
       {/* Modal de pedidos del cliente (click en el contador de Pedidos) */}
       {ordersCustomer && (

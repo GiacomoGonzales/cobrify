@@ -99,6 +99,23 @@ export default {
     },
 
     {
+      id: 'clinica',
+      title: 'En modo Clínica',
+      soloModos: ['clinic'],
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Debajo de las tarjetas aparece **Hoy en la clínica**: cuántas citas hay hoy (por confirmar, confirmadas, en atención, completadas) y las próximas cinco con su hora, paciente, tratamiento y quién atiende. Se actualiza sola cuando alguien agenda, desde el mostrador o desde el catálogo.',
+        },
+        {
+          type: 'texto',
+          text: 'Al lado, **Por cobrar**: la suma de lo que los pacientes todavía deben (tratamientos pagados en partes). **Ver en Ventas** lleva a los comprobantes con saldo, donde se registra cada abono.',
+        },
+        { type: 'enlace', to: '/app/agenda', label: 'Ir a la Agenda' },
+      ],
+    },
+
+    {
       id: 'restaurante',
       title: 'En modo restaurante',
       soloModos: ['restaurant'],

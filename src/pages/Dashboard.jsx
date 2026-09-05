@@ -37,6 +37,7 @@ import { useBranding } from '@/contexts/BrandingContext'
 import { getTables } from '@/services/tableService'
 import { useLocationAccess, useSalesScope } from '@/utils/locationAccess'
 import HotelDashboard from '@/components/hotel/HotelDashboard'
+import FranjaClinica from '@/components/clinic/FranjaClinica'
 import GuideLink from '@/components/guide/GuideLink'
 
 // Placeholder mientras llega el segundo tramo de facturas del mes.
@@ -1201,6 +1202,19 @@ export default function Dashboard() {
           </Card>
         ))}
       </div>
+
+      {/* Modo Clínica: las citas de hoy y lo que falta cobrar, entre las
+          tarjetas y los gráficos. Ver components/clinic/FranjaClinica. */}
+      {businessMode === 'clinic' && !isDemoMode && (
+        <FranjaClinica
+          businessId={getBusinessId()}
+          branchScope={branchScope}
+          routePrefix={routePrefix}
+          canAccess={canAccess}
+          canSeeSale={canSeeSale}
+          verTotales={permisos.verTotales}
+        />
+      )}
 
       {/* Gráficos principales: mes actual día por día + últimos 12 meses */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

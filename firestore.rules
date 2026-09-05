@@ -503,6 +503,13 @@ service cloud.firestore {
           allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
           allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
         }
+
+        // Subcollection: Photos (galería antes/después del paciente - modo clínica
+        // y ficha de atención). Ver src/services/patientPhotoService.js.
+        match /photos/{photoId} {
+          allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+          allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        }
       }
 
       // Subcollection: Products (Productos)

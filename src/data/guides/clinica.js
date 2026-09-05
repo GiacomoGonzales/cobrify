@@ -108,6 +108,7 @@ export default {
             'En **Pacientes**, presiona **Editar** en la persona.',
             'Completa **Alergias** y **Antecedentes** la primera vez. La alergia aparece en rojo en la lista.',
             'Cada visita, **Agregar atención** y guarda. La más reciente queda primero.',
+            'Las fotos del antes y el después van en la **galería** (el botón de la cámara en la lista): **Agregar foto**, y **Comparar** para verlas juntas.',
           ],
         },
         {
