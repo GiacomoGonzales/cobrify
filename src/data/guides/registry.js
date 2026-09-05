@@ -324,10 +324,13 @@ export const GUIDES = [
   {
     id: 'guias-remision',
     route: '/app/guias-remision',
+    // GRE Transportista no tiene guía propia: comparte esta (los filtros, el
+    // ZIP, los conductores y vehículos y el punto de llegada son iguales).
+    aliases: ['/app/guias-transportista'],
     title: 'Guías de Remisión',
     category: 'Operación',
-    description: 'Emitir la GRE del traslado: origen y destino, datos del transporte, descuento de stock, anulación y rechazos frecuentes.',
-    keywords: 'guia de remision gre remitente traslado despacho transporte placa conductor licencia dni modalidad origen destino peso motivo venta consignacion anular clonar xml cdr sunat rechazo',
+    description: 'Emitir la GRE del traslado: origen y destino, datos del transporte, descuento de stock, anulación, rechazos frecuentes, filtros y descarga de varias guías en un ZIP.',
+    keywords: 'guia de remision gre remitente transportista traslado despacho transporte placa conductor licencia dni modalidad origen destino peso motivo venta consignacion anular clonar xml cdr sunat rechazo zip descargar varias filtros fecha estado',
     modos: null,
     load: () => import('./guias-remision.js'),
   },

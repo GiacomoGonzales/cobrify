@@ -1573,7 +1573,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
                 onClick={() => setTransportType('02')}
                 className={`flex-1 py-2.5 px-4 rounded-lg border-2 font-medium text-sm transition-all ${
                   transportType === '02'
-                    ? 'border-orange-500 bg-orange-50 text-orange-700'
+                    ? 'border-primary-500 bg-primary-50 text-primary-700'
                     : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
                 }`}
               >
@@ -1584,7 +1584,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
                 onClick={() => setTransportType('01')}
                 className={`flex-1 py-2.5 px-4 rounded-lg border-2 font-medium text-sm transition-all ${
                   transportType === '01'
-                    ? 'border-orange-500 bg-orange-50 text-orange-700'
+                    ? 'border-primary-500 bg-primary-50 text-primary-700'
                     : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
                 }`}
               >
@@ -1666,7 +1666,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
                   type="checkbox"
                   checked={isM1OrLVehicle}
                   onChange={(e) => setIsM1OrLVehicle(e.target.checked)}
-                  className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                 />
                 <span className="text-sm text-gray-700">
                   Traslado en vehículos de categoría M1 o L
@@ -2055,7 +2055,7 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
               value={observations}
               onChange={(e) => setObservations(e.target.value.slice(0, 250))}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm resize-none"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm resize-none"
             />
             <p className="text-xs text-gray-500 text-right">
               {observations.length}/250 caracteres
@@ -2099,7 +2099,6 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
                 type="submit"
                 size="sm"
                 disabled={isSaving || isSavingDraft}
-                className="bg-orange-600 hover:bg-orange-700"
               >
                 {isSaving ? (
                   <>

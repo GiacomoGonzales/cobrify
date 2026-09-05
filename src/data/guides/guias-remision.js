@@ -1,12 +1,13 @@
 /**
  * GUÍA DE USO: Guías de Remisión (GRE Remitente)
  *
- * Nombres verificados contra src/pages/DispatchGuides.jsx.
+ * Nombres verificados contra src/pages/DispatchGuides.jsx y CarrierDispatchGuides.jsx
+ * (la página de GRE Transportista comparte esta guía: filtros y ZIP son los mismos).
  * Ver reglas de redacción en pos.js y en GuideRenderer.jsx.
  */
 export default {
   id: 'guias-remision',
-  actualizado: '02/09/2026',
+  actualizado: '05/09/2026',
   intro:
     'La guía de remisión es el documento que ampara el traslado de mercadería: dice qué se mueve, desde dónde, hacia dónde y en qué vehículo. Va a SUNAT igual que una factura, y es la que te piden si te fiscalizan en el camino.',
 
@@ -49,20 +50,47 @@ export default {
     },
 
     {
+      id: 'filtrar',
+      title: 'Filtrar la lista',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Arriba de la lista están los filtros. La fecha se elige con los accesos rápidos (**Hoy**, **7 días**, **30 días**, **Este mes**) o con **Personalizado**, que abre **Desde** y **Hasta** para un rango a tu medida. Al lado están el **estado** (aceptadas, pendientes, rechazadas, anuladas) y el **motivo** del traslado.',
+        },
+        {
+          type: 'texto',
+          text: 'La fecha que se filtra es la del **traslado**, la misma que ves en la columna de fecha de la lista. Los filtros se combinan entre sí y con el buscador; **Limpiar filtros** vuelve a mostrar todo.',
+        },
+        {
+          type: 'consejo',
+          text: 'Para mandarle al contador las guías de un mes: **Este mes** (o **Personalizado** con el mes que sea) y estado **Aceptadas**. Lo que queda en la lista es lo que baja con el ZIP y con Exportar Excel.',
+        },
+        {
+          type: 'texto',
+          text: 'En **GRE Transportista** los filtros son los mismos.',
+        },
+      ],
+    },
+
+    {
       id: 'descargar-todas',
       title: 'Bajar varias guías de una vez',
       blocks: [
         {
           type: 'texto',
-          text: 'Arriba de la lista está **Descargar PDFs (ZIP)**: arma un solo archivo con el PDF de todas las guías que estás viendo. Sirve sobre todo después de una emisión masiva, para no entrar guía por guía.',
+          text: 'Arriba de la lista está **Descargar PDFs (ZIP)**: arma un solo archivo con el PDF de todas las guías que estás viendo. Sirve sobre todo después de una emisión masiva, o para archivar las de un mes, sin entrar guía por guía.',
         },
         {
           type: 'consejo',
-          text: 'Baja **lo que está filtrado**, igual que Exportar Excel. Si primero filtras por fecha o por estado, el ZIP trae solo esas.',
+          text: 'Baja **lo que está filtrado**, igual que Exportar Excel: filtra primero por fecha, estado o motivo y el ZIP trae solo esas. El nombre del archivo dice qué rango de fechas contiene.',
         },
         {
           type: 'ojo',
           text: 'Los PDF se arman en tu computadora, uno por uno, así que con muchas guías tarda: el botón te va mostrando cuántas lleva. No cierres la pestaña mientras trabaja.',
+        },
+        {
+          type: 'texto',
+          text: 'En **GRE Transportista**, **Descargar PDFs (ZIP)** y **Exportar Excel** están en el mismo lugar y funcionan igual: bajan lo que quedó filtrado. El Excel del transportista trae además remitente, destinatario, placa y conductor.',
         },
       ],
     },

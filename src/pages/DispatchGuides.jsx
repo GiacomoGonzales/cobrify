@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, AlertCircle, AlertTriangle, X, Calendar, Weight, Hash, Pencil, Store, Search, Code, Share2, Printer, MoreVertical, FileCheck, Receipt, Ban, ShoppingCart, Copy, RotateCcw, Trash2 } from 'lucide-react'
+import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, Send, Loader2, AlertCircle, AlertTriangle, X, Calendar, Hash, Pencil, Store, Code, Share2, Printer, MoreVertical, FileCheck, Receipt, Ban, ShoppingCart, Copy, RotateCcw, Trash2 } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -20,6 +20,10 @@ import { updateDispatchGuide, deleteDispatchGuide, getDispatchGuide } from '@/se
 import { Capacitor } from '@capacitor/core'
 import GuideLink from '@/components/guide/GuideLink'
 import { documentLabelLong } from '@/utils/documentType'
+import FiltrosDeGuias from '@/components/guias/FiltrosDeGuias'
+import ChipEstadoGuia from '@/components/guias/ChipEstadoGuia'
+import { FILTROS_INICIALES, ESTADOS_DE_GUIA, cumpleFiltros, hayFiltrosActivos, nombreDeZip, etiquetaDeFiltroFecha } from '@/utils/filtroGuias'
+import { descargarZipDePdfs } from '@/utils/zipDePdfs'
 
 const TRANSFER_REASONS = {
   '01': 'Venta',
@@ -124,6 +128,8 @@ export default function DispatchGuides() {
   // Tokens: 'all' | 'main' | <branchId>.
   const filterBranch = branchScope || 'all'
   const [searchTerm, setSearchTerm] = useState('')
+  // Fecha, estado y motivo: mismo criterio que GRE Transportista (utils/filtroGuias.js)
+  const [filtros, setFiltros] = useState({ ...FILTROS_INICIALES })
   const [visibleCount, setVisibleCount] = useState(20)
   const ITEMS_PER_PAGE = 20
 
@@ -346,6 +352,9 @@ export default function DispatchGuides() {
   // Los PDF se arman acá en el navegador, así que igual hay que generarlos uno
   // por uno; lo que se evita es el clic por cada uno. Con muchas guías tarda, y
   // por eso se muestra el avance en vez de dejar el botón mudo.
+  //
+  // El armado del ZIP (nombres, avance, descarga) es el mismo módulo que usa
+  // GRE Transportista: utils/zipDePdfs.js.
   const [zipeando, setZipeando] = useState(false)
   const [avanceZip, setAvanceZip] = useState('')
 
@@ -363,49 +372,17 @@ export default function DispatchGuides() {
     setZipeando(true)
     setAvanceZip(`0 de ${filteredGuides.length}`)
     try {
-      const JSZip = (await import('jszip')).default
-      const zip = new JSZip()
-      const usados = new Set()
-      let listas = 0
-      let fallidas = 0
-
-      for (const guide of filteredGuides) {
-        try {
-          const blob = await getDispatchGuidePDFBlob(guide, companySettings, allProducts, branding)
-          // Dos guías pueden compartir número (series distintas, datos viejos):
-          // sin desempatar, JSZip pisa la anterior y el ZIP sale corto.
-          let nombre = `${guide.number || guide.id}.pdf`
-          let n = 2
-          while (usados.has(nombre)) nombre = `${guide.number || guide.id} (${n++}).pdf`
-          usados.add(nombre)
-          zip.file(nombre, blob)
-          listas++
-        } catch (e) {
-          console.warn(`No se pudo generar el PDF de ${guide.number}:`, e)
-          fallidas++
-        }
-        setAvanceZip(`${listas + fallidas} de ${filteredGuides.length}`)
-        // Ceder el hilo: jsPDF dibuja de forma sincrónica y sin esto el
-        // navegador no llega a repintar, así que el contador de avance se
-        // quedaría clavado en 0 hasta que termine todo.
-        await new Promise(r => setTimeout(r, 0))
-      }
+      const { listas, fallidas } = await descargarZipDePdfs(filteredGuides, {
+        generarBlob: (guide) => getDispatchGuidePDFBlob(guide, companySettings, allProducts, branding),
+        nombreDe: (guide) => guide.number || guide.id,
+        nombreZip: nombreDeZip('guias-de-remision', filtros),
+        onAvance: (hechas, total) => setAvanceZip(`${hechas} de ${total}`),
+      })
 
       if (listas === 0) {
         toast.error('No se pudo generar ningún PDF')
         return
       }
-
-      const contenido = await zip.generateAsync({ type: 'blob' })
-      const url = URL.createObjectURL(contenido)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `guias-de-remision-${new Date().toISOString().slice(0, 10)}.zip`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-
       // Si alguna falló hay que decirlo: un ZIP con menos archivos de los
       // esperados, sin aviso, se descubre cuando ya se archivó.
       if (fallidas > 0) {
@@ -668,8 +645,11 @@ export default function DispatchGuides() {
     return map
   }, [guides])
 
-  // Filtrar guías (búsqueda flexible: multi-palabra parcial, sin acentos)
+  // Filtrar guías: fecha/estado/motivo (criterio compartido con GRE
+  // Transportista) + búsqueda flexible (multi-palabra parcial, sin acentos)
+  const hoy = new Date()
   const filteredGuides = guides.filter(canAccess).filter(guide => {
+    if (!cumpleFiltros(guide, filtros, hoy)) return false
     const matchesSearch = matchesPrebuilt(deferredSearchTerm, guideSearchIndex.get(guide.id) || '')
 
     // Filtrar por sucursal
@@ -687,11 +667,12 @@ export default function DispatchGuides() {
 
   const displayedGuides = filteredGuides.slice(0, visibleCount)
   const hasMore = filteredGuides.length > visibleCount
+  const hayBusqueda = !!searchTerm || filterBranch !== 'all' || hayFiltrosActivos(filtros)
 
   // Reset pagination when filters change
   useEffect(() => {
     setVisibleCount(ITEMS_PER_PAGE)
-  }, [searchTerm, filterBranch])
+  }, [searchTerm, filterBranch, filtros])
 
   // Calcular estadísticas (sobre guías filtradas)
   const stats = {
@@ -724,7 +705,7 @@ export default function DispatchGuides() {
         : filterBranch === 'main'
           ? (businessSettings?.mainBranchName || 'Sucursal Principal')
           : (branches.find(b => b.id === filterBranch)?.name || 'Sucursal')
-      await generateDispatchGuidesExcel(filteredGuides, businessData, branchLabel)
+      await generateDispatchGuidesExcel(filteredGuides, businessData, branchLabel, etiquetaDeFiltroFecha(filtros))
       toast.success('Excel generado correctamente')
     } catch (error) {
       console.error('Error al exportar guías a Excel:', error)
@@ -734,49 +715,13 @@ export default function DispatchGuides() {
     }
   }
 
-  const getStatusBadge = (status, sunatStatus) => {
-    if (sunatStatus === 'voided') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-800">
-          <Ban className="w-3 h-3" />
-          Anulada
-        </span>
-      )
-    }
-
-    if (sunatStatus === 'accepted') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full chip-ok">
-          <CheckCircle className="w-3 h-3" />
-          Aceptada
-        </span>
-      )
-    }
-
-    if (sunatStatus === 'rejected') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full chip-error">
-          <XCircle className="w-3 h-3" />
-          Rechazada
-        </span>
-      )
-    }
-
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full chip-aviso">
-        <Clock className="w-3 h-3" />
-        Pendiente
-      </span>
-    )
-  }
-
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Guías de Remisión Electrónicas</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Guías de Remisión - Remitente</h1>
             <GuideLink />
           </div>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
@@ -885,30 +830,16 @@ export default function DispatchGuides() {
         </Card>
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="space-y-4">
-            {/* Barra de búsqueda */}
-            <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
-              <Search className="w-5 h-5 text-gray-500 flex-shrink-0" />
-              <input
-                type="text"
-                placeholder="Buscar por número o destino..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
-              />
-            </div>
-
-            {/* Filtros */}
-            {branches.length > 0 && (
-              <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Filtros: búsqueda, fecha, estado y motivo (la misma barra que GRE Transportista) */}
+      <FiltrosDeGuias
+        busqueda={searchTerm}
+        onBusqueda={setSearchTerm}
+        placeholder="Buscar por número o destino..."
+        filtros={filtros}
+        onFiltros={setFiltros}
+        estados={ESTADOS_DE_GUIA.filter(e => e.value !== 'draft')}
+        motivos={Object.entries(TRANSFER_REASONS).map(([value, label]) => ({ value, label }))}
+      />
 
       {/* Guides List */}
       <Card>
@@ -927,16 +858,16 @@ export default function DispatchGuides() {
                 <Truck className="w-8 h-8 text-gray-400" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                {searchTerm || filterBranch !== 'all'
+                {hayBusqueda
                   ? 'No se encontraron guías de remisión'
                   : 'No hay guías de remisión registradas'}
               </h3>
               <p className="text-gray-600 mb-6 max-w-md mx-auto">
-                {searchTerm || filterBranch !== 'all'
+                {hayBusqueda
                   ? 'Intenta con otros filtros de búsqueda'
                   : 'Comienza a emitir guías de remisión electrónicas para documentar el transporte de tus mercancías.'}
               </p>
-              {!searchTerm && filterBranch === 'all' && (
+              {!hayBusqueda && (
                 <Button onClick={handleCreateGuide}>
                   <Plus className="w-5 h-5 mr-2" />
                   Crear Primera Guía de Remisión
@@ -994,7 +925,7 @@ export default function DispatchGuides() {
                         {guide.items?.length || 0}
                       </span>
                     </div>
-                    <div className="scale-90 origin-right">{getStatusBadge(guide.status, guide.sunatStatus)}</div>
+                    <div className="scale-90 origin-right"><ChipEstadoGuia guide={guide} /></div>
                   </div>
                 </div>
               ))}
@@ -1071,7 +1002,7 @@ export default function DispatchGuides() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {getStatusBadge(guide.status, guide.sunatStatus)}
+                        <ChipEstadoGuia guide={guide} />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         {/* Botón de menú */}
@@ -1725,7 +1656,7 @@ export default function DispatchGuides() {
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)] space-y-6">
               {/* Estado */}
               <div className="flex justify-center">
-                {getStatusBadge(selectedGuide.status, selectedGuide.sunatStatus)}
+                <ChipEstadoGuia guide={selectedGuide} />
               </div>
 
               {/* Por qué SUNAT la rechazó. Estaba solo en el comprobante, y en

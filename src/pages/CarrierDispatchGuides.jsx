@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useDeferredValue } from 'react'
-import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, CheckCircle, Clock, XCircle, Send, Loader2, X, Calendar, Weight, Hash, Pencil, Search, Building2, CreditCard, Car, Code, Edit3, MoreVertical, Printer, FileCheck, Trash2, PlayCircle, AlertTriangle } from 'lucide-react'
+import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, Send, Loader2, X, Calendar, Hash, Pencil, Building2, CreditCard, Car, Code, Edit3, MoreVertical, Printer, FileCheck, Trash2, PlayCircle, AlertTriangle } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -8,9 +8,14 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { getCarrierDispatchGuides, sendCarrierDispatchGuideToSunat, getCompanySettings, updateCarrierDispatchGuide, deleteCarrierDispatchGuide } from '@/services/firestoreService'
 import CreateCarrierDispatchGuideModal from '@/components/CreateCarrierDispatchGuideModal'
-import { generateCarrierDispatchGuidePDF, previewCarrierDispatchGuidePDF } from '@/utils/carrierDispatchGuidePdfGenerator'
+import { generateCarrierDispatchGuidePDF, previewCarrierDispatchGuidePDF, getCarrierDispatchGuidePDFBlob } from '@/utils/carrierDispatchGuidePdfGenerator'
 import { buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
-import { etiquetaMotivo } from '@/utils/carrierTransferReasons'
+import { etiquetaMotivo, MOTIVOS_TRASLADO_TRANSPORTISTA } from '@/utils/carrierTransferReasons'
+import GuideLink from '@/components/guide/GuideLink'
+import FiltrosDeGuias from '@/components/guias/FiltrosDeGuias'
+import ChipEstadoGuia from '@/components/guias/ChipEstadoGuia'
+import { FILTROS_INICIALES, ESTADOS_DE_GUIA, cumpleFiltros, hayFiltrosActivos, nombreDeZip, etiquetaDeFiltroFecha } from '@/utils/filtroGuias'
+import { descargarZipDePdfs } from '@/utils/zipDePdfs'
 
 // Helper para formatear fecha sin problemas de zona horaria
 const formatTransferDate = (dateString) => {
@@ -35,8 +40,15 @@ export default function CarrierDispatchGuides() {
   const [companySettings, setCompanySettings] = useState(null)
   const [selectedGuide, setSelectedGuide] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
+  // Fecha, estado y motivo: mismo criterio que GRE Remitente (utils/filtroGuias.js)
+  const [filtros, setFiltros] = useState({ ...FILTROS_INICIALES })
   const [visibleCount, setVisibleCount] = useState(20)
   const ITEMS_PER_PAGE = 20
+
+  // Descarga masiva en ZIP (ver handleDownloadZip) y Excel (handleExportExcel)
+  const [zipeando, setZipeando] = useState(false)
+  const [avanceZip, setAvanceZip] = useState('')
+  const [isExporting, setIsExporting] = useState(false)
 
   // Estado para editar número de guía rechazada
   const [editingGuide, setEditingGuide] = useState(null)
@@ -308,6 +320,74 @@ export default function CarrierDispatchGuides() {
     setShowCreateModal(true)
   }
 
+  // Descargar en un ZIP el PDF de todas las guías filtradas: lo que se ve es
+  // lo que baja, igual que en GRE Remitente. El armado (nombres, avance,
+  // descarga) es el mismo módulo, utils/zipDePdfs.js.
+  const handleDownloadZip = async () => {
+    if (zipeando) return
+    if (!companySettings) {
+      toast.error('Cargando datos de empresa, intente de nuevo')
+      return
+    }
+    if (filteredGuides.length === 0) {
+      toast.error('No hay guías para descargar')
+      return
+    }
+
+    setZipeando(true)
+    setAvanceZip(`0 de ${filteredGuides.length}`)
+    try {
+      const { listas, fallidas } = await descargarZipDePdfs(filteredGuides, {
+        generarBlob: (guide) => getCarrierDispatchGuidePDFBlob(guide, companySettings),
+        nombreDe: (guide) => guide.number || guide.id,
+        nombreZip: nombreDeZip('guias-transportista', filtros),
+        onAvance: (hechas, total) => setAvanceZip(`${hechas} de ${total}`),
+      })
+
+      if (listas === 0) {
+        toast.error('No se pudo generar ningún PDF')
+        return
+      }
+      // Si alguna falló hay que decirlo: un ZIP con menos archivos de los
+      // esperados, sin aviso, se descubre cuando ya se archivó.
+      if (fallidas > 0) {
+        toast.warning(`${listas} guía(s) en el ZIP. ${fallidas} no se pudieron generar.`, 7000)
+      } else {
+        toast.success(`${listas} guía(s) descargadas`)
+      }
+    } catch (error) {
+      console.error('Error al armar el ZIP:', error)
+      toast.error('Error al armar el archivo ZIP')
+    } finally {
+      setZipeando(false)
+      setAvanceZip('')
+    }
+  }
+
+  // Exportar a Excel las guías filtradas (listado + resumen Mes × Estado) con
+  // las columnas del transportista. Es el mismo libro que arma GRE Remitente.
+  const handleExportExcel = async () => {
+    if (isExporting) return
+    if (filteredGuides.length === 0) {
+      toast.error('No hay guías para exportar')
+      return
+    }
+    setIsExporting(true)
+    try {
+      const { generateCarrierDispatchGuidesExcel } = await import('@/services/dispatchGuideExportService')
+      await generateCarrierDispatchGuidesExcel(filteredGuides, {
+        name: companySettings?.razonSocial || companySettings?.businessName || companySettings?.name || 'N/A',
+        ruc: companySettings?.ruc || 'N/A',
+      }, etiquetaDeFiltroFecha(filtros))
+      toast.success('Excel generado correctamente')
+    } catch (error) {
+      console.error('Error al exportar guías a Excel:', error)
+      toast.error('Error al generar el Excel')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   // Búsqueda con haystack pre-construido (perf): re-normaliza solo cuando cambia
   // la lista de guías, no en cada keystroke.
   const deferredSearchTerm = useDeferredValue(searchTerm)
@@ -325,18 +405,24 @@ export default function CarrierDispatchGuides() {
     return map
   }, [guides])
 
-  // Filtrar guías (búsqueda flexible: multi-palabra parcial, sin acentos)
-  const filteredGuides = useMemo(() => guides.filter(guide =>
-    matchesPrebuilt(deferredSearchTerm, guideSearchIndex.get(guide.id) || '')
-  ), [guides, deferredSearchTerm, guideSearchIndex])
+  // Filtrar guías: fecha/estado/motivo (criterio compartido con GRE Remitente)
+  // + búsqueda flexible (multi-palabra parcial, sin acentos)
+  const filteredGuides = useMemo(() => {
+    const hoy = new Date()
+    return guides.filter(guide =>
+      cumpleFiltros(guide, filtros, hoy)
+      && matchesPrebuilt(deferredSearchTerm, guideSearchIndex.get(guide.id) || '')
+    )
+  }, [guides, deferredSearchTerm, guideSearchIndex, filtros])
 
   const displayedGuides = filteredGuides.slice(0, visibleCount)
   const hasMore = filteredGuides.length > visibleCount
+  const hayBusqueda = !!searchTerm || hayFiltrosActivos(filtros)
 
   // Reset pagination when filters change
   useEffect(() => {
     setVisibleCount(ITEMS_PER_PAGE)
-  }, [searchTerm])
+  }, [searchTerm, filtros])
 
   // Estadísticas
   const stats = {
@@ -351,73 +437,59 @@ export default function CarrierDispatchGuides() {
     }).length,
   }
 
-  const getStatusBadge = (status, sunatStatus) => {
-    if (status === 'draft') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full chip-info">
-          <FileText className="w-3 h-3" />
-          Borrador
-        </span>
-      )
-    }
-
-    if (sunatStatus === 'accepted') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full chip-ok">
-          <CheckCircle className="w-3 h-3" />
-          Aceptada
-        </span>
-      )
-    }
-
-    if (sunatStatus === 'rejected') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full chip-error">
-          <XCircle className="w-3 h-3" />
-          Rechazada
-        </span>
-      )
-    }
-
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full chip-aviso">
-        <Clock className="w-3 h-3" />
-        Pendiente
-      </span>
-    )
-  }
-
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
+      {/* Header: la misma cabecera que GRE Remitente; las distingue el título y
+          nada más (Giacomo no quiso ni un chip con la serie ni la página pintada
+          de otro color). */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-2">
-            <Truck className="w-8 h-8 text-orange-600" />
-            Guías de Remisión - Transportista
-          </h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Guías de Remisión - Transportista</h1>
+            <GuideLink />
+          </div>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
             Emite guías de remisión como empresa transportista
           </p>
         </div>
-        <Button className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700 border-orange-700" onClick={handleCreateGuide}>
-          <Plus className="w-4 h-4 mr-2" />
-          Nueva GRE Transportista
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            className="w-full sm:w-auto"
+            onClick={handleDownloadZip}
+            disabled={zipeando || filteredGuides.length === 0}
+            title="Descarga el PDF de todas las guías que estás viendo, en un solo archivo ZIP"
+          >
+            {zipeando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+            {zipeando ? `Armando ZIP ${avanceZip}` : 'Descargar PDFs (ZIP)'}
+          </Button>
+          <Button
+            variant="outline"
+            className="w-full sm:w-auto"
+            onClick={handleExportExcel}
+            disabled={isExporting || filteredGuides.length === 0}
+          >
+            {isExporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+            Exportar Excel
+          </Button>
+          <Button className="w-full sm:w-auto" onClick={handleCreateGuide}>
+            <Plus className="w-4 h-4 mr-2" />
+            Nueva GRE Transportista
+          </Button>
+        </div>
       </div>
 
       {/* Info Banner */}
-      <div className="bg-gradient-to-r from-orange-50 to-amber-50 border-l-4 border-orange-500 p-4 rounded-lg">
+      <div className="bg-gradient-to-r from-blue-50 to-primary-50 border-l-4 border-primary-500 p-4 rounded-lg">
         <div className="flex items-start gap-3">
-          <Truck className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
+          <Truck className="w-5 h-5 text-primary-600 mt-0.5 flex-shrink-0" />
           <div className="flex-1">
-            <h3 className="text-sm font-semibold text-orange-900 mb-1">
+            <h3 className="text-sm font-semibold text-primary-900 mb-1">
               ¿Qué es la GRE Transportista?
             </h3>
-            <p className="text-sm text-orange-800 leading-relaxed">
+            <p className="text-sm text-primary-800 leading-relaxed">
               Es el documento electrónico emitido por la <strong>empresa de transporte</strong> para sustentar
               el traslado de bienes. Requiere datos del vehículo, conductor y referencia a la GRE Remitente.
-              <strong> Serie: V001</strong>
             </p>
           </div>
         </div>
@@ -432,8 +504,8 @@ export default function CarrierDispatchGuides() {
                 <p className="text-sm font-medium text-gray-600">Total Guías</p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">{stats.total}</p>
               </div>
-              <div className="p-3 bg-orange-100 rounded-lg">
-                <FileText className="w-6 h-6 text-orange-600" />
+              <div className="p-3 bg-primary-100 rounded-lg">
+                <FileText className="w-6 h-6 text-primary-600" />
               </div>
             </div>
           </CardContent>
@@ -482,21 +554,16 @@ export default function CarrierDispatchGuides() {
         </Card>
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
-            <Search className="w-5 h-5 text-gray-500 flex-shrink-0" />
-            <input
-              type="text"
-              placeholder="Buscar por número, destino, placa o remitente..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
-            />
-          </div>
-        </CardContent>
-      </Card>
+      {/* Filtros: búsqueda, fecha, estado y motivo (la misma barra que GRE Remitente) */}
+      <FiltrosDeGuias
+        busqueda={searchTerm}
+        onBusqueda={setSearchTerm}
+        placeholder="Buscar por número, destino, placa o remitente..."
+        filtros={filtros}
+        onFiltros={setFiltros}
+        estados={ESTADOS_DE_GUIA.filter(e => e.value !== 'voided')}
+        motivos={MOTIVOS_TRASLADO_TRANSPORTISTA.map(m => ({ value: m.code, label: m.name }))}
+      />
 
       {/* Guides List */}
       <Card>
@@ -506,24 +573,24 @@ export default function CarrierDispatchGuides() {
         <CardContent>
           {isLoading ? (
             <div className="text-center py-12">
-              <div className="w-8 h-8 border-4 border-orange-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+              <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
               <p className="text-gray-600">Cargando guías de remisión transportista...</p>
             </div>
           ) : filteredGuides.length === 0 ? (
             <div className="text-center py-12">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-orange-100 rounded-full mb-4">
-                <Truck className="w-8 h-8 text-orange-400" />
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
+                <Truck className="w-8 h-8 text-gray-400" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                {searchTerm ? 'No se encontraron guías' : 'No hay guías de remisión transportista'}
+                {hayBusqueda ? 'No se encontraron guías' : 'No hay guías de remisión transportista'}
               </h3>
               <p className="text-gray-600 mb-6 max-w-md mx-auto">
-                {searchTerm
-                  ? 'Intenta con otros términos de búsqueda'
+                {hayBusqueda
+                  ? 'Intenta con otros filtros de búsqueda'
                   : 'Emite tu primera guía de remisión como transportista para documentar el servicio de transporte.'}
               </p>
-              {!searchTerm && (
-                <Button onClick={handleCreateGuide} className="bg-orange-600 hover:bg-orange-700">
+              {!hayBusqueda && (
+                <Button onClick={handleCreateGuide}>
                   <Plus className="w-5 h-5 mr-2" />
                   Crear Primera GRE Transportista
                 </Button>
@@ -581,7 +648,7 @@ export default function CarrierDispatchGuides() {
                         {guide.vehicle?.plate || '-'}
                       </span>
                     </div>
-                    <div className="scale-90 origin-right">{getStatusBadge(guide.status, guide.sunatStatus)}</div>
+                    <div className="scale-90 origin-right"><ChipEstadoGuia guide={guide} /></div>
                   </div>
                 </div>
               ))}
@@ -620,7 +687,7 @@ export default function CarrierDispatchGuides() {
                     <tr key={guide.id} className="hover:bg-gray-50">
                       <td className="px-4 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-orange-400" />
+                          <FileText className="w-4 h-4 text-gray-400" />
                           <span className={`text-sm font-medium ${guide.status === 'draft' ? 'text-gray-400 italic' : 'text-gray-900'}`}>
                             {guide.number || 'Sin número'}
                           </span>
@@ -652,7 +719,7 @@ export default function CarrierDispatchGuides() {
                         </div>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
-                        {getStatusBadge(guide.status, guide.sunatStatus)}
+                        <ChipEstadoGuia guide={guide} />
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
@@ -930,11 +997,11 @@ export default function CarrierDispatchGuides() {
 
       {/* Information Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-l-4 border-l-orange-500">
+        <Card>
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <Car className="w-5 h-5 text-orange-600" />
+              <div className="p-2 bg-gray-100 rounded-lg">
+                <Car className="w-5 h-5 text-gray-600" />
               </div>
               <div>
                 <h4 className="font-semibold text-gray-900 mb-1">Vehículo y Conductor</h4>
@@ -946,11 +1013,11 @@ export default function CarrierDispatchGuides() {
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-blue-500">
+        <Card>
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <FileText className="w-5 h-5 text-blue-600" />
+              <div className="p-2 bg-gray-100 rounded-lg">
+                <FileText className="w-5 h-5 text-gray-600" />
               </div>
               <div>
                 <h4 className="font-semibold text-gray-900 mb-1">GRE Remitente</h4>
@@ -962,11 +1029,11 @@ export default function CarrierDispatchGuides() {
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-green-500">
+        <Card>
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <CreditCard className="w-5 h-5 text-green-600" />
+              <div className="p-2 bg-gray-100 rounded-lg">
+                <CreditCard className="w-5 h-5 text-gray-600" />
               </div>
               <div>
                 <h4 className="font-semibold text-gray-900 mb-1">Registro MTC</h4>
@@ -1095,7 +1162,7 @@ export default function CarrierDispatchGuides() {
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)] space-y-6">
               {/* Estado */}
               <div className="flex justify-center">
-                {getStatusBadge(selectedGuide.status, selectedGuide.sunatStatus)}
+                <ChipEstadoGuia guide={selectedGuide} />
               </div>
 
               {/* Por qué SUNAT la rechazó: antes solo se veía "Rechazada". */}
@@ -1493,7 +1560,6 @@ export default function CarrierDispatchGuides() {
               <Button
                 onClick={() => handleDownloadPdf(selectedGuide)}
                 disabled={downloadingPdf === selectedGuide.id}
-                className="bg-orange-600 hover:bg-orange-700"
               >
                 {downloadingPdf === selectedGuide.id ? (
                   <>

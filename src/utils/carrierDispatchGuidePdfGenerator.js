@@ -1306,6 +1306,14 @@ function hexToRgb(hex) {
 }
 
 /**
+ * El PDF como Blob, para meterlo en un ZIP (descarga masiva) o mandarlo por otro canal.
+ */
+export const getCarrierDispatchGuidePDFBlob = async (guide, companySettings) => {
+  const result = await generateCarrierDispatchGuidePDF(guide, companySettings, false)
+  return result.blob
+}
+
+/**
  * Abre el PDF de Guía de Remisión Transportista en una nueva pestaña para vista previa (o comparte en móvil)
  */
 export const previewCarrierDispatchGuidePDF = async (guide, companySettings) => {
