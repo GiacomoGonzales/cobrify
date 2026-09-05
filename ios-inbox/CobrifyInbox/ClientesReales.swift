@@ -1,46 +1,92 @@
 import SwiftUI
 
-/// Vincular la conversación a un negocio de Cobrify buscándolo por nombre.
+/// Vincular la conversación a un negocio de Cobrify.
+///
+/// Dos pasos: se busca el negocio y, apenas se elige, se pregunta QUIÉN
+/// escribe. Es el único momento en que se sabe —el dueño contrata pero
+/// después escribe su secretaria— y si no se pregunta ahí no se anota nunca.
 struct VincularSheet: View {
     let conversationId: String
     @Environment(\.dismiss) private var dismiss
     @StateObject private var buscador = BuscadorNegocios()
     @State private var texto = ""
+    @State private var elegido: NegocioIndexado?
+    @State private var rol = ""
+    @FocusState private var rolEnfocado: Bool
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    TextField("Nombre del negocio…", text: $texto)
-                        .autocorrectionDisabled()
-                        .onChange(of: texto) {
-                            Task { await buscador.buscar(texto) }
-                        }
+            Group {
+                if let elegido { pasoDelRol(elegido) } else { pasoDeBusqueda }
+            }
+            .navigationTitle(elegido == nil ? "Vincular negocio" : "¿Quién te escribe?")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(elegido == nil ? "Cancelar" : "Omitir") { dismiss() }
                 }
-                if buscador.buscando {
-                    ProgressView()
-                } else {
-                    ForEach(buscador.resultados, id: \.id) { r in
-                        Button {
-                            BuscadorNegocios.vincular(conversationId: conversationId,
-                                                      businessId: r.id, nombre: r.nombre)
+                if elegido != nil {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Listo") {
+                            BuscadorNegocios.guardarRol(conversationId: conversationId, rol: rol)
                             dismiss()
-                        } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(r.nombre)
-                                if let ruc = r.ruc {
-                                    Text("RUC \(ruc)").font(.caption).foregroundStyle(.secondary)
-                                }
-                            }
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
-            .navigationTitle("Vincular negocio")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) { Button("Cancelar") { dismiss() } }
+        }
+    }
+
+    private var pasoDeBusqueda: some View {
+        List {
+            Section {
+                TextField("Nombre, RUC o correo…", text: $texto)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .onChange(of: texto) { Task { await buscador.buscar(texto) } }
+            }
+            if buscador.buscando {
+                ProgressView()
+            } else {
+                ForEach(buscador.resultados) { r in
+                    Button {
+                        BuscadorNegocios.vincular(conversationId: conversationId,
+                                                  businessId: r.id, nombre: r.nombre)
+                        elegido = r
+                        rolEnfocado = true
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(r.nombre)
+                            if !r.detalle.isEmpty {
+                                Text(r.detalle).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func pasoDelRol(_ n: NegocioIndexado) -> some View {
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Vinculada a").font(.caption).foregroundStyle(.secondary)
+                    Text(n.nombre).font(.headline)
+                }
+            }
+            Section {
+                TextField("Secretaria, contador, almacén…", text: $rol)
+                    .autocorrectionDisabled()
+                    .focused($rolEnfocado)
+                    .submitLabel(.done)
+                    .onSubmit {
+                        BuscadorNegocios.guardarRol(conversationId: conversationId, rol: rol)
+                        dismiss()
+                    }
+            } footer: {
+                Text("Sale junto al nombre en la lista y en la cabecera del chat, para no confundir a quien escribe con el dueño. Puedes dejarlo en blanco.")
             }
         }
     }

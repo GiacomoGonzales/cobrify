@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseAuth
 import FirebaseFirestore
 
 /// El catálogo de planes, espejo del de la web (subscriptionService.PLANS).
@@ -284,53 +285,61 @@ final class FichaStore: ObservableObject {
 
 // ---------- Vincular una conversación a mano ----------
 
+/// Un negocio dentro del índice de búsqueda: lo justo para encontrarlo y
+/// distinguirlo de otro de nombre parecido sin abrir la ficha.
+struct NegocioIndexado: Identifiable, Equatable {
+    let id: String
+    let nombre: String
+    let comercial: String?
+    let ruc: String?
+    let email: String?
+    /// Todo lo buscable junto y normalizado, armado una sola vez al indexar.
+    let buscable: String
+
+    /// La segunda línea del resultado.
+    var detalle: String {
+        [comercial, ruc.map { "RUC \($0)" }, email].compactMap { $0 }.joined(separator: " · ")
+    }
+}
+
 @MainActor
 final class BuscadorNegocios: ObservableObject {
-    @Published var resultados: [(id: String, nombre: String, ruc: String?)] = []
+    @Published var resultados: [NegocioIndexado] = []
     @Published var buscando = false
 
-    /// Índice liviano de negocios (id, nombre, RUC) para poder buscar por
-    /// cualquier palabra. Se arma una sola vez y se reusa.
-    private static var indice: [(id: String, nombre: String, ruc: String?)] = []
+    /// Índice liviano de negocios. Se arma una sola vez y se reusa.
+    private static var indice: [NegocioIndexado] = []
 
+    /// Busca por lo mismo que la página de Usuarios del panel: razón social,
+    /// nombre comercial, RUC, correo, teléfono y código de cliente — por
+    /// cualquier parte, en cualquier orden y sin tildes.
+    ///
+    /// Antes empezaba por una consulta de prefijo y solo caía al índice si esa
+    /// quedaba corta. Sobra: el índice ya está en memoria y responde sin ir a
+    /// la red, y el prefijo no encontraba ni el nombre comercial ni el correo.
     func buscar(_ texto: String) async {
         let t = texto.trimmingCharacters(in: .whitespaces)
         guard t.count >= 2 else { resultados = []; return }
         buscando = true
         defer { buscando = false }
 
-        // 1) Por prefijo: es lo barato y resuelve la mayoría.
-        let db = Firestore.firestore()
-        let variantes = Array(Set([t, t.uppercased(),
-                                   t.prefix(1).uppercased() + t.dropFirst().lowercased()]))
-        var encontrados: [String: (id: String, nombre: String, ruc: String?)] = [:]
-        for v in variantes {
-            if let snap = try? await db.collection("businesses")
-                .order(by: "businessName")
-                .start(at: [v]).end(at: [v + "\u{f8ff}"])
-                .limit(to: 8).getDocuments() {
-                for d in snap.documents {
-                    encontrados[d.documentID] = (d.documentID,
-                                                 d.data()["businessName"] as? String ?? "(sin nombre)",
-                                                 d.data()["ruc"] as? String)
-                }
-            }
-        }
+        await Self.asegurarIndice()
 
-        // 2) El prefijo solo mira el ARRANQUE del nombre: buscar "giacomo" no
-        // encuentra "GONZALES GIACOMO". Si quedó corto, se busca dentro del
-        // nombre completo sobre un índice local que se arma una sola vez.
-        if encontrados.count < 5 {
-            await Self.asegurarIndice()
-            let aguja = Self.normalizar(t)
-            for n in Self.indice where Self.normalizar(n.nombre).contains(aguja) || (n.ruc ?? "").contains(t) {
-                encontrados[n.id] = n
-                if encontrados.count >= 25 { break }
-            }
-        }
+        // Todas las palabras tienen que aparecer, en cualquier orden: así
+        // "maria isabel" encuentra a "HANCCO SULLCA MARIA ISABEL".
+        let palabras = Self.normalizar(t).split(separator: " ").map(String.init)
+        guard !palabras.isEmpty else { resultados = []; return }
+        let aguja = Self.normalizar(t)
 
-        resultados = Array(encontrados.values)
-            .sorted { $0.nombre.localizedCaseInsensitiveCompare($1.nombre) == .orderedAscending }
+        resultados = Self.indice
+            .filter { n in palabras.allSatisfy { n.buscable.contains($0) } }
+            .sorted {
+                // Primero los que EMPIEZAN por lo buscado.
+                let a = Self.normalizar($0.nombre).hasPrefix(aguja)
+                let b = Self.normalizar($1.nombre).hasPrefix(aguja)
+                if a != b { return a }
+                return $0.nombre.localizedCaseInsensitiveCompare($1.nombre) == .orderedAscending
+            }
             .prefix(20)
             .map { $0 }
     }
@@ -343,13 +352,52 @@ final class BuscadorNegocios: ObservableObject {
 
     private static func asegurarIndice() async {
         guard indice.isEmpty else { return }
-        guard let snap = try? await Firestore.firestore().collection("businesses")
-            .order(by: "businessName").limit(to: 3000).getDocuments() else { return }
-        indice = snap.documents.map {
-            ($0.documentID,
-             $0.data()["businessName"] as? String ?? "(sin nombre)",
-             $0.data()["ruc"] as? String)
+        guard let token = try? await Auth.auth().currentUser?.getIDToken() else { return }
+
+        let campos = ["businessName", "razonSocial", "name", "tradeName",
+                      "nombreComercial", "ruc", "email", "phone", "codigoCliente"]
+        let mascara = campos.map { "mask.fieldPaths=\($0)" }.joined(separator: "&")
+        var pagina: String?
+        var acumulado: [NegocioIndexado] = []
+
+        // El tope de vueltas evita un bucle si el cursor viniera repetido.
+        for _ in 0..<20 {
+            var url = "https://firestore.googleapis.com/v1/projects/cobrify-395fe/databases/(default)/documents/businesses?pageSize=300&\(mascara)"
+            if let pagina, let esc = pagina.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+                url += "&pageToken=\(esc)"
+            }
+            guard let u = URL(string: url) else { break }
+            var req = URLRequest(url: u)
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            guard let (data, _) = try? await URLSession.shared.data(for: req),
+                  let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            else { break }
+
+            for doc in json["documents"] as? [[String: Any]] ?? [] {
+                let f = doc["fields"] as? [String: Any] ?? [:]
+                func txt(_ k: String) -> String? {
+                    guard let campo = f[k] as? [String: Any] else { return nil }
+                    if let s = campo["stringValue"] as? String { return s.nilSiVacio }
+                    if let n = campo["integerValue"] as? String { return n }
+                    return nil
+                }
+                // La razon social manda sobre businessName, igual que en el panel.
+                guard let nombre = txt("razonSocial") ?? txt("businessName"),
+                      let ruta = doc["name"] as? String, let id = ruta.split(separator: "/").last
+                else { continue }
+                var comercial = txt("tradeName") ?? txt("nombreComercial") ?? txt("name")
+                if comercial == nombre { comercial = nil }
+                let ruc = txt("ruc"), email = txt("email")
+                let heno = normalizar([nombre, comercial, ruc, email, txt("phone"), txt("codigoCliente")]
+                    .compactMap { $0 }.joined(separator: " "))
+                acumulado.append(NegocioIndexado(id: String(id), nombre: nombre, comercial: comercial,
+                                                 ruc: ruc, email: email, buscable: heno))
+            }
+
+            guard let siguiente = json["nextPageToken"] as? String else { break }
+            pagina = siguiente
         }
+        if !acumulado.isEmpty { indice = acumulado }
     }
 
     static func vincular(conversationId: String, businessId: String, nombre: String) {
@@ -378,7 +426,71 @@ final class BuscadorNegocios: ObservableObject {
             .updateData(["linkedBusinessId": FieldValue.delete(),
                          "linkedBusinessName": FieldValue.delete(),
                          "linkedBy": FieldValue.delete(),
+                         // El rol describe la relación con ESA empresa: al
+                         // soltarla, sobra.
+                         "rolContacto": FieldValue.delete(),
                          "updatedAt": FieldValue.serverTimestamp()]) { _ in }
+    }
+
+    /// Quién escribe, cuando no es el titular: "Secretaria", "Contador".
+    /// Texto libre a propósito — un catálogo cerrado se queda corto al segundo
+    /// cliente, y esto lo lee una persona, no un reporte.
+    static func guardarRol(conversationId: String, rol: String) {
+        let limpio = rol.trimmingCharacters(in: .whitespaces)
+        Firestore.firestore().collection("whatsappConversations").document(conversationId)
+            .updateData(["rolContacto": limpio.isEmpty ? FieldValue.delete() : limpio,
+                         "updatedAt": FieldValue.serverTimestamp()]) { _ in }
+    }
+}
+
+// ---------- Los otros números de la misma empresa ----------
+
+/// Otro contacto que escribe por el mismo negocio.
+struct ContactoDelNegocio: Identifiable, Equatable {
+    let id: String
+    let nombre: String?
+    let waId: String
+    let rol: String?
+
+    var titulo: String { nombre?.nilSiVacio ?? Formato.numero(waId) }
+}
+
+/// Los otros números vinculados a una empresa.
+///
+/// Sin esto, vincular a mano el número de la secretaria funcionaba pero no se
+/// veía desde ningún lado: quien atendía el chat del dueño no tenía cómo saber
+/// que había alguien más escribiendo por esa empresa.
+///
+/// Hay que mirar los dos campos porque el vínculo vive en `linkedBusinessId`
+/// cuando la empresa es la principal del contacto y en `linkedBusinessIds`
+/// cuando es una de varias.
+@MainActor
+final class OtrosContactosStore: ObservableObject {
+    @Published var contactos: [ContactoDelNegocio] = []
+
+    func cargar(businessId: String, excepto conversacionId: String?) async {
+        let convs = Firestore.firestore().collection("whatsappConversations")
+        async let principales = convs.whereField("linkedBusinessId", isEqualTo: businessId)
+            .limit(to: 25).getDocuments()
+        async let secundarias = convs.whereField("linkedBusinessIds", arrayContains: businessId)
+            .limit(to: 25).getDocuments()
+
+        var encontrados: [String: ContactoDelNegocio] = [:]
+        for snap in [try? await principales, try? await secundarias] {
+            for d in snap?.documents ?? [] where d.documentID != conversacionId {
+                guard encontrados[d.documentID] == nil else { continue }
+                let data = d.data()
+                encontrados[d.documentID] = ContactoDelNegocio(
+                    id: d.documentID,
+                    nombre: (data["nombre"] as? String)?.nilSiVacio,
+                    waId: data["waId"] as? String ?? "",
+                    rol: (data["rolContacto"] as? String)?.nilSiVacio
+                )
+            }
+        }
+        contactos = encontrados.values.sorted {
+            $0.titulo.localizedCaseInsensitiveCompare($1.titulo) == .orderedAscending
+        }
     }
 }
 

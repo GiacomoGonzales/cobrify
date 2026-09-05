@@ -16,6 +16,9 @@ struct Conversacion: Identifiable, Equatable {
     var linkedBusinessId: String?
     /// Todas las cuentas de este cliente (la principal incluida).
     var linkedBusinessIds: [String]
+    /// Quien escribe cuando no es el titular: "Secretaria", "Contador".
+    /// Una misma empresa puede tener varios numeros escribiendo por ella.
+    var rolContacto: String?
     var optOut: Bool
     var ventanaVenceAt: Date?
     var etiquetas: [String]
@@ -38,6 +41,7 @@ struct Conversacion: Identifiable, Equatable {
         if let p = data["linkedBusinessId"] as? String { todas.append(p) }
         for id in extras where !todas.contains(id) { todas.append(id) }
         linkedBusinessIds = todas
+        rolContacto = (data["rolContacto"] as? String)?.trimmingCharacters(in: .whitespaces).nilSiVacio
         etiquetas = data["etiquetas"] as? [String] ?? []
         nota = data["nota"] as? String
         optOut = data["optOut"] as? Bool ?? false
@@ -209,4 +213,10 @@ enum Formato {
         default: return texto
         }
     }
+}
+
+
+extension String {
+    /// Un texto vacio es lo mismo que no tener dato: evita pintar " · " suelto.
+    var nilSiVacio: String? { isEmpty ? nil : self }
 }

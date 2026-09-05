@@ -5,7 +5,11 @@ import FirebaseFirestore
 /// La joya: renovar el plan sin salir del chat.
 struct FichaClienteView: View {
     let businessId: String
+    /// La conversación desde la que se abrió, para excluirla de la lista de
+    /// "también escriben" y poder saltar a las otras.
+    var conversacionId: String? = nil
     @StateObject private var store = FichaStore()
+    @StateObject private var otros = OtrosContactosStore()
     @State private var mostrarRenovar = false
     @State private var mostrarAddon = false
     @State private var mostrarReactivar = false
@@ -45,7 +49,10 @@ struct FichaClienteView: View {
                 }
             }
         }
-        .task { await store.cargar(businessId: businessId) }
+        .task {
+            await store.cargar(businessId: businessId)
+            await otros.cargar(businessId: businessId, excepto: conversacionId)
+        }
     }
 
     @ViewBuilder private func lista(_ f: FichaCliente) -> some View {
@@ -65,6 +72,32 @@ struct FichaClienteView: View {
                     }
                 }
             }
+            if !otros.contactos.isEmpty {
+                Section("También escriben por esta empresa") {
+                    ForEach(otros.contactos) { c in
+                        Button {
+                            // El mismo camino que usa un aviso tocado.
+                            Navegacion.shared.abrirConversacion = c.id
+                            dismiss()
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(c.titulo)
+                                    Text([c.rol, Formato.numero(c.waId)].compactMap { $0 }.joined(separator: " · "))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
             Section("Suscripción") {
                 if f.accessBlocked {
                     VStack(alignment: .leading, spacing: 4) {

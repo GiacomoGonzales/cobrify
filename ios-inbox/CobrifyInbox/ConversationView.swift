@@ -429,7 +429,7 @@ struct ConversationView: View {
     /// vez" por la Cloud API, así que lo útil que sí sabemos es cuándo
     /// escribió el cliente por última vez.
     private var subtituloCabecera: String {
-        guard let vence = venceVentana else { return Formato.numero(conv.waId) }
+        guard let vence = venceVentana else { return conv.rolContacto ?? Formato.numero(conv.waId) }
         let restante = vence.timeIntervalSinceNow
         if restante <= 0 {
             if let ultimo = store.mensajes.last(where: { !$0.esSaliente })?.timestamp {
@@ -440,7 +440,7 @@ struct ConversationView: View {
         if restante < 3 * 3600 {
             return "Cierra en \(Formato.restante(hasta: vence))"
         }
-        return Formato.numero(conv.waId)
+        return conv.rolContacto ?? Formato.numero(conv.waId)
     }
 
     /// Sin color mientras no haya nada que avisar.

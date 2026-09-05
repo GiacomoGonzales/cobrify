@@ -299,7 +299,10 @@ private struct FilaConversacion: View {
                     }
                 }
                 if let negocio = conv.linkedBusinessName {
-                    Label(negocio, systemImage: "storefront")
+                    // El rol de quien escribe cuando no es el titular
+                    // ("Secretaria"): sin esto se atiende a ciegas.
+                    Label([negocio, conv.rolContacto].compactMap { $0 }.joined(separator: " · "),
+                          systemImage: "storefront")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)

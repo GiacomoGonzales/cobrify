@@ -7,6 +7,8 @@ struct GrupoCuentasView: View {
     @StateObject private var grupo = GrupoCuentasStore()
     @State private var fichaDe: String?
     @State private var mostrarBuscar = false
+    @State private var editandoRol = false
+    @State private var rol = ""
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -32,18 +34,41 @@ struct GrupoCuentasView: View {
                 get: { fichaDe.map { IdFicha(id: $0) } },
                 set: { fichaDe = $0?.id }
             )) { f in
-                FichaClienteView(businessId: f.id)
+                FichaClienteView(businessId: f.id, conversacionId: conv.id)
             }
             .sheet(isPresented: $mostrarBuscar) {
                 AgregarCuentaSheet(conversationId: conv.id, sugeridas: grupo.sugeridas)
             }
+            .alert("¿Quién te escribe?", isPresented: $editandoRol) {
+                TextField("Secretaria, contador, almacén…", text: $rol)
+                Button("Guardar") { BuscadorNegocios.guardarRol(conversationId: conv.id, rol: rol) }
+                Button("Cancelar", role: .cancel) { rol = conv.rolContacto ?? "" }
+            } message: {
+                Text("Sale junto al nombre en la lista y en la cabecera del chat. Déjalo en blanco para quitarlo.")
+            }
         }
-        .onAppear { grupo.escuchar(conversationId: conv.id) }
+        .onAppear {
+            grupo.escuchar(conversationId: conv.id)
+            rol = conv.rolContacto ?? ""
+        }
         .onDisappear { grupo.parar() }
     }
 
     private var lista: some View {
         List {
+            Section("Te escribe") {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(conv.titulo)
+                    Text(conv.rolContacto ?? Formato.numero(conv.waId))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Button(conv.rolContacto == nil ? "Anotar quién es" : "Cambiar quién es") {
+                    rol = conv.rolContacto ?? ""
+                    editandoRol = true
+                }
+            }
+
             Section {
                 ForEach(grupo.cuentas) { c in
                     Button { fichaDe = c.id } label: { FilaCuenta(cuenta: c, principal: c.id == conv.linkedBusinessId) }
@@ -170,23 +195,24 @@ private struct AgregarCuentaSheet: View {
         NavigationStack {
             List {
                 Section {
-                    TextField("Nombre del negocio…", text: $texto)
+                    TextField("Nombre, RUC o correo…", text: $texto)
                         .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
                         .onChange(of: texto) { Task { await buscador.buscar(texto) } }
                 }
                 if buscador.buscando {
                     ProgressView()
                 } else if !buscador.resultados.isEmpty {
                     Section("Resultados") {
-                        ForEach(buscador.resultados, id: \.id) { r in
+                        ForEach(buscador.resultados) { r in
                             Button {
                                 BuscadorNegocios.agregarCuenta(conversationId: conversationId, businessId: r.id)
                                 dismiss()
                             } label: {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(r.nombre)
-                                    if let ruc = r.ruc {
-                                        Text("RUC \(ruc)").font(.caption).foregroundStyle(.secondary)
+                                    if !r.detalle.isEmpty {
+                                        Text(r.detalle).font(.caption).foregroundStyle(.secondary)
                                     }
                                 }
                             }
