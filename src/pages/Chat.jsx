@@ -302,6 +302,36 @@ export default function Chat() {
     c.scrollTo({ top: c.scrollHeight, behavior: suave ? 'smooth' : 'auto' })
   }
 
+  /**
+   * Lo que YO mando baja al final SIEMPRE, aunque estuviera leyendo mensajes
+   * viejos. Es lo que hace WhatsApp y lo que uno espera: al responder, el
+   * hilo vuelve al presente. Solo los mensajes que ENTRAN respetan donde
+   * estaba el usuario.
+   *
+   * Alcanza con levantar la bandera: el efecto que baja el hilo se dispara
+   * igual cuando aparece la burbuja provisional.
+   */
+  const bajarAlMandar = () => { pegadoAlFondo.current = true }
+
+  /**
+   * Devolver el cursor al cuadro para poder encadenar mensajes sin tocar el
+   * mouse.
+   *
+   * Dos veces: ahora y despues del repintado. Al vaciarse el texto el boton de
+   * enviar se cambia por el del microfono, y ese cambio ocurre cuando termina
+   * este manejador — despues de la primera llamada. La segunda cubre eso y
+   * cualquier otro orden. Enfocar dos veces al mismo campo no cuesta nada.
+   *
+   * En el celular NO se enfoca: levantaria el teclado despues de cada mensaje,
+   * tapando media conversacion.
+   */
+  const devolverElCursor = () => {
+    if (cuadroTexto.current) cuadroTexto.current.style.height = 'auto'
+    if (!window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) return
+    cuadroTexto.current?.focus()
+    requestAnimationFrame(() => cuadroTexto.current?.focus())
+  }
+
   // Bajar al final del hilo.
   //
   // Al ABRIR una conversacion es un salto instantaneo, no una animacion: el
@@ -627,12 +657,9 @@ export default function Chat() {
     }])
 
     // El cuadro vuelve a su alto y recupera el cursor YA, no cuando termine la
-    // red: el boton de enviar se queda con el foco y encadenar mensajes sin
-    // volver a hacer clic es media conversacion.
-    if (cuadroTexto.current) cuadroTexto.current.style.height = 'auto'
-    if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
-      cuadroTexto.current?.focus()
-    }
+    // red: encadenar mensajes sin volver a hacer clic es media conversacion.
+    bajarAlMandar()
+    devolverElCursor()
 
     colaDeEnvios.current = colaDeEnvios.current.then(async () => {
       try {
@@ -672,6 +699,7 @@ export default function Chat() {
     if (!archivo) return
     const problema = validarArchivo(archivo)
     if (problema) { toast.error(problema); return }
+    bajarAlMandar()
     setEnviando(true)
     const citado = respondiendoA ? idDeWhatsapp(respondiendoA) : null
     setRespondiendoA(null)
@@ -697,6 +725,7 @@ export default function Chat() {
 
   const handleEnviarAdjunto = async () => {
     if (!adjunto || enviando) return
+    bajarAlMandar()
     setEnviando(true)
     try {
       const idToken = await getAuth().currentUser?.getIdToken()
@@ -1744,6 +1773,10 @@ export default function Chat() {
                 {texto.trim() || grabadora.grabando || !grabadora.puedeGrabar ? (
                   <button
                     type={grabadora.grabando ? 'button' : 'submit'}
+                    // El clic manda, pero NO se lleva el cursor: sin esto el
+                    // foco salta del cuadro al boton y hay que volver a hacer
+                    // clic para escribir el siguiente mensaje.
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={grabadora.grabando ? handleEnviarNota : undefined}
                     disabled={!grabadora.grabando && !texto.trim()}
                     className="p-2.5 bg-primary-600 text-white rounded-full hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
