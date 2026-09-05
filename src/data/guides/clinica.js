@@ -149,6 +149,34 @@ export default {
     },
 
     {
+      id: 'consentimiento',
+      title: 'Consentimiento informado con firma en pantalla',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Antes de un procedimiento, el paciente lee y firma el consentimiento en el celular o la tablet, sin papel. Queda en su ficha con fecha y hora, y sale como PDF cuando haga falta.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'En la ficha del paciente, pestaña **Consentimientos**, presiona **Nuevo consentimiento**.',
+            'Elige la plantilla, escribe el tratamiento y quién atiende: el texto se completa solo con los datos del paciente.',
+            'Dale el celular al paciente para que lea y firme en el recuadro (con el dedo). Marca la casilla de que leyó y acepta.',
+            'Presiona **Guardar firmado**. Desde la lista se descarga el PDF o se abre para imprimirlo.',
+          ],
+        },
+        {
+          type: 'texto',
+          text: 'Las plantillas se arman en **Configuración > Punto de venta**, en **Consentimientos informados**: una por tratamiento o una general, con **Agregar plantilla** (o **Partir de la plantilla general** para no empezar de cero). Acepta {paciente}, {dni}, {edad}, {tratamiento}, {profesional}, {fecha} y {negocio}. Sin plantillas propias se usa la general.',
+        },
+        {
+          type: 'ojo',
+          text: 'Lo que se guarda es el texto tal como lo leyó el paciente, con su firma. Cambiar la plantilla después no cambia lo ya firmado.',
+        },
+      ],
+    },
+
+    {
       id: 'profesionales',
       title: 'Quién atiende',
       blocks: [

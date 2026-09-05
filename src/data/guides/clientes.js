@@ -275,6 +275,22 @@ export default {
     },
 
     {
+      id: 'consentimientos',
+      title: 'Consentimientos informados',
+      soloModos: ['clinic'],
+      blocks: [
+        {
+          type: 'texto',
+          text: 'En la ficha del paciente, la pestaña **Consentimientos** guarda los que firmó en pantalla. **Nuevo consentimiento** arma el texto con sus datos, el paciente firma con el dedo en el recuadro, y **Guardar firmado** lo deja con fecha y hora. Cada uno se descarga como PDF o se abre para imprimir.',
+        },
+        {
+          type: 'consejo',
+          text: 'Las plantillas (una por tratamiento, o una general) se arman en **Configuración > Punto de venta**, en **Consentimientos informados**.',
+        },
+      ],
+    },
+
+    {
       id: 'galeria',
       title: 'Galería de antes y después',
       blocks: [

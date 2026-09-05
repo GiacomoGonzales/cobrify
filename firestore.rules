@@ -517,6 +517,13 @@ service cloud.firestore {
           allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
           allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
         }
+
+        // Subcollection: Consents (consentimientos informados firmados en pantalla).
+        // Ver src/services/consentService.js.
+        match /consents/{consentId} {
+          allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+          allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        }
       }
 
       // Subcollection: Products (Productos)

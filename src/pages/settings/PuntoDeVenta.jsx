@@ -55,6 +55,7 @@ import { filtrarVendibles } from '@/utils/productSale'
 import { recuerdaServicios, atiendeConCita } from '@/utils/businessModes'
 import { PLANTILLA_POR_DEFECTO } from '@/utils/mensajeCita'
 import { normalizarPreguntas, TIPOS_DE_PREGUNTA } from '@/utils/anamnesis'
+import { normalizarPlantillas, PLANTILLA_CONSENTIMIENTO_POR_DEFECTO } from '@/utils/consentimiento'
 import { buildProductHaystack } from '@/utils/productSearch'
 import { getProducts, getProductCategories } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
@@ -182,6 +183,8 @@ function leerConfig(bs) {
     appointmentReminderTemplate: d.appointmentReminderTemplate || '',
     // Preguntas propias de la anamnesis (ficha del paciente).
     anamnesisQuestions: normalizarPreguntas(d.anamnesisQuestions),
+    // Consentimientos informados: los textos que el paciente firma en pantalla.
+    consentTemplates: normalizarPlantillas(d.consentTemplates),
     // Restaurante: fuentes de pedido y costo de envío sugerido. El costo se
     // guarda como texto mientras se escribe y se redondea al guardar.
     hiddenOrderSources: d.hiddenOrderSources || [],
@@ -316,6 +319,19 @@ export default function PuntoDeVenta() {
   const quitarPregunta = (id) => setCfg(prev => ({
     ...prev,
     anamnesisQuestions: prev.anamnesisQuestions.filter(p => p.id !== id),
+  }))
+  // Plantillas de consentimiento informado. `base` = partir de la general.
+  const agregarPlantilla = (base = null) => setCfg(prev => ({
+    ...prev,
+    consentTemplates: [...prev.consentTemplates, { id: `ct_${Date.now()}`, nombre: base?.nombre || '', texto: base?.texto || '' }],
+  }))
+  const cambiarPlantilla = (id, parcial) => setCfg(prev => ({
+    ...prev,
+    consentTemplates: prev.consentTemplates.map(p => (p.id === id ? { ...p, ...parcial } : p)),
+  }))
+  const quitarPlantilla = (id) => setCfg(prev => ({
+    ...prev,
+    consentTemplates: prev.consentTemplates.filter(p => p.id !== id),
   }))
   const ponerGrifo = (parcial) => setCfg(prev => ({
     ...prev,
@@ -578,6 +594,7 @@ export default function PuntoDeVenta() {
       purchaseOrderDefaultNotes: cfg.purchaseOrderDefaultNotes || '',
       termsTemplates: cfg.termsTemplates,
       anamnesisQuestions: normalizarPreguntas(cfg.anamnesisQuestions),
+      consentTemplates: normalizarPlantillas(cfg.consentTemplates),
       // Objetos de los que esta pestaña es dueña. posCustomFields va siempre:
       // "Ocultar productos sin stock" aplica a todos los modos.
       posCustomFields: cfg.posCustomFields,
@@ -1276,6 +1293,51 @@ export default function PuntoDeVenta() {
                       </div>
                     ))}
                     <Button size="sm" variant="outline" onClick={agregarPregunta}>Agregar pregunta</Button>
+                  </div>
+                )}
+                {/* Consentimientos informados: el texto que el paciente firma en
+                    pantalla desde su ficha. Sin plantillas propias, la general de
+                    utils/consentimiento.js. */}
+                {(esClinica || camposPOS.showServiceCardFields) && (
+                  <div id="opcion-consentTemplates" className="ml-1 pl-3 border-l-2 border-gray-100 space-y-2 scroll-mt-24">
+                    <p className="text-sm font-medium text-gray-800">Consentimientos informados</p>
+                    <p className="text-xs text-gray-500">
+                      Los textos que el paciente lee y firma en pantalla desde su ficha (pestaña Consentimientos). Una plantilla por tratamiento, o una general. Acepta {'{paciente}'}, {'{dni}'}, {'{edad}'}, {'{tratamiento}'}, {'{profesional}'}, {'{fecha}'} y {'{negocio}'}. Sin plantillas propias se usa una general.
+                    </p>
+                    {cfg.consentTemplates.map(p => (
+                      <div key={p.id} className="border border-gray-200 rounded-lg p-2 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={p.nombre}
+                            onChange={e => cambiarPlantilla(p.id, { nombre: e.target.value })}
+                            placeholder="Nombre (ej: Consentimiento para láser)"
+                            className="flex-1 min-w-0 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => quitarPlantilla(p.id)}
+                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                            title="Quitar plantilla"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <textarea
+                          rows={6}
+                          value={p.texto}
+                          onChange={e => cambiarPlantilla(p.id, { texto: e.target.value })}
+                          placeholder="Texto del consentimiento"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500 resize-y"
+                        />
+                      </div>
+                    ))}
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" onClick={() => agregarPlantilla()}>Agregar plantilla</Button>
+                      {cfg.consentTemplates.length === 0 && (
+                        <Button size="sm" variant="outline" onClick={() => agregarPlantilla(PLANTILLA_CONSENTIMIENTO_POR_DEFECTO)}>Partir de la plantilla general</Button>
+                      )}
+                    </div>
                   </div>
                 )}
                 <Ajuste
