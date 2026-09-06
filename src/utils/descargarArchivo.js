@@ -50,6 +50,29 @@ function bajarComoImagen(url) {
   })
 }
 
+/**
+ * El camino seguro: el archivo pasa por nuestro propio dominio (/descargar),
+ * que lo devuelve con la orden de guardar. No hay pedido a otro dominio, así
+ * que no hay CORS que pueda cortarse — es el unico que funciona en un
+ * navegador con extensiones que bloquean esos pedidos.
+ */
+function porNuestroServidor(url, nombre) {
+  // En el sitio publicado va por /descargar, que es el MISMO dominio. En el
+  // servidor de desarrollo esa ruta no existe (devolveria la propia pagina),
+  // asi que ahi se llama a la funcion por su direccion.
+  const local = /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)
+  const base = local
+    ? 'https://us-central1-cobrify-395fe.cloudfunctions.net/descargarMedia'
+    : '/descargar'
+  const a = document.createElement('a')
+  a.href = `${base}?url=${encodeURIComponent(url)}&nombre=${encodeURIComponent(nombre)}`
+  a.download = nombre
+  a.rel = 'noopener'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
 export async function descargarArchivo(url, nombre = 'archivo', tipo = '') {
   const problemas = []
   try {
@@ -75,8 +98,10 @@ export async function descargarArchivo(url, nombre = 'archivo', tipo = '') {
     }
   }
 
-  window.open(url, '_blank', 'noopener')
-  return { ok: false, motivo: problemas.join(' · ') }
+  // Ninguno de los dos caminos directos llegó: se pasa por nuestro servidor.
+  console.warn('[descarga] se usa el servidor:', problemas.join(' · '))
+  porNuestroServidor(url, nombre)
+  return { ok: true, porServidor: true }
 }
 
 /** ".jpg" a partir del tipo o de la dirección. */

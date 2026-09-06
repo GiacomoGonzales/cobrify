@@ -14852,6 +14852,54 @@ export const updateWhatsappProfile = onRequest(
 // Van a una carpeta propia (whatsapp/biblioteca/) y no a la de una
 // conversacion: no pertenecen a ninguna, se usan en todas.
 // ============================================================
+/**
+ * Descargar un archivo del chat PASANDO POR NOSOTROS.
+ *
+ * Por que existe: el navegador de Giacomo (con sus extensiones) corta
+ * cualquier pedido con CORS hacia media.cobrifymedia.site, asi que la pagina
+ * no puede leer el archivo para guardarlo y terminaba abriendolo en otra
+ * pestaña. Aca no hay CORS que valga: el archivo llega desde el MISMO
+ * dominio de la app (por la reescritura /descargar) y con la cabecera que le
+ * dice al navegador "esto se guarda", que es lo que hace que baje directo y
+ * con el nombre que queremos.
+ *
+ * NO es un proxy abierto: solo deja pasar direcciones de nuestro propio
+ * almacen. Cualquier otra cosa se rechaza.
+ */
+const ORIGENES_DESCARGA = [
+  'https://media.cobrifymedia.site/',
+  'https://pub-5f82c9900b1941f6b4e0f6ba95d60f51.r2.dev/',
+]
+
+export const descargarMedia = onRequest(
+  { region: 'us-central1', timeoutSeconds: 120, memory: '256MiB', cors: true },
+  async (req, res) => {
+    try {
+      const url = String(req.query.url || '')
+      const nombre = String(req.query.nombre || 'Cobrify Chat archivo').slice(0, 120)
+      if (!ORIGENES_DESCARGA.some((o) => url.startsWith(o))) {
+        res.status(400).send('Direccion no permitida'); return
+      }
+
+      const arriba = await fetch(url)
+      if (!arriba.ok) { res.status(arriba.status).send('No se pudo traer el archivo'); return }
+
+      res.setHeader('Content-Type', arriba.headers.get('content-type') || 'application/octet-stream')
+      const largo = arriba.headers.get('content-length')
+      if (largo) res.setHeader('Content-Length', largo)
+      // Las comillas del nombre se escapan: uno con comillas rompia la cabecera.
+      res.setHeader('Content-Disposition', `attachment; filename="${nombre.replace(/"/g, '')}"`)
+      res.setHeader('Cache-Control', 'private, max-age=0, no-store')
+
+      const { Readable } = await import('node:stream')
+      Readable.fromWeb(arriba.body).pipe(res)
+    } catch (error) {
+      console.error('[Descarga] error:', error.message)
+      res.status(500).send('No se pudo descargar')
+    }
+  }
+)
+
 export const uploadWhatsappLibraryMedia = onRequest(
   {
     region: 'us-central1',

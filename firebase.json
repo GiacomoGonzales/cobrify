@@ -64,6 +64,11 @@
           "region": "us-central1"
         },
         {
+          "source": "/descargar",
+          "function": "descargarMedia",
+          "region": "us-central1"
+        },
+        {
           "source": "**",
           "destination": "/index.html"
         }
