@@ -222,7 +222,19 @@ const getInvoiceDate = (invoice) => {
   return invoice.createdAt.toDate ? invoice.createdAt.toDate() : new Date(invoice.createdAt)
 }
 
+/**
+ * Inmobiliaria tiene su propia pantalla de reportes. La eleccion va en un
+ * componente aparte a proposito: dentro de Reports habia un `return` antes de
+ * los ~90 `useState`, y un cambio de modo con la pagina abierta alteraba el
+ * orden de los hooks (pantalla en blanco, error 310 de React).
+ */
 export default function Reports() {
+  const { businessMode } = useAppContext()
+  if (businessMode === 'real_estate') return <RealEstateReports />
+  return <ReportsGeneral />
+}
+
+function ReportsGeneral() {
   const { user, isDemoMode, demoData, getBusinessId, hasFeature, businessMode, filterBranchesByAccess, hasMainBranchAccess, allowedBranches, allowedWarehouses, isBusinessOwner, isAdmin, businessSettings, assignedSellerId, branchScope } = useAppContext()
   const permisos = useDataPermissions()
   // Filtro de seguridad por ubicación (sucursal/almacén) para usuarios secundarios.
@@ -232,11 +244,6 @@ export default function Reports() {
   // Sub-usuario con vendedor asignado: solo ve las VENTAS de su vendedor.
   // Solo se aplica a facturas (las compras/gastos/movimientos no tienen sellerId).
   const canSeeSale = useSalesScope()
-
-  // Si estamos en modo inmobiliaria, renderizar el componente especializado
-  if (businessMode === 'real_estate') {
-    return <RealEstateReports />
-  }
 
   const [invoices, setInvoices] = useState([])
   const [customers, setCustomers] = useState([])
