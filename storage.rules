@@ -29,6 +29,20 @@ service firebase.storage {
       allow write: if request.auth != null && request.auth.uid == businessId;
     }
 
+    // Logo de una SUCURSAL. Mismo trato que el logo del negocio: aparece en las
+    // guías y comprobantes que se mandan por WhatsApp, así que no es un secreto.
+    //
+    // Antes caía en la regla genérica de más abajo, que exige `uid == businessId`,
+    // o sea que SOLO EL DUEÑO podía leerlo. Los PDF descargan el logo con el SDK
+    // (`getBlob`), que sí pasa por estas reglas, así que a un sub-usuario le
+    // fallaba y el PDF salía con el recuadro "TU LOGO AQUÍ". En pantalla se veía
+    // bien porque un <img> usa la URL con token, que no pasa por acá. Lo reportó
+    // JMC, que tiene doce sub-usuarios.
+    match /businesses/{businessId}/branches/{branchId}/logo {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == businessId;
+    }
+
     // Imágenes de productos (legacy: las nuevas van a Cloudflare). Lectura pública
     // para el catálogo; escritura SOLO del dueño (antes cualquier autenticado podía
     // sobrescribir/subir imágenes en el folder de OTRO negocio).

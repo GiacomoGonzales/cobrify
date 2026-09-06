@@ -22,6 +22,50 @@ export const MOTIVOS_TRASLADO_REMITENTE = [
   { code: '19', name: 'Traslado a zona primaria' },
 ]
 
+/**
+ * LAS TRES FORMAS DE ESCRIBIR EL MISMO MOTIVO.
+ *
+ * El nombre oficial no entra en un ticket de 32 caracteres, así que cada
+ * formato lo acorta — pero el CÓDIGO y su significado salen de una sola tabla.
+ * Tenerlas separadas costó caro: el generador del PDF A4 tenía su propia lista
+ * y estaba corrida un código (decía que el 17 era "emisor itinerante" y el 18
+ * "zona primaria", cuando son el 18 y el 19). La guía T020-00000094 de JMC, con
+ * motivo 18, salía como "Traslado emisor itinerante" en el ticket y como
+ * "Traslado a zona primaria" en el A4: la misma guía diciendo dos cosas.
+ *
+ * Si agregas un motivo, agrégalo en `MOTIVOS_TRASLADO_REMITENTE`; acá solo van
+ * los recortes de los que no entran.
+ */
+const ETIQUETA_BREVE = {
+  '04': 'Traslado entre establecimientos',
+  '14': 'Venta sujeta a confirmación',
+  '17': 'Traslado para transformación',
+  '18': 'Traslado emisor itinerante',
+}
+
+const ETIQUETA_TERMICA = {
+  '04': 'Traslado entre establec.',
+  '05': 'Consignacion',
+  '08': 'Importacion',
+  '09': 'Exportacion',
+  '14': 'Venta suj. confirmacion',
+  '17': 'Transformacion',
+  '18': 'Emisor itinerante',
+  '19': 'Zona primaria',
+}
+
+/** Para el ticket en pantalla y las casillas del A4 (espacio medio). */
+export const etiquetaBreveRemitente = (code) => {
+  const c = String(code || '').trim()
+  return ETIQUETA_BREVE[c] || etiquetaMotivoRemitente(c)
+}
+
+/** Para la impresora térmica: papel angosto y sin tildes. */
+export const etiquetaTermicaRemitente = (code) => {
+  const c = String(code || '').trim()
+  return ETIQUETA_TERMICA[c] || etiquetaBreveRemitente(c)
+}
+
 /** El que exige descripción en texto libre. */
 export const MOTIVO_OTROS = '13'
 export const MOTIVO_REMITENTE_POR_DEFECTO = '01'

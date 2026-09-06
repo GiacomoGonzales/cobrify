@@ -2,6 +2,7 @@ import { forwardRef } from 'react'
 import React from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { urlQrDeLaGuia } from '@/utils/qrGuiaSunat'
+import { etiquetaBreveRemitente } from '@/utils/senderTransferReasons'
 
 /**
  * Componente de Ticket Imprimible para Guía de Remisión
@@ -11,20 +12,8 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
   // Determinar si es papel de 58mm o 80mm
   const is58mm = paperWidth === 58
 
-  // Motivos de traslado
-  const TRANSFER_REASONS = {
-    '01': 'Venta',
-    '02': 'Compra',
-    '04': 'Traslado entre establecimientos',
-    '05': 'Consignación',
-    '08': 'Importación',
-    '09': 'Exportación',
-    '13': 'Otros',
-    '14': 'Venta sujeta a confirmación',
-    '17': 'Traslado para transformación',
-    '18': 'Traslado emisor itinerante',
-    '19': 'Traslado a zona primaria',
-  }
+  // El motivo sale del catálogo compartido: este ticket y el PDF A4 tienen
+  // que decir lo MISMO de la misma guía.
 
   // Unidades de medida
   const UNITS = {
@@ -457,7 +446,7 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
         <div className="section-title">Datos del Traslado</div>
         <div className="info-row">
           <span className="info-label">Motivo:</span>
-          <span>{TRANSFER_REASONS[guide.transferReason] || guide.transferReason || '-'}</span>
+          <span>{etiquetaBreveRemitente(guide.transferReason) || guide.transferReason || '-'}</span>
         </div>
         <div className="weight-box">
           PESO: {guide.totalWeight || guide.weight || '0'} {guide.weightUnit || 'KGM'}

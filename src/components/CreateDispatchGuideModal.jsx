@@ -19,20 +19,9 @@ import { codigosDeUbigeo } from '@/utils/ubigeoDesdeConsulta'
 import { validatePlate, normalizePlate, PLATE_MAX_LENGTH, PLATE_EXAMPLE } from '@/utils/vehiclePlate'
 import SelectorDeFlota, { useFlota } from '@/components/fleet/SelectorDeFlota'
 import { validateEmissionDate } from '@/utils/emissionDate'
+import { MOTIVOS_TRASLADO_REMITENTE } from '@/utils/senderTransferReasons'
 
-const TRANSFER_REASONS = [
-  { value: '01', label: 'Venta' },
-  { value: '02', label: 'Compra' },
-  { value: '04', label: 'Traslado entre establecimientos de la misma empresa' },
-  { value: '05', label: 'Consignación' },
-  { value: '08', label: 'Importación' },
-  { value: '09', label: 'Exportación' },
-  { value: '13', label: 'Otros' },
-  { value: '14', label: 'Venta sujeta a confirmación del comprador' },
-  { value: '17', label: 'Traslado de bienes para transformación' },
-  { value: '18', label: 'Traslado emisor itinerante CP' },
-  { value: '19', label: 'Traslado a zona primaria' },
-]
+const TRANSFER_REASONS = MOTIVOS_TRASLADO_REMITENTE.map(m => ({ value: m.code, label: m.name }))
 
 const DOCUMENT_TYPES = [
   { value: '1', label: 'DNI' },

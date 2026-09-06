@@ -17,6 +17,7 @@ import { vinculoDe } from '@/utils/documentLinks';
 import { getUnitShortLabel } from '@/utils/units'
 import { lineasDeProductosParaTicket } from '@/utils/cashClosureProducts'
 import { lineasDelComprobante } from '@/utils/comprobantePorConsumo'
+import { etiquetaTermicaRemitente } from '@/utils/senderTransferReasons'
 
 /**
  * Servicio para manejar impresoras térmicas WiFi/Bluetooth
@@ -4384,13 +4385,9 @@ export const printCashMovementTicket = async (movement, business, paperWidth = 5
 // IMPRESIÓN DE GUÍA DE REMISIÓN (TICKET TÉRMICO)
 // ============================================
 
-const GUIDE_TRANSFER_REASONS = {
-  '01': 'Venta', '02': 'Compra', '04': 'Traslado entre establec.',
-  '05': 'Consignacion',
-  '08': 'Importacion', '09': 'Exportacion', '13': 'Otros',
-  '14': 'Venta suj. confirmacion', '17': 'Transformacion',
-  '18': 'Emisor itinerante', '19': 'Zona primaria',
-};
+// Los recortes para papel angosto viven junto al catálogo, no acá: el código y
+// su significado tienen que salir de un solo lugar. Una lista aparte fue lo que
+// hizo que el PDF A4 imprimiera un motivo distinto al del ticket.
 
 const GUIDE_UNITS = {
   'NIU': 'UND', 'KGM': 'KG', 'LTR': 'LT', 'MTR': 'MT',
@@ -4457,7 +4454,7 @@ const buildDispatchGuideEscPos = (guide, business, paperWidth = 58) => {
 
   // Datos del traslado
   builder.bold().text('DATOS DEL TRASLADO\n').clearFormatting();
-  addRow('Motivo:', GUIDE_TRANSFER_REASONS[guide.transferReason] || guide.transferReason || '-');
+  addRow('Motivo:', etiquetaTermicaRemitente(guide.transferReason) || guide.transferReason || '-');
   builder.alignCenter().bold()
     .text('PESO: ' + (guide.totalWeight || guide.weight || '0') + ' ' + (guide.weightUnit || 'KGM') + '\n')
     .clearFormatting();
@@ -4661,7 +4658,7 @@ export const printDispatchGuideTicket = async (guide, business, paperWidth = 58)
     // Traslado
     printer = printer
       .bold().text('DATOS DEL TRASLADO\n').clearFormatting()
-      .text(createLine('Motivo:', convertSpanishText(GUIDE_TRANSFER_REASONS[guide.transferReason] || guide.transferReason || '-')) + '\n')
+      .text(createLine('Motivo:', convertSpanishText(etiquetaTermicaRemitente(guide.transferReason) || guide.transferReason || '-')) + '\n')
       .align('center').bold()
       .text('PESO: ' + (guide.totalWeight || guide.weight || '0') + ' ' + (guide.weightUnit || 'KGM') + '\n')
       .clearFormatting();

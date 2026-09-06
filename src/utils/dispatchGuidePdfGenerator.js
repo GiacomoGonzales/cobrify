@@ -9,35 +9,17 @@ import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { getUbigeoName } from '@/data/peruUbigeos'
 import { resolveBranchCompanyInfo } from '@/utils/companyDisplay'
+import { MOTIVOS_TRASLADO_REMITENTE, etiquetaBreveRemitente } from '@/utils/senderTransferReasons'
 
-const TRANSFER_REASONS = {
-  '01': 'Venta',
-  '02': 'Compra',
-  '03': 'Venta sujeta a confirmación del comprador',
-  '04': 'Traslado entre establecimientos de la misma empresa',
-  '05': 'Consignación',
-  '06': 'Devolución',
-  '07': 'Recojo de bienes transformados',
-  '08': 'Importación',
-  '09': 'Exportación',
-  '13': 'Otros',
-  '14': 'Venta sujeta a confirmación del comprador',
-  '17': 'Traslado emisor itinerante CP',
-  '18': 'Traslado a zona primaria',
-}
-
-const TRANSFER_REASONS_FULL = [
-  { code: '01', label: 'Venta' },
-  { code: '03', label: 'Venta sujeta a confirmación del comprador' },
-  { code: '02', label: 'Compra' },
-  { code: '04', label: 'Traslado entre establecimientos de la misma' },
-  { code: '05', label: 'Consignación' },
-  { code: '08', label: 'Importación' },
-  { code: '17', label: 'Traslado emisor itinerante CP' },
-  { code: '09', label: 'Exportación' },
-  { code: '18', label: 'Traslado a zona primaria' },
-  { code: '13', label: 'Otros' },
-]
+// Las casillas del motivo salen del catálogo compartido. Antes había acá una
+// lista propia y estaba CORRIDA UN CÓDIGO: daba el 17 por "emisor itinerante" y
+// el 18 por "zona primaria" (son el 18 y el 19), y el 19 no existía, así que una
+// guía con ese motivo no marcaba ninguna casilla. La guía T020-00000094 de JMC
+// salía con un motivo en el ticket y otro distinto en este PDF.
+const TRANSFER_REASONS_FULL = MOTIVOS_TRASLADO_REMITENTE.map(m => ({
+  code: m.code,
+  label: etiquetaBreveRemitente(m.code),
+}))
 
 const TRANSPORT_MODES = {
   '01': 'TRANSPORTE PÚBLICO',
