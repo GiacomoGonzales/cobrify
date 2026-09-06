@@ -45,7 +45,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { MARCA_CHAT } from '@/utils/dominioChat'
 import { useAvisosDelChat } from '@/hooks/useAvisosDelChat'
 import { useTema } from '@/utils/temaOscuro'
-import { estiloFondo, useApariencia } from '@/utils/aparienciaChat'
+import { estiloBurbuja, estiloFondo, useApariencia } from '@/utils/aparienciaChat'
 import BotonTema from '@/components/BotonTema'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
@@ -178,6 +178,11 @@ export default function Chat() {
   const [tema, cambiarTema] = useTema('chatTema')
   // El fondo del hilo, elegido en Configuración > Fondo del chat.
   const apariencia = useApariencia()
+  // El color de TUS burbujas. Se calcula una vez por render, no por mensaje.
+  const colorBurbuja = useMemo(
+    () => estiloBurbuja(apariencia.burbujaId, tema === 'oscuro'),
+    [apariencia.burbujaId, tema],
+  )
 
   // En la app: iconos del status bar segun el tema (la franja de arriba es
   // blanca u oscura), y al salir se devuelve el estilo de la app principal.
@@ -1440,10 +1445,9 @@ export default function Chat() {
                   return (
                     <div key={el.id} className={`flex ${mio ? 'justify-end' : 'justify-start'}`}>
                       <div
-                        className={`text-[14px] leading-snug rounded-2xl p-1 ${
-                          mio
-                            ? 'bg-primary-50 border border-primary-100 rounded-br-sm'
-                            : 'bg-white border border-gray-200 rounded-bl-sm'
+                        style={mio ? colorBurbuja : undefined}
+                        className={`text-[14px] leading-snug rounded-2xl p-1 border ${
+                          mio ? 'rounded-br-sm' : 'bg-white border-gray-200 rounded-bl-sm'
                         }`}
                       >
                         <AlbumMedia
@@ -1559,11 +1563,15 @@ export default function Chat() {
                         setPaletaAbierta(null)
                         setMenuMensaje(abierto ? null : m.id)
                       }}
+                      // El color de la burbuja propia va en el estilo y no en
+                      // clases: lo elige el usuario, así que no puede salir de
+                      // la paleta fija de Tailwind.
+                      style={!sinBurbuja && mio ? colorBurbuja : undefined}
                       className={`text-[14px] leading-snug ${
                         sinBurbuja
                           ? 'text-gray-900'
                           : mio
-                            ? `rounded-2xl ${conFoto ? 'p-1' : 'px-3.5 py-2'} bg-primary-50 border border-primary-100 text-gray-900 rounded-br-sm`
+                            ? `rounded-2xl ${conFoto ? 'p-1' : 'px-3.5 py-2'} border text-gray-900 rounded-br-sm`
                             : `rounded-2xl ${conFoto ? 'p-1' : 'px-3.5 py-2'} bg-white border border-gray-200 text-gray-900 rounded-bl-sm`
                       }`}
                     >

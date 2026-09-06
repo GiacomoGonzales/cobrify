@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
 import { Seccion, Campo, Entrada, Selector, AreaTexto, Boton } from '@/components/admin/ui'
-import { FONDOS, estiloFondo, guardarApariencia, prepararFoto, useApariencia } from '@/utils/aparienciaChat'
+import { BURBUJAS, FONDOS, estiloBurbuja, estiloFondo, guardarApariencia, prepararFoto, useApariencia } from '@/utils/aparienciaChat'
 import {
   obtenerPerfil,
   guardarPerfil,
@@ -56,7 +56,7 @@ export default function ConfiguracionChat({ onVolver }) {
           ['perfil', 'Perfil del negocio'],
           ['automaticos', 'Respuestas automáticas'],
           ['rapidas', 'Respuestas rápidas'],
-          ['apariencia', 'Fondo del chat'],
+          ['apariencia', 'Fondo y colores'],
         ].map(([id, nombre]) => (
           <button
             key={id}
@@ -116,7 +116,7 @@ function SeccionApariencia() {
   }
 
   return (
-    <Seccion titulo="Fondo del chat" descripcion="Elige un color o pon una foto tuya. Se guarda en este navegador; el fondo de la app del celular se elige aparte.">
+    <Seccion titulo="Fondo y colores" descripcion="Elige el fondo de la conversación y el color de tus mensajes. Se guarda en este navegador; en la app del celular se eligen aparte.">
       <input ref={archivo} type="file" accept="image/*" onChange={elegirFoto} className="hidden" />
 
       <div className="grid grid-cols-4 sm:grid-cols-7 gap-3">
@@ -191,6 +191,26 @@ function SeccionApariencia() {
         </div>
       )}
 
+      <div className="mt-7">
+        <p className="text-[13px] font-medium text-gray-900 mb-1">Color de tus mensajes</p>
+        <p className="text-[12px] text-gray-500 mb-2">Solo cambia los tuyos; los del cliente siguen en blanco.</p>
+        <div className="flex items-center gap-3">
+          {BURBUJAS.map((b) => (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => guardarApariencia({ burbujaId: b.id })}
+              title={b.nombre}
+              aria-label={b.nombre}
+              className={`w-9 h-9 rounded-full ${
+                apariencia.burbujaId === b.id ? 'ring-2 ring-offset-2 ring-gray-900' : ''
+              }`}
+              style={{ backgroundColor: b.hex }}
+            />
+          ))}
+        </div>
+      </div>
+
       <div className="mt-6">
         <p className="text-[12px] text-gray-500 mb-2">Vista previa</p>
         <div
@@ -203,7 +223,10 @@ function SeccionApariencia() {
             </span>
           </div>
           <div className="flex justify-end">
-            <span className="max-w-[75%] rounded-2xl rounded-br-sm bg-primary-50 border border-primary-100 px-3.5 py-2 text-[13px]">
+            <span
+              className="max-w-[75%] rounded-2xl rounded-br-sm border px-3.5 py-2 text-[13px]"
+              style={estiloBurbuja(apariencia.burbujaId)}
+            >
               ¡Todo bien! 🙌
             </span>
           </div>
