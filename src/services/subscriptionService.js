@@ -783,6 +783,12 @@ export const reactivateUser = async (userId, extendDays = 30) => {
       currentPeriodStart: Timestamp.fromDate(now),
       currentPeriodEnd: Timestamp.fromDate(newPeriodEnd),
       nextPaymentDate: Timestamp.fromDate(newPeriodEnd),
+      // El ciclo mensual del contador arranca HOY (es lo que dice la línea de
+      // arriba), así que el cupo arranca en cero. Sin esto se arrastraban los
+      // comprobantes del ciclo anterior a uno nuevo y recién pagado — caso
+      // real: 398 de un límite de 1000 el día siguiente a renovar.
+      'usage.invoicesThisMonth': 0,
+      lastCounterReset: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
     await mirrorCatalogSuspended(userId, false);
@@ -939,6 +945,9 @@ export const registerPayment = async (userId, amount, method = 'Transferencia', 
       lastPaymentDate: Timestamp.fromDate(now),
       currentPeriodEnd: Timestamp.fromDate(newPeriodEnd),
       nextPaymentDate: Timestamp.fromDate(newPeriodEnd),
+      // Empieza un ciclo mensual nuevo: el cupo de comprobantes también.
+      'usage.invoicesThisMonth': 0,
+      lastCounterReset: serverTimestamp(),
       monthlyPrice: planConfig?.pricePerMonth || 0,
       limits: newLimits,
       renewalPrice: newRenewalPrice,
