@@ -6,17 +6,24 @@ import FirebaseAuth
 @MainActor
 final class SessionStore: ObservableObject {
     @Published var user: User?
+    /// Firebase todavía no dijo si hay sesión guardada. Mientras tanto NO se
+    /// puede mostrar la pantalla de iniciar sesión: asomaba un instante antes
+    /// de entrar a la bandeja.
+    @Published var restaurando = true
     @Published var isWorking = false
     @Published var errorMessage: String?
 
     private var handle: AuthStateDidChangeListenerHandle?
 
     init() {
-        guard FirebaseBootstrap.isConfigured else { return }
+        guard FirebaseBootstrap.isConfigured else { restaurando = false; return }
         // El listener es la única fuente de verdad del estado: restaura la
         // sesión guardada al abrir y reacciona a login/logout.
         handle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
-            Task { @MainActor in self?.user = user }
+            Task { @MainActor in
+                self?.user = user
+                self?.restaurando = false
+            }
         }
     }
 

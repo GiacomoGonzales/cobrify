@@ -17,8 +17,14 @@ enum VistaPrevia {
     /// filtros y el paso a la conversación); sin él, directo a un chat.
     static let enBandeja = ProcessInfo.processInfo.arguments.contains("-bandeja")
 
+    /// `-splash` muestra solo la pantalla de arranque, sin depender de los
+    /// tiempos del arranque real.
+    static let soloSplash = ProcessInfo.processInfo.arguments.contains("-splash")
+
     @MainActor @ViewBuilder static var pantalla: some View {
-        if enBandeja {
+        if soloSplash {
+            SplashView()
+        } else if enBandeja {
             // La app entera: sirve para la bandeja, las carpetas y tambien
             // para Ajustes (apariencia, respuestas rapidas).
             MainTabView()

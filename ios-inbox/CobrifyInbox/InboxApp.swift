@@ -40,13 +40,30 @@ struct RootView: View {
         #endif
     }
 
+    /// El mínimo que se queda el splash aunque Firebase conteste al instante:
+    /// un fogonazo de 50 ms se ve peor que medio segundo tranquilo.
+    @State private var minimoCumplido = false
+
     @ViewBuilder private var pantallaReal: some View {
-        if !FirebaseBootstrap.isConfigured {
-            SetupNeededView()
-        } else if session.user != nil {
-            MainTabView()
-        } else {
-            LoginView()
+        ZStack {
+            if !FirebaseBootstrap.isConfigured {
+                SetupNeededView()
+            } else if session.user != nil {
+                MainTabView()
+            } else {
+                LoginView()
+            }
+
+            if session.restaurando || !minimoCumplido {
+                SplashView()
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.35), value: session.restaurando)
+        .animation(.easeInOut(duration: 0.35), value: minimoCumplido)
+        .task {
+            try? await Task.sleep(for: .milliseconds(900))
+            minimoCumplido = true
         }
     }
 }
