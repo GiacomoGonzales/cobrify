@@ -44,23 +44,33 @@ struct RootView: View {
     /// un fogonazo de 50 ms se ve peor que medio segundo tranquilo.
     @State private var minimoCumplido = false
 
+    private var enSplash: Bool { session.restaurando || !minimoCumplido }
+
     @ViewBuilder private var pantallaReal: some View {
         ZStack {
-            if !FirebaseBootstrap.isConfigured {
-                SetupNeededView()
-            } else if session.user != nil {
-                MainTabView()
-            } else {
-                LoginView()
+            Group {
+                if !FirebaseBootstrap.isConfigured {
+                    SetupNeededView()
+                } else if session.user != nil {
+                    MainTabView()
+                } else {
+                    LoginView()
+                }
             }
+            // La app no aparece de golpe: entra creciendo un pelín desde
+            // atrás mientras el splash se va. Es el mismo gesto que usa iOS
+            // al abrir una app desde el icono.
+            .opacity(enSplash ? 0 : 1)
+            .scaleEffect(enSplash ? 0.97 : 1)
 
-            if session.restaurando || !minimoCumplido {
+            if enSplash {
                 SplashView()
-                    .transition(.opacity)
+                    // Y el splash se va hacia adelante, como si uno lo
+                    // atravesara. Sin esto los dos se cruzaban en seco.
+                    .transition(.opacity.combined(with: .scale(scale: 1.06)))
             }
         }
-        .animation(.easeInOut(duration: 0.35), value: session.restaurando)
-        .animation(.easeInOut(duration: 0.35), value: minimoCumplido)
+        .animation(.easeInOut(duration: 0.5), value: enSplash)
         .task {
             try? await Task.sleep(for: .milliseconds(900))
             minimoCumplido = true
