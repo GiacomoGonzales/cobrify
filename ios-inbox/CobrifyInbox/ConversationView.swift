@@ -44,6 +44,7 @@ struct ConversationView: View {
     /// El video que se está viendo (desde un álbum). Los sueltos abren su
     /// propio visor dentro de la burbuja.
     @State private var videoAbierto: Mensaje?
+    @State private var mostrarApariencia = false
     /// Mensaje al que hay que saltar cuando se cierra una hoja. Se guarda en vez
     /// de saltar desde dentro: mientras la hoja se va, el scroll de abajo no
     /// esta listo para recibir la orden.
@@ -256,6 +257,13 @@ struct ConversationView: View {
                     } label: {
                         Label("Fotos y archivos", systemImage: "photo.on.rectangle")
                     }
+                    // Aqui tambien, no solo en Ajustes: es donde lo tiene
+                    // WhatsApp y donde se busca.
+                    Button {
+                        mostrarApariencia = true
+                    } label: {
+                        Label("Fondo del chat", systemImage: "paintbrush")
+                    }
                     Divider()
                     if conv.linkedBusinessId != nil {
                         Button {
@@ -317,6 +325,16 @@ struct ConversationView: View {
         }
         .sheet(isPresented: $mostrarVincular) {
             VincularSheet(conversationId: conv.id)
+        }
+        .sheet(isPresented: $mostrarApariencia) {
+            NavigationStack {
+                AparienciaView()
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Listo") { mostrarApariencia = false }
+                        }
+                    }
+            }
         }
         .fullScreenCover(item: $videoAbierto) { v in
             VisorAdjunto(url: v.media?.url ?? "", filename: v.media?.filename)

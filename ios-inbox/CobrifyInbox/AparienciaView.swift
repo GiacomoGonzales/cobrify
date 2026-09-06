@@ -10,25 +10,41 @@ struct AparienciaView: View {
     var body: some View {
         List {
             Section("Fondo del chat") {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(Apariencia.fondos, id: \.id) { f in
-                            if f.id == "foto" {
-                                PhotosPicker(selection: $fotoElegida, matching: .images) {
-                                    miniaturaFondo(f)
-                                }
-                                .buttonStyle(.plain)
-                            } else {
-                                Button { apariencia.fondoId = f.id } label: {
-                                    miniaturaFondo(f)
-                                }
-                                .buttonStyle(.plain)
+                // En cuadricula y no en una fila que se desliza: asi se ven
+                // TODOS de una vez. Antes "Tu foto" quedaba fuera de la
+                // pantalla y no habia manera de saber que estaba ahi.
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 14) {
+                    ForEach(Apariencia.fondos, id: \.id) { f in
+                        if f.id == "foto", !apariencia.tieneFoto {
+                            // Sin foto todavia: el toque abre la galeria.
+                            PhotosPicker(selection: $fotoElegida, matching: .images) {
+                                miniaturaFondo(f)
                             }
+                            .buttonStyle(.plain)
+                        } else {
+                            Button { apariencia.fondoId = f.id } label: {
+                                miniaturaFondo(f)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
-                    .padding(.vertical, 6)
                 }
-                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                .padding(.vertical, 6)
+
+                if apariencia.fondoId == "foto", apariencia.tieneFoto {
+                    PhotosPicker(selection: $fotoElegida, matching: .images) {
+                        Label("Elegir otra foto", systemImage: "photo.badge.plus")
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Atenuar el fondo").font(.subheadline)
+                        HStack(spacing: 10) {
+                            Image(systemName: "sun.max").font(.caption).foregroundStyle(.secondary)
+                            Slider(value: $apariencia.atenuar, in: 0...0.6)
+                            Image(systemName: "moon").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
             }
 
             Section("Color de tus burbujas") {
@@ -97,7 +113,10 @@ struct AparienciaView: View {
                 if f.id == "clasico" {
                     RoundedRectangle(cornerRadius: 12).fill(Color(.systemGroupedBackground))
                 } else if f.id == "foto" {
-                    if let img = Apariencia.shared.fotoFondo {
+                    // Se lee `versionFoto` para que la miniatura se refresque
+                    // sola al cambiar la foto.
+                    let _ = apariencia.versionFoto
+                    if let img = apariencia.fotoFondo {
                         Image(uiImage: img).resizable().scaledToFill()
                     } else {
                         RoundedRectangle(cornerRadius: 12).fill(.quaternary)
@@ -108,13 +127,16 @@ struct AparienciaView: View {
                         .fill(LinearGradient(colors: esquemaActual == .dark ? f.oscuros : f.claros,
                                              startPoint: .top, endPoint: .bottom))
                 }
-                if Apariencia.shared.fondoId == f.id {
+                if apariencia.fondoId == f.id {
                     RoundedRectangle(cornerRadius: 12).stroke(.tint, lineWidth: 3)
                 }
             }
-            .frame(width: 64, height: 96)
+            .frame(height: 92)
             .clipShape(RoundedRectangle(cornerRadius: 12))
-            Text(f.nombre).font(.caption2)
+            Text(f.nombre)
+                .font(.caption2)
+                .lineLimit(1)
+                .foregroundStyle(apariencia.fondoId == f.id ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
         }
     }
 }

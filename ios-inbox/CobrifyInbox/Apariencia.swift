@@ -9,12 +9,19 @@ final class Apariencia: ObservableObject {
 
     @AppStorage("fondoChat") var fondoId: String = "clasico"
     @AppStorage("colorBurbuja") var burbujaId: String = "verde"
+    /// Cuánto se oscurece la foto de fondo, para que los mensajes se lean.
+    /// De noche siempre un poco más: el mismo valor que de día dejaría la
+    /// pantalla demasiado clara.
+    @AppStorage("atenuarFondo") var atenuar: Double = 0.08
     /// Cambia cuando el usuario pone su propia foto, para refrescar vistas.
     @Published var versionFoto = 0
 
     /// Cada fondo trae su par: colores para modo claro y para modo oscuro,
     /// como hace WhatsApp — el beige de día se vuelve verde-noche de noche.
+    /// "Tu foto" va PRIMERO: es lo que la gente busca, y antes quedaba
+    /// escondida al final de una fila que había que deslizar.
     static let fondos: [(id: String, nombre: String, claros: [Color], oscuros: [Color])] = [
+        ("foto", "Tu foto", [], []),
         ("clasico", "Clásico", [], []),
         ("beige", "Beige WhatsApp", [Color(hex: "#EFE7DD"), Color(hex: "#E3D9CC")],
                                     [Color(hex: "#0B141A"), Color(hex: "#060E12")]),
@@ -26,7 +33,6 @@ final class Apariencia: ObservableObject {
                               [Color(hex: "#1B1030"), Color(hex: "#120A22")]),
         ("noche", "Noche", [Color(hex: "#1C2733"), Color(hex: "#10161D")],
                            [Color(hex: "#1C2733"), Color(hex: "#10161D")]),
-        ("foto", "Tu foto", [], []),
     ]
 
     static let burbujas: [(id: String, nombre: String, color: Color)] = [
@@ -75,6 +81,13 @@ final class Apariencia: ObservableObject {
 
     var fotoFondo: UIImage? { UIImage(contentsOfFile: Self.rutaFoto.path) }
 
+    var tieneFoto: Bool { FileManager.default.fileExists(atPath: Self.rutaFoto.path) }
+
+    /// El velo que va sobre la foto, ya con el extra de la noche.
+    func veloFoto(_ esquema: ColorScheme) -> Double {
+        esquema == .dark ? min(0.85, atenuar + 0.30) : atenuar
+    }
+
     /// El fondo listo para pintarse detrás de la conversación.
     func fondoView() -> some View { FondoChat() }
 }
@@ -96,7 +109,7 @@ struct FondoChat: View {
                         .scaledToFill()
                         .frame(width: geo.size.width, height: geo.size.height)
                         .clipped()
-                        .overlay(Color.black.opacity(esquema == .dark ? 0.35 : 0.08))
+                        .overlay(Color.black.opacity(apariencia.veloFoto(esquema)))
                 }
                 .ignoresSafeArea()
             } else {

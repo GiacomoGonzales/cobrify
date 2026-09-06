@@ -19,7 +19,9 @@ enum VistaPrevia {
 
     @MainActor @ViewBuilder static var pantalla: some View {
         if enBandeja {
-            ConversationListView()
+            // La app entera: sirve para la bandeja, las carpetas y tambien
+            // para Ajustes (apariencia, respuestas rapidas).
+            MainTabView()
                 .environmentObject(SessionStore())
         } else {
             NavigationStack {
