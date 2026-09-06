@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useDeferredValue } from 'react'
-import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, Send, Loader2, X, Calendar, Hash, Pencil, Building2, CreditCard, Car, Code, Edit3, MoreVertical, Printer, FileCheck, Trash2, PlayCircle, AlertTriangle } from 'lucide-react'
+import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, Send, Loader2, X, Calendar, Hash, Pencil, Building2, CreditCard, Car, Code, Edit3, MoreVertical, Printer, FileCheck, Trash2, PlayCircle, AlertTriangle, Receipt } from 'lucide-react'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -16,6 +16,7 @@ import FiltrosDeGuias from '@/components/guias/FiltrosDeGuias'
 import ChipEstadoGuia from '@/components/guias/ChipEstadoGuia'
 import { FILTROS_INICIALES, ESTADOS_DE_GUIA, cumpleFiltros, hayFiltrosActivos, nombreDeZip, etiquetaDeFiltroFecha } from '@/utils/filtroGuias'
 import { descargarZipDePdfs } from '@/utils/zipDePdfs'
+import { useAnchoDeTicket } from '@/hooks/useAnchoDeTicket'
 
 // Helper para formatear fecha sin problemas de zona horaria
 const formatTransferDate = (dateString) => {
@@ -37,6 +38,8 @@ export default function CarrierDispatchGuides() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [sendingToSunat, setSendingToSunat] = useState(null)
   const [downloadingPdf, setDownloadingPdf] = useState(null)
+  const [descargandoTicket, setDescargandoTicket] = useState(null)
+  const anchoTicket = useAnchoDeTicket()
   const [companySettings, setCompanySettings] = useState(null)
   const [selectedGuide, setSelectedGuide] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
@@ -271,6 +274,25 @@ export default function CarrierDispatchGuides() {
       toast.error('Error al generar el PDF')
     } finally {
       setDownloadingPdf(null)
+    }
+  }
+
+  // El ticket en PDF: el ancho es el configurado para la ticketera del negocio,
+  // igual que en las guías del remitente.
+  const handleDownloadTicket = async (guide) => {
+    if (!companySettings) {
+      toast.error('Cargando datos de empresa, intente de nuevo')
+      return
+    }
+    setDescargandoTicket(guide.id)
+    try {
+      const { descargarGuiaTicketPdf } = await import('@/utils/guiaTicketPdf')
+      await descargarGuiaTicketPdf(guide, companySettings, { anchoMm: anchoTicket })
+    } catch (error) {
+      console.error('Error al descargar el ticket:', error)
+      toast.error('No se pudo generar el ticket')
+    } finally {
+      setDescargandoTicket(null)
     }
   }
 
@@ -844,6 +866,26 @@ export default function CarrierDispatchGuides() {
                       <Download className="w-4 h-4 text-gray-400" />
                     )}
                     <span>{downloadingPdf === guide.id ? 'Generando...' : 'Descargar PDF'}</span>
+                  </button>
+
+                  {/* Descargar Ticket: el mismo papel en formato rollo, como
+                      archivo. Sirve para mandárselo al conductor por WhatsApp,
+                      y en la app es la única forma de sacarlo (el WebView de
+                      Android no tiene diálogo de impresión). */}
+                  <button
+                    onClick={() => {
+                      setOpenMenuId(null)
+                      handleDownloadTicket(guide)
+                    }}
+                    disabled={descargandoTicket === guide.id}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50"
+                  >
+                    {descargandoTicket === guide.id ? (
+                      <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+                    ) : (
+                      <Receipt className="w-4 h-4 text-gray-400" />
+                    )}
+                    <span>{descargandoTicket === guide.id ? 'Generando...' : 'Descargar Ticket (PDF)'}</span>
                   </button>
 
                   {/* XML SUNAT - Solo si fue aceptada */}

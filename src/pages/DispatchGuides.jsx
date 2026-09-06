@@ -25,6 +25,7 @@ import ChipEstadoGuia from '@/components/guias/ChipEstadoGuia'
 import { FILTROS_INICIALES, ESTADOS_DE_GUIA, cumpleFiltros, hayFiltrosActivos, nombreDeZip, etiquetaDeFiltroFecha } from '@/utils/filtroGuias'
 import { descargarZipDePdfs } from '@/utils/zipDePdfs'
 import { esDeSucursal } from '@/utils/branchScope'
+import { useAnchoDeTicket } from '@/hooks/useAnchoDeTicket'
 
 const TRANSFER_REASONS = {
   '01': 'Venta',
@@ -163,7 +164,9 @@ export default function DispatchGuides() {
 
   const [printMargins, setPrintMargins] = useState(8)
   const [simplePrint, setSimplePrint] = useState(false)
-  const [ticketPaperWidth, setTicketPaperWidth] = useState(80)
+  // El ancho del rollo sale del hook compartido: lo usan esta pantalla y la
+  // de guías de transportista, y no puede decir 80 en una y 58 en la otra.
+  const ticketPaperWidth = useAnchoDeTicket()
   // Ajustar la hoja al largo del ticket. Apagado, manda el papel elegido en
   // la ventana de imprimir (Configuración > Impresora).
   const [ajustarHoja, setAjustarHoja] = useState(true)
@@ -185,7 +188,6 @@ export default function DispatchGuides() {
         if (result.success && result.config) {
           setPrintMargins(result.config.printMargins ?? 8)
           setSimplePrint(result.config.simplePrint || false)
-          setTicketPaperWidth(result.config.paperWidth || 80)
           setAjustarHoja(result.config.ajustarHojaAlTicket !== false)
         }
       } catch (error) {

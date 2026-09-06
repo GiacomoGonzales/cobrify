@@ -14,6 +14,7 @@
  */
 import { etiquetaBreveRemitente } from '@/utils/senderTransferReasons'
 import { urlQrDeLaGuia } from '@/utils/qrGuiaSunat'
+import { etiquetaMotivo as etiquetaMotivoTransportista } from '@/utils/carrierTransferReasons'
 
 const UNIDADES = {
   NIU: 'UND', KGM: 'KG', LTR: 'LT', MTR: 'MT',
@@ -136,6 +137,16 @@ export function encabezadoDeGuia(guia = {}, empresa = {}) {
  * acordarse de esconderlas.
  */
 export function seccionesDeGuiaParaTicket(guia = {}) {
+  // La guía del TRANSPORTISTA (documento 31) es otro papel: el emisor es el
+  // transportista, aparece el remitente, y puede llevar varios conductores y
+  // vehículos. Se reparte acá para que quien pida "las secciones de esta guía"
+  // no tenga que saber de qué tipo es.
+  if (guia.documentType === '31') return seccionesDeTransportista(guia)
+  return seccionesDeRemitente(guia)
+}
+
+/** Las secciones de una guía del REMITENTE (documento 09). */
+function seccionesDeRemitente(guia = {}) {
   const destinatario = guia.recipient || {}
   const secciones = []
 
@@ -194,6 +205,112 @@ export function seccionesDeGuiaParaTicket(guia = {}) {
   }
 
   secciones.push(transporte(guia))
+
+  const items = (guia.items || []).map(i => ({
+    cantidad: i.quantity || 0,
+    unidad: unidadCorta(i.unit),
+    descripcion: i.description || i.name || '-',
+    serie: i.serialNumber || null,
+  }))
+  secciones.push({ titulo: `Bienes (${items.length})`, items })
+
+  return secciones.filter(s => s.titulo || s.filas?.length || s.texto || s.items)
+}
+
+/**
+ * Las secciones de una guía del TRANSPORTISTA (documento 31).
+ *
+ * Ojo con los nombres: acá el tipo de transporte es `transportType` (no
+ * `transportMode`) y el indicador de vehículo menor es `isM1OrLVehicle` (no
+ * `isM1LVehicle`). Son campos distintos guardados con nombres parecidos, y
+ * confundirlos deja el dato en blanco sin que nadie se entere.
+ */
+function seccionesDeTransportista(guia = {}) {
+  const remitente = guia.shipper || {}
+  const destinatario = guia.recipient || {}
+  const secciones = []
+
+  secciones.push({
+    filas: [
+      { etiqueta: 'F. Emisión', valor: fechaDeTicket(guia.issueDate || guia.createdAt) },
+      { etiqueta: 'F. Traslado', valor: fechaDeTicket(guia.transferDate) },
+    ],
+  })
+
+  secciones.push({
+    titulo: 'Remitente',
+    filas: [
+      { etiqueta: 'RUC', valor: remitente.ruc || '-' },
+      { etiqueta: 'Nombre', valor: remitente.businessName || '-' },
+    ],
+  })
+
+  secciones.push({
+    titulo: 'Destinatario',
+    filas: [
+      { etiqueta: 'Doc', valor: destinatario.documentNumber || '-' },
+      { etiqueta: 'Nombre', valor: destinatario.name || '-' },
+    ],
+  })
+
+  secciones.push({
+    titulo: 'Datos del Traslado',
+    filas: [
+      {
+        etiqueta: 'Motivo',
+        valor: etiquetaMotivoTransportista(guia.transferReason) || guia.transferReason || '-',
+      },
+      { etiqueta: 'Transporte', valor: guia.transportType === '01' ? 'PUBLICO' : 'PRIVADO' },
+    ],
+    destacado: `PESO: ${guia.totalWeight || 0} ${guia.weightUnit === 'TNE' ? 'TNE' : 'KGM'}`,
+    texto: guia.transferDescription || null,
+  })
+
+  for (const [titulo, punto] of [
+    ['Punto de Partida', guia.origin],
+    ['Punto de Llegada', guia.destination],
+  ]) {
+    secciones.push({
+      titulo,
+      texto: punto?.address || '-',
+      filas: punto?.ubigeo ? [{ etiqueta: 'Ubigeo', valor: punto.ubigeo }] : [],
+    })
+  }
+
+  // Conductores: puede haber uno principal y uno secundario.
+  const conductores = (guia.drivers?.length ? guia.drivers : [guia.driver])
+    .filter(c => c && (c.documentNumber || c.name))
+  if (conductores.length) {
+    const filas = []
+    conductores.forEach((c, i) => {
+      const nombre = `${c.name || ''} ${c.lastName || ''}`.trim() || '-'
+      filas.push({ etiqueta: conductores.length > 1 ? `Conductor ${i + 1}` : 'Conductor', valor: nombre })
+      if (c.documentNumber) {
+        filas.push({ etiqueta: TIPOS_DOC[c.documentType] || 'Doc', valor: c.documentNumber })
+      }
+      if (c.license) filas.push({ etiqueta: 'Licencia', valor: c.license })
+    })
+    secciones.push({ titulo: conductores.length > 1 ? 'Conductores' : 'Conductor', filas })
+  }
+
+  const vehiculos = (guia.vehicles?.length ? guia.vehicles : [guia.vehicle]).filter(v => v?.plate)
+  if (vehiculos.length) {
+    const filas = []
+    vehiculos.forEach((v, i) => {
+      filas.push({ etiqueta: vehiculos.length > 1 ? `Placa ${i + 1}` : 'Placa', valor: v.plate })
+      if (v.mtcAuthorization) filas.push({ etiqueta: 'MTC', valor: v.mtcAuthorization })
+      if (v.tuce) filas.push({ etiqueta: 'TUCE', valor: v.tuce })
+    })
+    secciones.push({
+      titulo: vehiculos.length > 1 ? 'Vehículos' : 'Vehículo',
+      filas,
+      nota: guia.isM1OrLVehicle ? '(Vehículo categoría M1 o L)' : null,
+    })
+  }
+
+  if (guia.observations) {
+    secciones.push({ titulo: 'Observaciones', texto: guia.observations })
+  }
 
   const items = (guia.items || []).map(i => ({
     cantidad: i.quantity || 0,
