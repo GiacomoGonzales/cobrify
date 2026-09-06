@@ -83,7 +83,7 @@ export default function VisorMedia({ imagenes, indiceInicial = 0, onCerrar, onEd
           <button
             onClick={async () => {
               setBajando(true)
-              const r = await descargarArchivo(actual.url, nombreDeArchivo(actual))
+              const r = await descargarArchivo(actual.url, nombreDeArchivo(actual), actual.tipo || 'image')
               setBajando(false)
               // Si no se pudo bajar directo se abrió en otra pestaña. Decirlo,
               // en vez de dejar al usuario preguntándose qué pasó.

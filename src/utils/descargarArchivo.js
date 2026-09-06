@@ -11,27 +11,72 @@
  * devuelve el motivo, para poder decirlo en pantalla en vez de dejar al
  * usuario adivinando.
  */
-export async function descargarArchivo(url, nombre = 'archivo') {
+/** Guarda el contenido con el nombre pedido. */
+function guardar(blob, nombre) {
+  const objeto = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = objeto
+  a.download = nombre
+  a.rel = 'noopener'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  // Sin esto el archivo se queda en memoria toda la sesión.
+  setTimeout(() => URL.revokeObjectURL(objeto), 10000)
+}
+
+/**
+ * Segundo camino, solo para fotos: cargarla como imagen y sacarla del lienzo.
+ *
+ * Existe porque en algunos navegadores —con ciertas extensiones puestas— el
+ * `fetch` a otro dominio no llega, pero la MISMA foto sí se carga como
+ * imagen: de hecho ya se está viendo en pantalla. Se paga un reencodeado
+ * (la copia no es byte a byte la original), y a cambio la descarga funciona.
+ */
+function bajarComoImagen(url) {
+  return new Promise((listo, falla) => {
+    const img = new Image()
+    // Sin esto el lienzo queda "manchado" y no deja sacar el contenido.
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      const lienzo = document.createElement('canvas')
+      lienzo.width = img.naturalWidth
+      lienzo.height = img.naturalHeight
+      lienzo.getContext('2d').drawImage(img, 0, 0)
+      lienzo.toBlob((b) => (b ? listo(b) : falla(new Error('el lienzo salió vacío'))), 'image/jpeg', 0.92)
+    }
+    img.onerror = () => falla(new Error('la foto no se pudo cargar'))
+    img.src = url
+  })
+}
+
+export async function descargarArchivo(url, nombre = 'archivo', tipo = '') {
+  const problemas = []
   try {
     const res = await fetch(url, { mode: 'cors', credentials: 'omit' })
     if (!res.ok) throw new Error(`el servidor respondió ${res.status}`)
-    const blob = await res.blob()
-    const objeto = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = objeto
-    a.download = nombre
-    a.rel = 'noopener'
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    // Sin esto el archivo se queda en memoria toda la sesión.
-    setTimeout(() => URL.revokeObjectURL(objeto), 10000)
+    guardar(await res.blob(), nombre)
     return { ok: true }
   } catch (e) {
-    console.warn('[descarga] no se pudo bajar directo:', e)
-    window.open(url, '_blank', 'noopener')
-    return { ok: false, motivo: e?.message || 'no se pudo leer el archivo' }
+    problemas.push(e?.message || 'no se pudo leer el archivo')
+    console.warn('[descarga] el camino normal falló:', e)
   }
+
+  // Solo las fotos tienen segundo camino; un PDF o un video no se pueden
+  // sacar de un lienzo.
+  const esFoto = tipo === 'image' || /\.(jpe?g|png|webp|gif)$/i.test(String(url).split('?')[0])
+  if (esFoto) {
+    try {
+      guardar(await bajarComoImagen(url), nombre)
+      return { ok: true, reencodeada: true }
+    } catch (e) {
+      problemas.push(e?.message || 'tampoco se pudo por imagen')
+      console.warn('[descarga] el camino por imagen también falló:', e)
+    }
+  }
+
+  window.open(url, '_blank', 'noopener')
+  return { ok: false, motivo: problemas.join(' · ') }
 }
 
 /** ".jpg" a partir del tipo o de la dirección. */
