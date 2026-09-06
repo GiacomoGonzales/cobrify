@@ -41,6 +41,9 @@ struct ConversationView: View {
     /// La foto abierta en el visor (por id de mensaje): el visor vive aquí,
     /// no en la burbuja, para poder pasar a las demás fotos del chat.
     @State private var fotoAbierta: FotoAbierta?
+    /// El video que se está viendo (desde un álbum). Los sueltos abren su
+    /// propio visor dentro de la burbuja.
+    @State private var videoAbierto: Mensaje?
     /// Mensaje al que hay que saltar cuando se cierra una hoja. Se guarda en vez
     /// de saltar desde dentro: mientras la hoja se va, el scroll de abajo no
     /// esta listo para recibir la orden.
@@ -74,6 +77,10 @@ struct ConversationView: View {
                             burbuja(m, proxy: proxy)
                                 .padding(.top, cambiaDeLado ? 10 : 0)
                                 .id(m.id)
+                        case .album(let fotos, let cambiaDeLado):
+                            album(fotos)
+                                .padding(.top, cambiaDeLado ? 10 : 0)
+                                .id(fotos[0].id)
                         }
                     }
                     // Ancla del final. Saltar "al último mensaje" fallaba
@@ -311,6 +318,9 @@ struct ConversationView: View {
         .sheet(isPresented: $mostrarVincular) {
             VincularSheet(conversationId: conv.id)
         }
+        .fullScreenCover(item: $videoAbierto) { v in
+            VisorAdjunto(url: v.media?.url ?? "", filename: v.media?.filename)
+        }
         .fullScreenCover(item: $fotoAbierta) { f in
             let fotos = fotosDelHilo
             VisorFotos(fotos: fotos,
@@ -403,16 +413,38 @@ struct ConversationView: View {
         store.mensajes.filter { $0.tipo == "image" && $0.media?.url != nil }
     }
 
+    /// La burbuja de un álbum. Fuera del cuerpo por lo mismo que `burbuja`:
+    /// con todo junto en el ForEach el compilador se rinde.
+    private func album(_ fotos: [Mensaje]) -> some View {
+        BurbujaAlbum(fotos: fotos) { m in
+            if m.tipo == "video" { videoAbierto = m } else { fotoAbierta = FotoAbierta(id: m.id) }
+        }
+    }
+
     /// Salta al mensaje que se eligió en una hoja.
     ///
     /// Con un respiro: si se salta mientras la hoja se está yendo, el destino
     /// queda tapado por la animación y parece que no pasó nada.
     private func saltarAlElegido(_ proxy: ScrollViewProxy) {
         guard let id = saltarA else { return }
+        // Una foto dentro de un álbum no tiene fila propia: la fila es el
+        // álbum entero, y lleva el id de su primera foto. Sin esto, buscar
+        // una de esas fotos no saltaba a ningún lado.
+        let destino = idDeLaFila(id)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            withAnimation { proxy.scrollTo(id, anchor: .center) }
+            withAnimation { proxy.scrollTo(destino, anchor: .center) }
             saltarA = nil
         }
+    }
+
+    /// El id de la fila que contiene ese mensaje (él mismo, o su álbum).
+    private func idDeLaFila(_ id: String) -> String {
+        for e in elementos {
+            if case .album(let fotos, _) = e, fotos.contains(where: { $0.id == id }) {
+                return fotos[0].id
+            }
+        }
+        return id
     }
 
     private static let anclaFinal = "fin-de-la-conversacion"
@@ -443,12 +475,17 @@ struct ConversationView: View {
         }
     }
 
-    /// Mensajes con su separador de día intercalado.
+    /// Mensajes con su separador de día intercalado, y las fotos mandadas de
+    /// una vez juntas en un álbum.
     private var elementos: [ElementoChat] {
         var resultado: [ElementoChat] = []
         var diaAnterior: DateComponents?
         var direccionAnterior: String?
-        for m in store.mensajes + store.pendientes {
+        let todos = store.mensajes + store.pendientes
+        var i = 0
+
+        while i < todos.count {
+            let m = todos[i]
             if let fecha = m.timestamp {
                 let dia = Calendar.current.dateComponents([.year, .month, .day], from: fecha)
                 if dia != diaAnterior {
@@ -459,10 +496,44 @@ struct ConversationView: View {
             }
             // El respiro de WhatsApp: cuando cambia quién habla, aire extra.
             let cambia = direccionAnterior != nil && direccionAnterior != m.direccion
-            resultado.append(.mensaje(m, cambiaDeLado: cambia))
+
+            // ¿Empieza aquí una tanda de fotos?
+            var fin = i
+            while fin + 1 < todos.count, vanJuntas(todos[fin], todos[fin + 1]) { fin += 1 }
+
+            if fin > i {
+                resultado.append(.album(Array(todos[i...fin]), cambiaDeLado: cambia))
+            } else {
+                resultado.append(.mensaje(m, cambiaDeLado: cambia))
+            }
             direccionAnterior = m.direccion
+            i = fin + 1
         }
         return resultado
+    }
+
+    /// Cuándo dos fotos seguidas son "la misma tanda".
+    ///
+    /// Se agrupan solo las que no pierden nada al juntarse: sin pie de foto,
+    /// sin cita, sin reacción y ya enviadas. Una foto con texto se queda sola
+    /// —si no, su texto desaparecería—, y las que todavía están subiendo
+    /// también, para ver el progreso de cada una.
+    private func vanJuntas(_ a: Mensaje, _ b: Mensaje) -> Bool {
+        guard agrupable(a), agrupable(b), a.direccion == b.direccion else { return false }
+        guard let ta = a.timestamp, let tb = b.timestamp else { return false }
+        // Cinco minutos: lo que tarda alguien en elegir y mandar varias fotos.
+        guard abs(tb.timeIntervalSince(ta)) <= 5 * 60 else { return false }
+        return Calendar.current.isDate(ta, inSameDayAs: tb)
+    }
+
+    private func agrupable(_ m: Mensaje) -> Bool {
+        (m.tipo == "image" || m.tipo == "video")
+            && m.media?.url != nil
+            && m.texto.isEmpty
+            && m.respondeA == nil
+            && m.reaccionMia == nil
+            && m.reaccionCliente == nil
+            && m.estado != "sending"
     }
 
     // MARK: - Responder
@@ -925,11 +996,14 @@ struct FotoAbierta: Identifiable {
 private enum ElementoChat: Identifiable {
     case separador(id: String, titulo: String)
     case mensaje(Mensaje, cambiaDeLado: Bool)
+    /// Varias fotos de una misma tanda, en una sola burbuja.
+    case album([Mensaje], cambiaDeLado: Bool)
 
     var id: String {
         switch self {
         case .separador(let id, _): return id
         case .mensaje(let m, _): return m.id
+        case .album(let fotos, _): return fotos[0].id
         }
     }
 }
@@ -957,6 +1031,17 @@ private struct BurbujaMensaje: View {
         mensaje.tipo == "sticker" && mensaje.media?.url != nil
     }
 
+    /// Una foto o un video sin pie de foto van SOLOS, sin burbuja, con la
+    /// hora encima — como WhatsApp hoy. Con pie de foto la burbuja se queda:
+    /// el texto necesita su fondo. Con cita también, por lo mismo.
+    private var esFotoSuelta: Bool {
+        (mensaje.tipo == "image" || mensaje.tipo == "video")
+            && mensaje.media?.url != nil
+            && mensaje.texto.isEmpty && citado == nil
+    }
+
+    private var sinBurbuja: Bool { esStickerSuelto || esFotoSuelta }
+
     var body: some View {
         HStack {
             if mensaje.esSaliente { Spacer(minLength: 60) }
@@ -967,6 +1052,8 @@ private struct BurbujaMensaje: View {
                 contenido
                 if mensaje.tipo == "audio", mensaje.media?.url != nil {
                     EmptyView()  // la burbuja de audio ya lleva su pie
+                } else if esFotoSuelta {
+                    EmptyView()  // la hora va encima de la foto
                 } else if esStickerSuelto {
                     // La hora del sticker va en su propia pastillita.
                     pieDeMensaje
@@ -977,15 +1064,15 @@ private struct BurbujaMensaje: View {
                     pieDeMensaje
                 }
             }
-            .padding(.horizontal, esStickerSuelto ? 0 : 12)
-            .padding(.vertical, esStickerSuelto ? 0 : 8)
+            .padding(.horizontal, sinBurbuja ? 0 : 12)
+            .padding(.vertical, sinBurbuja ? 0 : 8)
             // El tinte pinta los iconos de adjuntos y la onda ya escuchada. En
             // la burbuja propia iba en blanco, de cuando el fondo era el color
             // de la marca a pleno; sobre el pastel de ahora no se veía nada.
             // Los enlaces no dependen de esto: llevan su azul puesto a mano
             // (Color.enlace), el mismo en los dos lados.
             .tint(mensaje.esSaliente ? apariencia.colorBurbuja : Color.accentColor)
-            .background(esStickerSuelto ? AnyShapeStyle(.clear) : AnyShapeStyle(fondo),
+            .background(sinBurbuja ? AnyShapeStyle(.clear) : AnyShapeStyle(fondo),
                         in: RoundedRectangle(cornerRadius: 16))
             .contextMenu { menuContextual }
             .overlay(alignment: mensaje.esSaliente ? .bottomLeading : .bottomTrailing) {
@@ -1077,10 +1164,14 @@ private struct BurbujaMensaje: View {
             switch mensaje.tipo {
             case "image":
                 VStack(alignment: .leading, spacing: 6) {
-                    miniatura
-                        .onTapGesture {
-                            if let alAbrirFoto { alAbrirFoto() } else { verAdjunto = true }
-                        }
+                    if esFotoSuelta {
+                        miniatura
+                            .conHoraEncima(mensaje)
+                            .onTapGesture { abrirFoto() }
+                    } else {
+                        miniatura
+                            .onTapGesture { abrirFoto() }
+                    }
                     if !mensaje.texto.isEmpty {
                         Text(TextoWhatsapp.atribuido(mensaje.texto))
                             .frame(maxWidth: 230, alignment: .leading)
@@ -1109,6 +1200,22 @@ private struct BurbujaMensaje: View {
                         Text("Sticker")
                     }
                 }
+            case "video" where mensaje.media?.url != nil:
+                VStack(alignment: .leading, spacing: 6) {
+                    let vista = MiniaturaVideo(url: mensaje.media?.url ?? "")
+                    if esFotoSuelta {
+                        vista.conHoraEncima(mensaje)
+                            .onTapGesture { verAdjunto = true }
+                    } else {
+                        vista.clipShape(RoundedRectangle(cornerRadius: 12))
+                            .onTapGesture { verAdjunto = true }
+                    }
+                    if !mensaje.texto.isEmpty {
+                        Text(TextoWhatsapp.atribuido(mensaje.texto))
+                            .frame(maxWidth: 230, alignment: .leading)
+                    }
+                }
+                .fullScreenCover(isPresented: $verAdjunto) { visor }
             case "video", "document":
                 HStack(spacing: 8) {
                     Image(systemName: icono)
@@ -1140,6 +1247,10 @@ private struct BurbujaMensaje: View {
                     .multilineTextAlignment(.leading)
             }
         }
+    }
+
+    private func abrirFoto() {
+        if let alAbrirFoto { alAbrirFoto() } else { verAdjunto = true }
     }
 
     private var visor: some View {
@@ -1184,29 +1295,7 @@ private struct BurbujaMensaje: View {
         }
     }
 
-    private var pieDeMensaje: some View {
-        HStack(spacing: 4) {
-            Text(Formato.horaCorta(mensaje.timestamp))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            if mensaje.esSaliente {
-                switch mensaje.estado {
-                case "read":
-                    Text("✓✓").font(.caption2).kerning(-3).foregroundStyle(.blue)
-                case "delivered":
-                    Text("✓✓").font(.caption2).kerning(-3).foregroundStyle(.secondary)
-                case "failed":
-                    Image(systemName: "exclamationmark.circle")
-                        .font(.caption2).foregroundStyle(.red)
-                case "sending":
-                    Image(systemName: "clock")
-                        .font(.caption2).foregroundStyle(.secondary)
-                default:
-                    Text("✓").font(.caption2).foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
+    private var pieDeMensaje: some View { PieMensaje(mensaje: mensaje) }
 
     @ObservedObject private var apariencia = Apariencia.shared
     @Environment(\.colorScheme) private var esquema

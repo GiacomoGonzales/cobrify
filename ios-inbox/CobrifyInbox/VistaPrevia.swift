@@ -13,12 +13,33 @@ import FirebaseFirestore
 enum VistaPrevia {
     static let activa = ProcessInfo.processInfo.arguments.contains("-vistaPrevia")
 
-    @MainActor static var pantalla: some View {
-        NavigationStack {
-            ConversationView(conv: conversacion, alAbrir: {})
+    /// Con `-bandeja` arranca en la lista de chats (para probar carpetas,
+    /// filtros y el paso a la conversación); sin él, directo a un chat.
+    static let enBandeja = ProcessInfo.processInfo.arguments.contains("-bandeja")
+
+    @MainActor @ViewBuilder static var pantalla: some View {
+        if enBandeja {
+            ConversationListView()
+                .environmentObject(SessionStore())
+        } else {
+            NavigationStack {
+                ConversationView(conv: conversacion, alAbrir: {})
+            }
+            .onAppear { CatalogoStore.shared.respuestasRapidas = atajos }
         }
-        .onAppear { CatalogoStore.shared.respuestasRapidas = atajos }
     }
+
+    /// Con `-sinCarpetas` la bandeja arranca sin ninguna, para ver el
+    /// cartel de "Sin carpetas".
+    static var etiquetas: [Etiqueta] {
+        ProcessInfo.processInfo.arguments.contains("-sinCarpetas") ? [] : etiquetasDePrueba
+    }
+
+    private static let etiquetasDePrueba: [Etiqueta] = [
+        Etiqueta(id: "interesados", nombre: "Interesados", colorHex: "#2D7FF9"),
+        Etiqueta(id: "pago", nombre: "Pagó — en implementación", colorHex: "#1B6E4A"),
+        Etiqueta(id: "seguimiento", nombre: "Seguimiento", colorHex: "#EA7C1C"),
+    ]
 
     static let conversacion = Conversacion(id: "vista-previa", data: [
         "nombre": "Giacomo González",
@@ -38,9 +59,14 @@ enum VistaPrevia {
             ("c3", "Dra. Rojas", "51955500123", cerrada),
             ("c4", "Bodega Don Pepe", "51933322211", abierta),
             ("c5", "Minimarket La Esquina", "51944455566", abierta),
-        ].map { id, nombre, waId, vence in
-            Conversacion(id: id, data: ["nombre": nombre, "waId": waId, "ultimoMensaje": "Gracias!",
-                                        "ventanaVenceAt": vence, "ultimoMensajeAt": Timestamp(date: Date())])
+        ].enumerated().map { i, fila in
+            let (id, nombre, waId, vence) = fila
+            return Conversacion(id: id, data: [
+                "nombre": nombre, "waId": waId, "ultimoMensaje": "Gracias!",
+                "ventanaVenceAt": vence, "ultimoMensajeAt": Timestamp(date: Date().addingTimeInterval(Double(-i) * 900)),
+                "sinLeer": i % 2 == 0 ? i + 1 : 0,
+                "etiquetas": [["interesados"], ["pago"], ["interesados", "seguimiento"], [], ["pago"]][i],
+            ])
         }
     }
 
@@ -68,7 +94,34 @@ enum VistaPrevia {
             m(-40 + i, i % 2 == 0 ? "entrante" : "saliente",
               i % 2 == 0 ? "Consulta \(i / 2 + 1): ¿el plan incluye la app del celular?" : "Sí, todos los planes la incluyen.")
         }
-        return relleno + [
+        /// Un video de muestra, para ver la vista previa con el play.
+        func video(_ i: Int, _ direccion: String, _ nombre: String) -> Mensaje {
+            Mensaje(id: "vp-video-\(i)", data: [
+                "direccion": direccion, "tipo": "video", "texto": "", "estado": "read",
+                "timestamp": Timestamp(date: ahora.addingTimeInterval(Double(i - 10) * 60)),
+                "media": ["url": "https://test-videos.co.uk/vids/\(nombre)",
+                          "mimeType": "video/mp4", "filename": "muestra.mp4"],
+            ])
+        }
+
+        // Tandas de fotos, para ver los álbumes de 2, 3 y 5.
+        let tandaDeCinco = (0..<5).map { k in
+            foto(-30 + k, "saliente", "album\(k)", 900 + k * 40, 1200)
+        }
+        let tandaDeTres = (0..<3).map { k in
+            foto(-24 + k, "entrante", "tres\(k)", 1200, 900)
+        }
+        let tandaDeDos = (0..<2).map { k in
+            foto(-20 + k, "saliente", "dos\(k)", 1000, 1000)
+        }
+        // Una tanda mezclada: dos fotos y un video, todo en el mismo álbum.
+        let tandaMixta = [
+            foto(-16, "entrante", "mix0", 1000, 1000),
+            video(-15, "entrante", "bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4"),
+            foto(-14, "entrante", "mix1", 1000, 1000),
+        ]
+        return relleno + tandaDeCinco + tandaDeTres + tandaDeDos + tandaMixta + [
+            video(-12, "saliente", "jellyfish/mp4/h264/360/Jellyfish_360_10s_1MB.mp4"),
             foto(-9, "entrante", "local", 900, 1200, "Así quedó el local, ¿qué te parece?"),
             foto(-8, "saliente", "menu", 1200, 800),
             foto(-7, "entrante", "ticket", 800, 800, "El ticket de ayer"),

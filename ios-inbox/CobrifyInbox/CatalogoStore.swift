@@ -88,6 +88,13 @@ final class CatalogoStore: ObservableObject {
 
     func empezar() {
         guard listeners.isEmpty else { return }
+        #if DEBUG
+        if VistaPrevia.activa {
+            if etiquetas.isEmpty { etiquetas = VistaPrevia.etiquetas }
+            if respuestasRapidas.isEmpty { respuestasRapidas = VistaPrevia.atajos }
+            return
+        }
+        #endif
         let db = Firestore.firestore()
         listeners.append(db.collection("whatsappSettings").document("etiquetas")
             .addSnapshotListener { [weak self] snap, _ in
@@ -124,14 +131,45 @@ final class CatalogoStore: ObservableObject {
         guard !id.isEmpty else { return "Ponle un nombre válido." }
         guard !etiquetas.contains(where: { $0.id == id }) else { return "Ya existe una carpeta con ese nombre." }
 
-        let lista = (etiquetas + [Etiqueta(id: id, nombre: limpio, colorHex: colorHex)])
-            .map { ["id": $0.id, "nombre": $0.nombre, "color": $0.colorHex] }
+        return await guardarEtiquetas(etiquetas + [Etiqueta(id: id, nombre: limpio, colorHex: colorHex)],
+                                      siFalla: "No se pudo crear la carpeta.")
+    }
+
+    /// Renombrar o recolorear una carpeta. El id NO cambia: si cambiara, los
+    /// chats que ya están dentro se quedarían apuntando a una carpeta que ya
+    /// no existe. Es lo mismo que hace la web.
+    func editarEtiqueta(_ id: String, nombre: String, colorHex: String) async -> String? {
+        let limpio = nombre.trimmingCharacters(in: .whitespaces)
+        guard !limpio.isEmpty else { return "Ponle un nombre." }
+        guard etiquetas.contains(where: { $0.id == id }) else { return "Esa carpeta ya no existe." }
+        let lista = etiquetas.map { e in
+            e.id == id ? Etiqueta(id: id, nombre: limpio, colorHex: colorHex) : e
+        }
+        return await guardarEtiquetas(lista, siFalla: "No se pudo guardar la carpeta.")
+    }
+
+    /// Borrar una carpeta.
+    ///
+    /// NO recorre las conversaciones quitándoles la etiqueta: el id huérfano
+    /// simplemente deja de mostrarse (la pantalla solo pinta etiquetas que
+    /// estén en el catálogo). Es barato, es reversible —recrearla con el
+    /// mismo nombre la revive con sus chats dentro— y evita una escritura
+    /// masiva por un toque. La web decide exactamente lo mismo.
+    @discardableResult
+    func borrarEtiqueta(_ id: String) async -> String? {
+        await guardarEtiquetas(etiquetas.filter { $0.id != id },
+                               siFalla: "No se pudo borrar la carpeta.")
+    }
+
+    /// Escribe la lista completa en el documento compartido con la web.
+    private func guardarEtiquetas(_ lista: [Etiqueta], siFalla: String) async -> String? {
+        let arr = lista.map { ["id": $0.id, "nombre": $0.nombre, "color": $0.colorHex] }
         do {
             try await Firestore.firestore().collection("whatsappSettings").document("etiquetas")
-                .setData(["lista": lista, "updatedAt": FieldValue.serverTimestamp()], merge: true)
+                .setData(["lista": arr, "updatedAt": FieldValue.serverTimestamp()], merge: true)
             return nil
         } catch {
-            return "No se pudo crear la carpeta."
+            return siFalla
         }
     }
 

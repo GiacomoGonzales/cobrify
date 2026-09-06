@@ -34,6 +34,7 @@ import { Boton, useMenuDeFila, BotonDeFila, CajaMenu, ItemMenu, SeparadorMenu } 
 import MiniaturaPdf, { formatoKB } from '@/components/chat/MiniaturaPdf'
 import SelectorPlantilla from '@/components/chat/SelectorPlantilla'
 import VisorMedia from '@/components/chat/VisorMedia'
+import AlbumMedia, { VistaVideo, VisorVideo } from '@/components/chat/AlbumMedia'
 import PanelMultimedia from '@/components/chat/PanelMultimedia'
 import ConfiguracionChat from '@/components/chat/ConfiguracionChat'
 import { useGrabadora, relojDeGrabacion } from '@/components/chat/grabadoraDeVoz'
@@ -161,6 +162,7 @@ export default function Chat() {
   const [adjuntoGuardado, setAdjuntoGuardado] = useState(null)
   // Visor de imagenes, panel de archivos y busqueda dentro de la conversacion.
   const [visorIndice, setVisorIndice] = useState(null)
+  const [videoAbierto, setVideoAbierto] = useState(null)
   const [panelMedia, setPanelMedia] = useState(false)
   // El menu "..." de la cabecera, el mismo del admin.
   const menuCabecera = useMenuDeFila()
@@ -479,18 +481,29 @@ export default function Chat() {
     return [...mensajes, ...enVuelo]
   }, [mensajes, pendientes])
 
-  // El hilo cortado por dias. El separador se arma una sola vez aca en vez de
-  // preguntarse en cada burbuja si cambio el dia respecto de la anterior.
+  // El hilo cortado por dias, y las fotos y videos de una misma tanda juntos
+  // en un album. El separador se arma una sola vez aca en vez de preguntarse
+  // en cada burbuja si cambio el dia respecto de la anterior.
   const elementos = useMemo(() => {
     const salida = []
     let diaPrevio = null
-    for (const m of hilo) {
+    let i = 0
+    while (i < hilo.length) {
+      const m = hilo[i]
       const dia = claveDeDia(m.timestamp)
       if (dia && dia !== diaPrevio) {
         salida.push({ separador: true, id: `dia-${dia}`, rotulo: formatearDia(m.timestamp) })
         diaPrevio = dia
       }
-      salida.push({ separador: false, id: m.id, mensaje: m })
+      let fin = i
+      while (fin + 1 < hilo.length && vanJuntas(hilo[fin], hilo[fin + 1])) fin += 1
+      if (fin > i) {
+        const grupo = hilo.slice(i, fin + 1)
+        salida.push({ separador: false, id: grupo[0].id, album: grupo, mensaje: grupo[grupo.length - 1] })
+      } else {
+        salida.push({ separador: false, id: m.id, mensaje: m })
+      }
+      i = fin + 1
     }
     return salida
   }, [hilo])
@@ -1372,6 +1385,35 @@ export default function Chat() {
                 }
                 const m = el.mensaje
                 const mio = m.direccion === 'saliente'
+                if (el.album) {
+                  return (
+                    <div key={el.id} className={`flex ${mio ? 'justify-end' : 'justify-start'}`}>
+                      <div
+                        className={`text-[14px] leading-snug rounded-2xl p-1 ${
+                          mio
+                            ? 'bg-primary-50 border border-primary-100 rounded-br-sm'
+                            : 'bg-white border border-gray-200 rounded-bl-sm'
+                        }`}
+                      >
+                        <AlbumMedia
+                          mensajes={el.album}
+                          onAbrirFoto={(f) => abrirVisorDe(f.media)}
+                          onAbrirVideo={(v) => setVideoAbierto(v.media.url)}
+                        />
+                        <div className="flex items-center gap-1 justify-end mt-0.5 pr-1 text-gray-400">
+                          <span className="text-[11px]">{formatearHora(m.timestamp)}</span>
+                          {mio && (
+                            m.estado === 'read'
+                              ? <CheckCheck className="w-3.5 h-3.5 text-blue-200" />
+                              : m.estado === 'delivered'
+                                ? <CheckCheck className="w-3.5 h-3.5" />
+                                : <Check className="w-3.5 h-3.5" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                }
                 // Los stickers y las notas de voz no llevan burbuja: el sticker tiene su
                 // propia forma recortada y el reproductor de audio ya trae su recuadro.
                 // Meterlos en una burbuja era poner un marco sobre otro marco.
@@ -1543,10 +1585,9 @@ export default function Chat() {
                         </button>
                       )}
                       {m.tipo === 'video' && m.media?.url && (
-                        // preload="metadata": baja solo la cabecera para poder
-                        // mostrar el primer cuadro y la duracion. Sin esto el
-                        // navegador se traia el video entero al abrir el chat.
-                        <video src={m.media.url} controls preload="metadata" className="rounded-lg mb-1 max-w-full max-h-72" />
+                        <div className="mb-1">
+                          <VistaVideo media={m.media} onAbrir={() => setVideoAbierto(m.media.url)} />
+                        </div>
                       )}
                       {m.tipo === 'audio' && m.media?.url && (
                         <audio src={m.media.url} controls className="mb-1 max-w-full" />
@@ -1935,6 +1976,10 @@ export default function Chat() {
         </div>
       )}
 
+      {videoAbierto && (
+        <VisorVideo url={videoAbierto} onCerrar={() => setVideoAbierto(null)} />
+      )}
+
       {visorIndice !== null && imagenesDelHilo.length > 0 && (
         <VisorMedia
           imagenes={imagenesDelHilo}
@@ -2114,6 +2159,35 @@ function BurbujaDocumento({ media }) {
 const BORDE_FOTO = 4 // el hilo entre la foto y el borde de la burbuja (p-1)
 const TOPE_ANCHO = 360 // 22.5rem
 const TOPE_ALTO = 336 // 21rem
+
+/**
+ * Cuando dos mensajes seguidos son "la misma tanda" y van en un album.
+ *
+ * Las mismas reglas que la app del iPhone, a proposito: fotos o videos
+ * consecutivos, del mismo lado, del mismo dia y con menos de cinco minutos
+ * entre uno y otro. Solo se juntan los que no pierden nada al juntarse: con
+ * pie de foto, con cita, con reaccion o a medio enviar se quedan solos.
+ */
+const agrupableEnAlbum = (m) => (
+  (m.tipo === 'image' || m.tipo === 'video')
+  && Boolean(m.media?.url)
+  && !m.texto
+  && !m.respondeA
+  && !m.reacciones?.mia
+  && !m.reacciones?.cliente
+  && m.estado !== 'enviando'
+  && m.estado !== 'failed'
+)
+
+const vanJuntas = (a, b) => {
+  if (!agrupableEnAlbum(a) || !agrupableEnAlbum(b)) return false
+  if (a.direccion !== b.direccion) return false
+  const ta = a.timestamp?.toDate?.() || a.timestamp
+  const tb = b.timestamp?.toDate?.() || b.timestamp
+  if (!(ta instanceof Date) || !(tb instanceof Date)) return false
+  if (claveDeDia(a.timestamp) !== claveDeDia(b.timestamp)) return false
+  return Math.abs(tb - ta) <= 5 * 60 * 1000
+}
 
 const medidasDeImagen = (media) => {
   const { ancho, alto } = media || {}
