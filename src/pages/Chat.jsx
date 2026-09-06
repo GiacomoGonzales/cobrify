@@ -1231,12 +1231,14 @@ export default function Chat() {
           ${activaId || configAbierta ? 'max-md:translate-x-0' : 'max-md:translate-x-full'}`}
       >
         {arrastrando && activa && !configAbierta && (
-          <div className="absolute inset-3 z-40 rounded-2xl border-2 border-dashed border-primary-500 bg-primary-50/90 backdrop-blur-sm grid place-items-center pointer-events-none">
-            <div className="text-center">
-              <Upload className="w-8 h-8 mx-auto text-primary-600 mb-2" />
-              <p className="text-[15px] font-semibold text-gray-900">Suelta el archivo aquí</p>
-              <p className="text-[12.5px] text-gray-600 mt-0.5">
-                {ventanaAbierta ? 'Se envía a esta conversación' : 'La ventana de 24 horas está cerrada'}
+          // Apenas un velo y el marco punteado: la conversación se sigue
+          // viendo detrás. Antes el recuadro la tapaba entera con un verde
+          // casi opaco y en modo oscuro el texto no se leía.
+          <div className="absolute inset-3 z-40 rounded-2xl border-2 border-dashed border-primary-500/70 bg-black/10 grid place-items-center pointer-events-none">
+            <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-white shadow-lg border border-gray-200">
+              <Upload className="w-4 h-4 text-primary-600 flex-none" />
+              <p className="text-[13px] font-medium text-gray-900">
+                {ventanaAbierta ? 'Suelta el archivo aquí' : 'La ventana de 24 horas está cerrada'}
               </p>
             </div>
           </div>
