@@ -38,6 +38,7 @@ import QRCode from 'qrcode'
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { limpiarSlug, problemaDelSlug } from '@/utils/catalogSlug'
+import { normalizeCustomDomain } from '@/services/brandingService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useGuardado } from '@/components/settings/useGuardado'
@@ -492,7 +493,10 @@ export default function Catalogo() {
       },
       hotelBooking,
       catalogSlug: catalogSlug.toLowerCase().trim(),
-      customDomain: catalogCustomDomain.toLowerCase().trim().replace(/^www\./, '') || null,
+      // `normalizeCustomDomain` es el criterio compartido (brandingService): quita
+      // el protocolo, la ruta y el www. Acá se hacía a mano y solo el www, así que
+      // pegar la dirección entera guardaba 'cobrifyperu.comcatalogomistica'.
+      customDomain: normalizeCustomDomain(catalogCustomDomain) || null,
       catalogColor,
       catalogTheme,
       catalogCoverImage,
@@ -2312,7 +2316,12 @@ export default function Catalogo() {
                       <input
                         type="text"
                         value={catalogCustomDomain}
-                        onChange={(e) => setCatalogCustomDomain(e.target.value.toLowerCase().replace(/[^a-z0-9.-]/g, ''))}
+                        onChange={(e) => setCatalogCustomDomain(e.target.value.toLowerCase().replace(/[^a-z0-9./:-]/g, ''))}
+                        onBlur={(e) => setCatalogCustomDomain(normalizeCustomDomain(e.target.value))}
+                        onPaste={(e) => {
+                          e.preventDefault()
+                          setCatalogCustomDomain(normalizeCustomDomain(e.clipboardData.getData('text')))
+                        }}
                         placeholder="mitienda.com"
                         className="w-full px-4 py-2.5 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                       />
