@@ -35,6 +35,8 @@ import MiniaturaPdf, { formatoKB } from '@/components/chat/MiniaturaPdf'
 import SelectorPlantilla from '@/components/chat/SelectorPlantilla'
 import VisorMedia from '@/components/chat/VisorMedia'
 import AlbumMedia, { VistaVideo, VisorVideo } from '@/components/chat/AlbumMedia'
+import EditorFoto from '@/components/chat/EditorFoto'
+import ReenviarSheet from '@/components/chat/ReenviarSheet'
 import PanelMultimedia from '@/components/chat/PanelMultimedia'
 import ConfiguracionChat from '@/components/chat/ConfiguracionChat'
 import { useGrabadora, relojDeGrabacion } from '@/components/chat/grabadoraDeVoz'
@@ -163,6 +165,9 @@ export default function Chat() {
   // Visor de imagenes, panel de archivos y busqueda dentro de la conversacion.
   const [visorIndice, setVisorIndice] = useState(null)
   const [videoAbierto, setVideoAbierto] = useState(null)
+  // Editar y reenviar desde el visor de fotos.
+  const [editando, setEditando] = useState(null)
+  const [reenviando, setReenviando] = useState(null)
   const [panelMedia, setPanelMedia] = useState(false)
   // El menu "..." de la cabecera, el mismo del admin.
   const menuCabecera = useMenuDeFila()
@@ -543,6 +548,44 @@ export default function Chat() {
   const abrirVisorDe = (media) => {
     const i = imagenesDelHilo.findIndex((x) => x.url === media.url)
     setVisorIndice(i >= 0 ? i : 0)
+  }
+
+  /**
+   * Reenviar una foto que YA esta guardada: viaja su direccion, no el
+   * archivo. Devuelve cuantas salieron y avisa de las que no.
+   */
+  const reenviarGuardada = async (conversationIds, media, caption = '') => {
+    const idToken = await getAuth().currentUser?.getIdToken()
+    const fallos = []
+    for (const id of conversationIds) {
+      try {
+        // Una por una a proposito: si una falla, las demas igual salen.
+        // eslint-disable-next-line no-await-in-loop
+        await enviarArchivoGuardado(id, media, caption, idToken)
+      } catch (e) {
+        fallos.push(e.message || 'no se pudo enviar')
+      }
+    }
+    const salieron = conversationIds.length - fallos.length
+    if (salieron > 0) toast.success(salieron === 1 ? 'Reenviada' : `Reenviada a ${salieron}`)
+    if (fallos.length) throw new Error(fallos[0])
+  }
+
+  /** Mandar una foto NUEVA (la que se acaba de pintar) a varias conversaciones. */
+  const enviarArchivoA = async (conversationIds, archivo, caption = '') => {
+    const idToken = await getAuth().currentUser?.getIdToken()
+    const fallos = []
+    for (const id of conversationIds) {
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await enviarArchivo(id, archivo, caption, idToken)
+      } catch (e) {
+        fallos.push(e.message || 'no se pudo enviar')
+      }
+    }
+    const salieron = conversationIds.length - fallos.length
+    if (salieron > 0) toast.success(salieron === 1 ? 'Enviada' : `Enviada a ${salieron}`)
+    if (fallos.length) throw new Error(fallos[0])
   }
 
   // Ir a un mensaje puntual: lo trae a la vista y lo resalta un momento.
@@ -1980,9 +2023,34 @@ export default function Chat() {
         <VisorVideo url={videoAbierto} onCerrar={() => setVideoAbierto(null)} />
       )}
 
+      {editando && (
+        <EditorFoto
+          media={editando}
+          onCerrar={() => setEditando(null)}
+          onEnviar={async (archivo, pie) => {
+            await enviarArchivoA([activaId], archivo, pie)
+            setEditando(null)
+            setVisorIndice(null)
+          }}
+        />
+      )}
+
+      {reenviando && (
+        <ReenviarSheet
+          conversaciones={conversaciones}
+          onCerrar={() => setReenviando(null)}
+          onEnviar={async (ids) => {
+            await reenviarGuardada(ids, reenviando, '')
+            setReenviando(null)
+          }}
+        />
+      )}
+
       {visorIndice !== null && imagenesDelHilo.length > 0 && (
         <VisorMedia
           imagenes={imagenesDelHilo}
+          onEditar={(media) => setEditando(media)}
+          onReenviar={(media) => setReenviando(media)}
           indiceInicial={visorIndice}
           onCerrar={() => setVisorIndice(null)}
         />

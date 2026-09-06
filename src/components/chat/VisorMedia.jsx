@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
-import { ChevronLeft, ChevronRight, Download, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, Forward, PencilLine, X } from 'lucide-react'
+import { descargarArchivo, nombreDeArchivo } from '@/utils/descargarArchivo'
 
 /**
  * Visor de imágenes a pantalla completa, liviano.
@@ -10,10 +11,15 @@ import { ChevronLeft, ChevronRight, Download, X } from 'lucide-react'
  *
  * Navega entre todas las imágenes de la conversación con las flechas o el
  * teclado, y cierra con Escape.
+ *
+ * Arriba: editar (pintar encima), reenviar y descargar — lo mismo que ofrece
+ * WhatsApp al abrir una foto. `onEditar` y `onReenviar` son opcionales: sin
+ * ellos el visor se comporta como antes.
  */
-export default function VisorMedia({ imagenes, indiceInicial = 0, onCerrar }) {
+export default function VisorMedia({ imagenes, indiceInicial = 0, onCerrar, onEditar, onReenviar }) {
   const [i, setI] = useState(indiceInicial)
   const [originalListo, setOriginalListo] = useState(false)
+  const [bajando, setBajando] = useState(false)
 
   const actual = imagenes[i]
 
@@ -54,16 +60,36 @@ export default function VisorMedia({ imagenes, indiceInicial = 0, onCerrar }) {
           {imagenes.length > 1 ? `${i + 1} de ${imagenes.length}` : ''}
         </span>
         <div className="flex items-center gap-1">
-          <a
-            href={actual.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            download
-            className="p-2 hover:text-white rounded-lg hover:bg-white/10"
-            title="Descargar original"
+          {onEditar && (
+            <button
+              onClick={() => onEditar(actual)}
+              className="p-2 hover:text-white rounded-lg hover:bg-white/10"
+              title="Editar y enviar"
+            >
+              <PencilLine className="w-5 h-5" />
+            </button>
+          )}
+          {onReenviar && (
+            <button
+              onClick={() => onReenviar(actual)}
+              className="p-2 hover:text-white rounded-lg hover:bg-white/10"
+              title="Reenviar"
+            >
+              <Forward className="w-5 h-5" />
+            </button>
+          )}
+          <button
+            onClick={async () => {
+              setBajando(true)
+              await descargarArchivo(actual.url, nombreDeArchivo(actual))
+              setBajando(false)
+            }}
+            disabled={bajando}
+            className="p-2 hover:text-white rounded-lg hover:bg-white/10 disabled:opacity-50"
+            title="Descargar"
           >
             <Download className="w-5 h-5" />
-          </a>
+          </button>
           <button onClick={onCerrar} className="p-2 hover:text-white rounded-lg hover:bg-white/10" aria-label="Cerrar">
             <X className="w-5 h-5" />
           </button>
