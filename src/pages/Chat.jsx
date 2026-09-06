@@ -45,6 +45,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { MARCA_CHAT } from '@/utils/dominioChat'
 import { useAvisosDelChat } from '@/hooks/useAvisosDelChat'
 import { useTema } from '@/utils/temaOscuro'
+import { estiloFondo, useApariencia } from '@/utils/aparienciaChat'
 import BotonTema from '@/components/BotonTema'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
@@ -175,6 +176,8 @@ export default function Chat() {
   const menuTagsConv = useMenuDeFila()
   // Claro u oscuro. Se guarda aparte del panel: son personas distintas.
   const [tema, cambiarTema] = useTema('chatTema')
+  // El fondo del hilo, elegido en Configuración > Fondo del chat.
+  const apariencia = useApariencia()
 
   // En la app: iconos del status bar segun el tema (la franja de arriba es
   // blanca u oscura), y al salir se devuelve el estilo de la app principal.
@@ -1414,6 +1417,11 @@ export default function Chat() {
                 pegadoAlFondo.current = abajo
                 setLejosDelFondo((antes) => (antes === !abajo ? antes : !abajo))
               }}
+              // El fondo va en el contenedor que hace scroll. Por defecto el
+              // navegador lo deja QUIETO respecto del elemento, no pegado al
+              // contenido: la foto se queda fija mientras pasan los mensajes,
+              // como en WhatsApp.
+              style={estiloFondo(apariencia, tema === 'oscuro')}
               className="flex-1 overflow-y-auto px-4 py-4 space-y-2"
             >
               {elementos.map((el) => {

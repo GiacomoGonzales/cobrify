@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
 import { Seccion, Campo, Entrada, Selector, AreaTexto, Boton } from '@/components/admin/ui'
+import { FONDOS, estiloFondo, guardarApariencia, prepararFoto, useApariencia } from '@/utils/aparienciaChat'
 import {
   obtenerPerfil,
   guardarPerfil,
@@ -55,6 +56,7 @@ export default function ConfiguracionChat({ onVolver }) {
           ['perfil', 'Perfil del negocio'],
           ['automaticos', 'Respuestas automáticas'],
           ['rapidas', 'Respuestas rápidas'],
+          ['apariencia', 'Fondo del chat'],
         ].map(([id, nombre]) => (
           <button
             key={id}
@@ -74,9 +76,140 @@ export default function ConfiguracionChat({ onVolver }) {
           {seccion === 'perfil' && <SeccionPerfil />}
           {seccion === 'automaticos' && <SeccionAutomaticos />}
           {seccion === 'rapidas' && <SeccionRapidas />}
+          {seccion === 'apariencia' && <SeccionApariencia />}
         </div>
       </div>
     </div>
+  )
+}
+
+/* =========================== FONDO DEL CHAT =========================== */
+/**
+ * El fondo de la conversación: los mismos siete del iPhone, o una foto tuya.
+ *
+ * Se guarda en ESTE navegador, no en la cuenta: es gusto personal, igual que
+ * en el teléfono. Por eso elegirlo aquí no cambia el del iPhone.
+ */
+function SeccionApariencia() {
+  const apariencia = useApariencia()
+  const toast = useToast()
+  const archivo = useRef(null)
+  const [trabajando, setTrabajando] = useState(false)
+
+  const elegirFoto = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setTrabajando(true)
+    try {
+      const datos = await prepararFoto(file)
+      guardarApariencia({ foto: datos, fondoId: 'foto' })
+      toast.success('Fondo actualizado')
+    } catch (error) {
+      // El caso tipico: el navegador se quedo sin espacio para guardarla.
+      toast.error(error?.name === 'QuotaExceededError'
+        ? 'La foto es muy pesada para guardarla en este navegador. Prueba con una más chica.'
+        : (error.message || 'No se pudo usar esa foto.'))
+    } finally {
+      setTrabajando(false)
+    }
+  }
+
+  return (
+    <Seccion titulo="Fondo del chat" descripcion="Elige un color o pon una foto tuya. Se guarda en este navegador; el fondo de la app del celular se elige aparte.">
+      <input ref={archivo} type="file" accept="image/*" onChange={elegirFoto} className="hidden" />
+
+      <div className="grid grid-cols-4 sm:grid-cols-7 gap-3">
+        {FONDOS.map((f) => {
+          const elegido = apariencia.fondoId === f.id
+          const esFoto = f.id === 'foto'
+          return (
+            <button
+              key={f.id}
+              type="button"
+              disabled={trabajando}
+              onClick={() => {
+                // Sin foto todavia, el toque abre el selector de archivos.
+                if (esFoto && !apariencia.foto) archivo.current?.click()
+                else guardarApariencia({ fondoId: f.id })
+              }}
+              className="block text-left"
+            >
+              <span
+                className={`block h-24 rounded-xl border bg-gray-100 bg-cover bg-center ${
+                  elegido ? 'border-gray-900 ring-2 ring-gray-900' : 'border-gray-200'
+                }`}
+                style={
+                  esFoto
+                    ? (apariencia.foto ? { backgroundImage: `url(${apariencia.foto})` } : undefined)
+                    : estiloFondo({ fondoId: f.id, foto: '', atenuar: 0 })
+                }
+              >
+                {esFoto && !apariencia.foto && (
+                  <span className="h-full grid place-items-center text-gray-400">
+                    <ImageIcon className="w-5 h-5" />
+                  </span>
+                )}
+              </span>
+              <span className={`block mt-1 text-[11.5px] truncate ${elegido ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
+                {f.nombre}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {apariencia.fondoId === 'foto' && apariencia.foto && (
+        <div className="mt-5 space-y-4">
+          <div className="flex items-center gap-3">
+            <Boton variante="secundario" onClick={() => archivo.current?.click()} disabled={trabajando}>
+              Elegir otra foto
+            </Boton>
+            <button
+              type="button"
+              onClick={() => { guardarApariencia({ foto: '', fondoId: 'clasico' }); toast.success('Foto quitada') }}
+              className="text-[13px] text-gray-500 hover:text-red-600"
+            >
+              Quitar la foto
+            </button>
+          </div>
+
+          <Campo etiqueta="Atenuar el fondo">
+            <input
+              type="range"
+              min="0"
+              max="0.6"
+              step="0.02"
+              value={apariencia.atenuar}
+              onChange={(e) => guardarApariencia({ atenuar: Number(e.target.value) })}
+              className="w-full max-w-xs"
+            />
+            <p className="text-[12px] text-gray-500 mt-1">
+              Si la foto es clara, los mensajes cuestan de leer. De noche se oscurece un poco más sola.
+            </p>
+          </Campo>
+        </div>
+      )}
+
+      <div className="mt-6">
+        <p className="text-[12px] text-gray-500 mb-2">Vista previa</p>
+        <div
+          className="rounded-xl border border-gray-200 p-4 space-y-2 bg-gray-100 bg-cover bg-center"
+          style={estiloFondo(apariencia)}
+        >
+          <div className="flex">
+            <span className="max-w-[75%] rounded-2xl rounded-bl-sm bg-white border border-gray-200 px-3.5 py-2 text-[13px]">
+              Hola, ¿cómo va todo?
+            </span>
+          </div>
+          <div className="flex justify-end">
+            <span className="max-w-[75%] rounded-2xl rounded-br-sm bg-primary-50 border border-primary-100 px-3.5 py-2 text-[13px]">
+              ¡Todo bien! 🙌
+            </span>
+          </div>
+        </div>
+      </div>
+    </Seccion>
   )
 }
 
