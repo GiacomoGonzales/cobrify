@@ -15,7 +15,7 @@
  */
 export default {
   id: 'reportes',
-  actualizado: '05/09/2026',
+  actualizado: '06/09/2026',
   intro:
     'Reportes responde las preguntas que no se ven en el día a día: qué se vende de verdad, quién compra, cuánto ganas y en qué se te va el dinero. Son diez reportes distintos, todos calculados sobre tus ventas y gastos ya registrados.',
 
@@ -147,6 +147,19 @@ export default {
         {
           type: 'texto',
           text: '**Productos** te da el **Top 5 Productos**, el **Top 5 Categorías**, la **Evolución de ventas**, el desglose de **Ventas por Categoría** y **por Marca**, y la lista completa de **Todos los Productos Vendidos** en el período.',
+        },
+        {
+          type: 'texto',
+          text: 'Esa lista se puede **imprimir o descargar en PDF** cuando quieras. Sobre el título de **Todos los Productos Vendidos** tienes el botón **Ticket**, que la manda a la impresora de tickets, y el botón **PDF**, que baja el archivo. Sirve para saber qué salió hoy, qué salió ayer o qué salió el mes pasado sin tener que esperar al cierre de caja.',
+        },
+        { type: 'ui', kind: 'boton', label: 'Ticket' },
+        {
+          type: 'texto',
+          text: 'El papel sale con el mismo formato que el resumen del cierre de caja, así que los dos se leen igual. Al lado de los botones eliges el ancho del rollo: **80 mm** es el de mostrador y **58 mm** el chico.',
+        },
+        {
+          type: 'ojo',
+          text: 'Imprime exactamente lo que estás viendo: el período, la sucursal filtrada y, si escribiste algo en el buscador, solo los productos que coinciden. Si quieres el resumen completo, borra la búsqueda antes de imprimir.',
         },
         {
           type: 'texto',
@@ -328,6 +341,10 @@ export default {
         {
           type: 'texto',
           text: 'Si activaste los campos opcionales del cliente **Licencia / Resolución** y **Tarjeta de Propiedad** (Configuración → Campos del cliente), el Excel de ventas los trae como columnas propias en las hojas **Detalle Completo** e **Items Detallados**, al lado del cliente. Si no los tienes activados, esas columnas no aparecen y el reporte se ve igual que siempre.',
+        },
+        {
+          type: 'texto',
+          text: 'Aparte del Excel, el reporte de **Productos** se puede sacar en **Ticket** o en **PDF** desde los botones que están sobre la lista de Todos los Productos Vendidos.',
         },
         {
           type: 'ojo',

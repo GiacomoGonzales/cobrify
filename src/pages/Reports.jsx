@@ -5,6 +5,8 @@ import {
   ShoppingCart,
   Users,
   Package,
+  Printer,
+  FileText,
   Loader2,
   Download,
   BarChart3,
@@ -24,10 +26,12 @@ import {
   Award,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useToast } from '@/contexts/ToastContext'
 import { useDataPermissions } from '@/hooks/useDataPermissions'
 import RealEstateReports from './RealEstateReports'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
+import Button from '@/components/ui/Button'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { documentLabel, esRuc } from '@/utils/documentType'
@@ -72,6 +76,9 @@ import {
 import { CHART_COLORS, CHART_MUTED, colorForKey, assignColors, capSeries } from '@/utils/chartColors'
 import { getSaleSeller } from '@/utils/saleSeller'
 import { esDeSucursal } from '@/utils/branchScope'
+import { resumenDeProductos, ticketProductosHtml, descargarProductosPdf } from '@/utils/reporteProductos'
+import { getRangeLabel } from '@/services/reportExportService'
+import { printHtmlIframe } from '@/utils/printHtmlIframe'
 import { almacenesDeSucursal, esDeSucursalLaCompra } from '@/utils/purchaseBranch'
 import MonthSelect from '@/components/MonthSelect'
 import { getInvoiceCommission, buildSellerIndex, ventaCobrada } from '@/utils/commissions'
@@ -221,6 +228,7 @@ export default function Reports() {
   // Filtro de seguridad por ubicación (sucursal/almacén) para usuarios secundarios.
   // Debe declararse antes de cualquier return condicional para no romper el orden de hooks.
   const canAccess = useLocationAccess()
+  const toast = useToast()
   // Sub-usuario con vendedor asignado: solo ve las VENTAS de su vendedor.
   // Solo se aplica a facturas (las compras/gastos/movimientos no tienen sellerId).
   const canSeeSale = useSalesScope()
@@ -269,6 +277,11 @@ export default function Reports() {
   const filterBranch = branchScope || 'all'
   const [productSearch, setProductSearch] = useState('')
   const [productPage, setProductPage] = useState(0)
+  // Imprimir el resumen por producto a demanda. Antes solo salía al pie del
+  // cierre de caja, o sea únicamente del turno que se estaba cerrando; los
+  // clientes lo pedían para el día que quisieran.
+  const [imprimiendoProductos, setImprimiendoProductos] = useState(false)
+  const [anchoTicket, setAnchoTicket] = useState(80)
   const PRODUCTS_PER_PAGE = 25
   // Tab Marcas: búsqueda y paginación independientes
   const [brandSearch, setBrandSearch] = useState('')
@@ -2832,6 +2845,60 @@ export default function Reports() {
         return null
     }
   }
+  // Imprimir "qué se vendió de cada producto". Sale de `topProducts`, que es
+  // EXACTAMENTE lo que la tabla está mostrando: si el papel dijera otra cosa que
+  // la pantalla, no habría forma de saber a cuál creerle. Respeta también el
+  // buscador, así se puede imprimir solo una familia de productos.
+  // Un solo criterio de filtrado: lo usa la tabla Y lo que se imprime. Si cada
+  // uno filtrara por su cuenta, el papel podria traer filas que la pantalla no
+  // muestra.
+  const productosFiltrados = () => {
+    const q = productSearch.trim().toLowerCase()
+    if (!q) return topProducts
+    return topProducts.filter(p =>
+      p.name?.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q))
+  }
+
+  const productosParaImprimir = () => resumenDeProductos(productosFiltrados())
+
+  const datosDeImpresion = () => ({
+    negocio: businessSettings || {},
+    // El MISMO rótulo que ponen los Excel del reporte (reportExportService).
+    periodo: getRangeLabel(dateRange, customStartDate, customEndDate),
+    sucursal: getBranchLabel(),
+  })
+
+  const imprimirProductosTicket = () => {
+    const resumen = productosParaImprimir()
+    if (resumen.lineas.length === 0) {
+      toast.error(productSearch.trim() ? 'La búsqueda no coincide con ningún producto' : 'No hay productos vendidos en este período')
+      return
+    }
+    printHtmlIframe(
+      ticketProductosHtml(resumen, { ...datosDeImpresion(), anchoMm: anchoTicket }),
+      'productos-vendidos-iframe',
+      anchoTicket,
+    )
+  }
+
+  const imprimirProductosPdf = async () => {
+    const resumen = productosParaImprimir()
+    if (resumen.lineas.length === 0) {
+      toast.error(productSearch.trim() ? 'La búsqueda no coincide con ningún producto' : 'No hay productos vendidos en este período')
+      return
+    }
+    setImprimiendoProductos(true)
+    try {
+      await descargarProductosPdf(resumen, datosDeImpresion())
+      toast.success('PDF descargado')
+    } catch (e) {
+      console.error('Error al generar el PDF de productos:', e)
+      toast.error('No se pudo generar el PDF')
+    } finally {
+      setImprimiendoProductos(false)
+    }
+  }
+
   const reportesExportables = ['overview', 'sales', 'products', 'brands', 'customers', 'sellers', 'expenses', 'profitability']
   const puedeExportar = permisos.exportar
     && reportesExportables.includes(selectedReport)
@@ -4018,6 +4085,28 @@ export default function Reports() {
             <CardHeader>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <CardTitle>Todos los Productos Vendidos ({topProducts.length})</CardTitle>
+                <div className="flex items-center gap-2">
+                  {/* El ancho del papel: 58 mm es el rollo chico, 80 el de mostrador */}
+                  <select
+                    value={anchoTicket}
+                    onChange={(e) => setAnchoTicket(Number(e.target.value))}
+                    className="text-sm border border-gray-300 rounded-lg px-2 py-2 bg-white"
+                    title="Ancho del papel del ticket"
+                  >
+                    <option value={80}>80 mm</option>
+                    <option value={58}>58 mm</option>
+                  </select>
+                  <Button variant="outline" size="sm" onClick={imprimirProductosTicket} disabled={topProducts.length === 0}>
+                    <Printer className="w-4 h-4 mr-1.5" />
+                    Ticket
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={imprimirProductosPdf} disabled={topProducts.length === 0 || imprimiendoProductos}>
+                    {imprimiendoProductos
+                      ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                      : <FileText className="w-4 h-4 mr-1.5" />}
+                    PDF
+                  </Button>
+                </div>
                 <div className="relative w-full sm:w-64">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
@@ -4032,12 +4121,7 @@ export default function Reports() {
             </CardHeader>
             <CardContent>
               {(() => {
-                const filtered = productSearch.trim()
-                  ? topProducts.filter(p =>
-                      p.name?.toLowerCase().includes(productSearch.toLowerCase()) ||
-                      p.sku?.toLowerCase().includes(productSearch.toLowerCase())
-                    )
-                  : topProducts
+                const filtered = productosFiltrados()
                 const totalPages = Math.ceil(filtered.length / PRODUCTS_PER_PAGE)
                 const paginated = filtered.slice(productPage * PRODUCTS_PER_PAGE, (productPage + 1) * PRODUCTS_PER_PAGE)
 

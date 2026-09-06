@@ -22,9 +22,15 @@ import { documentLabel } from '@/utils/documentType'
 
 // =================== HELPERS LOCALES ===================
 
-/** Etiqueta amigable del rango de fechas para el título. */
-const getRangeLabel = (dateRange, customStartDate, customEndDate) => {
+/**
+ * Etiqueta amigable del rango de fechas para el título.
+ *
+ * Se exporta porque el ticket y el PDF de "productos vendidos" tienen que
+ * decir el MISMO período que el Excel: son el mismo reporte en otro papel.
+ */
+export const getRangeLabel = (dateRange, customStartDate, customEndDate) => {
   switch (dateRange) {
+    case 'today': return 'Hoy'
     case 'week': return 'Última semana'
     case 'month': return 'Este mes'
     case 'quarter': return 'Último trimestre'
