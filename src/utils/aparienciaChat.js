@@ -42,13 +42,6 @@ function aRGB(hex) {
   return [(v >> 16) & 255, (v >> 8) & 255, v & 255]
 }
 
-/** Mezcla dos colores. `proporcion` es cuánto sobrevive del primero. */
-function mezclar(hex, base, proporcion) {
-  const c = aRGB(hex) || aRGB(BURBUJAS[0].hex)
-  const r = c.map((x, i) => Math.round(x * proporcion + base[i] * (1 - proporcion)))
-  return `rgb(${r[0]}, ${r[1]}, ${r[2]})`
-}
-
 /** El color elegido, sea uno de la paleta o uno propio ("#RRGGBB"). */
 export function hexDeBurbuja(burbujaId) {
   if (aRGB(burbujaId)) return burbujaId
@@ -60,22 +53,9 @@ export function esColorPropio(burbujaId) {
   return Boolean(aRGB(burbujaId))
 }
 
-/**
- * El relleno y el borde de TU burbuja: pastel de día, profundo de noche.
- *
- * Las proporciones son las mismas que usa la app del iPhone
- * (`Apariencia.fondoBurbuja`), para que el mismo color se vea igual en las
- * dos pantallas.
- */
-export function estiloBurbuja(burbujaId, oscuro = false) {
-  const hex = hexDeBurbuja(burbujaId)
-  const base = oscuro ? [13, 20, 18] : [255, 255, 255]
-  const p = proporcionLegible(hex, oscuro)
-  return {
-    backgroundColor: mezclar(hex, base, p),
-    borderColor: mezclar(hex, base, Math.min(1, p + (oscuro ? 0.15 : 0.16))),
-  }
-}
+/** Los dos colores de texto que usa la bandeja. */
+const TEXTO_OSCURO = [10, 37, 64]
+const TEXTO_CLARO = [230, 237, 243]
 
 /** Luminancia relativa (WCAG), para medir el contraste. */
 function luz(c) {
@@ -91,26 +71,59 @@ function contraste(a, b) {
   return (alto + 0.05) / (bajo + 0.05)
 }
 
+const css = (c) => `rgb(${c[0]}, ${c[1]}, ${c[2]})`
+
 /**
- * Cuánto del color elegido sobrevive en la burbuja.
+ * El texto que mejor se lee sobre ese fondo, y el fondo corregido si hiciera
+ * falta.
  *
- * Los cinco de la paleta se ven bien con la proporción de siempre (la misma
- * que usa el iPhone). Pero desde que se puede elegir CUALQUIER color, uno muy
- * claro —un amarillo, un blanco— dejaba el texto casi ilegible de noche.
- * Aquí se baja la proporción hasta que el texto se lea, y ni un paso más:
- * así los colores normales quedan exactamente igual que antes.
+ * Con un color elegido a mano puede tocar cualquier tono: uno muy claro deja
+ * ilegible el texto claro, y uno intermedio no se lleva bien con ninguno de
+ * los dos. Se elige el texto que más contrasta y, solo si aun así no llega a
+ * 4,5, se aleja el fondo un pasito a la vez. El tono no cambia; casi todos
+ * los colores no se mueven nada.
  */
-function proporcionLegible(hex, oscuro) {
-  const base = oscuro ? [13, 20, 18] : [255, 255, 255]
-  const texto = oscuro ? [230, 237, 243] : [10, 37, 64]
-  const rgb = aRGB(hex) || aRGB(BURBUJAS[0].hex)
-  let p = oscuro ? 0.4 : 0.22
-  while (p > 0.12) {
-    const mezcla = rgb.map((x, i) => Math.round(x * p + base[i] * (1 - p)))
-    if (contraste(mezcla, texto) >= 4.5) break
-    p -= 0.04
+function legible(fondo) {
+  const haciaOscuro = contraste(fondo, TEXTO_CLARO) >= contraste(fondo, TEXTO_OSCURO)
+  const texto = haciaOscuro ? TEXTO_CLARO : TEXTO_OSCURO
+  const destino = haciaOscuro ? [0, 0, 0] : [255, 255, 255]
+  let actual = fondo
+  for (let i = 0; i < 14 && contraste(actual, texto) < 4.5; i += 1) {
+    actual = actual.map((x, k) => Math.round(x * 0.94 + destino[k] * 0.06))
   }
-  return p
+  return { fondo: actual, texto }
+}
+
+/**
+ * El relleno, el borde y el color de letra de TU burbuja.
+ *
+ * Con uno de los cinco de la paleta se hace lo mismo que en el iPhone: pastel
+ * de día, profundo de noche — que es como se ve WhatsApp.
+ *
+ * Con un color elegido a mano se usa TAL CUAL, en los dos temas. Antes se le
+ * aplicaba la misma mezcla que a la paleta y por eso un verde oscuro salía
+ * pálido: el círculo mostraba un color y la burbuja otro (reporte de
+ * Giacomo). Lo que eliges es lo que se ve.
+ */
+export function estiloBurbuja(burbujaId, oscuro = false) {
+  const hex = hexDeBurbuja(burbujaId)
+  const crudo = aRGB(hex) || aRGB(BURBUJAS[0].hex)
+
+  const base = esColorPropio(burbujaId)
+    ? crudo
+    : crudo.map((x, i) => {
+      const b = oscuro ? [13, 20, 18] : [255, 255, 255]
+      const p = oscuro ? 0.4 : 0.22
+      return Math.round(x * p + b[i] * (1 - p))
+    })
+
+  const { fondo, texto } = legible(base)
+  // El borde, un pelín más marcado que el relleno, para que la burbuja se
+  // recorte del fondo aunque el fondo sea del mismo tono.
+  const haciaOscuro = luz(fondo) > 0.4
+  const borde = fondo.map((x) => Math.round(haciaOscuro ? x * 0.88 : x * 0.92 + 255 * 0.08))
+
+  return { backgroundColor: css(fondo), borderColor: css(borde), color: css(texto) }
 }
 
 export function leerApariencia() {
