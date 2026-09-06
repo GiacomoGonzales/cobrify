@@ -122,6 +122,7 @@ enum VistaPrevia {
         ]
         return relleno + tandaDeCinco + tandaDeTres + tandaDeDos + tandaMixta + [
             video(-12, "saliente", "jellyfish/mp4/h264/360/Jellyfish_360_10s_1MB.mp4"),
+            foto(-10, "entrante", "alta", 739, 1600),
             foto(-9, "entrante", "local", 900, 1200, "Así quedó el local, ¿qué te parece?"),
             foto(-8, "saliente", "menu", 1200, 800),
             foto(-7, "entrante", "ticket", 800, 800, "El ticket de ayer"),

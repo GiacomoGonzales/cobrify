@@ -228,6 +228,11 @@ private struct PaginaFoto: View {
         ZStack {
             FotoZoom(imagen: imagen, alTocar: alTocar, alArrastrar: alArrastrar,
                      alSoltar: alSoltar, alZoom: alZoom)
+                // De borde a borde, como WhatsApp. Sin esto la pagina recibe
+                // el area segura del TabView y la foto se encoge para caber en
+                // una altura menor: una foto alta terminaba con margenes a los
+                // lados (reporte de Giacomo, 06-sep-2026).
+                .ignoresSafeArea()
             if imagen == nil {
                 if fallo {
                     Label("No se pudo cargar la foto", systemImage: "wifi.exclamationmark")
