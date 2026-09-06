@@ -35,12 +35,29 @@ export const BURBUJAS = [
   { id: 'rosa', nombre: 'Rosa', hex: '#DB2777' },
 ]
 
+/** "#25BC6A" -> [37, 188, 106]. Null si no es un color válido. */
+function aRGB(hex) {
+  if (typeof hex !== 'string' || !/^#[0-9a-f]{6}$/i.test(hex.trim())) return null
+  const v = parseInt(hex.trim().slice(1), 16)
+  return [(v >> 16) & 255, (v >> 8) & 255, v & 255]
+}
+
 /** Mezcla dos colores. `proporcion` es cuánto sobrevive del primero. */
 function mezclar(hex, base, proporcion) {
-  const v = parseInt(hex.replace('#', ''), 16)
-  const c = [(v >> 16) & 255, (v >> 8) & 255, v & 255]
+  const c = aRGB(hex) || aRGB(BURBUJAS[0].hex)
   const r = c.map((x, i) => Math.round(x * proporcion + base[i] * (1 - proporcion)))
   return `rgb(${r[0]}, ${r[1]}, ${r[2]})`
+}
+
+/** El color elegido, sea uno de la paleta o uno propio ("#RRGGBB"). */
+export function hexDeBurbuja(burbujaId) {
+  if (aRGB(burbujaId)) return burbujaId
+  return (BURBUJAS.find((b) => b.id === burbujaId) || BURBUJAS[0]).hex
+}
+
+/** Si lo guardado es un color propio y no uno de los cinco de la paleta. */
+export function esColorPropio(burbujaId) {
+  return Boolean(aRGB(burbujaId))
 }
 
 /**
@@ -51,12 +68,49 @@ function mezclar(hex, base, proporcion) {
  * dos pantallas.
  */
 export function estiloBurbuja(burbujaId, oscuro = false) {
-  const hex = (BURBUJAS.find((b) => b.id === burbujaId) || BURBUJAS[0]).hex
+  const hex = hexDeBurbuja(burbujaId)
   const base = oscuro ? [13, 20, 18] : [255, 255, 255]
+  const p = proporcionLegible(hex, oscuro)
   return {
-    backgroundColor: mezclar(hex, base, oscuro ? 0.4 : 0.22),
-    borderColor: mezclar(hex, base, oscuro ? 0.55 : 0.38),
+    backgroundColor: mezclar(hex, base, p),
+    borderColor: mezclar(hex, base, Math.min(1, p + (oscuro ? 0.15 : 0.16))),
   }
+}
+
+/** Luminancia relativa (WCAG), para medir el contraste. */
+function luz(c) {
+  const [r, g, b] = c.map((v) => {
+    const x = v / 255
+    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+function contraste(a, b) {
+  const [alto, bajo] = [luz(a), luz(b)].sort((x, y) => y - x)
+  return (alto + 0.05) / (bajo + 0.05)
+}
+
+/**
+ * Cuánto del color elegido sobrevive en la burbuja.
+ *
+ * Los cinco de la paleta se ven bien con la proporción de siempre (la misma
+ * que usa el iPhone). Pero desde que se puede elegir CUALQUIER color, uno muy
+ * claro —un amarillo, un blanco— dejaba el texto casi ilegible de noche.
+ * Aquí se baja la proporción hasta que el texto se lea, y ni un paso más:
+ * así los colores normales quedan exactamente igual que antes.
+ */
+function proporcionLegible(hex, oscuro) {
+  const base = oscuro ? [13, 20, 18] : [255, 255, 255]
+  const texto = oscuro ? [230, 237, 243] : [10, 37, 64]
+  const rgb = aRGB(hex) || aRGB(BURBUJAS[0].hex)
+  let p = oscuro ? 0.4 : 0.22
+  while (p > 0.12) {
+    const mezcla = rgb.map((x, i) => Math.round(x * p + base[i] * (1 - p)))
+    if (contraste(mezcla, texto) >= 4.5) break
+    p -= 0.04
+  }
+  return p
 }
 
 export function leerApariencia() {

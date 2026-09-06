@@ -16,7 +16,8 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
 import { Seccion, Campo, Entrada, Selector, AreaTexto, Boton } from '@/components/admin/ui'
-import { BURBUJAS, FONDOS, estiloBurbuja, estiloFondo, guardarApariencia, prepararFoto, useApariencia } from '@/utils/aparienciaChat'
+import { BURBUJAS, FONDOS, esColorPropio, estiloBurbuja, estiloFondo, guardarApariencia, hexDeBurbuja, prepararFoto, useApariencia } from '@/utils/aparienciaChat'
+import { useTema } from '@/utils/temaOscuro'
 import {
   obtenerPerfil,
   guardarPerfil,
@@ -93,6 +94,11 @@ export default function ConfiguracionChat({ onVolver }) {
 function SeccionApariencia() {
   const apariencia = useApariencia()
   const toast = useToast()
+  // La vista previa tiene que verse como la conversación de verdad, y de
+  // noche los colores son otros. Sin esto mostraba el tono claro con la letra
+  // clara encima: ilegible, y encima mentía sobre cómo iba a quedar.
+  const [tema] = useTema('chatTema')
+  const oscuro = tema === 'oscuro'
   const archivo = useRef(null)
   const [trabajando, setTrabajando] = useState(false)
 
@@ -208,6 +214,31 @@ function SeccionApariencia() {
               style={{ backgroundColor: b.hex }}
             />
           ))}
+
+          {/* El color libre. El círculo ES el selector del navegador: al
+              tocarlo se abre la paleta del sistema. */}
+          <label
+            title="Elegir un color"
+            className={`relative w-9 h-9 rounded-full cursor-pointer grid place-items-center ${
+              esColorPropio(apariencia.burbujaId) ? 'ring-2 ring-offset-2 ring-gray-900' : ''
+            }`}
+            style={
+              esColorPropio(apariencia.burbujaId)
+                ? { backgroundColor: apariencia.burbujaId }
+                : { background: 'conic-gradient(#F0332C, #FFC400, #22C55E, #2D7FF9, #A855F7, #F0332C)' }
+            }
+          >
+            {!esColorPropio(apariencia.burbujaId) && (
+              <Plus className="w-4 h-4 text-white drop-shadow" />
+            )}
+            <input
+              type="color"
+              value={hexDeBurbuja(apariencia.burbujaId)}
+              onChange={(e) => guardarApariencia({ burbujaId: e.target.value })}
+              className="absolute inset-0 opacity-0 cursor-pointer"
+              aria-label="Elegir un color"
+            />
+          </label>
         </div>
       </div>
 
@@ -215,17 +246,17 @@ function SeccionApariencia() {
         <p className="text-[12px] text-gray-500 mb-2">Vista previa</p>
         <div
           className="rounded-xl border border-gray-200 p-4 space-y-2 bg-gray-100 bg-cover bg-center"
-          style={estiloFondo(apariencia)}
+          style={estiloFondo(apariencia, oscuro)}
         >
           <div className="flex">
-            <span className="max-w-[75%] rounded-2xl rounded-bl-sm bg-white border border-gray-200 px-3.5 py-2 text-[13px]">
+            <span className="max-w-[75%] rounded-2xl rounded-bl-sm bg-white border border-gray-200 text-gray-900 px-3.5 py-2 text-[13px]">
               Hola, ¿cómo va todo?
             </span>
           </div>
           <div className="flex justify-end">
             <span
-              className="max-w-[75%] rounded-2xl rounded-br-sm border px-3.5 py-2 text-[13px]"
-              style={estiloBurbuja(apariencia.burbujaId)}
+              className="max-w-[75%] rounded-2xl rounded-br-sm border text-gray-900 px-3.5 py-2 text-[13px]"
+              style={estiloBurbuja(apariencia.burbujaId, oscuro)}
             >
               ¡Todo bien! 🙌
             </span>
