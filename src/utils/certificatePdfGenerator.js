@@ -1,10 +1,9 @@
 import jsPDF from 'jspdf'
 import { formatDate } from '@/lib/utils'
-import { Capacitor, CapacitorHttp } from '@capacitor/core'
+import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
-import { storage } from '@/lib/firebase'
-import { ref, getDownloadURL, getBlob } from 'firebase/storage'
+import { cargarImagenBase64 } from '@/utils/imagenParaPdf'
 
 // Colores base
 const DARK_GRAY = [55, 65, 81]
@@ -26,102 +25,13 @@ const hexToRgb = (hex) => {
 }
 
 /**
- * Extrae el path de Firebase Storage desde una URL
- */
-const getStoragePathFromUrl = (url) => {
-  try {
-    const match = url.match(/\/o\/(.+?)\?/)
-    if (match) {
-      const encodedPath = match[1]
-      return decodeURIComponent(encodedPath)
-    }
-    return null
-  } catch (error) {
-    console.error('Error extrayendo path:', error)
-    return null
-  }
-}
-
-/**
- * Carga una imagen desde Firebase Storage y la convierte a base64
- */
-const loadImageAsBase64 = async (url) => {
-  try {
-    const isNative = Capacitor.isNativePlatform()
-
-    // En plataformas nativas, usar CapacitorHttp
-    if (isNative) {
-      try {
-        const storagePath = getStoragePathFromUrl(url)
-        let downloadUrl = url
-
-        if (storagePath) {
-          const storageRef = ref(storage, storagePath)
-          downloadUrl = await getDownloadURL(storageRef)
-        }
-
-        const response = await CapacitorHttp.get({
-          url: downloadUrl,
-          responseType: 'blob'
-        })
-
-        if (response.status === 200 && response.data) {
-          const base64Data = response.data
-          const mimeType = url.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg'
-          return `data:${mimeType};base64,${base64Data}`
-        }
-        throw new Error('No se pudo descargar la imagen')
-      } catch (nativeError) {
-        console.warn('CapacitorHttp falló, intentando Firebase SDK:', nativeError.message)
-      }
-    }
-
-    // Método estándar: Firebase SDK
-    const storagePath = getStoragePathFromUrl(url)
-
-    if (storagePath) {
-      const storageRef = ref(storage, storagePath)
-      const blob = await getBlob(storageRef)
-
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onloadend = () => resolve(reader.result)
-        reader.onerror = reject
-        reader.readAsDataURL(blob)
-      })
-    }
-
-    // Fallback: cargar directamente
-    return new Promise((resolve, reject) => {
-      const img = new Image()
-      img.crossOrigin = 'anonymous'
-      img.onload = () => {
-        const canvas = document.createElement('canvas')
-        canvas.width = img.width
-        canvas.height = img.height
-        const ctx = canvas.getContext('2d')
-        ctx.drawImage(img, 0, 0)
-        resolve(canvas.toDataURL('image/png'))
-      }
-      img.onerror = reject
-      // Rompe-caché: forzamos descargar el logo fresco (y con permiso CORS),
-      // evitando que el navegador reuse una copia vieja sin permiso.
-      img.src = url + (url.includes('?') ? '&' : '?') + '_cb=' + Date.now()
-    })
-  } catch (error) {
-    console.error('Error cargando imagen:', error)
-    return null
-  }
-}
-
-/**
  * Carga imagen con reintentos
  */
 const loadImageWithRetry = async (url, maxRetries = 2, timeout = 8000) => {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const result = await Promise.race([
-        loadImageAsBase64(url),
+        cargarImagenBase64(url),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Timeout')), timeout)
         )

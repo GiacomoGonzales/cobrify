@@ -1,11 +1,10 @@
 import jsPDF from 'jspdf'
 import { contrastTextColor } from '@/utils/pdfColors'
-import { storage } from '@/lib/firebase'
-import { ref, getBlob, getDownloadURL } from 'firebase/storage'
-import { Capacitor, CapacitorHttp } from '@capacitor/core'
+import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { getCurrencySymbol, getCurrencyLongName, normalizeCurrency } from '@/utils/currency'
+import { cargarImagenBase64 } from '@/utils/imagenParaPdf'
 
 // ============================================================
 // GENERADOR DE PDF PARA COMPRAS REGISTRADAS (módulo Compras)
@@ -16,32 +15,6 @@ import { getCurrencySymbol, getCurrencyLongName, normalizeCurrency } from '@/uti
 // ============================================================
 
 // Sistema de caché compartido para el logo
-const LOGO_CACHE_KEY = 'cobrify_logo_cache'
-const LOGO_CACHE_EXPIRY = 24 * 60 * 60 * 1000
-
-const getLogoFromCache = (logoUrl) => {
-  try {
-    const cached = localStorage.getItem(LOGO_CACHE_KEY)
-    if (!cached) return null
-    const { url, data, timestamp } = JSON.parse(cached)
-    if (url === logoUrl && (Date.now() - timestamp) < LOGO_CACHE_EXPIRY) {
-      return data
-    }
-    return null
-  } catch (error) {
-    return null
-  }
-}
-
-const saveLogoToCache = (logoUrl, base64Data) => {
-  try {
-    localStorage.setItem(LOGO_CACHE_KEY, JSON.stringify({
-      url: logoUrl,
-      data: base64Data,
-      timestamp: Date.now()
-    }))
-  } catch (error) {}
-}
 
 const numeroALetras = (num) => {
   const unidades = ['', 'UN', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE']
@@ -98,81 +71,11 @@ const numeroALetras = (num) => {
   return `${resultado} CON ${decimales.toString().padStart(2, '0')}/100`
 }
 
-const getStoragePathFromUrl = (url) => {
-  try {
-    const match = url.match(/\/o\/(.+?)\?/)
-    if (match) return decodeURIComponent(match[1])
-    return null
-  } catch (error) {
-    return null
-  }
-}
-
-const loadImageAsBase64 = async (url) => {
-  try {
-    const cachedLogo = getLogoFromCache(url)
-    if (cachedLogo) return cachedLogo
-
-    const isNative = Capacitor.isNativePlatform()
-
-    if (isNative) {
-      try {
-        const storagePath = getStoragePathFromUrl(url)
-        let downloadUrl = url
-        if (storagePath) {
-          const storageRef = ref(storage, storagePath)
-          downloadUrl = await getDownloadURL(storageRef)
-        }
-        const response = await CapacitorHttp.get({ url: downloadUrl, responseType: 'blob' })
-        if (response.status === 200 && response.data) {
-          const mimeType = url.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg'
-          const result = `data:${mimeType};base64,${response.data}`
-          saveLogoToCache(url, result)
-          return result
-        }
-      } catch (nativeError) {
-        console.warn('CapacitorHttp falló:', nativeError.message)
-      }
-    }
-
-    const storagePath = getStoragePathFromUrl(url)
-    if (storagePath) {
-      const storageRef = ref(storage, storagePath)
-      const blob = await getBlob(storageRef)
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onloadend = () => {
-          saveLogoToCache(url, reader.result)
-          resolve(reader.result)
-        }
-        reader.onerror = reject
-        reader.readAsDataURL(blob)
-      })
-    }
-
-    const response = await fetch(url, { mode: 'cors', credentials: 'omit', cache: 'reload' })
-    if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`)
-    const blob = await response.blob()
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        saveLogoToCache(url, reader.result)
-        resolve(reader.result)
-      }
-      reader.onerror = reject
-      reader.readAsDataURL(blob)
-    })
-  } catch (error) {
-    console.error('Error cargando logo:', error)
-    throw error
-  }
-}
-
 const loadImageWithRetry = async (url, maxRetries = 2, timeout = 10000) => {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const result = await Promise.race([
-        loadImageAsBase64(url),
+        cargarImagenBase64(url),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeout))
       ])
       if (result) return result

@@ -2,14 +2,13 @@ import jsPDF from 'jspdf'
 import { contrastTextColor } from '@/utils/pdfColors'
 import QRCode from 'qrcode'
 import { urlQrDeLaGuia } from '@/utils/qrGuiaSunat'
-import { storage } from '@/lib/firebase'
-import { ref, getDownloadURL, getBlob } from 'firebase/storage'
-import { Capacitor, CapacitorHttp } from '@capacitor/core'
+import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import { getUbigeoName } from '@/data/peruUbigeos'
 import { resolveBranchCompanyInfo } from '@/utils/companyDisplay'
 import { MOTIVOS_TRASLADO_REMITENTE, etiquetaBreveRemitente } from '@/utils/senderTransferReasons'
+import { cargarImagenBase64 } from '@/utils/imagenParaPdf'
 
 // Las casillas del motivo salen del catálogo compartido. Antes había acá una
 // lista propia y estaba CORRIDA UN CÓDIGO: daba el 17 por "emisor itinerante" y
@@ -24,95 +23,6 @@ const TRANSFER_REASONS_FULL = MOTIVOS_TRASLADO_REMITENTE.map(m => ({
 const TRANSPORT_MODES = {
   '01': 'TRANSPORTE PÚBLICO',
   '02': 'TRANSPORTE PRIVADO',
-}
-
-/**
- * Extrae el path de Firebase Storage desde una URL
- */
-const getStoragePathFromUrl = (url) => {
-  try {
-    const match = url.match(/\/o\/(.+?)\?/)
-    if (match) {
-      const encodedPath = match[1]
-      return decodeURIComponent(encodedPath)
-    }
-    return null
-  } catch (error) {
-    console.error('Error extrayendo path:', error)
-    return null
-  }
-}
-
-/**
- * Carga una imagen desde Firebase Storage y la convierte a base64
- */
-const loadImageAsBase64 = async (url) => {
-  try {
-    const isNative = Capacitor.isNativePlatform()
-
-    if (isNative) {
-      try {
-        const storagePath = getStoragePathFromUrl(url)
-        let downloadUrl = url
-
-        if (storagePath) {
-          const storageRef = ref(storage, storagePath)
-          downloadUrl = await getDownloadURL(storageRef)
-        }
-
-        const response = await CapacitorHttp.get({
-          url: downloadUrl,
-          responseType: 'blob'
-        })
-
-        if (response.status === 200 && response.data) {
-          const base64Data = response.data
-          const mimeType = url.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg'
-          return `data:${mimeType};base64,${base64Data}`
-        }
-        throw new Error('No se pudo descargar la imagen')
-      } catch (nativeError) {
-        console.warn('CapacitorHttp falló, intentando Firebase SDK:', nativeError.message)
-      }
-    }
-
-    const storagePath = getStoragePathFromUrl(url)
-
-    if (storagePath) {
-      const storageRef = ref(storage, storagePath)
-      const blob = await getBlob(storageRef)
-
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onloadend = () => resolve(reader.result)
-        reader.onerror = reject
-        reader.readAsDataURL(blob)
-      })
-    }
-
-    const response = await fetch(url, {
-      mode: 'cors',
-      credentials: 'omit',
-      cache: 'reload'
-    })
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.status}`)
-    }
-
-    const blob = await response.blob()
-
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onloadend = () => resolve(reader.result)
-      reader.onerror = reject
-      reader.readAsDataURL(blob)
-    })
-
-  } catch (error) {
-    console.error('Error cargando imagen:', error)
-    throw error
-  }
 }
 
 /**
@@ -354,7 +264,7 @@ export const generateDispatchGuidePDF = async (guide, companySettings, download 
   if (branchInfo.logoUrl) {
     try {
       const imgData = cacheLogo[branchInfo.logoUrl] || await Promise.race([
-        loadImageAsBase64(branchInfo.logoUrl),
+        cargarImagenBase64(branchInfo.logoUrl),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 15000))
       ])
       if (imgData) cacheLogo[branchInfo.logoUrl] = imgData

@@ -11,46 +11,13 @@ import { resolveBranchCompanyInfo } from '@/utils/companyDisplay'
 import { getWalletLogoDataUrl } from '@/utils/walletLogos'
 import { unitDisplayName } from '@/data/sunatUnits'
 import { vinculoDe } from '@/utils/documentLinks'
+import { cargarImagenBase64, rutaDeStorage } from '@/utils/imagenParaPdf'
 
 // Sistema de caché compartido con pdfGenerator
-const LOGO_CACHE_KEY = 'cobrify_logo_cache'
-const LOGO_CACHE_EXPIRY = 24 * 60 * 60 * 1000 // 24 horas
 
 // Caché en memoria para imágenes de productos durante una misma generación de PDF
 // (evita descargar la misma imagen varias veces si se repite el producto)
 const _productImageMemoryCache = new Map()
-
-const getLogoFromCache = (logoUrl) => {
-  try {
-    const cached = localStorage.getItem(LOGO_CACHE_KEY)
-    if (!cached) return null
-
-    const { url, data, timestamp } = JSON.parse(cached)
-
-    if (url === logoUrl && (Date.now() - timestamp) < LOGO_CACHE_EXPIRY) {
-      console.log('✅ Logo obtenido desde caché (cotización)')
-      return data
-    }
-
-    return null
-  } catch (error) {
-    return null
-  }
-}
-
-const saveLogoToCache = (logoUrl, base64Data) => {
-  try {
-    const cacheData = {
-      url: logoUrl,
-      data: base64Data,
-      timestamp: Date.now()
-    }
-    localStorage.setItem(LOGO_CACHE_KEY, JSON.stringify(cacheData))
-    console.log('✅ Logo guardado en caché (cotización)')
-  } catch (error) {
-    // Si localStorage está lleno, ignorar
-  }
-}
 
 /**
  * Convierte un número a texto en español (para montos en cotizaciones peruanas)
@@ -129,23 +96,6 @@ const numeroALetras = (num) => {
 }
 
 /**
- * Extrae el path de Firebase Storage desde una URL
- */
-const getStoragePathFromUrl = (url) => {
-  try {
-    const match = url.match(/\/o\/(.+?)\?/)
-    if (match) {
-      const encodedPath = match[1]
-      return decodeURIComponent(encodedPath)
-    }
-    return null
-  } catch (error) {
-    console.error('Error extrayendo path:', error)
-    return null
-  }
-}
-
-/**
  * Adivina el mime por la extensión de la URL (camino nativo: CapacitorHttp
  * devuelve base64 pelado, sin content-type utilizable). Antes solo contemplaba
  * .png y etiquetaba TODO lo demás como image/jpeg — un .webp (formato en que
@@ -158,95 +108,6 @@ const guessMimeFromUrl = (url) => {
   if (u.includes('.webp')) return 'image/webp'
   if (u.includes('.gif')) return 'image/gif'
   return 'image/jpeg'
-}
-
-/**
- * Carga una imagen desde Firebase Storage y la convierte a base64
- * Utiliza caché para mejorar rendimiento
- */
-const loadImageAsBase64 = async (url) => {
-  try {
-    // Primero intentar obtener del caché
-    const cachedLogo = getLogoFromCache(url)
-    if (cachedLogo) {
-      return cachedLogo
-    }
-
-    console.log('🔄 Logo no está en caché, descargando...')
-    const isNative = Capacitor.isNativePlatform()
-
-    if (isNative) {
-      try {
-        const storagePath = getStoragePathFromUrl(url)
-        let downloadUrl = url
-
-        if (storagePath) {
-          const storageRef = ref(storage, storagePath)
-          downloadUrl = await getDownloadURL(storageRef)
-        }
-
-        const response = await CapacitorHttp.get({
-          url: downloadUrl,
-          responseType: 'blob'
-        })
-
-        if (response.status === 200 && response.data) {
-          const base64Data = response.data
-          const result = `data:${guessMimeFromUrl(url)};base64,${base64Data}`
-          saveLogoToCache(url, result)
-          return result
-        }
-        throw new Error('No se pudo descargar la imagen')
-      } catch (nativeError) {
-        console.warn('CapacitorHttp falló, intentando Firebase SDK:', nativeError.message)
-      }
-    }
-
-    const storagePath = getStoragePathFromUrl(url)
-
-    if (storagePath) {
-      const storageRef = ref(storage, storagePath)
-      const blob = await getBlob(storageRef)
-
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onloadend = () => {
-          const result = reader.result
-          saveLogoToCache(url, result)
-          resolve(result)
-        }
-        reader.onerror = reject
-        reader.readAsDataURL(blob)
-      })
-    }
-
-    const response = await fetch(url, {
-      mode: 'cors',
-      credentials: 'omit',
-      cache: 'reload'
-    })
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.status}`)
-    }
-
-    const blob = await response.blob()
-
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        const result = reader.result
-        saveLogoToCache(url, result)
-        resolve(result)
-      }
-      reader.onerror = reject
-      reader.readAsDataURL(blob)
-    })
-
-  } catch (error) {
-    console.error('Error cargando logo:', error)
-    throw error
-  }
 }
 
 /**
@@ -269,7 +130,7 @@ const loadProductImageAsBase64 = async (url, timeout = 15000) => {
     const fetchPromise = (async () => {
       if (isNative) {
         try {
-          const storagePath = getStoragePathFromUrl(url)
+          const storagePath = rutaDeStorage(url)
           let downloadUrl = url
           if (storagePath) {
             const storageRef = ref(storage, storagePath)
@@ -284,7 +145,7 @@ const loadProductImageAsBase64 = async (url, timeout = 15000) => {
         }
       }
 
-      const storagePath = getStoragePathFromUrl(url)
+      const storagePath = rutaDeStorage(url)
       if (storagePath) {
         const storageRef = ref(storage, storagePath)
         const blob = await getBlob(storageRef)
@@ -367,7 +228,7 @@ const loadImageWithRetry = async (url, maxRetries = 2, timeout = 10000) => {
       console.log(`🔄 Intento ${attempt}/${maxRetries} de cargar logo (cotización)...`)
 
       const result = await Promise.race([
-        loadImageAsBase64(url),
+        cargarImagenBase64(url),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error(`Timeout después de ${timeout/1000}s`)), timeout)
         )

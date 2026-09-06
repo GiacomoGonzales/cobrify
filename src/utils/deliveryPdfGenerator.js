@@ -1,72 +1,13 @@
 import jsPDF from 'jspdf'
 import { contrastTextColor } from '@/utils/pdfColors'
-import { storage } from '@/lib/firebase'
-import { ref, getDownloadURL, getBlob } from 'firebase/storage'
-import { Capacitor, CapacitorHttp } from '@capacitor/core'
+import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
+import { cargarImagenBase64 } from '@/utils/imagenParaPdf'
 
 // ============================================================
 // Helpers
 // ============================================================
-
-const getStoragePathFromUrl = (url) => {
-  try {
-    const match = url.match(/\/o\/(.+?)\?/)
-    if (match) return decodeURIComponent(match[1])
-    return null
-  } catch { return null }
-}
-
-const loadImageAsBase64 = async (url) => {
-  try {
-    const isNative = Capacitor.isNativePlatform()
-
-    if (isNative) {
-      try {
-        const storagePath = getStoragePathFromUrl(url)
-        let downloadUrl = url
-        if (storagePath) {
-          const storageRef = ref(storage, storagePath)
-          downloadUrl = await getDownloadURL(storageRef)
-        }
-        const response = await CapacitorHttp.get({ url: downloadUrl, responseType: 'blob' })
-        if (response.status === 200 && response.data) {
-          const mimeType = url.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg'
-          return `data:${mimeType};base64,${response.data}`
-        }
-        throw new Error('No se pudo descargar la imagen')
-      } catch (nativeError) {
-        console.warn('CapacitorHttp falló, intentando Firebase SDK:', nativeError.message)
-      }
-    }
-
-    const storagePath = getStoragePathFromUrl(url)
-    if (storagePath) {
-      const storageRef = ref(storage, storagePath)
-      const blob = await getBlob(storageRef)
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onloadend = () => resolve(reader.result)
-        reader.onerror = reject
-        reader.readAsDataURL(blob)
-      })
-    }
-
-    const response = await fetch(url, { mode: 'cors', credentials: 'omit', cache: 'reload' })
-    if (!response.ok) throw new Error(`Failed to fetch image: ${response.status}`)
-    const blob = await response.blob()
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onloadend = () => resolve(reader.result)
-      reader.onerror = reject
-      reader.readAsDataURL(blob)
-    })
-  } catch (error) {
-    console.error('Error cargando imagen:', error)
-    throw error
-  }
-}
 
 function hexToRgb(hex) {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
@@ -140,7 +81,7 @@ export const generateDeliveryPDF = async (delivery, companySettings) => {
   if (companySettings?.logoUrl) {
     try {
       const imgData = await Promise.race([
-        loadImageAsBase64(companySettings.logoUrl),
+        cargarImagenBase64(companySettings.logoUrl),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 15000)),
       ])
 
