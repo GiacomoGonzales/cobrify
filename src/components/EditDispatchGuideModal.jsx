@@ -15,6 +15,7 @@ import SUNAT_UNITS, { normalizeSunatUnit } from '@/data/sunatUnits'
 import { matchesSearchQuery } from '@/lib/utils'
 import { consultarRUC, consultarDNI, consultarEstablecimientos } from '@/services/documentLookupService'
 import { codigosDeUbigeo } from '@/utils/ubigeoDesdeConsulta'
+import { getEmissionDateLimits, validateEmissionDate } from '@/utils/emissionDate'
 
 const TRANSFER_REASONS = [
   { value: '01', label: 'Venta' },
@@ -116,6 +117,8 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
   const [loadingSupplierEstablishments, setLoadingSupplierEstablishments] = useState(false)
   const [transportMode, setTransportMode] = useState('02')
   const [issueDate, setIssueDate] = useState('')
+  // Los límites salen del mismo módulo que usa el POS: una sola regla.
+  const limitesEmision = getEmissionDateLimits('guia_remision')
   const [transferDate, setTransferDate] = useState('')
   const [carrierDeliveryDate, setCarrierDeliveryDate] = useState('') // Fecha de entrega de bienes al transportista (obligatoria en transporte público - SUNAT 3617)
   const [transferDescription, setTransferDescription] = useState('')
@@ -1037,6 +1040,14 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
       return
     }
 
+    // El `min`/`max` del campo solo pinta gris el calendario: tecleando los
+    // dígitos el valor entra igual. Por eso se vuelve a revisar acá.
+    const revisionFecha = validateEmissionDate(issueDate, 'guia_remision')
+    if (!revisionFecha.valid) {
+      toast.error(revisionFecha.error)
+      return
+    }
+
     // Transporte público: la "Fecha de entrega de bienes al transportista" es obligatoria
     // desde el 01/06/2026 (SUNAT errores 3617/3618). Sin ella la guía es rechazada.
     if (transportMode === '01') {
@@ -1330,12 +1341,18 @@ export default function EditDispatchGuideModal({ isOpen, onClose, guide, onUpdat
                 ))}
               </Select>
 
+              {/* Los mismos límites que al crear. Este campo era el ÚNICO de los
+                  tres formularios de guía sin `min`/`max`, y por ahí entró una
+                  fecha de emisión futura: guía creada el 6 y editada a fecha 7,
+                  que SUNAT rechazó con 2108 ("fecha mayor a la recepción"). */}
               <Input
                 type="date"
                 label="Fecha de emisión"
                 required
                 value={issueDate}
                 onChange={(e) => setIssueDate(e.target.value)}
+                min={limitesEmision.min}
+                max={limitesEmision.max}
               />
             </div>
 

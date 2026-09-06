@@ -30,8 +30,22 @@ export const toDateString = (date = new Date()) => {
 /**
  * Días hacia atrás admitidos por tipo de documento. La nota de venta no es un
  * comprobante electrónico —no va a SUNAT— así que no tiene plazo hacia atrás.
+ *
+ * Las guías de remisión llevan 1: es el plazo que ya aplicaban sus formularios.
+ * OJO con no confundir las dos fechas de una guía: la de EMISIÓN no puede ser
+ * futura (SUNAT rechaza con 2108, "fecha mayor a la recepción"), pero la de
+ * TRASLADO sí — se emite hoy una guía para trasladar mañana, y eso es normal.
+ * Acá solo se habla de la de emisión.
  */
-const DAYS_BACK = { factura: 3, boleta: 7 }
+const DAYS_BACK = { factura: 3, boleta: 7, guia_remision: 1, guia_transportista: 1 }
+
+/** Cómo nombrar al documento en el mensaje de error. */
+const NOMBRE_PLURAL = {
+  factura: 'Las facturas',
+  boleta: 'Las boletas',
+  guia_remision: 'Las guías de remisión',
+  guia_transportista: 'Las guías de transportista',
+}
 
 /**
  * ¿Este documento viaja a SUNAT y por lo tanto tiene plazo HACIA ATRÁS?
@@ -99,7 +113,7 @@ export const validateEmissionDate = (dateStr, documentType, today = new Date()) 
   }
 
   if (min && dateStr < min) {
-    const nombre = documentType === 'factura' ? 'Las facturas' : 'Las boletas'
+    const nombre = NOMBRE_PLURAL[documentType] || 'Los comprobantes'
     return {
       valid: false,
       error: `La fecha de emisión es muy antigua. ${nombre} se pueden emitir hasta ${daysBack} días atrás, o sea desde el ${formatDisplay(min)}. Elegiste ${formatDisplay(dateStr)}.`,

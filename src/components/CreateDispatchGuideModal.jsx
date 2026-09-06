@@ -18,6 +18,7 @@ import { consultarRUC, consultarDNI, consultarEstablecimientos } from '@/service
 import { codigosDeUbigeo } from '@/utils/ubigeoDesdeConsulta'
 import { validatePlate, normalizePlate, PLATE_MAX_LENGTH, PLATE_EXAMPLE } from '@/utils/vehiclePlate'
 import SelectorDeFlota, { useFlota } from '@/components/fleet/SelectorDeFlota'
+import { validateEmissionDate } from '@/utils/emissionDate'
 
 const TRANSFER_REASONS = [
   { value: '01', label: 'Venta' },
@@ -1627,6 +1628,15 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
 
     if (!totalWeight || parseFloat(totalWeight) <= 0) {
       toast.error('Debe ingresar el peso total de la mercancía')
+      return
+    }
+
+    // El `min`/`max` del campo solo pinta gris el calendario: tecleando los
+    // dígitos el valor entra igual, y una fecha de emisión futura se la come
+    // SUNAT con el error 2108.
+    const revisionFecha = validateEmissionDate(issueDate, 'guia_remision')
+    if (!revisionFecha.valid) {
+      toast.error(revisionFecha.error)
       return
     }
 

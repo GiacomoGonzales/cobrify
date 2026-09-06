@@ -13,6 +13,7 @@ import { createCarrierDispatchGuide, saveCarrierDispatchGuideDraft, deleteCarrie
 import { consultarRUC, consultarDNI, consultarEstablecimientos } from '@/services/documentLookupService'
 import { DEPARTAMENTOS, getProvincias, getDistritos, buildUbigeo, resolveUbigeoParts } from '@/data/peruUbigeos'
 import { MOTIVOS_TRASLADO_TRANSPORTISTA, etiquetaConCodigo } from '@/utils/carrierTransferReasons'
+import { validateEmissionDate } from '@/utils/emissionDate'
 
 /**
  * Los tres selectores de ubigeo: departamento → provincia → distrito.
@@ -874,6 +875,15 @@ export default function CreateCarrierDispatchGuideModal({ isOpen, onClose, draft
 
     if (!totalWeight || parseFloat(totalWeight) <= 0) {
       toast.error('Debe ingresar el peso total de la mercancía')
+      return
+    }
+
+    // El `min`/`max` del campo solo pinta gris el calendario: tecleando los
+    // dígitos el valor entra igual, y una fecha de emisión futura se la come
+    // SUNAT con el error 2108.
+    const revisionFecha = validateEmissionDate(issueDate, 'guia_remision')
+    if (!revisionFecha.valid) {
+      toast.error(revisionFecha.error)
       return
     }
 
