@@ -15,6 +15,7 @@ import { generateSummaryDocumentsXML, generateSummaryDocumentId, canVoidBoleta, 
 import { signXML } from './src/utils/xmlSigner.js'
 import { sendSummary, getStatus, getStatusCdr } from './src/utils/sunatClient.js'
 import { voidBoletaViaQPse, voidInvoiceViaQPse, obtenerToken, consultarEstado, leerEstadoQPse } from './src/services/qpseService.js'
+import { tocaResetear } from './src/utils/cicloMensual.js'
 import { sendPushNotification } from './notifications/sendPushNotification.js'
 import { loginRappi, probeLogins, getStoreOrders, getOrdersV2, registerWebhook, listWebhooks, registerStoreWebhook, listStoreWebhook, getClientIdFromToken, decodeJwtPayload, getBaseUrl, getV1BaseUrl } from './src/services/rappiApi.js'
 import {
@@ -2792,12 +2793,15 @@ export const sendDebitNoteToSunat = onRequest(
 /**
  * Cloud Function programada: Resetear contadores mensuales
  *
- * Se ejecuta DIARIAMENTE a las 00:00 (medianoche) hora de Perú (America/Lima)
- * Resetea el contador de documentos (usage.invoicesThisMonth) solo para usuarios
- * cuyo período mensual está iniciando HOY.
+ * Se ejecuta DIARIAMENTE a las 00:00 (medianoche) hora de Perú (America/Lima).
+ * El límite de comprobantes va por mes DESDE EL ALTA, no por mes calendario:
+ * quien contrató un día 10 vuelve a cero cada día 10.
  *
- * Ejemplo: Si un usuario contrató el 10 de octubre, su contador se resetea
- * el 10 de cada mes (10 de noviembre, 10 de diciembre, etc.)
+ * El criterio de a quién le toca está en `utils/cicloMensual` (con pruebas):
+ * "¿ya pasó el corte y todavía no se reseteó?". Comparar el día de corte con el
+ * día de hoy —que es lo que se hacía— dejaba fuera a quien tiene un corte que
+ * no existe en el mes (un 31 en septiembre) y perdía el mes entero si la tarea
+ * fallaba un día.
  */
 export const resetMonthlyCounters = onSchedule(
   {
@@ -2811,18 +2815,14 @@ export const resetMonthlyCounters = onSchedule(
       console.log('🔄 Iniciando reseteo de contadores mensuales...')
 
       const today = new Date()
-      const dayOfMonth = today.getDate() // Día del mes (1-31)
-
-      console.log(`📅 Hoy es día ${dayOfMonth} del mes`)
+      console.log(`📅 Corrida del ${today.toISOString()}`)
 
       // Obtener todas las suscripciones activas
       const subscriptionsSnapshot = await db.collection('subscriptions').get()
 
       let resetCount = 0
       let skippedCount = 0
-
-      // Procesar cada suscripción
-      const batch = db.batch()
+      const porResetear = []
 
       for (const docSnapshot of subscriptionsSnapshot.docs) {
         const subscription = docSnapshot.data()
@@ -2833,36 +2833,31 @@ export const resetMonthlyCounters = onSchedule(
           continue
         }
 
-        // Obtener la fecha de inicio del período actual
-        const currentPeriodStart = subscription.currentPeriodStart?.toDate?.() || subscription.currentPeriodStart
-
-        if (!currentPeriodStart) {
-          console.log(`⏭️ Usuario ${userId}: Sin fecha de inicio de período`)
-          skippedCount++
-          continue
-        }
-
-        // Obtener el día del mes en que inició el período
-        const periodStartDay = currentPeriodStart.getDate()
-
-        // Si el día de inicio del período coincide con el día de hoy, resetear
-        if (periodStartDay === dayOfMonth) {
-          console.log(`✅ Usuario ${userId}: Reseteando contador (día ${dayOfMonth})`)
-
-          batch.update(docSnapshot.ref, {
-            'usage.invoicesThisMonth': 0,
-            lastCounterReset: FieldValue.serverTimestamp()
-          })
-
+        const veredicto = tocaResetear(subscription, today)
+        if (veredicto.resetear) {
+          console.log(`✅ Usuario ${userId}: reseteando (corte ${veredicto.corte.toISOString().slice(0, 10)} — ${veredicto.motivo})`)
+          porResetear.push(docSnapshot.ref)
           resetCount++
         } else {
           skippedCount++
         }
       }
 
-      // Ejecutar todas las actualizaciones en batch
-      if (resetCount > 0) {
+      // En lotes de 400: un batch de Firestore admite 500 operaciones y esto
+      // crece con la cartera. Además, la primera corrida tras el arreglo pone al
+      // día a todos los que venían atrasados, así que puede ser grande.
+      for (let i = 0; i < porResetear.length; i += 400) {
+        const batch = db.batch()
+        for (const ref of porResetear.slice(i, i + 400)) {
+          batch.update(ref, {
+            'usage.invoicesThisMonth': 0,
+            lastCounterReset: FieldValue.serverTimestamp()
+          })
+        }
         await batch.commit()
+      }
+
+      if (resetCount > 0) {
         console.log(`✅ Reseteo completado: ${resetCount} contadores reseteados, ${skippedCount} omitidos`)
       } else {
         console.log(`ℹ️ No hay contadores para resetear hoy. Total revisados: ${skippedCount}`)
