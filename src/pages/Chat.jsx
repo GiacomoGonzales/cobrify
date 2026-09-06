@@ -45,7 +45,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { MARCA_CHAT } from '@/utils/dominioChat'
 import { useAvisosDelChat } from '@/hooks/useAvisosDelChat'
 import { useTema } from '@/utils/temaOscuro'
-import { estiloBurbuja, estiloFondo, useApariencia } from '@/utils/aparienciaChat'
+import { azulLeido, colorTenue, estiloBurbuja, estiloFondo, useApariencia } from '@/utils/aparienciaChat'
 import { PencilLine, Upload } from 'lucide-react'
 import BotonTema from '@/components/BotonTema'
 import { Capacitor } from '@capacitor/core'
@@ -199,6 +199,11 @@ export default function Chat() {
     () => estiloBurbuja(apariencia.burbujaId, tema === 'oscuro'),
     [apariencia.burbujaId, tema],
   )
+  // La hora y las palomitas dentro de TU burbuja: el color del texto de esa
+  // burbuja, atenuado. Con un gris fijo se perdían sobre el verde oscuro
+  // (comparado con WhatsApp, que hace justo esto).
+  const piePropio = useMemo(() => ({ color: colorTenue(colorBurbuja.color, 0.72) }), [colorBurbuja])
+  const azulPalomitas = useMemo(() => azulLeido(colorBurbuja.backgroundColor), [colorBurbuja])
 
   // En la app: iconos del status bar segun el tema (la franja de arriba es
   // blanca u oscura), y al salir se devuelve el estilo de la app principal.
@@ -1531,11 +1536,14 @@ export default function Chat() {
                           onAbrirFoto={(f) => abrirVisorDe(f.media)}
                           onAbrirVideo={(v) => setVideoAbierto(v.media.url)}
                         />
-                        <div className="flex items-center gap-1 justify-end mt-0.5 pr-1 text-gray-400">
+                        <div
+                          style={mio ? piePropio : undefined}
+                          className={`flex items-center gap-1 justify-end mt-0.5 pr-1 ${mio ? '' : 'text-gray-400'}`}
+                        >
                           <span className="text-[11px]">{formatearHora(m.timestamp)}</span>
                           {mio && (
                             m.estado === 'read'
-                              ? <CheckCheck className="w-3.5 h-3.5 text-blue-200" />
+                              ? <CheckCheck className="w-3.5 h-3.5" style={{ color: azulPalomitas }} />
                               : m.estado === 'delivered'
                                 ? <CheckCheck className="w-3.5 h-3.5" />
                                 : <Check className="w-3.5 h-3.5" />
@@ -1750,8 +1758,9 @@ export default function Chat() {
                           : !['image', 'sticker', 'video', 'audio', 'document'].includes(m.tipo)
                             && <p className="text-[13px] italic opacity-75">[{m.tipo}]</p>}
                         <div
+                          style={mio && !sinBurbuja ? piePropio : undefined}
                           className={`flex items-center gap-1 justify-end mt-0.5 ${
-                            'text-gray-400'
+                            mio && !sinBurbuja ? '' : 'text-gray-400'
                           }`}
                         >
                           {fallo && (
@@ -1764,7 +1773,7 @@ export default function Chat() {
                               : m.estado === 'enviando'
                                 ? <Clock className="w-3.5 h-3.5 opacity-70" />
                                 : m.estado === 'read'
-                                  ? <CheckCheck className="w-3.5 h-3.5 text-blue-200" />
+                                  ? <CheckCheck className="w-3.5 h-3.5" style={{ color: azulPalomitas }} />
                                   : m.estado === 'delivered'
                                     ? <CheckCheck className="w-3.5 h-3.5" />
                                     : <Check className="w-3.5 h-3.5" />

@@ -74,6 +74,29 @@ function contraste(a, b) {
 const css = (c) => `rgb(${c[0]}, ${c[1]}, ${c[2]})`
 
 /**
+ * El mismo color, más apagado. Para la hora y las palomitas dentro de TU
+ * burbuja: WhatsApp las pone del color del texto pero atenuadas, no en un
+ * gris fijo — un gris fijo se pierde sobre un fondo oscuro.
+ */
+/**
+ * El azul de las palomitas de "leído", el mismo gesto de WhatsApp pero
+ * elegido según la burbuja: el celeste clarito se ve sobre un fondo oscuro y
+ * desaparece sobre uno claro (1,7 de contraste), así que ahí va un azul
+ * profundo.
+ */
+export function azulLeido(fondoCss) {
+  const n = String(fondoCss).match(/\d+/g)
+  if (!n || n.length < 3) return '#53BDEB'
+  return luz([+n[0], +n[1], +n[2]]) > 0.35 ? '#075E8D' : '#53BDEB'
+}
+
+export function colorTenue(colorCss, alfa = 0.7) {
+  const n = String(colorCss).match(/\d+/g)
+  if (!n || n.length < 3) return colorCss
+  return `rgba(${n[0]}, ${n[1]}, ${n[2]}, ${alfa})`
+}
+
+/**
  * El texto que mejor se lee sobre ese fondo, y el fondo corregido si hiciera
  * falta.
  *
