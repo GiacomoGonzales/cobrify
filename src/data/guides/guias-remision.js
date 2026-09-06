@@ -113,6 +113,10 @@ export default {
           text: 'Desde el celular, **Descargar Ticket** abre el menú de compartir de Android: desde ahí lo mandas directo por WhatsApp o lo guardas en el teléfono.',
         },
         {
+          type: 'texto',
+          text: 'En **GRE Transportista** también está **Descargar Ticket (PDF)**, con los datos que le corresponden a esa guía: remitente, destinatario, conductor y vehículo.',
+        },
+        {
           type: 'ojo',
           text: 'Si tienes una **ticketera Bluetooth** configurada, el botón Imprimir Ticket la usa directamente. Si no tienes ninguna, usa Descargar Ticket.',
         },
