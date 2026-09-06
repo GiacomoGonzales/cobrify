@@ -9,6 +9,7 @@ import UIKit
 struct VisorFotos: View {
     let fotos: [Mensaje]
     let nombreContacto: String
+    let conversationId: String
     @State private var indice: Int
     @Environment(\.dismiss) private var dismiss
 
@@ -17,14 +18,16 @@ struct VisorFotos: View {
     @State private var tirado: CGFloat = 0
     @State private var ampliada = false
     @State private var mostrarReenviar = false
+    @State private var mostrarEditor = false
     @State private var aviso: String?
     /// Las fotos ya cargadas, por dirección: de aquí salen compartir y el
     /// tamaño real.
     @State private var cargadas: [String: UIImage] = [:]
 
-    init(fotos: [Mensaje], indiceInicial: Int, nombreContacto: String) {
+    init(fotos: [Mensaje], indiceInicial: Int, nombreContacto: String, conversationId: String) {
         self.fotos = fotos
         self.nombreContacto = nombreContacto
+        self.conversationId = conversationId
         _indice = State(initialValue: min(max(0, indiceInicial), max(0, fotos.count - 1)))
     }
 
@@ -81,8 +84,18 @@ struct VisorFotos: View {
         .statusBarHidden(!adornosVisibles)
         .preferredColorScheme(.dark)
         .sheet(isPresented: $mostrarReenviar) {
-            if let actual {
-                ReenviarSheet(mensaje: actual) { avisar($0) }
+            if let actual, let adjunto = actual.media, let url = adjunto.url {
+                ReenviarSheet(foto: .guardada(url: url, adjunto: adjunto), caption: actual.texto) { avisar($0) }
+            }
+        }
+        .fullScreenCover(isPresented: $mostrarEditor) {
+            if let img = cargadas[urlActual] {
+                EditorFoto(imagen: img, conversationId: conversationId) { texto in
+                    avisar(texto)
+                    // Lo pintado ya salió: se vuelve a la conversación para
+                    // verlo llegar, como en WhatsApp.
+                    dismiss()
+                }
             }
         }
     }
@@ -139,6 +152,10 @@ struct VisorFotos: View {
                 TiraDeFotos(fotos: fotos, indice: $indice)
             }
             HStack {
+                accion("Editar", "pencil.tip.crop.circle") { mostrarEditor = true }
+                    .opacity(cargadas[urlActual] == nil ? 0.4 : 1)
+                    .disabled(cargadas[urlActual] == nil)
+                Spacer()
                 accion("Reenviar", "arrowshape.turn.up.right") { mostrarReenviar = true }
                 Spacer()
                 accion("Guardar", "square.and.arrow.down") { guardar() }
@@ -153,7 +170,7 @@ struct VisorFotos: View {
                     etiquetaAccion("Compartir", "square.and.arrow.up").opacity(0.4)
                 }
             }
-            .padding(.horizontal, 28)
+            .padding(.horizontal, 12)
             .padding(.bottom, 4)
         }
         .padding(.top, 14)
@@ -174,7 +191,7 @@ struct VisorFotos: View {
             Text(titulo).font(.caption2)
         }
         .foregroundStyle(.white)
-        .frame(width: 72)
+        .frame(width: 68)
         .contentShape(Rectangle())
     }
 
@@ -420,11 +437,20 @@ private struct FotoZoom: UIViewRepresentable {
 
 // MARK: - Reenviar
 
-/// Elegir a quién reenviar la foto. Sale por su dirección (ya está guardada
-/// en nuestro almacén), sin volver a subirla: lo mismo que hacen las
-/// respuestas rápidas con archivo.
+/// Qué foto se está reenviando.
+enum FotoAReenviar {
+    /// Una que ya vive en nuestro almacén: viaja su dirección, no el archivo.
+    case guardada(url: String, adjunto: MediaAdjunto)
+    /// Una recién pintada: todavía no existe en ningún lado, va el archivo.
+    case nueva(Data)
+}
+
+/// Elegir a quién reenviar la foto. La que ya está guardada sale por su
+/// dirección, sin volver a subirla — lo mismo que hacen las respuestas
+/// rápidas con archivo.
 struct ReenviarSheet: View {
-    let mensaje: Mensaje
+    let foto: FotoAReenviar
+    var caption: String = ""
     let alTerminar: (String) -> Void
 
     @StateObject private var bandeja = InboxStore()
@@ -534,19 +560,31 @@ struct ReenviarSheet: View {
     }
 
     private func enviar() async {
-        guard let adjunto = mensaje.media, let url = adjunto.url else { return }
-        var d: [String: Any] = ["url": url, "mimeType": adjunto.mimeType ?? "image/jpeg", "tipo": "image"]
-        if let f = adjunto.filename { d["filename"] = f }
-        if let t = adjunto.thumbUrl { d["thumbUrl"] = t }
-        if let a = adjunto.ancho { d["ancho"] = a }
-        if let a = adjunto.alto { d["alto"] = a }
-        guard let media = MediaBiblioteca(d) else { return }
+        var guardada: MediaBiblioteca?
+        if case .guardada(let url, let adjunto) = foto {
+            var d: [String: Any] = ["url": url, "mimeType": adjunto.mimeType ?? "image/jpeg", "tipo": "image"]
+            if let f = adjunto.filename { d["filename"] = f }
+            if let t = adjunto.thumbUrl { d["thumbUrl"] = t }
+            if let a = adjunto.ancho { d["ancho"] = a }
+            if let a = adjunto.alto { d["alto"] = a }
+            guard let m = MediaBiblioteca(d) else { return }
+            guardada = m
+        }
 
         enviando = true
         var fallidas: [String] = []
         for conv in bandeja.conversaciones where elegidas.contains(conv.id) {
             do {
-                try await ChatAPI.enviarMediaGuardada(conversationId: conv.id, media: media, caption: mensaje.texto)
+                if let media = guardada {
+                    try await ChatAPI.enviarMediaGuardada(conversationId: conv.id, media: media, caption: caption)
+                } else if case .nueva(let datos) = foto {
+                    // Recién pintada: sube una vez por conversación. Son una o
+                    // dos, y a cambio no hace falta un sitio donde dejarla.
+                    try await ChatAPI.enviarMedia(conversationId: conv.id,
+                                                  base64: datos.base64EncodedString(),
+                                                  mimeType: "image/jpeg",
+                                                  filename: "foto.jpg", caption: caption)
+                }
             } catch {
                 fallidas.append("\(conv.titulo): \((error as? ChatAPI.ErrorEnvio)?.mensaje ?? "no se pudo enviar")")
             }

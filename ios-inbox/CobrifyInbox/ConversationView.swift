@@ -315,7 +315,8 @@ struct ConversationView: View {
             let fotos = fotosDelHilo
             VisorFotos(fotos: fotos,
                        indiceInicial: fotos.firstIndex { $0.id == f.id } ?? 0,
-                       nombreContacto: conv.titulo)
+                       nombreContacto: conv.titulo,
+                       conversationId: conv.id)
         }
         .sheet(isPresented: $mostrarPlantilla) {
             EnviarPlantillaSheet(conversationId: conv.id)
