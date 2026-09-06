@@ -6,6 +6,7 @@
 import axios from 'axios'
 import JSZip from 'jszip'
 import { generateInvoiceXML, generateXMLFileName, validateInvoiceData } from './sunatXMLService'
+import { cuerpoDeConsulta } from '@/utils/bajaSunat'
 
 /**
  * URLs de los servicios de SUNAT según ambiente
@@ -347,21 +348,33 @@ export const voidInvoice = async (userId, invoiceId, reason, idToken) => {
 /**
  * Consulta el estado de una comunicación de baja pendiente
  *
+ * Sirve para los dos caminos de baja: `referencia` puede ser una venta guardada
+ * o la respuesta de `voidDocument`, y de ahi sale si la baja es una comunicacion
+ * (factura) o un resumen diario (boleta). El criterio esta en `utils/bajaSunat`.
+ *
  * @param {string} userId - ID del usuario/negocio
- * @param {string} voidedDocumentId - ID del documento de baja
+ * @param {string|Object} referencia - ID de la comunicación de baja, o el objeto del que sacarlo
  * @param {string} idToken - Token de autenticación
  * @returns {Promise<Object>} { status: string, message?: string, error?: string }
  */
-export const checkVoidStatus = async (userId, voidedDocumentId, idToken) => {
+export const checkVoidStatus = async (userId, referencia, idToken) => {
   try {
     // URL de Cloud Functions (funciona con autenticación Firebase)
     const checkVoidStatusUrl = import.meta.env.VITE_CHECK_VOID_STATUS_URL || 'https://us-central1-cobrify-395fe.cloudfunctions.net/checkVoidStatus'
+
+    // Un texto suelto es un id de comunicación de baja, como se llamaba antes.
+    const cuerpo = typeof referencia === 'string'
+      ? { voidedDocumentId: referencia }
+      : cuerpoDeConsulta(referencia)
+    if (!cuerpo) {
+      return { status: 'error', error: 'El documento no tiene una anulación en curso' }
+    }
 
     const response = await axios.post(
       checkVoidStatusUrl,
       {
         userId,
-        voidedDocumentId
+        ...cuerpo
       },
       {
         headers: {

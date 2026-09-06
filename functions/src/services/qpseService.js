@@ -272,6 +272,54 @@ async function enviarASunat(nombreArchivo, xmlFirmadoBase64, token, environment 
 }
 
 /**
+ * LEE LA RESPUESTA DE `consultarEstado` — un solo criterio para todo el sistema.
+ *
+ * QPse no devuelve un formato estable: el código llega en `code`, `codigo` o
+ * `estado`; el mensaje de SUNAT en `message` o `mensaje` (NUNCA en `descripcion`
+ * ni `description`, aunque varias partes del sistema los leían); y el veredicto
+ * en `sunat_success` o en `state_label`.
+ *
+ * Cada sitio que interpretaba esto por su cuenta se equivocaba distinto:
+ * - `checkVoidStatus` leía `descripcion`/`description` y perdía el mensaje, así
+ *   que un "el comprobante ya fue informado y se encuentra anulado" (que es un
+ *   ÉXITO disfrazado de error 99) le llegaba vacío y lo trataba como rechazo.
+ * - El 98 viene a veces como '0098' — QPse rellena con ceros — y una comparación
+ *   con '98' a secas lo daba por definitivo (caso real: la baja quedaba
+ *   "Anulando..." para siempre).
+ *
+ * Esto TRADUCE, no decide: quien interpreta el codigo (en proceso, ya dado de
+ * baja, transitorio) son las funciones de criterio de `index.js`.
+ *
+ * @param {Object} estado - Respuesta cruda de `consultarEstado`
+ * @returns {{codigo: string, descripcion: string, notas: string, aceptado: boolean,
+ *            etiqueta: string, cdrUrl: string, cdrCrudo: string}}
+ */
+export function leerEstadoQPse(estado) {
+  const codigo = String(estado?.codigo || estado?.code || estado?.estado || '')
+  const descripcion = estado?.message || estado?.mensaje ||
+    estado?.descripcion || estado?.description || ''
+  const notas = Array.isArray(estado?.errores) ? estado.errores.join(' | ')
+    : (estado?.errores || estado?.observaciones || '')
+
+  // El codigo llega con ceros a la izquierda segun el momento: '0' y '0000' son
+  // aceptado. `state_label` es el veredicto propio de QPse: 'aceptado',
+  // 'rechazado' o 'indeterminado' (ni el sabe).
+  const numero = /^\d+$/.test(codigo) ? String(Number(codigo)) : ''
+
+  return {
+    codigo,
+    descripcion,
+    notas,
+    aceptado: numero === '0' || estado?.sunat_success === true ||
+      estado?.state_label === 'aceptado',
+    etiqueta: estado?.state_label || '',
+    cdrUrl: estado?.url_cdr || '',
+    cdrCrudo: estado?.cdr || estado?.cdr_base64 || estado?.cdr_content ||
+      estado?.contenido_cdr || estado?.cdr_xml || '',
+  }
+}
+
+/**
  * Consulta el estado de un comprobante en QPse
  *
  * @param {string} nombreArchivo - Nombre del archivo
@@ -1018,29 +1066,25 @@ export async function voidBoletaViaQPse(summaryXml, ruc, summaryId, config) {
     }
 
     // 7. Parsear respuesta final
-    const responseCode = estadoFinal?.codigo || estadoFinal?.code || resultadoEnvio.codigo || '98'
-    const accepted = responseCode === '0' || responseCode === '0000' || estadoFinal?.sunat_success === true
-    // OJO con los nombres de campo: QPse devuelve el mensaje de SUNAT en
-    // `message` (y a veces `mensaje`), NUNCA en `descripcion`/`description`.
-    // Al leer solo esos dos, el mensaje real se perdia y quedaba el texto de
-    // relleno "Pendiente de confirmacion de SUNAT" — asi que quien mirara la
-    // respuesta (isAlreadyVoidedResponse, la UI, los logs) nunca veia lo que
-    // SUNAT habia dicho de verdad.
+    // El criterio para leer la respuesta de QPse vive en `leerEstadoQPse`, que
+    // comparten esta funcion y `checkVoidStatus`. Antes cada una lo hacia por su
+    // cuenta y se equivocaban distinto (ver la cabecera de esa funcion).
     //
     // Caso BB01-00000002 de GRUPO DMS (22-ago): SUNAT respondia code 99 con
     // "El comprobante ya fue informado y se encuentra anulado o rechazado" y el
     // sistema lo reportaba como "pendiente", asi que la boleta seguia activa y
     // cada reintento mandaba otro resumen. Once resumenes rechazados.
-    const description = estadoFinal?.descripcion || estadoFinal?.description ||
-      estadoFinal?.message || estadoFinal?.mensaje ||
+    const leido = leerEstadoQPse(estadoFinal)
+    const responseCode = leido.codigo || resultadoEnvio.codigo || '98'
+    const accepted = leido.aceptado
+    const description = leido.descripcion ||
       resultadoEnvio?.descripcion || resultadoEnvio?.message || resultadoEnvio?.mensaje ||
       (accepted ? 'Boleta anulada correctamente' : 'Pendiente de confirmación de SUNAT')
 
     // Capturar CDR del campo `cdr` (base64 sin comprimir para resumen RC).
     // Igual que en voidInvoiceViaQPse — usa decodeQPseCdr para uniformidad.
     let cdrData = null
-    const cdrFromQuery = estadoFinal?.cdr || estadoFinal?.cdr_base64 ||
-      estadoFinal?.cdr_content || estadoFinal?.contenido_cdr || ''
+    const cdrFromQuery = leido.cdrCrudo
     if (cdrFromQuery) {
       cdrData = await decodeQPseCdr(cdrFromQuery)
       if (cdrData) {
@@ -1052,11 +1096,11 @@ export async function voidBoletaViaQPse(summaryXml, ruc, summaryId, config) {
       accepted: accepted,
       responseCode: responseCode,
       description: description,
-      notes: estadoFinal?.observaciones || estadoFinal?.errores?.join(' | ') || '',
+      notes: leido.notas,
       ticket: ticket,
       nombreArchivo: nombreArchivo,
       xmlFirmado: xmlFirmado,
-      cdrUrl: estadoFinal?.url_cdr || '',
+      cdrUrl: leido.cdrUrl,
       cdrData: cdrData,
       rawResponse: {
         firma: resultadoFirma,

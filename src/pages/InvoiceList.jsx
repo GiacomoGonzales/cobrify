@@ -70,6 +70,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { doc, updateDoc } from 'firebase/firestore'
 import { storage, db } from '@/lib/firebase'
 import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured, voidDocument, canVoidDocument, checkVoidStatus } from '@/services/sunatService'
+import { referenciaDeBaja } from '@/utils/bajaSunat'
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 import { aplicarTamanoDeHoja } from '@/utils/printPageSize'
@@ -1791,7 +1792,8 @@ Gracias por tu preferencia.`
         // (si SUNAT la rechaza, el comprobante sigue válido y no hay nada que revertir).
         toast.info('SUNAT está procesando la anulación. El stock se devolverá cuando SUNAT confirme. Consultando estado...')
         const invoiceBeingVoided = voidingSunatInvoice
-        const voidedDocumentId = result.voidedDocumentId
+        // Boleta o factura: la referencia de la baja sale del mismo criterio.
+        const { id: voidedDocumentId } = referenciaDeBaja(result)
         if (voidedDocumentId) {
           let pollAttempts = 0
           const maxPollAttempts = 6 // 6 intentos x 15s = 90s más
@@ -1800,14 +1802,16 @@ Gracias por tu preferencia.`
           const pollStatus = async () => {
             pollAttempts++
             try {
-              const statusResult = await checkVoidStatus(businessId, voidedDocumentId, idToken)
+              const statusResult = await checkVoidStatus(businessId, result, idToken)
               if (statusResult.status === 'voided' || statusResult.status === 'accepted') {
                 await applySunatVoidSideEffects(invoiceBeingVoided)
                 toast.success(`${docTypeName} anulada exitosamente en SUNAT. Stock restaurado.`)
                 await refreshOneInvoice(invoiceBeingVoided.id)
                 return
-              } else if (statusResult.status === 'rejected' || statusResult.error) {
-                // Baja rechazada: el stock nunca se tocó, no hay nada que revertir.
+              } else if (statusResult.status === 'rejected' || statusResult.status === 'unconfirmed' || statusResult.error) {
+                // Baja rechazada o envío que no llegó a SUNAT: el stock nunca se
+                // tocó, no hay nada que revertir. El comprobante vuelve a quedar
+                // anulable.
                 toast.error(statusResult.error || 'SUNAT rechazó la anulación')
                 await refreshOneInvoice(invoiceBeingVoided.id)
                 return
@@ -1859,14 +1863,18 @@ Gracias por tu preferencia.`
       const isBoleta = series.toUpperCase().startsWith('B')
       const docTypeName = isBoleta ? 'Boleta' : 'Factura'
 
-      // PASO 1: Si tiene voidedDocumentId, consultar estado primero
-      const voidDocId = invoice.voidedDocumentId
+      // PASO 1: Si hay una baja en curso, consultar su estado primero.
+      // Las boletas guardan `summaryDocumentId` y las facturas `voidedDocumentId`;
+      // mirar solo el segundo hacia que ninguna boleta llegara nunca a consultar y
+      // el reintento mandara OTRO resumen a SUNAT. Criterio en utils/bajaSunat.
+      const { id: voidDocId } = referenciaDeBaja(invoice)
+      let sigueEnProceso = false
       if (voidDocId) {
         toast.info('Consultando estado de anulación en SUNAT...')
         for (let attempt = 1; attempt <= 3; attempt++) {
           try {
             console.log(`🔍 checkVoidStatus intento ${attempt}/3, voidedDocumentId: ${voidDocId}`)
-            const statusResult = await checkVoidStatus(businessId, voidDocId, idToken)
+            const statusResult = await checkVoidStatus(businessId, invoice, idToken)
             console.log('📋 checkVoidStatus resultado:', JSON.stringify(statusResult))
             // 'accepted' = la baja ya había sido procesada por SUNAT en una consulta previa.
             // Aplicar los efectos acá: si la anulación quedó pendiente y el usuario cerró la
@@ -1880,6 +1888,12 @@ Gracias por tu preferencia.`
               toast.error(statusResult.error || 'SUNAT rechazó la anulación.')
               await refreshOneInvoice(invoice.id)
               return
+            } else if (statusResult.status === 'unconfirmed') {
+              // El envío no llegó a SUNAT: el comprobante volvió a su estado
+              // anterior y se puede volver a anular. Salir del bucle y reenviar.
+              break
+            } else if (statusResult.status === 'pending') {
+              sigueEnProceso = true
             }
             // Si pending, esperar y reintentar
             if (attempt < 3) await new Promise(r => setTimeout(r, 8000))
@@ -1887,6 +1901,18 @@ Gracias por tu preferencia.`
             console.warn('Error consultando estado:', e)
           }
         }
+      }
+
+      // SUNAT dijo que la baja TODAVIA se está procesando: no se reenvía nada.
+      // Mandar otro resumen mientras el anterior sigue en cola deja el mismo
+      // comprobante informado dos veces; SUNAT acepta uno y rechaza el otro con
+      // "ya fue informado", y el comprobante queda en un estado que nadie
+      // entiende. Pasó de verdad: cinco boletas de ASOCIADOS MAVI con dos
+      // resúmenes cada una en la misma noche.
+      if (sigueEnProceso) {
+        toast.info('SUNAT todavía está procesando esta anulación. Vuelva a intentar en unos minutos: no hace falta volver a anular.')
+        await refreshOneInvoice(invoice.id)
+        return
       }
 
       // PASO 2: Si no se resolvió con checkVoidStatus, reenviar la baja
@@ -1910,14 +1936,14 @@ Gracias por tu preferencia.`
         await applySunatVoidSideEffects(invoice)
         toast.success(`${docTypeName} anulada exitosamente en SUNAT. Stock restaurado.`)
         await refreshOneInvoice(invoice.id)
-      } else if (result.status === 'pending' && result.voidedDocumentId) {
+      } else if (result.status === 'pending' && referenciaDeBaja(result).id) {
         // Polling con el nuevo voidedDocumentId
         toast.info('SUNAT está procesando. Consultando estado...')
         for (let attempt = 1; attempt <= 4; attempt++) {
           await new Promise(r => setTimeout(r, 10000))
           try {
             console.log(`🔍 Polling intento ${attempt}/4...`)
-            const statusResult = await checkVoidStatus(businessId, result.voidedDocumentId, idToken)
+            const statusResult = await checkVoidStatus(businessId, result, idToken)
             console.log('📋 Polling resultado:', JSON.stringify(statusResult))
             if (statusResult.status === 'voided' || statusResult.status === 'accepted') {
               await applySunatVoidSideEffects(invoice)
@@ -4286,7 +4312,7 @@ Gracias por tu preferencia.`
 
                   {/* Reintentar anulación - Para documentos en "voiding" o con error de anulación previo */}
                   {(invoice.documentType === 'factura' || invoice.documentType === 'boleta' || invoice.documentType === 'nota_credito' || invoice.documentType === 'nota_debito') &&
-                   (invoice.sunatStatus === 'voiding' || (invoice.sunatStatus === 'accepted' && invoice.voidedDocumentId)) && (
+                   (invoice.sunatStatus === 'voiding' || (invoice.sunatStatus === 'accepted' && referenciaDeBaja(invoice).id)) && (
                     <>
                       <div className="border-t border-gray-100 my-1" />
                       <button

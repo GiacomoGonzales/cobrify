@@ -14,7 +14,7 @@ import { generateVoidedDocumentsXML, generateVoidedDocumentId, getDocumentTypeCo
 import { generateSummaryDocumentsXML, generateSummaryDocumentId, canVoidBoleta, CONDITION_CODES, getIdentityTypeCode } from './src/utils/summaryDocumentsXmlGenerator.js'
 import { signXML } from './src/utils/xmlSigner.js'
 import { sendSummary, getStatus, getStatusCdr } from './src/utils/sunatClient.js'
-import { voidBoletaViaQPse, voidInvoiceViaQPse, obtenerToken, consultarEstado } from './src/services/qpseService.js'
+import { voidBoletaViaQPse, voidInvoiceViaQPse, obtenerToken, consultarEstado, leerEstadoQPse } from './src/services/qpseService.js'
 import { sendPushNotification } from './notifications/sendPushNotification.js'
 import { loginRappi, probeLogins, getStoreOrders, getOrdersV2, registerWebhook, listWebhooks, registerStoreWebhook, listStoreWebhook, getClientIdFromToken, decodeJwtPayload, getBaseUrl, getV1BaseUrl } from './src/services/rappiApi.js'
 import {
@@ -5868,10 +5868,19 @@ export const checkVoidStatus = onRequest(
       const idToken = authHeader.split('Bearer ')[1]
       const decodedToken = await auth.verifyIdToken(idToken)
 
-      const { userId, voidedDocumentId } = req.body
+      // Facturas y boletas se dan de baja por caminos distintos —comunicacion de
+      // baja (RA, `voidedDocuments`) y resumen diario (RC, `summaryDocuments`)—
+      // pero la pregunta es la misma: "¿como va la baja?". Antes esta funcion
+      // solo sabia de facturas, asi que NADIE consultaba nunca el ticket de una
+      // boleta y toda anulacion que SUNAT dejara en proceso quedaba en
+      // "Anulando..." para siempre (caso real: ASOCIADOS MAVI, una boleta
+      // trabada desde mayo y cinco mas de setiembre).
+      const { userId, voidedDocumentId, summaryDocumentId } = req.body
+      const esResumen = !!summaryDocumentId && !voidedDocumentId
+      const documentoId = voidedDocumentId || summaryDocumentId
 
-      if (!userId || !voidedDocumentId) {
-        res.status(400).json({ error: 'userId y voidedDocumentId son requeridos' })
+      if (!userId || !documentoId) {
+        res.status(400).json({ error: 'userId y voidedDocumentId (o summaryDocumentId) son requeridos' })
         return
       }
 
@@ -5883,8 +5892,9 @@ export const checkVoidStatus = onRequest(
         return
       }
 
-      // Obtener documento de baja
-      const voidedDocRef = db.collection('businesses').doc(userId).collection('voidedDocuments').doc(voidedDocumentId)
+      // Obtener documento de baja (comunicacion de baja o resumen diario)
+      const voidedDocRef = db.collection('businesses').doc(userId)
+        .collection(esResumen ? 'summaryDocuments' : 'voidedDocuments').doc(documentoId)
       const voidedDoc = await voidedDocRef.get()
 
       if (!voidedDoc.exists) {
@@ -5894,8 +5904,13 @@ export const checkVoidStatus = onRequest(
 
       const voidedData = voidedDoc.data()
 
-      // Si ya está procesado, retornar estado
-      if (voidedData.status !== 'pending') {
+      // Si SUNAT ya dio un veredicto, devolverlo sin volver a preguntar.
+      // OJO: 'failed' NO es un veredicto de SUNAT — es "no pudimos averiguarlo"
+      // (se cayo el envio, la consulta dio error). Cortar ahi dejaba trabado
+      // para siempre lo que solo hacia falta volver a consultar: la boleta
+      // BB02-2108 de ASOCIADOS MAVI paso cuatro meses en "Anulando..." cuando
+      // SUNAT ya la tenia dada de baja.
+      if (voidedData.status === 'accepted' || voidedData.status === 'rejected') {
         res.status(200).json({
           status: voidedData.status,
           responseCode: voidedData.responseCode,
@@ -5929,12 +5944,27 @@ export const checkVoidStatus = onRequest(
           return
         }
 
-        const token = await obtenerToken(qpseConfig.usuario, qpseConfig.password, qpseConfig.environment || 'demo')
-        const nombreArchivo = `${businessData.ruc}-${voidedData.voidedDocId}`
+        // `obtenerToken` recibe el OBJETO de configuracion. Se le venian pasando
+        // tres argumentos sueltos (usuario, password, ambiente), asi que leia
+        // `config.usuario` de un string: QPse recibia usuario y contrasena vacios
+        // y devolvia 401 — es decir, esta consulta NUNCA funciono con QPse y toda
+        // baja que SUNAT dejara en proceso se quedaba trabada.
+        const token = await obtenerToken({
+          usuario: qpseConfig.usuario,
+          password: qpseConfig.password,
+          environment: qpseConfig.environment || 'demo',
+        })
+        // El nombre del archivo es RUC-<id del documento>: para una factura,
+        // el de la comunicacion de baja (RA-...); para una boleta, el del
+        // resumen diario (RC-...).
+        const nombreArchivo = `${businessData.ruc}-${esResumen ? voidedData.summaryDocId : voidedData.voidedDocId}`
         const estadoQPse = await consultarEstado(nombreArchivo, token, qpseConfig.environment || 'demo')
 
-        const codigo = String(estadoQPse?.codigo || estadoQPse?.code || estadoQPse?.estado || '')
-        const accepted = codigo === '0' || codigo === '0000' || estadoQPse?.sunat_success === true
+        // Un solo criterio para leer lo que responde QPse, compartido con la
+        // anulacion (`leerEstadoQPse` de qpseService).
+        const leido = leerEstadoQPse(estadoQPse)
+        const codigo = leido.codigo
+        const accepted = leido.aceptado
 
         // ¿SUNAT dice que el documento YA está de baja (2323/1033)? Tratarlo como
         // ANULADO, no como rechazo: antes esta rama caía en "rejected" y devolvía la
@@ -5943,16 +5973,16 @@ export const checkVoidStatus = onRequest(
         // baja" (patrón real: Induhealth F001-61/64, Serviceglobalcar FPP4-64).
         const alreadyVoided = isAlreadyVoidedResponse({
           responseCode: codigo,
-          description: estadoQPse?.descripcion || estadoQPse?.description || '',
-          notes: Array.isArray(estadoQPse?.errores) ? estadoQPse.errores.join(' | ') : (estadoQPse?.errores || '')
+          description: leido.descripcion,
+          notes: leido.notas,
         })
 
         if (accepted || alreadyVoided) {
           await voidedDocRef.update({
             status: 'accepted',
             responseCode: codigo,
-            responseDescription: estadoQPse?.descripcion || (alreadyVoided ? 'Documento ya dado de baja en SUNAT' : 'Anulación aceptada'),
-            cdrUrl: estadoQPse?.url_cdr || null,
+            responseDescription: leido.descripcion || (alreadyVoided ? 'Documento ya dado de baja en SUNAT' : 'Anulación aceptada'),
+            cdrUrl: leido.cdrUrl || null,
             processedAt: FieldValue.serverTimestamp()
           })
           await invoiceRef.update({
@@ -5968,8 +5998,27 @@ export const checkVoidStatus = onRequest(
           // 'voiding' PARA SIEMPRE (mismo bug ya corregido en voidInvoiceQPse).
           // Código vacío = respuesta ambigua de QPse: mantener pendiente sin tocar estados.
           res.status(200).json({ status: 'pending', message: 'Aún en proceso en SUNAT' })
+        } else if (leido.etiqueta === 'indeterminado') {
+          // QPse dice que ni el sabe (tipico del error de envio 'env:Server', que
+          // significa que el resumen no llego a SUNAT). No es una baja rechazada
+          // por SUNAT, asi que no se puede dar por muerta; tampoco sirve dejar el
+          // comprobante en "Anulando..." para siempre. Se devuelve al estado
+          // anterior con el motivo a la vista para que se pueda reintentar.
+          const detalle = leido.descripcion || leido.notas || 'SUNAT no confirmó la baja'
+          await voidedDocRef.update({
+            status: 'failed',
+            responseCode: codigo,
+            responseDescription: detalle,
+            processedAt: FieldValue.serverTimestamp()
+          })
+          await invoiceRef.update({
+            sunatStatus: 'accepted',
+            voidingTicket: null,
+            voidError: `No se pudo confirmar la baja: ${detalle}. Vuelva a intentar la anulación.`
+          })
+          res.status(200).json({ status: 'unconfirmed', error: detalle })
         } else {
-          const errorMsg = estadoQPse?.descripcion || estadoQPse?.errores?.join(' | ') || 'Error desconocido'
+          const errorMsg = leido.descripcion || leido.notas || 'Error desconocido'
           await voidedDocRef.update({
             status: 'rejected',
             error: errorMsg,
@@ -6868,11 +6917,14 @@ export const voidBoletaQPse = onRequest(
       console.log(summaryXml)
       console.log('📊 Datos usados para generar XML:', JSON.stringify(summaryXmlData, null, 2))
 
-      // 10. Marcar boleta como "anulando" antes de enviar
+      // 10. Marcar boleta como "anulando" antes de enviar.
+      // `voidError` se limpia: si no, el error del intento anterior se queda
+      // pegado y la boleta muestra "Anulando..." junto a un mensaje viejo.
       await boletaRef.update({
         sunatStatus: 'voiding',
         voidMethod: 'qpse',
         voidReason: reason || 'ANULACION DE OPERACION',
+        voidError: null,
         updatedAt: FieldValue.serverTimestamp()
       })
 
