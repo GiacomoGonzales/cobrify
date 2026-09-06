@@ -7,7 +7,7 @@
  */
 export default {
   id: 'guias-remision',
-  actualizado: '05/09/2026',
+  actualizado: '06/09/2026',
   intro:
     'La guía de remisión es el documento que ampara el traslado de mercadería: dice qué se mueve, desde dónde, hacia dónde y en qué vehículo. Va a SUNAT igual que una factura, y es la que te piden si te fiscalizan en el camino.',
 
@@ -91,6 +91,30 @@ export default {
         {
           type: 'texto',
           text: 'En **GRE Transportista**, **Descargar PDFs (ZIP)** y **Exportar Excel** están en el mismo lugar y funcionan igual: bajan lo que quedó filtrado. El Excel del transportista trae además remitente, destinatario, placa y conductor.',
+        },
+      ],
+    },
+
+    {
+      id: 'imprimir',
+      title: 'Imprimir o descargar la guía',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'En el menú de cada guía (los tres puntos de la fila) tienes cuatro formas de sacarla: **Ver PDF**, **Imprimir PDF** en hoja A4, **Imprimir Ticket** para la impresora de rollo y **Descargar Ticket (PDF)**, que te baja el ticket como archivo.',
+        },
+        { type: 'ui', kind: 'boton', label: 'Descargar Ticket (PDF)' },
+        {
+          type: 'texto',
+          text: 'Descargar el ticket sirve para **mandarlo por WhatsApp** al chofer o al cliente, sin necesidad de tener una impresora al lado. Sale con el ancho de papel que tengas configurado para tu ticketera: 80 mm o 58 mm.',
+        },
+        {
+          type: 'consejo',
+          text: 'Desde el celular, **Descargar Ticket** abre el menú de compartir de Android: desde ahí lo mandas directo por WhatsApp o lo guardas en el teléfono.',
+        },
+        {
+          type: 'ojo',
+          text: 'Si tienes una **ticketera Bluetooth** configurada, el botón Imprimir Ticket la usa directamente. Si no tienes ninguna, usa Descargar Ticket.',
         },
       ],
     },

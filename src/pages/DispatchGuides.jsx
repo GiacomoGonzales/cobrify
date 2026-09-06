@@ -116,6 +116,7 @@ export default function DispatchGuides() {
   const [previewingPdf, setPreviewingPdf] = useState(null) // ID de guía en vista previa
   const [sharingPdf, setSharingPdf] = useState(null) // ID de guía siendo compartida
   const [printingTicket, setPrintingTicket] = useState(null) // Guía para imprimir en ticket
+  const [descargandoTicket, setDescargandoTicket] = useState(null) // Guía cuyo ticket se está generando
   const ticketRef = useRef(null) // Ref para el componente de ticket
   const [companySettings, setCompanySettings] = useState(null) // Datos de la empresa
   const [allProducts, setAllProducts] = useState([]) // Productos para PDF (marca, lab, SKU)
@@ -506,6 +507,23 @@ export default function DispatchGuides() {
       }
     }
 
+    // En la app no hay diálogo de impresión: el WebView de Android ignora
+    // `window.print()`, así que sin ticketera Bluetooth el botón no hacía NADA y
+    // el ticket era imposible de sacar (lo reportó JMC). Ahí se entrega el mismo
+    // ticket en PDF, que el celular puede guardar o compartir.
+    if (isNativePlatform) {
+      try {
+        toast.info('Preparando el ticket...')
+        const { descargarGuiaTicketPdf } = await import('@/utils/guiaTicketPdf')
+        await descargarGuiaTicketPdf(guide, companySettings, { anchoMm: ticketPaperWidth })
+        return
+      } catch (error) {
+        console.error('Error al generar el ticket en PDF:', error)
+        toast.error('No se pudo preparar el ticket')
+        return
+      }
+    }
+
     // Fallback: impresión web (window.print)
     setPrintingTicket(guide)
     setTimeout(() => {
@@ -518,6 +536,25 @@ export default function DispatchGuides() {
         setPrintingTicket(null)
       }, 500)
     }, 100)
+  }
+
+  // Descargar el ticket como PDF (web y app). El ancho es el que el negocio
+  // tenga configurado para su ticketera, así el papel sale igual que impreso.
+  const handleDownloadTicket = async (guide) => {
+    if (!companySettings) {
+      toast.error('Cargando datos de empresa, intente de nuevo')
+      return
+    }
+    setDescargandoTicket(guide.id)
+    try {
+      const { descargarGuiaTicketPdf } = await import('@/utils/guiaTicketPdf')
+      await descargarGuiaTicketPdf(guide, companySettings, { anchoMm: ticketPaperWidth })
+    } catch (error) {
+      console.error('Error al descargar el ticket:', error)
+      toast.error('No se pudo generar el ticket')
+    } finally {
+      setDescargandoTicket(null)
+    }
   }
 
   // Marcar guía como anulada (la baja se hace manualmente en portal SUNAT)
@@ -1108,6 +1145,23 @@ export default function DispatchGuides() {
                   >
                     <Receipt className="w-4 h-4 text-gray-400" />
                     <span>Imprimir Ticket</span>
+                  </button>
+
+                  {/* Descargar el ticket como archivo. Imprimir y descargar no
+                      son lo mismo: para mandarlo por WhatsApp hace falta el
+                      archivo, y era justo lo que no se podía hacer. */}
+                  <button
+                    onClick={() => {
+                      setOpenMenuId(null)
+                      handleDownloadTicket(guide)
+                    }}
+                    disabled={descargandoTicket === guide.id}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3 disabled:opacity-50"
+                  >
+                    {descargandoTicket === guide.id
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : <Download className="w-4 h-4 text-gray-400" />}
+                    <span>{descargandoTicket === guide.id ? 'Generando...' : 'Descargar Ticket (PDF)'}</span>
                   </button>
 
                   {/* Descargar PDF */}

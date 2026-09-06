@@ -1,8 +1,12 @@
 import { forwardRef } from 'react'
 import React from 'react'
 import { QRCodeSVG } from 'qrcode.react'
-import { urlQrDeLaGuia } from '@/utils/qrGuiaSunat'
-import { etiquetaBreveRemitente } from '@/utils/senderTransferReasons'
+import {
+  seccionesDeGuiaParaTicket,
+  encabezadoDeGuia,
+  datosQrDeLaGuia,
+  PIE_DE_TICKET,
+} from '@/utils/guiaTicketDatos'
 
 /**
  * Componente de Ticket Imprimible para Guía de Remisión
@@ -15,138 +19,12 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
   // El motivo sale del catálogo compartido: este ticket y el PDF A4 tienen
   // que decir lo MISMO de la misma guía.
 
-  // Unidades de medida
-  const UNITS = {
-    'NIU': 'UND',
-    'KGM': 'KG',
-    'LTR': 'LT',
-    'MTR': 'MT',
-    'GLL': 'GAL',
-    'BOX': 'CJ',
-    'PK': 'PQ',
-    'DZN': 'DOC',
-    'TNE': 'TN',
-  }
-
-  // Formatear fecha
-  const formatDate = (dateValue) => {
-    if (!dateValue) return '-'
-    if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
-      const [year, month, day] = dateValue.split('-')
-      return `${day}/${month}/${year}`
-    }
-    const date = dateValue.toDate ? dateValue.toDate() : new Date(dateValue)
-    return date.toLocaleDateString('es-PE', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    })
-  }
-
-  // Generar código QR
-  const generateQRData = () => {
-    // La URL de SUNAT primero: es la que al escanearla ABRE la guía en el sitio
-    // de SUNAT, y es lo que el fedatario necesita ver. El formato de tuberías
-    // es solo texto: escanearlo muestra caracteres y no lleva a ningún lado.
-    // Se conserva como respaldo para las guías que no tienen CDR guardado.
-    const url = urlQrDeLaGuia(guide)
-    if (url) return url
-
-    const ruc = companySettings?.ruc || '00000000000'
-    const tipoDoc = guide.documentType === '31' ? '31' : '09'
-    const serie = guide.series || guide.number?.split('-')[0] || 'T001'
-    const numero = guide.number?.split('-')[1] || '1'
-    return `${ruc}|${tipoDoc}|${serie}|${numero}`
-  }
-
-  // Obtener datos del destinatario
-  const getRecipientData = () => {
-    if (guide.recipient) {
-      return {
-        documentNumber: guide.recipient.documentNumber || guide.recipient.ruc || '-',
-        name: guide.recipient.name || guide.recipient.businessName || '-',
-        address: guide.recipient.address || '-',
-      }
-    }
-    return { documentNumber: '-', name: '-', address: '-' }
-  }
-
-  const recipientData = getRecipientData()
-
-  // Tipos de documento
-  const DOC_TYPES = {
-    '1': 'DNI',
-    '4': 'CE',
-    '6': 'RUC',
-    '7': 'PAS',
-  }
-
-  // Tipos de documento relacionado
-  const RELATED_DOC_TYPES = {
-    '01': 'FAC',
-    '03': 'BOL',
-    '09': 'GRE',
-    '31': 'GRT',
-    '49': 'OC',
-  }
-
-  // Obtener datos del transporte
-  const getTransportData = () => {
-    if (guide.transportMode === '02') {
-      // Transporte privado
-      const driver = guide.transport?.driver || guide.driver || {}
-      const vehicle = guide.transport?.vehicle || guide.vehicle || {}
-      return {
-        type: guide.isM1LVehicle ? 'PRIVADO (M1/L)' : 'PRIVADO',
-        vehicle: vehicle.plate || '-',
-        vehicleAuth: vehicle.authorizationNumber
-          ? `${vehicle.authorizationEntity || ''} ${vehicle.authorizationNumber}`.trim()
-          : null,
-        driverDocType: DOC_TYPES[driver.documentType] || driver.documentType || '',
-        driverDocNumber: driver.documentNumber || '-',
-        driverName: `${driver.name || ''} ${driver.lastName || ''}`.trim() || '-',
-        license: driver.license || '-',
-        isM1L: guide.isM1LVehicle,
-      }
-    } else {
-      // Transporte público
-      const carrier = guide.transport?.carrier || guide.carrier || {}
-      return {
-        type: 'PUBLICO',
-        carrier: carrier.businessName || '-',
-        carrierRuc: carrier.ruc || '-',
-      }
-    }
-  }
-
-  const transportData = getTransportData()
-
-  // Obtener documentos relacionados
-  const getRelatedDocs = () => {
-    const docs = []
-
-    // Documento de referencia principal (factura/boleta)
-    if (guide.referenceInvoice?.fullNumber) {
-      docs.push({
-        type: RELATED_DOC_TYPES[guide.referenceInvoice.documentType] || 'DOC',
-        number: guide.referenceInvoice.fullNumber,
-      })
-    }
-
-    // Documentos relacionados adicionales
-    if (guide.relatedDocuments?.length > 0) {
-      guide.relatedDocuments.forEach(doc => {
-        docs.push({
-          type: RELATED_DOC_TYPES[doc.type] || 'DOC',
-          number: doc.fullNumber || `${doc.series}-${doc.number}`,
-        })
-      })
-    }
-
-    return docs
-  }
-
-  const relatedDocs = getRelatedDocs()
+  // TODO el contenido —las secciones, sus etiquetas y sus valores— sale de
+  // `guiaTicketDatos`, que comparte con el ticket en PDF. Antes estaba escrito
+  // acá y el PDF A4 tenía su propia versión: la misma guía llegó a imprimir dos
+  // motivos de traslado distintos.
+  const enc = encabezadoDeGuia(guide, companySettings)
+  const secciones = seccionesDeGuiaParaTicket(guide)
 
   return (
     <div ref={ref} className="guide-ticket-container">
@@ -382,211 +260,65 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
 
       {/* HEADER - Datos del Emisor */}
       <div className="ticket-header">
-        <div className="company-name">{companySettings?.tradeName || companySettings?.name || 'MI EMPRESA'}</div>
-        <div className="company-info">RUC: {companySettings?.ruc || '00000000000'}</div>
-        <div className="company-info">{companySettings?.address || ''}</div>
-        {companySettings?.phone && (
-          <div className="company-info">Tel: {companySettings.phone}</div>
-        )}
-        {guide.branchName && (
-          <div className="company-info">Sucursal: {guide.branchName}</div>
-        )}
+        <div className="company-name">{enc.nombre}</div>
+        <div className="company-info">RUC: {enc.ruc}</div>
+        {enc.direccion && <div className="company-info">{enc.direccion}</div>}
+        {enc.telefono && <div className="company-info">Tel: {enc.telefono}</div>}
+        {enc.sucursal && <div className="company-info">Sucursal: {enc.sucursal}</div>}
 
-        <div className="document-type">
-          {guide.documentType === '31' ? 'GUÍA REMISIÓN TRANSPORTISTA' : 'GUÍA DE REMISIÓN'}
-        </div>
-        <div className="document-number">{guide.number || '-'}</div>
+        <div className="document-type">{enc.tipo}</div>
+        <div className="document-number">{enc.numero}</div>
       </div>
 
-      {/* Fechas */}
-      <div className="ticket-section">
-        <div className="info-row">
-          <span className="info-label">F. Emisión:</span>
-          <span>{formatDate(guide.issueDate || guide.createdAt)}</span>
-        </div>
-        <div className="info-row">
-          <span className="info-label">F. Traslado:</span>
-          <span>{formatDate(guide.transferDate)}</span>
-        </div>
-      </div>
+      {secciones.map((seccion, i) => (
+        <div className="ticket-section" key={i}>
+          {seccion.titulo && <div className="section-title">{seccion.titulo}</div>}
 
-      {/* Destinatario */}
-      <div className="ticket-section">
-        <div className="section-title">Destinatario</div>
-        <div className="info-row">
-          <span className="info-label">Doc:</span>
-          <span>{recipientData.documentNumber}</span>
-        </div>
-        <div className="info-row">
-          <span className="info-label">Nombre:</span>
-          <span>{recipientData.name}</span>
-        </div>
-      </div>
+          {(seccion.filas || []).map((fila, k) => (
+            <div className="info-row" key={k}>
+              <span className="info-label">{fila.etiqueta}:</span>
+              <span>{fila.valor}</span>
+            </div>
+          ))}
 
-      {/* Proveedor (motivo 02 Compra) */}
-      {guide.supplier?.documentNumber && (
-        <div className="ticket-section">
-          <div className="section-title">Proveedor</div>
-          <div className="info-row">
-            <span className="info-label">RUC:</span>
-            <span>{guide.supplier.documentNumber}</span>
-          </div>
-          <div className="info-row">
-            <span className="info-label">Nombre:</span>
-            <span>{guide.supplier.name || '-'}</span>
-          </div>
-          {guide.supplier.address && (
-            <div className="address-text">{guide.supplier.address}</div>
+          {seccion.destacado && <div className="weight-box">{seccion.destacado}</div>}
+          {seccion.texto && <div className="address-text">{seccion.texto}</div>}
+          {seccion.nota && (
+            <div className="address-text" style={{ textAlign: 'center', fontStyle: 'italic' }}>
+              {seccion.nota}
+            </div>
+          )}
+
+          {seccion.items && (
+            <div className="items-table">
+              <div className="items-header">
+                <span>Cant</span>
+                <span>Und</span>
+                <span>Descripción</span>
+              </div>
+              {seccion.items.map((item, k) => (
+                <div key={k}>
+                  <div className="item-row">
+                    <span>{item.cantidad}</span>
+                    <span>{item.unidad}</span>
+                    <span>{item.descripcion}</span>
+                  </div>
+                  {item.serie && (
+                    <div className="item-code" style={{ paddingLeft: '10px', fontSize: '9px' }}>
+                      S/N: {item.serie}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </div>
-      )}
-
-      {/* Motivo y Peso */}
-      <div className="ticket-section">
-        <div className="section-title">Datos del Traslado</div>
-        <div className="info-row">
-          <span className="info-label">Motivo:</span>
-          <span>{etiquetaBreveRemitente(guide.transferReason) || guide.transferReason || '-'}</span>
-        </div>
-        <div className="weight-box">
-          PESO: {guide.totalWeight || guide.weight || '0'} {guide.weightUnit || 'KGM'}
-        </div>
-        {guide.transferDescription && (
-          <div className="address-text" style={{ marginTop: '2px' }}>
-            Obs: {guide.transferDescription}
-          </div>
-        )}
-      </div>
-
-      {/* Documentos Relacionados (si existen) */}
-      {relatedDocs.length > 0 && (
-        <div className="ticket-section">
-          <div className="section-title">Doc. Relacionados</div>
-          {relatedDocs.map((doc, idx) => (
-            <div key={idx} className="info-row">
-              <span className="info-label">{doc.type}:</span>
-              <span>{doc.number}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Origen */}
-      <div className="ticket-section">
-        <div className="section-title">Punto de Partida</div>
-        <div className="address-text">
-          {guide.origin?.address || guide.originAddress || '-'}
-        </div>
-        {guide.origin?.ubigeo && (
-          <div className="info-row">
-            <span className="info-label">Ubigeo:</span>
-            <span>{guide.origin.ubigeo}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Destino */}
-      <div className="ticket-section">
-        <div className="section-title">Punto de Llegada</div>
-        <div className="address-text">
-          {guide.destination?.address || guide.destinationAddress || '-'}
-        </div>
-        {guide.destination?.ubigeo && (
-          <div className="info-row">
-            <span className="info-label">Ubigeo:</span>
-            <span>{guide.destination.ubigeo}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Transporte */}
-      <div className="ticket-section">
-        <div className="section-title">Transporte {transportData.type}</div>
-        {guide.transportMode === '02' ? (
-          <>
-            {/* Vehículo */}
-            {transportData.vehicle !== '-' && (
-              <div className="info-row">
-                <span className="info-label">Placa:</span>
-                <span>{transportData.vehicle}</span>
-              </div>
-            )}
-            {transportData.vehicleAuth && (
-              <div className="info-row">
-                <span className="info-label">Autoriz:</span>
-                <span>{transportData.vehicleAuth}</span>
-              </div>
-            )}
-            {/* Conductor */}
-            {transportData.driverName !== '-' && (
-              <>
-                <div className="info-row">
-                  <span className="info-label">Conductor:</span>
-                  <span>{transportData.driverName}</span>
-                </div>
-                {transportData.driverDocNumber !== '-' && (
-                  <div className="info-row">
-                    <span className="info-label">{transportData.driverDocType || 'Doc'}:</span>
-                    <span>{transportData.driverDocNumber}</span>
-                  </div>
-                )}
-                {transportData.license !== '-' && (
-                  <div className="info-row">
-                    <span className="info-label">Licencia:</span>
-                    <span>{transportData.license}</span>
-                  </div>
-                )}
-              </>
-            )}
-            {/* Indicador M1/L */}
-            {transportData.isM1L && (
-              <div className="address-text" style={{ textAlign: 'center', fontStyle: 'italic' }}>
-                (Vehículo categoría M1 o L)
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            <div className="info-row">
-              <span className="info-label">Transportista:</span>
-              <span>{transportData.carrier}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">RUC:</span>
-              <span>{transportData.carrierRuc}</span>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Items */}
-      <div className="ticket-section">
-        <div className="section-title">Bienes ({guide.items?.length || 0})</div>
-        <div className="items-table">
-          <div className="items-header">
-            <span>Cant</span>
-            <span>Und</span>
-            <span>Descripción</span>
-          </div>
-          {(guide.items || []).map((item, index) => (
-            <div key={index}>
-              <div className="item-row">
-                <span>{item.quantity || 0}</span>
-                <span>{UNITS[item.unit] || item.unit || 'UND'}</span>
-                <span>{item.description || item.name || '-'}</span>
-              </div>
-              {item.serialNumber && (
-                <div className="item-code" style={{ paddingLeft: '10px', fontSize: '9px' }}>S/N: {item.serialNumber}</div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
+      ))}
 
       {/* QR Code */}
       <div className="qr-container">
         <QRCodeSVG
-          value={generateQRData()}
+          value={datosQrDeLaGuia(guide, companySettings?.ruc)}
           size={is58mm ? 50 : 70}
           level="M"
         />
@@ -594,11 +326,17 @@ const DispatchGuideTicket = forwardRef(({ guide, companySettings, paperWidth = 8
 
       {/* Footer */}
       <div className="ticket-footer">
-        <p className="footer-text">REPRESENTACIÓN IMPRESA DE LA</p>
-        <p className="footer-text">GUÍA DE REMISIÓN ELECTRÓNICA</p>
-        <p className="footer-text" style={{ fontSize: is58mm ? '5pt' : '6pt', marginTop: '2px' }}>
-          Consulte en: www.sunat.gob.pe
-        </p>
+        {PIE_DE_TICKET.map((linea, i) => (
+          <p
+            className="footer-text"
+            key={i}
+            style={i === PIE_DE_TICKET.length - 1
+              ? { fontSize: is58mm ? '5pt' : '6pt', marginTop: '2px' }
+              : undefined}
+          >
+            {linea}
+          </p>
+        ))}
       </div>
     </div>
   )
