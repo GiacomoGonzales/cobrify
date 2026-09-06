@@ -46,6 +46,7 @@ import { MARCA_CHAT } from '@/utils/dominioChat'
 import { useAvisosDelChat } from '@/hooks/useAvisosDelChat'
 import { useTema } from '@/utils/temaOscuro'
 import { estiloBurbuja, estiloFondo, useApariencia } from '@/utils/aparienciaChat'
+import { PencilLine, Upload } from 'lucide-react'
 import BotonTema from '@/components/BotonTema'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
@@ -160,6 +161,21 @@ export default function Chat() {
   // Adjunto elegido, esperando confirmacion (con su vista previa y pie).
   const [adjunto, setAdjunto] = useState(null)
   const [pieAdjunto, setPieAdjunto] = useState('')
+  // Arrastrar un archivo desde el escritorio. El contador es necesario: al
+  // pasar por encima de un hijo el navegador dispara `dragleave` del padre, y
+  // con un simple booleano el aviso parpadeaba.
+  const [arrastrando, setArrastrando] = useState(false)
+  const profundidadArrastre = useRef(0)
+  // La dirección temporal de la vista previa. Se crea UNA vez por archivo y
+  // se libera al cambiarlo: antes se pedía una nueva en cada repintado y
+  // quedaban colgadas en memoria hasta recargar.
+  const [urlAdjunto, setUrlAdjunto] = useState('')
+  useEffect(() => {
+    if (!adjunto) { setUrlAdjunto(''); return undefined }
+    const url = URL.createObjectURL(adjunto)
+    setUrlAdjunto(url)
+    return () => URL.revokeObjectURL(url)
+  }, [adjunto])
   // Archivo de una respuesta rapida: ya esta guardado, asi que no se sube de
   // nuevo — queda enganchado al cuadro y sale con el texto como pie.
   const [adjuntoGuardado, setAdjuntoGuardado] = useState(null)
@@ -825,12 +841,55 @@ export default function Chat() {
   const handleElegirArchivo = (e) => {
     const file = e.target.files?.[0]
     e.target.value = ''
+    tomarAdjunto(file)
+  }
+
+  /** Deja un archivo listo en la vista previa, o explica por qué no se puede. */
+  const tomarAdjunto = (file) => {
     if (!file) return
+    if (!activaId) { toast.error('Abre una conversación primero'); return }
+    if (!ventanaAbierta) { toast.error('La ventana de 24 horas está cerrada'); return }
     const problema = validarArchivo(file)
     if (problema) { toast.error(problema); return }
     setAdjunto(file)
     setPieAdjunto('')
   }
+
+  /** Soltar archivos encima de la conversación. */
+  const alSoltarArchivos = (e) => {
+    e.preventDefault()
+    profundidadArrastre.current = 0
+    setArrastrando(false)
+    const archivos = [...(e.dataTransfer?.files || [])]
+    if (!archivos.length) return
+    if (archivos.length > 1) toast.warning('Se envía de a un archivo: va el primero.')
+    tomarAdjunto(archivos[0])
+  }
+
+  const alEntrarArrastre = (e) => {
+    if (!e.dataTransfer?.types?.includes('Files')) return
+    profundidadArrastre.current += 1
+    setArrastrando(true)
+  }
+
+  const alSalirArrastre = () => {
+    profundidadArrastre.current = Math.max(0, profundidadArrastre.current - 1)
+    if (profundidadArrastre.current === 0) setArrastrando(false)
+  }
+
+  // Soltar un archivo FUERA de la conversación —en la lista, en el borde— y
+  // el navegador lo abriría en la pestaña, tirando abajo la bandeja y lo que
+  // estuvieras escribiendo. Aquí no pasa nada: el que cuenta es el <main>,
+  // que ya llamó a preventDefault antes de que esto corra.
+  useEffect(() => {
+    const tragar = (e) => { if (!e.defaultPrevented) e.preventDefault() }
+    window.addEventListener('dragover', tragar)
+    window.addEventListener('drop', tragar)
+    return () => {
+      window.removeEventListener('dragover', tragar)
+      window.removeEventListener('drop', tragar)
+    }
+  }, [])
 
   const handleEnviarAdjunto = async () => {
     if (!adjunto || enviando) return
@@ -1161,12 +1220,27 @@ export default function Chat() {
           En escritorio no cambia nada: `max-md:` solo aplica por debajo de md.
           Y con "reducir movimiento" activado en el sistema, no hay animación. */}
       <main
-        className={`flex-1 flex flex-col bg-gray-200
+        onDragEnter={alEntrarArrastre}
+        onDragOver={(e) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault() }}
+        onDragLeave={alSalirArrastre}
+        onDrop={alSoltarArchivos}
+        className={`relative flex-1 flex flex-col bg-gray-200
           max-md:absolute max-md:inset-0 max-md:z-20
           max-md:transition-transform max-md:duration-200 max-md:ease-out
           motion-reduce:transition-none
           ${activaId || configAbierta ? 'max-md:translate-x-0' : 'max-md:translate-x-full'}`}
       >
+        {arrastrando && activa && !configAbierta && (
+          <div className="absolute inset-3 z-40 rounded-2xl border-2 border-dashed border-primary-500 bg-primary-50/90 backdrop-blur-sm grid place-items-center pointer-events-none">
+            <div className="text-center">
+              <Upload className="w-8 h-8 mx-auto text-primary-600 mb-2" />
+              <p className="text-[15px] font-semibold text-gray-900">Suelta el archivo aquí</p>
+              <p className="text-[12.5px] text-gray-600 mt-0.5">
+                {ventanaAbierta ? 'Se envía a esta conversación' : 'La ventana de 24 horas está cerrada'}
+              </p>
+            </div>
+          </div>
+        )}
         {configAbierta ? (
           <ConfiguracionChat onVolver={() => setConfigAbierta(false)} />
         ) : !activa ? (
@@ -1980,11 +2054,22 @@ export default function Chat() {
             </div>
             <div className="p-5">
               {adjunto.type.startsWith('image/') ? (
-                <img
-                  src={URL.createObjectURL(adjunto)}
-                  alt="Vista previa"
-                  className="rounded-lg max-h-64 mx-auto object-contain"
-                />
+                <div className="relative">
+                  <img
+                    src={urlAdjunto}
+                    alt="Vista previa"
+                    className="rounded-lg max-h-64 mx-auto object-contain"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setEditando({ url: urlAdjunto })}
+                    className="absolute top-2 right-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-black/55 text-white text-[12px] font-medium hover:bg-black/70"
+                    title="Pintar sobre la foto"
+                  >
+                    <PencilLine className="w-3.5 h-3.5" />
+                    Editar
+                  </button>
+                </div>
               ) : (
                 <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-4 py-3">
                   <FileText className="w-8 h-8 text-red-500 flex-none" />
@@ -2044,9 +2129,14 @@ export default function Chat() {
           media={editando}
           onCerrar={() => setEditando(null)}
           onEnviar={async (archivo, pie) => {
+            bajarAlMandar()
             await enviarArchivoA([activaId], archivo, pie)
             setEditando(null)
             setVisorIndice(null)
+            // Si venía de un archivo recién arrastrado, su vista previa
+            // también sobra: ya salió.
+            setAdjunto(null)
+            setPieAdjunto('')
           }}
         />
       )}
