@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { ChevronLeft, ChevronRight, Download, Forward, PencilLine, X } from 'lucide-react'
 import { descargarArchivo, nombreDeArchivo } from '@/utils/descargarArchivo'
+import { useToast } from '@/contexts/ToastContext'
 
 /**
  * Visor de imágenes a pantalla completa, liviano.
@@ -20,6 +21,7 @@ export default function VisorMedia({ imagenes, indiceInicial = 0, onCerrar, onEd
   const [i, setI] = useState(indiceInicial)
   const [originalListo, setOriginalListo] = useState(false)
   const [bajando, setBajando] = useState(false)
+  const toast = useToast()
 
   const actual = imagenes[i]
 
@@ -81,8 +83,11 @@ export default function VisorMedia({ imagenes, indiceInicial = 0, onCerrar, onEd
           <button
             onClick={async () => {
               setBajando(true)
-              await descargarArchivo(actual.url, nombreDeArchivo(actual))
+              const r = await descargarArchivo(actual.url, nombreDeArchivo(actual))
               setBajando(false)
+              // Si no se pudo bajar directo se abrió en otra pestaña. Decirlo,
+              // en vez de dejar al usuario preguntándose qué pasó.
+              if (!r.ok) toast.warning(`Se abrió en otra pestaña: ${r.motivo}. Guárdala desde ahí.`)
             }}
             disabled={bajando}
             className="p-2 hover:text-white rounded-lg hover:bg-white/10 disabled:opacity-50"

@@ -180,6 +180,13 @@ struct ConversationView: View {
         .background(Apariencia.shared.fondoView())
         .navigationTitle(conv.titulo)
         .navigationBarTitleDisplayMode(.inline)
+        // Vidrio esmerilado arriba y abajo. No es un adorno: sin nada, el
+        // texto que sube se cortaba en seco contra el fondo y parecía
+        // desaparecer de la nada. Con el material se ve pasar POR DEBAJO,
+        // desenfocado — que es lo que hace WhatsApp. Un color sólido no
+        // sirve: ya se probó y se leía como un segundo fondo encima del fondo.
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -764,6 +771,7 @@ struct ConversationView: View {
                 }
             }
             .padding(.top, 4)
+            .background(.ultraThinMaterial)
         }
     }
 
