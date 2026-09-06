@@ -9,7 +9,7 @@
  */
 export default {
   id: 'catalogo-online',
-  actualizado: '12/08/2026',
+  actualizado: '06/09/2026',
   intro:
     'Tu catálogo online es una tienda web que sale de los productos que ya tienes cargados. No hay que armarla aparte: se enciende, se comparte el enlace y tus clientes pueden ver precios y hacer pedidos.',
 
@@ -30,6 +30,14 @@ export default {
         {
           type: 'consejo',
           text: 'El catálogo se alimenta solo de tus productos: si cambias un precio o subes una foto en **Productos**, el catálogo se actualiza sin que tengas que tocar nada más.',
+        },
+        {
+          type: 'texto',
+          text: 'El campo del enlace es solo el **nombre corto** que va al final de la dirección, no la dirección entera. Escribe `mi-tienda` y tu catálogo queda en cobrifyperu.com/catalogo/mi-tienda. Si pegas una dirección completa, el sistema se queda con el último tramo.',
+        },
+        {
+          type: 'ojo',
+          text: 'Ese nombre es **único**: si otro negocio ya lo tiene, te avisa debajo del campo y no te deja guardar. Elige uno propio, como el nombre de tu tienda.',
         },
       ],
     },

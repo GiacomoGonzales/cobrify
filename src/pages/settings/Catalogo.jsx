@@ -35,8 +35,9 @@ import {
   MessageCircle, Package, Palette, QrCode, Save, ShoppingCart, Store, Trash2, User, X,
 } from 'lucide-react'
 import QRCode from 'qrcode'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { limpiarSlug, problemaDelSlug } from '@/utils/catalogSlug'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useGuardado } from '@/components/settings/useGuardado'
@@ -106,6 +107,12 @@ export default function Catalogo() {
   }, [appointmentsBooking.enabled])
 
   const [catalogSlug, setCatalogSlug] = useState('')
+  // Si el nombre ya lo usa OTRO negocio, los dos catálogos viven en la misma
+  // dirección y la búsqueda muestra el primero que encuentra: uno termina
+  // viendo el catálogo del otro. Pasó de verdad (2 negocios con
+  // 'cobrifyperucomcatalogo', 5-set-2026), así que se comprueba antes de guardar.
+  // 'libre' | 'tomado' | 'revisando' | null (sin comprobar todavía)
+  const [slugDisponible, setSlugDisponible] = useState(null)
   const [catalogCustomDomain, setCatalogCustomDomain] = useState('')
 
   const [catalogColor, setCatalogColor] = useState('#10B981')
@@ -400,6 +407,37 @@ export default function Catalogo() {
     fetchResellerDomain()
   }, [subscription?.resellerId])
 
+  // ¿El nombre está libre? Se pregunta a Firestore con la MISMA consulta que
+  // resuelve el catálogo público (nombre + catálogo activo), que es justo el
+  // choque que importa. Se espera medio segundo para no consultar en cada tecla.
+  useEffect(() => {
+    const propio = catalogSlug
+    if (!propio || problemaDelSlug(propio)) {
+      setSlugDisponible(null)
+      return
+    }
+    let vivo = true
+    setSlugDisponible('revisando')
+    const t = setTimeout(async () => {
+      try {
+        const q = query(
+          collection(db, 'businesses'),
+          where('catalogSlug', '==', propio),
+          where('catalogEnabled', '==', true)
+        )
+        const snap = await getDocs(q)
+        const ajeno = snap.docs.some(d => d.id !== getBusinessId())
+        if (vivo) setSlugDisponible(ajeno ? 'tomado' : 'libre')
+      } catch (e) {
+        // Sin respuesta no se afirma nada: el guardado vuelve a comprobar.
+        console.warn('No se pudo comprobar el nombre del catálogo:', e)
+        if (vivo) setSlugDisponible(null)
+      }
+    }, 500)
+    return () => { vivo = false; clearTimeout(t) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalogSlug])
+
   // ── Guardado ────────────────────────────────────────────────────────────────
   // Los mismos campos que escribía el botón viejo, uno por uno. El modo demo lo
   // corta `useGuardado`.
@@ -407,6 +445,38 @@ export default function Catalogo() {
     if (catalogEnabled && !catalogSlug) {
       toast.error(businessMode === 'restaurant' ? 'Ingresa una URL para tu carta digital' : 'Ingresa una URL para tu catálogo')
       return
+    }
+
+    // El nombre tiene que servir Y ser único. Lo segundo se vuelve a comprobar
+    // acá y no solo mientras escribe: entre que escribió y guardó, otro negocio
+    // pudo tomarlo, y guardar un duplicado deja a los dos catálogos en la misma
+    // dirección.
+    if (catalogEnabled && catalogSlug) {
+      // Se limpia del todo ANTES de validar: el guion del final se deja pasar
+      // mientras escribe, pero no se guarda.
+      const slugFinal = limpiarSlug(catalogSlug)
+      if (slugFinal !== catalogSlug) setCatalogSlug(slugFinal)
+      const problema = problemaDelSlug(slugFinal)
+      if (problema) {
+        toast.error(problema)
+        return
+      }
+      try {
+        const snap = await getDocs(query(
+          collection(db, 'businesses'),
+          where('catalogSlug', '==', slugFinal),
+          where('catalogEnabled', '==', true)
+        ))
+        if (snap.docs.some(d => d.id !== getBusinessId())) {
+          setSlugDisponible('tomado')
+          toast.error(`"${slugFinal}" ya lo está usando otro negocio. Elige otro nombre.`)
+          return
+        }
+      } catch (e) {
+        // Si la comprobación no responde, no se bloquea el guardado: sería peor
+        // dejarlo sin poder guardar por un problema de red.
+        console.warn('No se pudo comprobar si el nombre está tomado:', e)
+      }
     }
 
     await guardar({
@@ -567,7 +637,15 @@ export default function Catalogo() {
                         <input
                           type="text"
                           value={catalogSlug}
-                          onChange={(e) => setCatalogSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                          // `limpiarSlug` y no un reemplazo suelto: si pegan la
+                          // dirección entera se queda con el último tramo, en vez
+                          // de juntarlo todo en un engendro.
+                          onChange={(e) => setCatalogSlug(limpiarSlug(e.target.value, { escribiendo: true }))}
+                          onPaste={(e) => {
+                            e.preventDefault()
+                            setCatalogSlug(limpiarSlug(e.clipboardData.getData('text')))
+                          }}
+                          maxLength={60}
                           placeholder={businessMode === 'restaurant' ? 'mi-restaurante' : 'mi-tienda'}
                           className="flex-1 px-3 py-2.5 bg-white border-0 focus:ring-2 focus:ring-primary-500 text-gray-900"
                         />
@@ -583,11 +661,23 @@ export default function Catalogo() {
                         </button>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      {businessMode === 'restaurant'
-                        ? 'Solo letras minúsculas, números y guiones. Ejemplo: mi-restaurante, la-buena-mesa'
-                        : 'Solo letras minúsculas, números y guiones. Ejemplo: mi-tienda, ferreteria-lopez'}
-                    </p>
+                    {catalogSlug && problemaDelSlug(catalogSlug) ? (
+                      <p className="text-xs text-red-600 mt-2">{problemaDelSlug(catalogSlug)}</p>
+                    ) : slugDisponible === 'tomado' ? (
+                      <p className="text-xs text-red-600 mt-2">
+                        Ese nombre ya lo usa otro negocio. Elige otro para que tu enlace sea solo tuyo.
+                      </p>
+                    ) : slugDisponible === 'libre' ? (
+                      <p className="text-xs text-emerald-600 mt-2">Disponible</p>
+                    ) : slugDisponible === 'revisando' ? (
+                      <p className="text-xs text-gray-400 mt-2">Comprobando si está libre...</p>
+                    ) : (
+                      <p className="text-xs text-gray-500 mt-2">
+                        {businessMode === 'restaurant'
+                          ? 'Solo letras minúsculas, números y guiones. Ejemplo: mi-restaurante, la-buena-mesa'
+                          : 'Solo letras minúsculas, números y guiones. Ejemplo: mi-tienda, ferreteria-lopez'}
+                      </p>
+                    )}
                   </div>
 
 {/* Vista previa del enlace */}
