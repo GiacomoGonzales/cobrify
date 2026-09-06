@@ -18,7 +18,7 @@
  */
 export default {
   id: 'facturas',
-  actualizado: '05/09/2026',
+  actualizado: '06/09/2026',
   intro:
     'Ventas es el historial de todo lo que emitiste: facturas, boletas, notas de venta, notas de crédito y de débito. Desde acá consultas, cobras lo pendiente, corriges errores, reimprimes y descargas. Es la página a la que vuelves cuando algo de una venta pasada necesita atención.',
 
@@ -133,7 +133,15 @@ export default {
         },
         {
           type: 'texto',
-          text: '**Anular en SUNAT** pasa por el estado **Anulación en proceso** hasta que SUNAT confirma con su constancia (el CDR de baja). Si quedó detenida, el botón **Reintentar anulación** vuelve a consultar. Anular no es eliminar: el trámite queda registrado ante SUNAT.',
+          text: '**Anular en SUNAT** pasa por el estado **Anulación en proceso** hasta que SUNAT confirma con su constancia (el CDR de baja). Anular no es eliminar: el trámite queda registrado ante SUNAT.',
+        },
+        {
+          type: 'texto',
+          text: 'No tienes que quedarte esperando: cada vez que entras a Comprobantes, el sistema **vuelve a consultarle a SUNAT** por las anulaciones que quedaron en proceso y te avisa en pantalla si alguna ya quedó anulada, o si SUNAT la rechazó. Si quieres consultar una en particular ahora mismo, el botón **Reintentar anulación** del menú de la fila hace lo mismo al instante.',
+        },
+        {
+          type: 'ojo',
+          text: 'Si el aviso dice que **SUNAT no la anuló**, ese comprobante **sigue vigente**: no está anulado y hay que volver a anularlo. El mensaje trae el motivo del rechazo.',
         },
         {
           type: 'texto',
@@ -368,7 +376,7 @@ export default {
     },
     {
       q: 'Dice "Anulación en proceso" desde hace rato, ¿está trabada?',
-      a: 'La Comunicación de Baja no es instantánea: SUNAT la procesa y responde con su constancia. Usa **Reintentar anulación** para volver a consultar; cuando SUNAT responde, pasa a Anulada y aparece el CDR de baja.',
+      a: 'La Comunicación de Baja no es instantánea: SUNAT la procesa y responde con su constancia, y a veces se toma horas. Cada vez que entras a Comprobantes el sistema vuelve a consultar solo, y te avisa en cuanto SUNAT responde. Para apurar una en concreto, usa **Reintentar anulación** en el menú de esa fila. Si SUNAT la rechazó, el aviso te dice el motivo y el comprobante sigue vigente.',
     },
     {
       q: 'Anulé una venta que ya estaba cobrada, ¿y la plata?',

@@ -1505,6 +1505,16 @@ Gracias por tu preferencia.`
       return
     }
 
+    // Marca para dejar el inventario quieto en un comprobante puntual. Se usa
+    // cuando devolver el stock haría más daño que bien: una cantidad cargada mal
+    // en su día (una línea de 339.900 unidades, por ejemplo) o un negocio que ya
+    // resolvió la diferencia con un conteo físico. El comprobante se anula igual;
+    // lo único que no ocurre es el movimiento de stock.
+    if (freshInvoice.skipStockRestore === true) {
+      toast.info('El comprobante quedó anulado. El stock no se movió: este comprobante está marcado para ajustarse por conteo.')
+      return
+    }
+
     const series = invoice.series || invoice.number?.split('-')[0] || ''
     const docTypeName = series.toUpperCase().startsWith('B') ? 'Boleta' : 'Factura'
 
@@ -1970,6 +1980,70 @@ Gracias por tu preferencia.`
       toast.error(error?.response?.data?.error || error.message || 'Error al reintentar la anulación.')
     }
   }
+
+  // AL ABRIR LA LISTA, CERRAR LAS ANULACIONES QUE QUEDARON A MEDIAS.
+  //
+  // Un comprobante en "Anulando..." significa que la baja se mandó a SUNAT y
+  // falta leer la respuesta. Esa lectura solo ocurría si alguien tocaba
+  // "Reintentar anulación", y como la consulta estaba rota nadie la tocaba con
+  // éxito: al 6-set-2026 había 103 comprobantes así en 60 negocios, el más
+  // viejo de enero. Casi la mitad ya estaban anulados en SUNAT sin que el
+  // sistema lo supiera, y el resto habían sido RECHAZADOS —o sea que seguían
+  // siendo ventas válidas— sin que nadie se enterara tampoco.
+  //
+  // Ahora se consultan solos al entrar a la pantalla. Lo hace el mismo camino
+  // que el botón, así que el stock se devuelve igual (y `stockRestored` impide
+  // duplicarlo). De a pocos por visita: son llamadas a SUNAT, no hay apuro.
+  const bajasRevisadasRef = useRef(new Set())
+  useEffect(() => {
+    if (isDemoMode || isLoading || !user?.uid) return
+
+    const pendientes = invoices
+      .filter(inv => inv.sunatStatus === 'voiding' && referenciaDeBaja(inv).id)
+      .filter(inv => !bajasRevisadasRef.current.has(inv.id))
+      .slice(0, 3)
+    if (pendientes.length === 0) return
+
+    let cancelado = false
+    const revisar = async () => {
+      const businessId = getBusinessId()
+      let idToken
+      try {
+        const { getAuth } = await import('firebase/auth')
+        idToken = await getAuth().currentUser?.getIdToken()
+      } catch { return }
+      if (!idToken) return
+
+      for (const inv of pendientes) {
+        if (cancelado) return
+        bajasRevisadasRef.current.add(inv.id)
+        try {
+          const estado = await checkVoidStatus(businessId, inv, idToken)
+          if (cancelado) return
+          const nombre = inv.number || `${inv.series}-${inv.correlativeNumber}`
+
+          if (estado.status === 'voided' || estado.status === 'accepted') {
+            await applySunatVoidSideEffects(inv)
+            toast.success(`SUNAT confirmó la anulación de ${nombre}.`)
+            await refreshOneInvoice(inv.id)
+          } else if (estado.status === 'rejected' || estado.status === 'unconfirmed') {
+            // Importante decirlo: el comprobante NO está anulado y el negocio
+            // puede llevar meses creyendo que sí.
+            toast.error(`SUNAT no anuló ${nombre}: ${estado.error || 'la baja fue rechazada'}. El comprobante sigue vigente.`, 9000)
+            await refreshOneInvoice(inv.id)
+          }
+          // 'pending' se deja como está: SUNAT todavía la está procesando.
+        } catch (e) {
+          console.warn('No se pudo revisar la anulación pendiente:', e)
+        }
+      }
+    }
+    revisar()
+    return () => { cancelado = true }
+    // `invoices` entra a propósito: cada carga trae comprobantes nuevos que
+    // revisar. El Set de arriba es lo que evita repetir el mismo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoices, isLoading, isDemoMode, user?.uid])
 
   // Función para convertir nota de venta navegando al POS con datos precargados
   const handleConvertInPOS = (invoice) => {
