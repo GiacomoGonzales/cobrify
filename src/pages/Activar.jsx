@@ -5,14 +5,32 @@ import { auth } from '@/lib/firebase'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
 import { RUBROS, RUBROS_ALFABETICOS, sugerirRubroDeCuenta } from '@/data/rubros'
 import { Boton, Campo, Entrada, Aviso } from '@/components/admin/ui'
+import { LogoAppStore, LogoPlayStore, LogoNavegador } from '@/components/LogosTienda'
 
 const FN = 'https://us-central1-cobrify-395fe.cloudfunctions.net'
 
 /** Las tiendas. La detección elige cuál va primero. */
 const TIENDAS = {
-  ios: { etiqueta: 'Descargar para iPhone', pie: 'App Store', url: 'https://apps.apple.com/pe/app/cobrify-peru/id6756195760' },
-  android: { etiqueta: 'Descargar para Android', pie: 'Play Store', url: 'https://play.google.com/store/apps/details?id=com.factuya.cobrify' },
-  web: { etiqueta: 'Entrar desde la computadora', pie: 'cobrifyperu.com', url: 'https://cobrifyperu.com/login' },
+  ios: {
+    etiqueta: 'Descargar para iPhone',
+    pie: 'App Store',
+    url: 'https://apps.apple.com/pe/app/cobrify-peru/id6756195760',
+    Logo: LogoAppStore,
+  },
+  android: {
+    etiqueta: 'Descargar para Android',
+    pie: 'Google Play',
+    url: 'https://play.google.com/store/apps/details?id=com.factuya.cobrify',
+    Logo: LogoPlayStore,
+  },
+  web: {
+    etiqueta: 'Entrar desde la computadora',
+    pie: 'Ir directo a iniciar sesión',
+    // Al login, no a la portada: acaba de crear su cuenta, lo que quiere es
+    // entrar, no leerse la web de nuevo.
+    url: 'https://cobrifyperu.com/login',
+    Logo: LogoNavegador,
+  },
 }
 
 /** Desde qué aparato entró, para enseñarle solo lo que le sirve. */
@@ -304,40 +322,77 @@ function Par({ etiqueta, valor }) {
 function Final({ listo, alta, correo }) {
   const suyo = aparato()
   const resto = Object.keys(TIENDAS).filter((k) => k !== suyo)
-  const vence = listo.hasta ? new Date(listo.hasta).toLocaleDateString('es-PE', { day: 'numeric', month: 'long', year: 'numeric' }) : null
+  const vence = listo.hasta
+    ? new Date(listo.hasta).toLocaleDateString('es-PE', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null
 
   return (
     <>
-      <div className="text-center">
-        <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-primary-50 text-[18px] font-bold text-primary-700">✓</div>
-        <h1 className="text-[17px] font-semibold text-gray-900">Listo{alta.nombre ? `, ${alta.nombre.split(' ')[0]}` : ''}</h1>
-        {vence && <p className="mt-0.5 text-[12.5px] text-gray-500">Tu cuenta está activa hasta el {vence}.</p>}
+      {/* El momento importante: que sepa que ya está, y que su cuenta tiene
+          fecha. Nada de adornos alrededor. */}
+      <div className="pt-1 text-center">
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary-600">
+          <svg viewBox="0 0 24 24" className="h-6 w-6 text-white" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m5 13 4 4L19 7" />
+          </svg>
+        </div>
+        <h1 className="text-[19px] font-semibold text-gray-900">
+          Tu cuenta está lista{alta.nombre ? `, ${alta.nombre.split(' ')[0]}` : ''}
+        </h1>
+        {vence && (
+          <p className="mt-1 text-[13px] text-gray-500">
+            {alta.planNombre ? `${alta.planNombre} · a` : 'A'}ctiva hasta el {vence}
+          </p>
+        )}
       </div>
 
-      <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2.5">
-        <Par etiqueta="Entras con" valor={correo} />
-        <Par etiqueta="Contraseña" valor="La que acabas de crear" />
-        {alta.planNombre && <Par etiqueta="Plan" valor={alta.planNombre} />}
+      {/* Con qué entra. La contraseña NO se imprime: la acaba de escribir él, y
+          enseñarla solo deja una captura con su clave dando vueltas. */}
+      <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Tus datos para entrar</p>
+        <p className="mt-1 break-all text-[14px] font-medium text-gray-900">{correo}</p>
+        <p className="mt-0.5 text-[12.5px] text-gray-500">Con la contraseña que acabas de crear.</p>
       </div>
 
-      <div className="space-y-1.5">
-        <a href={TIENDAS[suyo].url} target="_blank" rel="noreferrer"
-           className="block rounded-md border border-primary-600 bg-primary-50 px-3 py-2.5 text-[13px] font-medium text-primary-900 hover:bg-primary-100">
-          {TIENDAS[suyo].etiqueta}
-          <span className="block text-[11px] font-normal text-primary-700">{TIENDAS[suyo].pie}</span>
-        </a>
-        {resto.map((k) => (
-          <a key={k} href={TIENDAS[k].url} target="_blank" rel="noreferrer"
-             className="block rounded-md border border-gray-200 px-3 py-2 text-[12.5px] text-gray-700 hover:border-gray-300">
-            {TIENDAS[k].etiqueta}
-            <span className="block text-[11px] text-gray-400">{TIENDAS[k].pie}</span>
-          </a>
-        ))}
+      {/* La descarga: primero la de su aparato, grande; las otras debajo y
+          pequeñas. Mostrar las tres iguales es lo que confunde. */}
+      <div className="space-y-2">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Empieza a usarlo</p>
+        <Tienda k={suyo} destacada />
+        {resto.map((k) => <Tienda key={k} k={k} />)}
       </div>
 
-      <p className="text-center text-[11.5px] text-gray-500">
-        Guarda esta página: puedes volver a abrirla desde el mismo enlace.
+      <p className="border-t border-gray-100 pt-3 text-center text-[11.5px] leading-relaxed text-gray-500">
+        Guarda este enlace: puedes volver a abrirlo cuando quieras para tener estos datos a mano.
       </p>
     </>
+  )
+}
+
+/** Una opción para empezar a usarlo, con la marca de su tienda. */
+function Tienda({ k, destacada = false }) {
+  const t = TIENDAS[k]
+  const Logo = t.Logo
+  return (
+    <a
+      href={t.url}
+      target="_blank"
+      rel="noreferrer"
+      className={`flex items-center gap-3 rounded-lg border px-4 transition-colors ${
+        destacada
+          ? 'border-primary-600 bg-primary-600 py-3.5 text-white hover:bg-primary-700'
+          : 'border-gray-200 py-2.5 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+      }`}
+    >
+      <Logo className={destacada ? 'h-6 w-6 flex-none' : 'h-5 w-5 flex-none'} />
+      <span className="min-w-0">
+        <span className={`block font-medium ${destacada ? 'text-[14px]' : 'text-[13px]'}`}>{t.etiqueta}</span>
+        <span className={`block text-[11.5px] ${destacada ? 'text-white/75' : 'text-gray-400'}`}>{t.pie}</span>
+      </span>
+      <svg viewBox="0 0 24 24" className={`ml-auto h-4 w-4 flex-none ${destacada ? 'text-white/70' : 'text-gray-300'}`}
+           fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m9 18 6-6-6-6" />
+      </svg>
+    </a>
   )
 }
