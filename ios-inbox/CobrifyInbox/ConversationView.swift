@@ -45,7 +45,9 @@ struct ConversationView: View {
     /// propio visor dentro de la burbuja.
     @State private var videoAbierto: Mensaje?
     @State private var mostrarApariencia = false
-    @Environment(\.colorScheme) private var esquemaDelChat
+    /// Lo que mide el compositor. Con eso se sabe dónde tiene que haberse
+    /// desvanecido del todo el texto que pasa por debajo.
+    @State private var altoCompositor: CGFloat = 90
     /// Mensaje al que hay que saltar cuando se cierra una hoja. Se guarda en vez
     /// de saltar desde dentro: mientras la hoja se va, el scroll de abajo no
     /// esta listo para recibir la orden.
@@ -100,6 +102,25 @@ struct ConversationView: View {
                 .padding(.bottom, 8)
                 .background(SondaDeScroll(espia: espia))
             }
+            // El texto que pasa por debajo del compositor se DESVANECE, en
+            // vez de cortarse en seco. Se hace con una máscara sobre el
+            // contenido —o sea, las letras se vuelven transparentes y deja
+            // ver el fondo— y no con un velo encima: un velo de color solo se
+            // nota si el fondo es claro, y sobre un fondo oscuro no hacía
+            // nada (reporte de Giacomo con su fondo de noche).
+            .mask(
+                VStack(spacing: 0) {
+                    // Todo visible…
+                    Rectangle().fill(.black)
+                    // …se desvanece en los 52 pt de ANTES del compositor…
+                    LinearGradient(colors: [.black, .black.opacity(0)],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: 52)
+                    // …y de ahí para abajo ya no se ve nada, así que no
+                    // asoma entre las cápsulas del cuadro de escribir.
+                    Color.clear.frame(height: max(0, altoCompositor - 12))
+                }
+            )
             // OJO: aquí NO va `defaultScrollAnchor(.bottom)`. Reajusta el
             // desplazamiento cada vez que cambia el alto del contenido, eso
             // cambia qué filas hay que medir, lo que vuelve a cambiar el alto…
@@ -763,33 +784,14 @@ struct ConversationView: View {
                     }
                 }
             }
-            .padding(.top, 22)
-            // Un velo que se desvanece hacia arriba. NO es una barra: arriba
-            // es transparente del todo y el fondo del chat se sigue viendo;
-            // solo se cierra a la altura del cuadro de escribir, para que el
-            // texto que pasa por debajo se apague en vez de asomarse entre
-            // las cápsulas. Un material (vidrio) ya se probó en el build 38 y
-            // sobre una foto en modo oscuro salía como un gris opaco.
-            .background(
-                LinearGradient(
-                    stops: [
-                        .init(color: velo.opacity(0), location: 0),
-                        .init(color: velo.opacity(0.42), location: 0.32),
-                        .init(color: velo.opacity(0.86), location: 0.62),
-                        .init(color: velo.opacity(0.97), location: 1),
-                    ],
-                    startPoint: .top, endPoint: .bottom
-                )
-                .ignoresSafeArea(edges: .bottom)
-                .allowsHitTesting(false)
-            )
+            .padding(.top, 14)
+            // El compositor NO pinta nada detrás: el fondo del chat se ve
+            // limpio de arriba abajo. Lo único que hace es decir cuánto mide,
+            // para que la máscara sepa dónde desvanecer el texto.
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { alto in
+                if abs(alto - altoCompositor) > 1 { altoCompositor = alto }
+            }
         }
-    }
-
-    /// El color del velo: negro de noche, blanco de día. Tiñe lo mínimo para
-    /// que el fondo del chat siga mandando.
-    private var velo: Color {
-        esquemaDelChat == .dark ? .black : .white
     }
 
     /// Reaccionar (tocar el mismo emoji la quita). El servidor actualiza el
