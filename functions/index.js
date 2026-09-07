@@ -625,6 +625,36 @@ function codigoSunat(valor) {
   return String(Number(s))
 }
 
+/**
+ * Devuelve el comprobante a su estado anterior cuando el envío se corta ANTES
+ * de llegar a SUNAT.
+ *
+ * El envío marca `sunatStatus: 'sending'` dentro de una transacción para que no
+ * salgan dos a la vez. Pero varias salidas tempranas —negocio sin método de
+ * emisión habilitado, configuración no encontrada— respondían el error y
+ * volvían **sin deshacer esa marca**, y el comprobante quedaba "Enviando..."
+ * para siempre: la pantalla muestra un spinner eterno y nadie sabe si llegó.
+ *
+ * Al 6-set-2026 había 623 así en 45 negocios, y **344 eran de 13 negocios que
+ * ni siquiera tienen la emisión configurada** (KIRLAN solo tenía 266, con
+ * `method: 'none'`): ahí el envío nunca pudo ni empezar.
+ *
+ * Se vuelve al estado previo, salvo que ese estado ya fuera 'sending' (un
+ * reintento sobre un envío cortado): en ese caso 'pending', que es de donde
+ * se puede volver a mandar.
+ */
+async function revertirEnvioNoIniciado(docRef, estadoPrevio, motivo) {
+  try {
+    await docRef.update({
+      sunatStatus: estadoPrevio && estadoPrevio !== 'sending' ? estadoPrevio : 'pending',
+      sunatSendingStartedAt: null,
+      sunatError: motivo || null,
+    })
+  } catch (err) {
+    console.error('No se pudo revertir el estado de envío:', err.message)
+  }
+}
+
 /** ¿SUNAT dice que TODAVÍA está procesando? (98 o el literal PROCESANDO) */
 function sunatEnProceso(valor) {
   const c = codigoSunat(valor)
@@ -878,6 +908,7 @@ export const sendInvoiceToSunat = onRequest(
       const businessDoc = await businessRef.get()
 
       if (!businessDoc.exists) {
+        await revertirEnvioNoIniciado(invoiceRef, invoiceData.sunatStatus, 'Configuración de empresa no encontrada')
         res.status(404).json({ error: 'Configuración de empresa no encontrada' })
         return
       }
@@ -920,6 +951,7 @@ export const sendInvoiceToSunat = onRequest(
       const qpseEnabled = businessData.qpse?.enabled === true
 
       if (!sunatEnabled && !qpseEnabled) {
+        await revertirEnvioNoIniciado(invoiceRef, invoiceData.sunatStatus, 'Ningún método de emisión está habilitado. Configura SUNAT directo o QPse en Configuración.')
         res.status(400).json({
           error: 'Ningún método de emisión está habilitado. Configura SUNAT directo o QPse en Configuración.'
         })
@@ -1678,6 +1710,7 @@ export const sendCreditNoteToSunat = onRequest(
       const businessDoc = await businessRef.get()
 
       if (!businessDoc.exists) {
+        await revertirEnvioNoIniciado(creditNoteRef, creditNoteData.sunatStatus, 'Configuración de empresa no encontrada')
         res.status(404).json({ error: 'Configuración de empresa no encontrada' })
         return
       }
@@ -1720,6 +1753,7 @@ export const sendCreditNoteToSunat = onRequest(
       const qpseEnabled = businessData.qpse?.enabled === true
 
       if (!sunatEnabled && !qpseEnabled) {
+        await revertirEnvioNoIniciado(creditNoteRef, creditNoteData.sunatStatus, 'Ningún método de emisión está habilitado. Configura SUNAT directo o QPse.')
         res.status(400).json({
           error: 'Ningún método de emisión está habilitado. Configura SUNAT directo o QPse.'
         })
@@ -2353,6 +2387,7 @@ export const sendDebitNoteToSunat = onRequest(
       const businessDoc = await businessRef.get()
 
       if (!businessDoc.exists) {
+        await revertirEnvioNoIniciado(debitNoteRef, debitNoteData.sunatStatus, 'Configuración de empresa no encontrada')
         res.status(404).json({ error: 'Configuración de empresa no encontrada' })
         return
       }
@@ -2395,6 +2430,7 @@ export const sendDebitNoteToSunat = onRequest(
       const qpseEnabled = businessData.qpse?.enabled === true
 
       if (!sunatEnabled && !qpseEnabled) {
+        await revertirEnvioNoIniciado(debitNoteRef, debitNoteData.sunatStatus, 'Ningún método de emisión está habilitado. Configura SUNAT directo o QPse.')
         res.status(400).json({
           error: 'Ningún método de emisión está habilitado. Configura SUNAT directo o QPse.'
         })
