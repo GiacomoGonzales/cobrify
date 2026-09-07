@@ -45,9 +45,6 @@ struct ConversationView: View {
     /// propio visor dentro de la burbuja.
     @State private var videoAbierto: Mensaje?
     @State private var mostrarApariencia = false
-    /// Lo que mide el compositor. Con eso se sabe dónde tiene que haberse
-    /// desvanecido del todo el texto que pasa por debajo.
-    @State private var altoCompositor: CGFloat = 90
     /// Mensaje al que hay que saltar cuando se cierra una hoja. Se guarda en vez
     /// de saltar desde dentro: mientras la hoja se va, el scroll de abajo no
     /// esta listo para recibir la orden.
@@ -98,29 +95,20 @@ struct ConversationView: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
                 // Un respiro antes del compositor: sin esto la última burbuja
-                // queda pegada al cuadro de escribir.
-                .padding(.bottom, 8)
+                // queda pegada al cuadro de escribir. Y tiene que ser al menos
+                // lo que mide la banda que desvanece, o el último mensaje se
+                // vería siempre medio apagado aun estando quieto.
+                .padding(.bottom, 34)
                 .background(SondaDeScroll(espia: espia))
             }
-            // El texto que pasa por debajo del compositor se DESVANECE, en
-            // vez de cortarse en seco. Se hace con una máscara sobre el
-            // contenido —o sea, las letras se vuelven transparentes y deja
-            // ver el fondo— y no con un velo encima: un velo de color solo se
-            // nota si el fondo es claro, y sobre un fondo oscuro no hacía
-            // nada (reporte de Giacomo con su fondo de noche).
-            .mask(
-                VStack(spacing: 0) {
-                    // Todo visible…
-                    Rectangle().fill(.black)
-                    // …se desvanece en los 52 pt de ANTES del compositor…
-                    LinearGradient(colors: [.black, .black.opacity(0)],
-                                   startPoint: .top, endPoint: .bottom)
-                        .frame(height: 52)
-                    // …y de ahí para abajo ya no se ve nada, así que no
-                    // asoma entre las cápsulas del cuadro de escribir.
-                    Color.clear.frame(height: max(0, altoCompositor - 12))
-                }
-            )
+            // El texto se DESVANECE al meterse detrás de la cabecera y del
+            // compositor, en vez de cortarse en seco. Es una máscara sobre el
+            // contenido —las letras se vuelven transparentes y dejan ver el
+            // fondo—, no un velo encima: un velo de color solo se nota si el
+            // fondo es claro, y sobre un fondo oscuro no hacía nada.
+            .mask(mascaraDeBordes)
+            // Y sin el bloque de vidrio que iOS 26 pega bajo la cabecera.
+            .sinEfectoDeBorde()
             // OJO: aquí NO va `defaultScrollAnchor(.bottom)`. Reajusta el
             // desplazamiento cada vez que cambia el alto del contenido, eso
             // cambia qué filas hay que medir, lo que vuelve a cambiar el alto…
@@ -195,12 +183,16 @@ struct ConversationView: View {
         }
       }
         .background(Apariencia.shared.fondoView())
-        // El compositor va ENCIMA de la lista, no debajo: así los mensajes
-        // pasan por abajo al desplazar y se disuelven en el degradado, en vez
-        // de cortarse en seco contra el borde del cuadro.
+        // El compositor se lleva su propio sitio y la lista termina justo en
+        // su borde de arriba. Ahí es donde la máscara desvanece el texto, así
+        // que se disuelve al llegar en vez de cortarse en seco.
         .safeAreaInset(edge: .bottom) { barraDeRespuesta }
         .navigationTitle(conv.titulo)
         .navigationBarTitleDisplayMode(.inline)
+        // La cabecera NO pinta nada: se ve el fondo del chat de arriba abajo.
+        // Por defecto iOS le mete una capa gris en cuanto el hilo se mueve, y
+        // sobre una foto eso se lee como un bloque pegado arriba.
+        .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -786,11 +778,30 @@ struct ConversationView: View {
             }
             .padding(.top, 14)
             // El compositor NO pinta nada detrás: el fondo del chat se ve
-            // limpio de arriba abajo. Lo único que hace es decir cuánto mide,
-            // para que la máscara sepa dónde desvanecer el texto.
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { alto in
-                if abs(alto - altoCompositor) > 1 { altoCompositor = alto }
-            }
+            // limpio de arriba abajo.
+        }
+    }
+
+    /// La máscara que desvanece el hilo por arriba y por abajo.
+    ///
+    /// La lista ya termina exactamente en el borde de la cabecera y en el del
+    /// compositor —eso lo pone el sistema—, así que basta con desvanecer sus
+    /// dos extremos: el texto se disuelve justo al tocarlos, no a media
+    /// pantalla. Y como se desvanece el CONTENIDO en vez de pintar un velo
+    /// encima, funciona igual con fondo claro, oscuro o una foto.
+    private var mascaraDeBordes: some View {
+        let banda: CGFloat = 34
+        return VStack(spacing: 0) {
+            // Aparece justo al salir de la cabecera…
+            LinearGradient(colors: [.black.opacity(0), .black],
+                           startPoint: .top, endPoint: .bottom)
+                .frame(height: banda)
+            // …en medio se ve todo…
+            Rectangle().fill(.black)
+            // …y se desvanece justo al meterse en el cuadro de escribir.
+            LinearGradient(colors: [.black, .black.opacity(0)],
+                           startPoint: .top, endPoint: .bottom)
+                .frame(height: banda)
         }
     }
 
@@ -1385,5 +1396,19 @@ struct ResumenCita: View {
         guard seg.isFinite, seg > 0 else { return }
         await MainActor.run { AudiosAnalizados.duracion[url] = seg }
         duracion = seg
+    }
+}
+
+extension View {
+    /// iOS 26 pega un bloque de vidrio ("scroll edge effect") bajo la cabecera
+    /// en cuanto el hilo se mueve. Sobre una foto de fondo eso se lee como un
+    /// bloque gris. Lo quitamos: el desvanecido del texto ya hace ese trabajo,
+    /// y sin tapar el fondo. En iOS anteriores no existe y no hace falta.
+    @ViewBuilder func sinEfectoDeBorde() -> some View {
+        if #available(iOS 26.0, *) {
+            self.scrollEdgeEffectHidden(true, for: .all)
+        } else {
+            self
+        }
     }
 }
