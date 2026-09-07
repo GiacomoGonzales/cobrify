@@ -46,6 +46,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Modal from '@/components/ui/Modal'
 import VersionApp from '@/components/VersionApp'
+import AccesosSoporte from '@/components/settings/AccesosSoporte'
 import { getYapeConfig } from '@/services/yapeService'
 import {
   deleteAllProducts,
@@ -1048,6 +1049,11 @@ export default function Cuenta() {
           </Modal>
         </>
       )}
+
+      {/* Cuándo entró soporte a esta cuenta. Va aquí, entre las cosas de
+          seguridad, y no escondido: quien puede entrar sin la contraseña tiene
+          que rendir cuentas de cuándo lo hace. */}
+      <AccesosSoporte />
 
       {/* Qué versión está corriendo. En el celular son dos: la de la tienda y
           la web que va dentro. Sirve para soporte. */}
