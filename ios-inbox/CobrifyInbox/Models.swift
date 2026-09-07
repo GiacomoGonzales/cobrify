@@ -69,6 +69,10 @@ struct Mensaje: Identifiable, Equatable {
     var respondeA: String?
     var reaccionMia: String?
     var reaccionCliente: String?
+    /// Solo en los ecos optimistas: el id que devolvió el servidor al
+    /// guardarlo. Es lo que permite retirar el eco cuando llega el mensaje
+    /// de verdad, aunque el guardado no se parezca al que se mandó.
+    var idConfirmado: String?
 
     init(id: String, data: [String: Any]) {
         self.id = id
@@ -112,6 +116,7 @@ struct Mensaje: Identifiable, Equatable {
         respondeA = nil
         reaccionMia = nil
         reaccionCliente = nil
+        idConfirmado = nil
     }
 }
 

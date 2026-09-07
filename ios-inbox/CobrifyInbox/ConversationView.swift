@@ -914,8 +914,9 @@ struct ConversationView: View {
             store.pendientes.append(eco)
             Task {
                 do {
-                    try await ChatAPI.enviarMediaGuardada(conversationId: conv.id,
-                                                          media: media, caption: texto)
+                    let id = try await ChatAPI.enviarMediaGuardada(conversationId: conv.id,
+                                                                   media: media, caption: texto)
+                    store.confirmar(eco: eco.id, waMessageId: id)
                 } catch {
                     store.pendientes.removeAll { $0.id == eco.id }
                     errorEnvio = (error as? ChatAPI.ErrorEnvio)?.mensaje ?? "No se pudo enviar."

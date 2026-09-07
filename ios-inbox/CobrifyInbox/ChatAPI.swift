@@ -15,7 +15,9 @@ enum ChatAPI {
     private static let urlEnvio = URL(string: "https://us-central1-cobrify-395fe.cloudfunctions.net/sendWhatsappMessage")!
     private static let urlEnvioMedia = URL(string: "https://us-central1-cobrify-395fe.cloudfunctions.net/sendWhatsappMediaMessage")!
 
-    static func enviarTexto(conversationId: String, texto: String, respondeA: String? = nil) async throws {
+    /// Devuelve el id con el que el servidor guardó el mensaje.
+    @discardableResult
+    static func enviarTexto(conversationId: String, texto: String, respondeA: String? = nil) async throws -> String? {
         guard let user = Auth.auth().currentUser else {
             throw ErrorEnvio(mensaje: "La sesión venció. Vuelve a entrar.", ventanaCerrada: false)
         }
@@ -44,6 +46,13 @@ enum ChatAPI {
                 ventanaCerrada: json?["ventanaCerrada"] as? Bool ?? false
             )
         }
+        return idDelMensaje(data)
+    }
+
+    /// El id que el servidor le puso al mensaje. Los tres envíos lo devuelven.
+    private static func idDelMensaje(_ data: Data) -> String? {
+        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        return json?["waMessageId"] as? String
     }
 
     /// Reaccionar a un mensaje (emoji vacío = quitar la reacción).
@@ -66,7 +75,8 @@ enum ChatAPI {
 
     /// Envía un archivo que YA está guardado (el de una respuesta rápida):
     /// viaja solo su dirección, no el archivo — instantáneo aunque pese 15 MB.
-    static func enviarMediaGuardada(conversationId: String, media: MediaBiblioteca, caption: String) async throws {
+    @discardableResult
+    static func enviarMediaGuardada(conversationId: String, media: MediaBiblioteca, caption: String) async throws -> String? {
         guard let user = Auth.auth().currentUser else {
             throw ErrorEnvio(mensaje: "La sesión venció. Vuelve a entrar.", ventanaCerrada: false)
         }
@@ -92,6 +102,7 @@ enum ChatAPI {
             throw ErrorEnvio(mensaje: json?["error"] as? String ?? "No se pudo enviar.",
                              ventanaCerrada: json?["ventanaCerrada"] as? Bool ?? false)
         }
+        return idDelMensaje(data)
     }
 
     /// Sube un archivo a la biblioteca (para las respuestas rápidas): queda
@@ -111,8 +122,9 @@ enum ChatAPI {
     /// Envía una foto, un audio o un PDF: el archivo viaja en base64 y el
     /// servidor lo guarda en nuestro almacenamiento antes de pasarlo a Meta —
     /// la MISMA ruta que la web, el historial vive en un solo lugar.
+    @discardableResult
     static func enviarMedia(conversationId: String, base64: String, mimeType: String,
-                            filename: String, caption: String) async throws {
+                            filename: String, caption: String) async throws -> String? {
         guard let user = Auth.auth().currentUser else {
             throw ErrorEnvio(mensaje: "La sesión venció. Vuelve a entrar.", ventanaCerrada: false)
         }
@@ -145,5 +157,6 @@ enum ChatAPI {
                 ventanaCerrada: json?["ventanaCerrada"] as? Bool ?? false
             )
         }
+        return idDelMensaje(data)
     }
 }

@@ -107,13 +107,38 @@ final class MensajesStore: ObservableObject {
                 }
                 self.aplicarReaccionesOptimistas()
 
-                // El eco optimista se retira cuando el servidor ya guardó el
-                // mensaje de verdad (mismo texto, dirección saliente).
-                let confirmados = Set(self.mensajes.filter(\.esSaliente).map { "\($0.tipo)|\($0.texto)" })
-                let retirados = self.pendientes.filter { confirmados.contains("\($0.tipo)|\($0.texto)") }
-                for r in retirados { self.previasLocales.removeValue(forKey: r.id) }
-                self.pendientes.removeAll { confirmados.contains("\($0.tipo)|\($0.texto)") }
+                self.retirarEcosConfirmados()
             }
+    }
+
+    /// El servidor ya guardó el mensaje: se le apunta al eco su id de verdad.
+    /// Sin esto, un texto CON ENLACE se veía doble: el servidor lo guarda como
+    /// imagen con el texto de pie (así el enlace sale con su foto a lo ancho),
+    /// y el eco, que era de tipo texto, no calzaba con nada y se quedaba
+    /// puesto hasta cerrar la app.
+    func confirmar(eco: String, waMessageId: String?) {
+        guard let waMessageId else { return }
+        if let i = pendientes.firstIndex(where: { $0.id == eco }) {
+            pendientes[i].idConfirmado = waMessageId
+        }
+        retirarEcosConfirmados()
+    }
+
+    /// Quita los ecos que el servidor ya tiene guardados.
+    private func retirarEcosConfirmados() {
+        // Por id de verdad: infalible, aunque lo guardado no se parezca a lo
+        // que se mandó.
+        let ids = Set(mensajes.map(\.id))
+        // Por tipo y texto: red de seguridad para cuando la respuesta del
+        // envío se pierde por el camino y nunca llega el id.
+        let porTexto = Set(mensajes.filter(\.esSaliente).map { "\($0.tipo)|\($0.texto)" })
+        let fuera = pendientes.filter { eco in
+            (eco.idConfirmado.map(ids.contains) ?? false) || porTexto.contains("\(eco.tipo)|\(eco.texto)")
+        }
+        guard !fuera.isEmpty else { return }
+        let idsFuera = Set(fuera.map(\.id))
+        for id in idsFuera { previasLocales.removeValue(forKey: id) }
+        pendientes.removeAll { idsFuera.contains($0.id) }
     }
 
     private func aplicarReaccionesOptimistas() {
@@ -148,7 +173,8 @@ final class MensajesStore: ObservableObject {
         let eco = Mensaje(pendiente: texto)
         pendientes.append(eco)
         do {
-            try await ChatAPI.enviarTexto(conversationId: conversationId, texto: texto, respondeA: respondeA)
+            let id = try await ChatAPI.enviarTexto(conversationId: conversationId, texto: texto, respondeA: respondeA)
+            confirmar(eco: eco.id, waMessageId: id)
             return nil
         } catch {
             pendientes.removeAll { $0.id == eco.id }
@@ -165,9 +191,10 @@ final class MensajesStore: ObservableObject {
         // de "Enviando…" sobre un hueco.
         if tipo == "image" { previasLocales[eco.id] = datos }
         do {
-            try await ChatAPI.enviarMedia(conversationId: conversationId,
-                                          base64: datos.base64EncodedString(),
-                                          mimeType: mimeType, filename: filename, caption: caption)
+            let id = try await ChatAPI.enviarMedia(conversationId: conversationId,
+                                                   base64: datos.base64EncodedString(),
+                                                   mimeType: mimeType, filename: filename, caption: caption)
+            confirmar(eco: eco.id, waMessageId: id)
             return nil
         } catch {
             pendientes.removeAll { $0.id == eco.id }
