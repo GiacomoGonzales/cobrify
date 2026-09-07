@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { signInWithCustomToken } from 'firebase/auth'
-import { auth } from '@/lib/firebase'
+import { ref as refStorage, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { doc, updateDoc } from 'firebase/firestore'
+import { auth, db, storage } from '@/lib/firebase'
 import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
 import { RUBROS, RUBROS_ALFABETICOS, sugerirRubroDeCuenta } from '@/data/rubros'
 import { Boton, Campo, Entrada, Aviso } from '@/components/admin/ui'
@@ -74,6 +76,11 @@ export default function Activar() {
 
   const [buscando, setBuscando] = useState(false)
   const [datosSunat, setDatosSunat] = useState(null)
+  /** El logo se ELIGE aquí pero se sube después: mientras llena el formulario
+      todavía no hay cuenta ni sesión, y Storage solo deja escribir al dueño. */
+  const [logo, setLogo] = useState(null)
+  const [logoPrevia, setLogoPrevia] = useState(null)
+  const [subiendoLogo, setSubiendoLogo] = useState(false)
 
   useEffect(() => {
     let vivo = true
@@ -168,11 +175,36 @@ export default function Activar() {
       // Queda con la sesión abierta: acaba de escribir su clave, no tiene por
       // qué escribirla otra vez. Si el pase no vino, la cuenta está igual de
       // creada — solo tendrá que entrar por el login como cualquier otro día.
-      if (d.pase) signInWithCustomToken(auth, d.pase).catch(() => {})
+      if (d.pase) {
+        try {
+          await signInWithCustomToken(auth, d.pase)
+          // Y con la sesión abierta ya se puede subir el logo, que es lo que
+          // no se podía antes: Storage exige ser el dueño de la cuenta.
+          if (logo) await subirLogo(d.uid)
+        } catch (e) {
+          console.error('No se pudo iniciar sesión tras crear la cuenta:', e)
+        }
+      }
     } catch {
       setError('No se pudo crear la cuenta. Revisa tu conexión.')
     } finally {
       setEnviando(false)
+    }
+  }
+
+  /** Sube el logo y lo apunta en el negocio. Si falla, la cuenta no se toca:
+      lo podrá poner después desde Configuración. */
+  async function subirLogo(uid) {
+    setSubiendoLogo(true)
+    try {
+      const destino = refStorage(storage, `businesses/${uid}/logo`)
+      await uploadBytes(destino, logo)
+      const url = await getDownloadURL(destino)
+      await updateDoc(doc(db, 'businesses', uid), { logoUrl: url })
+    } catch (e) {
+      console.error('No se pudo subir el logo:', e)
+    } finally {
+      setSubiendoLogo(false)
     }
   }
 
@@ -228,6 +260,14 @@ export default function Activar() {
           <Campo etiqueta="Teléfono del local" ayuda="Es el que sale impreso en el ticket.">
             <Entrada value={f.phone} onChange={(e) => set('phone', e.target.value)} placeholder="01 445 6677" />
           </Campo>
+
+          <CampoLogo
+            previa={logoPrevia}
+            onElegir={(archivo) => {
+              setLogo(archivo)
+              setLogoPrevia(archivo ? URL.createObjectURL(archivo) : null)
+            }}
+          />
         </>
       )}
 
@@ -264,10 +304,12 @@ export default function Activar() {
         ) : <span />}
         <Boton
           variante="primario"
-          disabled={!puedeSeguir || enviando}
+          disabled={!puedeSeguir || enviando || subiendoLogo}
           onClick={() => (paso === 2 ? terminar() : setPaso(paso + 1))}
         >
-          {paso === 2 ? (enviando ? 'Creando tu cuenta…' : 'Crear mi cuenta') : 'Continuar'}
+          {paso === 2
+            ? (subiendoLogo ? 'Subiendo tu logo…' : enviando ? 'Creando tu cuenta…' : 'Crear mi cuenta')
+            : 'Continuar'}
         </Boton>
       </div>
     </Marco>
@@ -363,6 +405,56 @@ function SelectorRubro({ valor, onElegir, sugerido }) {
             </button>
           ))
         )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * El logo del negocio. Opcional a propósito: es lo primero que sale en sus
+ * comprobantes, pero no vale frenar un alta por una imagen que no tiene a mano.
+ */
+function CampoLogo({ previa, onElegir }) {
+  return (
+    <div>
+      <span className="mb-1 block text-[12px] font-medium text-gray-700">
+        Tu logo <span className="font-normal text-gray-400">— opcional</span>
+      </span>
+      <div className="flex items-center gap-3">
+        <div className="flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+          {previa ? (
+            <img src={previa} alt="Tu logo" className="h-full w-full object-contain" />
+          ) : (
+            <svg viewBox="0 0 24 24" className="h-6 w-6 text-gray-300" fill="none" stroke="currentColor" strokeWidth="1.6">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <path d="m21 15-5-5L5 21" />
+            </svg>
+          )}
+        </div>
+        <div className="min-w-0">
+          <label className="inline-flex cursor-pointer items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-[12.5px] font-medium text-gray-700 hover:bg-gray-50">
+            {previa ? 'Cambiar' : 'Subir imagen'}
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => onElegir(e.target.files?.[0] || null)}
+            />
+          </label>
+          {previa && (
+            <button
+              type="button"
+              onClick={() => onElegir(null)}
+              className="ml-2 text-[12.5px] text-gray-500 hover:text-gray-700"
+            >
+              Quitar
+            </button>
+          )}
+          <p className="mt-1 text-[11.5px] leading-relaxed text-gray-500">
+            Sale en tus facturas y boletas. Lo puedes poner después.
+          </p>
+        </div>
       </div>
     </div>
   )
