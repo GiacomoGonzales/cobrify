@@ -337,7 +337,9 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                 </select>
               </div>
 
-              {/* Toggle para usar fecha personalizada */}
+              {/* Fecha personalizada: no aplica a un cambio de plan, que por
+                  definicion no mueve el vencimiento. */}
+              {tipoDeOperacion !== 'cambio_de_plan' && (
               <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
                 <div className="flex items-center gap-3">
                   <input
@@ -360,17 +362,40 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                   </label>
                 </div>
               </div>
+              )}
 
               {/* Vista previa de la nueva fecha */}
               <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
                 <div className="flex items-center gap-2 mb-2">
                   <Calendar className="w-5 h-5 text-gray-700" />
                   <p className="font-semibold text-gray-900">
-                    {useCustomDate ? 'Fecha de Vencimiento Personalizada' : 'Vista Previa de Renovación'}
+                    {tipoDeOperacion === 'cambio_de_plan'
+                      ? 'El vencimiento no cambia'
+                      : (useCustomDate ? 'Fecha de Vencimiento Personalizada' : 'Vista Previa de Renovación')}
                   </p>
                 </div>
 
-                {useCustomDate ? (
+                {/* Un cambio de plan cobra una mejora, no tiempo: la fecha se
+                    queda donde estaba. Mostrar acá el cálculo de renovación
+                    hacía creer que se le regalaba un mes. */}
+                {tipoDeOperacion === 'cambio_de_plan' ? (
+                  <div className="space-y-1">
+                    <p className="text-sm text-gray-900">
+                      <strong>Sigue venciendo:</strong>{' '}
+                      {periodEnd ? format(new Date(periodEnd), 'dd/MM/yyyy', { locale: es }) : 'N/A'}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Conserva los comprobantes que ya usó este mes y vuelve a cero en su día de corte de siempre.
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Desde la próxima renovación se le cobra{' '}
+                      <strong className="text-gray-900">
+                        S/ {Number(selectedPlanConfig?.totalPrice ?? selectedPlanConfig?.price ?? 0).toFixed(2)}
+                      </strong>{' '}
+                      ({selectedPlanConfig?.name || selectedPlanForPayment}).
+                    </p>
+                  </div>
+                ) : useCustomDate ? (
                   <div className="space-y-3">
                     <div>
                       <label className="block text-sm font-medium text-gray-900 mb-2">
@@ -419,13 +444,16 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                 )}
               </div>
 
+
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
                   disabled={loading}
                   className="flex-1 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50 font-semibold"
                 >
-                  {loading ? 'Procesando...' : `Registrar Pago de S/ ${parseFloat(paymentAmount).toFixed(2)}`}
+                  {loading ? 'Procesando...' : (tipoDeOperacion === 'cambio_de_plan'
+                    ? `Registrar cambio de plan · S/ ${parseFloat(paymentAmount).toFixed(2)}`
+                    : `Registrar Pago de S/ ${parseFloat(paymentAmount).toFixed(2)}`)}
                 </button>
                 <button
                   type="button"
