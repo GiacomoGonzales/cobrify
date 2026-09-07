@@ -334,6 +334,33 @@ export const getInvoicesPage = async (userId, { pageSize = 100, startAfterDoc = 
 }
 
 /**
+ * Los comprobantes que quedaron en "Anulando...", SIN filtro de fecha.
+ *
+ * La pantalla de Comprobantes carga solo los ultimos 30 dias, asi que una baja
+ * a medias de hace meses no aparecia en `invoices` y la revision automatica
+ * nunca la veia: al 6-set eran 91 de 104 los que quedaban fuera de alcance,
+ * el mas viejo de enero. Entre ellos, 59 ya estaban anulados en SUNAT y 29
+ * seguian VIGENTES sin que el negocio lo supiera.
+ *
+ * Sin `orderBy`: un `where` sobre un campo suelto usa el indice automatico y
+ * no hay indice compuesto que desplegar.
+ */
+export const getInvoicesEnAnulacion = async (userId, { max = 50 } = {}) => {
+  try {
+    const q = query(
+      collection(db, 'businesses', userId, 'invoices'),
+      where('sunatStatus', '==', 'voiding'),
+      limit(max)
+    )
+    const snap = await getDocs(q)
+    return { success: true, data: snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) }
+  } catch (error) {
+    console.error('Error al obtener comprobantes en anulacion:', error)
+    return { success: false, error: error.message, data: [] }
+  }
+}
+
+/**
  * Obtener facturas de un usuario
  */
 export const getInvoices = async userId => {

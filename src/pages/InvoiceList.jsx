@@ -63,7 +63,7 @@ import { getDocumentTotalInBase, getDocumentRate, getReportsCurrency, resolveRep
 import { getInvoiceDate, getInvoiceTimeInfo } from '@/utils/invoiceDate'
 import { consumoDeModificadoresDeVarias } from '@/utils/modificadorInsumo'
 import { toDateString } from '@/utils/emissionDate'
-import { getInvoicesPage, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, updateProductStockTransaction } from '@/services/firestoreService'
+import { getInvoicesPage, getInvoicesEnAnulacion, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, updateProductStockTransaction } from '@/services/firestoreService'
 import { getCashRegisterSession, addCashMovement } from '@/services/firestoreService'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, generateExitNotePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
@@ -1995,18 +1995,36 @@ Gracias por tu preferencia.`
   // que el botón, así que el stock se devuelve igual (y `stockRestored` impide
   // duplicarlo). De a pocos por visita: son llamadas a SUNAT, no hay apuro.
   const bajasRevisadasRef = useRef(new Set())
+  // Los trabados casi nunca son recientes, y esta lista solo carga 30 días: se
+  // piden aparte, una sola vez por visita.
+  const bajasViejasRef = useRef(null)
   useEffect(() => {
     if (isDemoMode || isLoading || !user?.uid) return
-
-    const pendientes = invoices
-      .filter(inv => inv.sunatStatus === 'voiding' && referenciaDeBaja(inv).id)
-      .filter(inv => !bajasRevisadasRef.current.has(inv.id))
-      .slice(0, 3)
-    if (pendientes.length === 0) return
 
     let cancelado = false
     const revisar = async () => {
       const businessId = getBusinessId()
+
+      if (bajasViejasRef.current === null) {
+        bajasViejasRef.current = []
+        const sueltas = await getInvoicesEnAnulacion(businessId)
+        if (cancelado) return
+        if (sueltas.success) {
+          bajasViejasRef.current = sueltas.data.filter(canAccessInvoice).filter(canSeeSale)
+        }
+      }
+
+      // Los de la pantalla y los de fuera del rango, sin repetir.
+      const porId = new Map()
+      for (const inv of [...invoices, ...bajasViejasRef.current]) {
+        if (inv.sunatStatus !== 'voiding') continue
+        if (!referenciaDeBaja(inv).id) continue
+        if (bajasRevisadasRef.current.has(inv.id)) continue
+        porId.set(inv.id, inv)
+      }
+      const pendientes = [...porId.values()].slice(0, 3)
+      if (pendientes.length === 0) return
+
       let idToken
       try {
         const { getAuth } = await import('firebase/auth')
