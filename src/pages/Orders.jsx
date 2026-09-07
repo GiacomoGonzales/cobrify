@@ -36,6 +36,7 @@ import { getActiveMotoristas, createDeliveryRecord, updateOperationalStatus } fr
 import { resumirItemsParaEnvio } from '@/utils/deliveryShare'
 import { stationsForOrder } from '@/utils/kitchenComandaFormat'
 import { montoDeEnvio } from '@/utils/deliveryFee'
+import { estadoParaCobrar } from '@/utils/cobroDeOrden'
 import GuideLink from '@/components/guide/GuideLink'
 
 /**
@@ -1012,10 +1013,6 @@ export default function Orders() {
         partialClose: true,
         items: selectedItems,
         remainingItems,
-        tableId: orderToClose.tableId || null,
-        tableNumber: orderToClose.tableNumber || null,
-        waiterId: orderToClose.waiterId || null,
-        waiterName: orderToClose.waiterName || null,
         // El envío NO se cobra en un pago parcial: la orden sigue abierta y el
         // envío es UNO solo. Se cobra entero cuando se cierra, o si no se
         // cobraría una vez por cada persona que paga su parte.
@@ -1411,61 +1408,12 @@ export default function Orders() {
   }
 
   // Ir al POS para cobrar una orden
-  // Datos del cliente de la orden que se pasan al POS (state) para precargar el
-  // comprobante. Solo se incluyen los que existen. `customerAddress` es la de
-  // ENTREGA (delivery) y no va al comprobante; la fiscal (RUC) es customerFiscalAddress.
-  const orderCustomerState = (order) => ({
-    customerName: order.customerName || null,
-    customerPhone: order.customerPhone || null,
-    customerDocumentType: order.customerDocumentType || null,
-    customerDocumentNumber: order.customerDocumentNumber || null,
-    customerBusinessName: order.customerBusinessName || null,
-    customerFiscalAddress: order.customerFiscalAddress || null,
-    // Dirección de ENTREGA (delivery). Antes no se pasaba y el cajero tenía que
-    // re-teclearla al emitir el comprobante. El POS la usa solo si no hay
-    // dirección fiscal (en factura manda la de SUNAT).
-    customerAddress: order.customerAddress || null,
-  })
-
-  /**
-   * Lo que viaja al POS para cobrar una orden.
-   *
-   * Existe porque habia TRES lugares armando este mismo objeto a mano y se
-   * fueron separando: solo el de "Cerrar orden" mandaba el costo del envio, asi
-   * que cobrar desde el boton "Cobrar" de la tarjeta —que es por donde se cobra
-   * normalmente— perdia el delivery (reporte de Edin Solano, 03-sep-2026).
-   *
-   * Los datos propios de cada camino (mesa, mozo, cobro parcial) se agregan
-   * despues; esto es lo que TODOS necesitan.
-   */
-  const estadoParaCobrar = (order) => ({
-    fromOrder: true,
-    orderId: order.id,
-    orderNumber: order.orderNumber,
-    orderType: order.orderType,
-    markAsPaidOnComplete: true,
-    // Sede de la orden: el POS fija sucursal+almacén (comprobante/serie/caja/stock correctos)
-    branchId: order.branchId ?? null,
-    // El costo del envío viaja APARTE de los items: el POS lo agrega como una
-    // línea al final del carrito. Así se cobra sin que el cajero teclee un
-    // precio, que es justo lo que estos negocios tienen apagado.
-    deliveryFee: montoDeEnvio(order.deliveryFee),
-    // Datos del cliente capturados al crear la orden → el POS los precarga
-    // para no re-teclear al emitir el comprobante.
-    ...orderCustomerState(order),
-  })
 
   const handleGoToPayment = (order) => {
     appNavigate('pos', {
       state: {
         ...estadoParaCobrar(order),
         items: order.items,
-        // Si la orden está asociada a una mesa, pasar info para que se libere
-        // automáticamente al completar el pago (Cobrar libera la mesa).
-        tableId: order.tableId || null,
-        tableNumber: order.tableNumber || null,
-        waiterId: order.waiterId || null,
-        waiterName: order.waiterName || null,
       }
     })
   }
