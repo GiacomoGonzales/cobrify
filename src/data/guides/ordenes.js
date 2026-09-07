@@ -5,13 +5,13 @@
  *
  * Estados verificados: pending, preparing, ready, dispatched. Tipos: mesa,
  * para llevar, delivery y en local (mostrador). Acciones reales: Marcar
- * Lista, Marcar Entregada, Despachar, Cerrar Cuenta, Cerrar sin comprobante.
+ * Lista, Cobrar y Finalizar, Despachar, Cerrar Cuenta, Cerrar sin comprobante.
  *
  * Ver reglas de redacción en pos.js y en GuideRenderer.jsx.
  */
 export default {
   id: 'ordenes',
-  actualizado: '01/09/2026',
+  actualizado: '06/09/2026',
   intro:
     'Órdenes es la bandeja de todo lo que está en curso, venga de donde venga: las mesas del salón, los pedidos para llevar, los delivery y los de mostrador. Si Mesas es el mapa del salón, Órdenes es la lista de trabajo pendiente.',
 
@@ -31,7 +31,7 @@ export default {
           filas: [
             ['Pendiente', 'Entró y todavía nadie la empezó', '—'],
             ['Preparando', 'Cocina está en eso', 'Marcar Lista'],
-            ['Lista', 'Terminada, esperando salir', 'Despachar / Marcar Entregada'],
+            ['Lista', 'Terminada, esperando salir', 'Despachar / Cobrar y Finalizar'],
             ['Despachada', 'Salió del local o se entregó', '—'],
           ],
         },
@@ -134,7 +134,20 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Con **Cerrar Cuenta** se cobra la orden y se emite el comprobante con todo su consumo ya cargado. Si la orden venía de una mesa, al cerrarla la mesa se libera.',
+          text: 'El botón verde de cada tarjeta es el que termina la orden, y su nombre te dice qué va a pasar:',
+        },
+        {
+          type: 'tabla',
+          encabezados: ['Dice', 'Cuándo', 'Qué hace'],
+          filas: [
+            ['Cerrar Cuenta', 'Pedidos de mesa sin cobrar', 'Cobra, emite el comprobante y libera la mesa'],
+            ['Cobrar y Finalizar', 'Para llevar y delivery sin cobrar', 'Cobra, emite el comprobante y cierra la orden'],
+            ['Finalizar Orden', 'Cuando ya emitiste el comprobante', 'Solo la saca de la lista; no vuelve a cobrar'],
+          ],
+        },
+        {
+          type: 'texto',
+          text: 'En los tres casos la orden llega al cobro con todo su consumo ya cargado, y si venía de una mesa, esa mesa queda libre.',
         },
         {
           type: 'texto',

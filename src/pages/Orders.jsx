@@ -1418,11 +1418,14 @@ export default function Orders() {
     })
   }
 
-  // "Marcar Entregada" abre el cierre de la orden. SIEMPRE pasa por CloseOrderModal
-  // (emitir comprobante en el POS, o cerrar sin comprobante con motivo auditable),
-  // aunque la orden ya esté pagada: "pagado" es solo informativo (para la comanda del
-  // motorizado, que sepa si cobrar al entregar) y NO equivale a "facturado". Así una
-  // orden con pago anticipado sigue requiriendo su comprobante antes de salir de la lista.
+  // El botón que termina la orden. Hace DOS cosas según el caso, y por eso su
+  // nombre cambia con él: sin facturar abre el cierre ("Cobrar y Finalizar"),
+  // ya facturada la cierra directo ("Finalizar Orden"). Se llamaba siempre
+  // "Marcar Entregada", que en el primer caso era falso: no marcaba nada.
+  //
+  // Ojo con "pagado": es solo informativo —para que la comanda del motorizado
+  // diga si hay que cobrar al entregar— y NO equivale a facturado. Una orden con
+  // pago anticipado sigue necesitando su comprobante antes de salir de la lista.
   const handleMarkAsDelivered = async (order) => {
     if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo')
@@ -1957,12 +1960,11 @@ export default function Orders() {
                     )}
                   </div>
 
-                  {/* Botones de acción: avanzar estado + Marcar Entregada + menú "+".
-                      Entregada va como BOTON y Cobrar al menú porque cerrar la orden
-                      es lo que se hace en cada pedido; facturar desde acá, mucho
-                      menos. Y no se pierde: Entregada sobre una orden sin facturar
-                      abre el cierre, que ofrece emitir el comprobante o cerrar sin
-                      él con su motivo. */}
+                  {/* Botones: avanzar el estado + terminar la orden + menú "+".
+                      Terminar va como BOTON porque es lo que se hace en cada
+                      pedido; facturar desde acá, mucho menos. Y no se pierde:
+                      sobre una orden sin facturar, ese botón abre el cierre, que
+                      ofrece emitir el comprobante o cerrar sin él con su motivo. */}
                   <div className="pt-1 flex gap-2 items-stretch">
                     {/* Botón primario según estado */}
                     {order.status === 'pending' && (
@@ -1999,7 +2001,11 @@ export default function Orders() {
                         )}
                       </Button>
                     )}
-                    {order.status === 'ready' && order.tableNumber && (
+                    {/* Mesa lista: UN solo botón. Antes salían "Cerrar Cuenta" y
+                        "Marcar Entregada" uno al lado del otro llamando a la
+                        MISMA función — el segundo no marcaba nada, abría el
+                        cierre igual que el primero. */}
+                    {order.status === 'ready' && order.tableNumber && !order.invoiced && (
                       <Button
                         onClick={() => handleCloseOrder(order)}
                         variant="success"
@@ -2033,7 +2039,7 @@ export default function Orders() {
                         por los cuatro estados. Los negocios que cobran y no usan el
                         flujo de cocina terminaban con cientos de ordenes abiertas
                         (caso real: 175 pendientes, varias de seis horas). */}
-                    {order.status !== 'delivered' && (
+                    {order.status !== 'delivered' && !(order.status === 'ready' && order.tableNumber && !order.invoiced) && (
                       <Button
                         onClick={() => handleMarkAsDelivered(order)}
                         variant="success"
@@ -2041,7 +2047,10 @@ export default function Orders() {
                         className={BOTON_ACCION}
                       >
                         <CheckCircle className="w-5 h-5 mr-1.5" />
-                        Marcar Entregada
+                        {/* El nombre dice lo que va a pasar. "Marcar Entregada"
+                            mentía en la mitad de los casos: sobre una orden sin
+                            facturar no marcaba nada, abría el cobro. */}
+                        {order.invoiced ? 'Finalizar Orden' : 'Cobrar y Finalizar'}
                       </Button>
                     )}
 
@@ -2112,19 +2121,10 @@ export default function Orders() {
                               <Split className="w-5 h-5 text-gray-600" />
                               <span className="font-medium text-gray-900">Dividir Cuenta</span>
                             </button>
-                            {/* Cerrar Cuenta secundario: en ready sin mesa (delivery/takeout), por si se necesita cerrar sin despachar */}
-                            {order.status === 'ready' && !order.tableNumber && (
-                              <button
-                                onClick={() => {
-                                  setOpenMenuOrderId(null)
-                                  handleCloseOrder(order)
-                                }}
-                                className="w-full text-left px-4 py-3 text-base hover:bg-green-50 flex items-center gap-3 border-t border-gray-100"
-                              >
-                                <Receipt className="w-5 h-5 text-green-600" />
-                                <span className="font-medium text-gray-900">Cerrar Cuenta</span>
-                              </button>
-                            )}
+                            {/* Acá había un "Cerrar Cuenta" para ready sin mesa: era
+                                un tercer camino a la misma función. El botón
+                                "Cobrar y Finalizar" de la tarjeta ya cierra sin
+                                despachar, que era para lo que estaba. */}
                           </div>
                         </>
                       )}
