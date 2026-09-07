@@ -3634,7 +3634,27 @@ export const deleteUser = onRequest(
         console.error(`⚠️ Error eliminando suscripción: ${subError.message}`)
       }
 
-      // 4. Eliminar de resellers si existe
+      // 4. Marcar su alta, si vino de un formulario.
+      //    El alta es el registro de "le mande el enlace tal dia y lo uso".
+      //    Si la cuenta se borra, esa fila se queda en Admin > Altas diciendo
+      //    "Activada" y apuntando a una cuenta que ya no existe. No se borra
+      //    —es historia de lo que se mando— pero se marca para que la lista
+      //    deje de mostrarla.
+      try {
+        const altas = await db.collection('altasPendientes')
+          .where('uid', '==', userIdToDelete).get()
+        for (const alta of altas.docs) {
+          await alta.ref.update({ cuentaEliminada: true, cuentaEliminadaEn: FieldValue.serverTimestamp() })
+        }
+        if (!altas.empty) {
+          deletedItems.push(`Alta marcada (${altas.size})`)
+          console.log(`✅ ${altas.size} alta(s) marcadas como cuenta eliminada`)
+        }
+      } catch (altaError) {
+        console.error(`⚠️ Error marcando el alta: ${altaError.message}`)
+      }
+
+      // 5. Eliminar de resellers si existe
       try {
         const resellerRef = db.collection('resellers').doc(userIdToDelete)
         const resellerDoc = await resellerRef.get()

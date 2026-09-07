@@ -57,7 +57,12 @@ export default function AdminAltas() {
   const cargar = () => {
     setCargando(true)
     getDocs(query(collection(db, 'altasPendientes'), orderBy('createdAt', 'desc'), limit(200)))
-      .then((snap) => setAltas(snap.docs.map((d) => ({ codigo: d.id, ...d.data() }))))
+      // Fuera las de cuentas ya eliminadas: la fila decia "Activada" y
+      // apuntaba a una cuenta que ya no existe. Siguen en la base por si
+      // alguna vez hace falta saber que se mando ese enlace.
+      .then((snap) => setAltas(
+        snap.docs.map((d) => ({ codigo: d.id, ...d.data() })).filter((a) => !a.cuentaEliminada),
+      ))
       .catch((e) => {
         console.error('No se pudieron cargar las altas:', e)
         toast.error('No se pudieron cargar las altas')
