@@ -106,9 +106,13 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Cada usuario puede **cambiar su propia contraseña** desde su sesión: en el menú de la izquierda, la opción **Cambiar contraseña**. Le pide la actual, la nueva y que la repita. No necesita permisos ni pedírtelo a ti.',
+          text: 'Si quieres que un usuario **pueda cambiar su propia contraseña**, enciende **Puede cambiar su contraseña** en su ficha. Le aparece la opción **Cambiar contraseña** en su menú, le pide la actual y la nueva, y ya no depende de ti.',
         },
-        { type: 'ui', kind: 'boton', label: 'Cambiar contraseña' },
+        { type: 'ui', kind: 'boton', label: 'Puede cambiar su contraseña' },
+        {
+          type: 'ojo',
+          text: 'Viene **apagado**, también para los usuarios que ya tenías. En un mostrador con gente que entra y sale, la contraseña la manejas tú; enciéndelo para los que quieras que se la administren solos.',
+        },
         {
           type: 'texto',
           text: 'Si **olvidó** su contraseña actual, ahí sí entras tú: en Gestión de usuarios, abre su ficha y usa **Cambiar contraseña**. Le pones una nueva sin necesitar la anterior.',

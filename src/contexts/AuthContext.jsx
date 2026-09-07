@@ -89,6 +89,10 @@ export const AuthProvider = ({ children }) => {
   const [assignedMotoristaId, setAssignedMotoristaId] = useState(null) // Repartidor asignado al sub-usuario
   const [assignedSellerName, setAssignedSellerName] = useState(null)
   const [independentCashRegister, setIndependentCashRegister] = useState(false) // Si el sub-usuario tiene caja independiente
+  // ¿Este sub-usuario puede cambiar su propia contraseña? Lo enciende el dueño
+  // en Gestión de usuarios. Apagado por defecto: la clave de un cajero la
+  // maneja el dueño salvo que decida lo contrario.
+  const [puedeCambiarSuClave, setPuedeCambiarSuClave] = useState(false)
   const [hideStockInPOS, setHideStockInPOS] = useState(false) // Ocultar stock en tarjetas del POS
   // Permisos de datos del sub-usuario: { verTotales, verCostos, exportar }.
   // null = no tiene propios y hereda la opción del negocio (ver
@@ -233,6 +237,7 @@ export const AuthProvider = ({ children }) => {
                 setAssignedMotoristaId(userData.assignedMotoristaId || null)
                 setAssignedSellerName(userData.assignedSellerName || null)
                 setIndependentCashRegister(userData.independentCashRegister || false)
+                setPuedeCambiarSuClave(userData.puedeCambiarSuClave === true)
                 setHideStockInPOS(userData.hideStockInPOS || false)
                 setHideDiscountInPOS(userData.hideDiscountInPOS || false)
                 setDataPermissions(userData.dataPermissions || null)
@@ -646,6 +651,7 @@ export const AuthProvider = ({ children }) => {
       setAssignedMotoristaId(userData.assignedMotoristaId || null)
       setAssignedSellerName(userData.assignedSellerName || null)
       setIndependentCashRegister(userData.independentCashRegister || false)
+      setPuedeCambiarSuClave(userData.puedeCambiarSuClave === true)
       setHideStockInPOS(userData.hideStockInPOS || false)
       setHideDiscountInPOS(userData.hideDiscountInPOS || false)
       setDataPermissions(userData.dataPermissions || null)
@@ -967,6 +973,7 @@ export const AuthProvider = ({ children }) => {
     assignedMotoristaId, // Repartidor asignado al sub-usuario (filtra Envíos)
     assignedSellerName,
     independentCashRegister, // Si el sub-usuario tiene caja independiente
+    puedeCambiarSuClave, // Si el sub-usuario puede cambiar su propia contraseña
     hideStockInPOS, // Ocultar stock en tarjetas del POS
     hideDiscountInPOS, // Ocultar descuentos en POS
     dataPermissions, // Permisos de datos del sub-usuario (null = hereda del negocio)

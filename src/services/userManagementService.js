@@ -369,6 +369,10 @@ export const createManagedUser = async (ownerId, userData) => {
       defaultWaiterId: userData.defaultWaiterId || null, // Mozo por defecto (modo restaurante) al ocupar mesa
       defaultWaiterName: userData.defaultWaiterName || null,
       independentCashRegister: userData.independentCashRegister || false, // Si true, abre su propia caja; si false, comparte la caja del owner
+      // ¿Puede cambiarse la contraseña solo? Lo enciende el dueño en Gestión de
+      // usuarios. Apagado por defecto y para los que ya existen: la clave de un
+      // cajero la maneja el dueño salvo que decida lo contrario.
+      puedeCambiarSuClave: userData.puedeCambiarSuClave === true,
       // Permisos de datos: { verTotales, verCostos, exportar }. Si no vienen,
       // queda null y el usuario hereda la opción del negocio — es lo que hace
       // que los sub-usuarios de siempre no cambien de comportamiento.

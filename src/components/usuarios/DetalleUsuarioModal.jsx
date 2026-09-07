@@ -1,7 +1,6 @@
 import {
   Mail, Calendar, ShieldCheck, Warehouse, Store, UserCheck, Bike, Wallet,
-  Eye, EyeOff, Key, Edit2, Archive, ArchiveRestore, Trash2, FileText, CreditCard,
-} from 'lucide-react'
+  Eye, EyeOff, Key, Edit2, Archive, ArchiveRestore, Trash2, FileText, CreditCard, KeyRound } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 
@@ -168,6 +167,12 @@ export default function DetalleUsuarioModal({
             {usuario.independentCashRegister
               ? 'Abre y cierra su propia caja'
               : 'Comparte la caja del dueño'}
+          </Dato>
+
+          <Dato icono={KeyRound} etiqueta="Su contraseña">
+            {usuario.puedeCambiarSuClave === true
+              ? 'Puede cambiarla él mismo'
+              : 'Solo la cambias tú, desde acá'}
           </Dato>
 
           {creado && <Dato icono={Calendar} etiqueta="Creado">{creado}</Dato>}

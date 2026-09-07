@@ -72,6 +72,7 @@ export default function Users() {
   const [posSellers, setPosSellers] = useState([])
   const [assignedSellerId, setAssignedSellerId] = useState('')
   const [independentCashRegister, setIndependentCashRegister] = useState(false)
+  const [puedeCambiarSuClave, setPuedeCambiarSuClave] = useState(false)
   const [hideStockInPOS, setHideStockInPOS] = useState(false)
   const [hideDiscountInPOS, setHideDiscountInPOS] = useState(false)
   // null mientras el dueño no toque nada: así un usuario que ya existía sigue
@@ -410,6 +411,7 @@ export default function Users() {
     setAssignedMotoristaId(userToEdit.assignedMotoristaId || '')
     setDefaultWaiterId(userToEdit.defaultWaiterId || '')
     setIndependentCashRegister(userToEdit.independentCashRegister || false)
+    setPuedeCambiarSuClave(userToEdit.puedeCambiarSuClave === true)
     setHideStockInPOS(userToEdit.hideStockInPOS || false)
     setHideDiscountInPOS(userToEdit.hideDiscountInPOS || false)
     setDataPermissions(userToEdit.dataPermissions || null)
@@ -572,6 +574,7 @@ export default function Users() {
           defaultWaiterId: defaultWaiterId || null,
           defaultWaiterName: selectedWaiterObj?.name || null,
           independentCashRegister,
+          puedeCambiarSuClave,
           hideStockInPOS,
           hideDiscountInPOS,
           dataPermissions,
@@ -616,6 +619,7 @@ export default function Users() {
           defaultWaiterId: defaultWaiterId || null,
           defaultWaiterName: selectedWaiterForCreate?.name || null,
           independentCashRegister,
+          puedeCambiarSuClave,
           hideStockInPOS,
           hideDiscountInPOS,
           dataPermissions,
@@ -1360,6 +1364,30 @@ export default function Users() {
                             {independentCashRegister
                               ? 'Este usuario abre y cierra su propia caja.'
                               : 'Las ventas de este usuario se suman a la caja principal.'}
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* Su contraseña. Va acá porque es una decisión del dueño
+                        sobre ESE usuario, no un permiso de datos. Apagado por
+                        defecto: la clave de un cajero la maneja el dueño salvo
+                        que decida lo contrario. */}
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Su contraseña</h4>
+                      <label className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                        <input
+                          type="checkbox"
+                          checked={puedeCambiarSuClave}
+                          onChange={() => setPuedeCambiarSuClave(!puedeCambiarSuClave)}
+                          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-gray-900">Puede cambiar su contraseña</div>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            {puedeCambiarSuClave
+                              ? 'Le aparece "Cambiar contraseña" en su menú. Le pide la actual antes de cambiarla.'
+                              : 'Su contraseña solo la cambias tú, desde esta misma ficha.'}
                           </div>
                         </div>
                       </label>

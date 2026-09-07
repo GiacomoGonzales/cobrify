@@ -1,11 +1,14 @@
 /**
- * CAMBIAR MI CONTRASEÑA — para cualquier usuario, sin permisos de por medio.
+ * CAMBIAR MI CONTRASEÑA — para el sub-usuario a quien el dueño se lo habilite.
  *
  * La misma operación existe en Configuración > Cuenta y seguridad, pero esa
  * pantalla está detrás del permiso de Configuración: un cajero o un mozo no la
- * ve. Hasta ahora, la única forma de que un empleado cambiara su clave era
- * pedírselo al dueño — o sea, una contraseña que su propio dueño no controla, y
- * que el jefe conoce. Lo pidió Mandil.
+ * ve, y su clave se la tenía que cambiar el dueño. Lo pidió Mandil.
+ *
+ * NO es para todos: el dueño lo enciende por usuario en Gestión de usuarios
+ * ("Puede cambiar su contraseña"), y está apagado por defecto. En un mostrador
+ * con rotación de personal, esa clave la maneja el dueño. Al dueño y al admin
+ * esta página no les aparece en el menú porque ya la tienen en Configuración.
  *
  * Las reglas del cambio están en `utils/cambioDeContrasena`, compartidas con la
  * pantalla de Configuración.
@@ -22,7 +25,7 @@ import { cambiarMiContrasena, LARGO_MINIMO } from '@/utils/cambioDeContrasena'
 
 export default function MiClave() {
   const toast = useToast()
-  const { user, isDemoMode } = useAppContext()
+  const { user, isDemoMode, isAdmin, isBusinessOwner, puedeCambiarSuClave } = useAppContext()
   const [actual, setActual] = useState('')
   const [nueva, setNueva] = useState('')
   const [repetida, setRepetida] = useState('')
@@ -51,7 +54,28 @@ export default function MiClave() {
     }
   }
 
+  // El dueño y el admin siempre pueden; un sub-usuario, solo si el dueño se lo
+  // habilitó en Gestión de usuarios. La entrada del menú ya lo respeta, pero la
+  // ruta se puede escribir a mano.
+  const tienePermiso = isDemoMode || isAdmin || isBusinessOwner || puedeCambiarSuClave
+
   const tipo = verClaves ? 'text' : 'password'
+
+  if (!tienePermiso) {
+    return (
+      <div className="max-w-lg mx-auto">
+        <Card>
+          <CardContent className="py-10 text-center space-y-2">
+            <KeyRound className="w-8 h-8 text-gray-300 mx-auto" />
+            <p className="font-medium text-gray-900">Tu contraseña la cambia el dueño del negocio</p>
+            <p className="text-sm text-gray-500">
+              Pídele que te ponga una nueva desde Gestión de usuarios.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-lg mx-auto space-y-4">

@@ -92,7 +92,7 @@ import VersionApp from '@/components/VersionApp'
 
 function Sidebar() {
   const { mobileMenuOpen, setMobileMenuOpen, sidebarCollapsed, toggleSidebar, orderAlertCount } = useStore()
-  const { isAdmin, isBusinessOwner, isReseller, isDemoMode, hasPageAccess, businessMode, businessSettings, hasFeature } = useAppContext()
+  const { isAdmin, isBusinessOwner, isReseller, isDemoMode, hasPageAccess, businessMode, businessSettings, hasFeature, puedeCambiarSuClave } = useAppContext()
   const { branding } = useBranding()
   const location = useLocation()
 
@@ -2336,14 +2336,17 @@ function Sidebar() {
       hideInDemo: true,
     },
     {
-      // Cambiar la propia contraseña: para TODOS, como el manual. La misma
-      // operación existe en Configuración, pero un sub-usuario no ve esa
-      // pantalla y su clave se la tenía que cambiar el dueño.
+      // Cambiar la propia contraseña. Solo para quien NO ve Configuración: ahí
+      // ya está, en "Cuenta y seguridad", y al dueño le sobra una entrada
+      // repetida en el menú. Lo que faltaba era el caso del sub-usuario, que no
+      // puede entrar a Configuración y dependía del dueño para su clave.
       path: '/mi-clave',
       icon: KeyRound,
       label: 'Cambiar contraseña',
       pageId: null,
       hideInDemo: true,
+      soloSinConfiguracion: true,
+      requierePermisoDeClave: true,
     },
     {
       path: '/mi-suscripcion',
@@ -2478,6 +2481,20 @@ function Sidebar() {
 
     // Si es solo para reseller y el usuario no es reseller, no mostrar
     if (item.resellerOnly && !isReseller) return false
+
+    // Entradas que existen SOLO porque el usuario no llega a Configuración.
+    // Va antes de los atajos de abajo, que le muestran todo al dueño y al admin
+    // — que son justamente quienes sí tienen Configuración.
+    if (item.soloSinConfiguracion) {
+      const veConfiguracion = isAdmin || isBusinessOwner ||
+        (hasPageAccess ? hasPageAccess('settings') : false)
+      if (veConfiguracion) return false
+    }
+
+    // Y solo si el dueño se lo habilitó en Gestión de usuarios. No todos los
+    // sub-usuarios deberían poder cambiarse la clave: en un mostrador con
+    // rotación, esa la maneja el dueño.
+    if (item.requierePermisoDeClave && !puedeCambiarSuClave) return false
 
     // Si estamos en modo demo, mostrar todo excepto reseller
     if (isDemoMode && !item.resellerOnly) return true
