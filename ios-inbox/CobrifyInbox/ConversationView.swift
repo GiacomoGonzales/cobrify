@@ -776,10 +776,10 @@ struct ConversationView: View {
                     }
                 }
             }
-            // Poco aire encima: ese padding es parte del compositor, o sea
-            // que es alto que se le quita a la conversación. Cuanto menos,
-            // más pegado llega el texto al cuadro de escribir.
-            .padding(.top, 8)
+            // Cero aire encima: ese padding es parte del compositor, o sea
+            // alto que se le quita a la conversación. En cero, el borde de la
+            // lista —donde el texto acaba de desvanecerse— coincide exacto con
+            // el borde de arriba de la cápsula de escribir.
             // El compositor NO pinta nada detrás: el fondo del chat se ve
             // limpio de arriba abajo.
         }
