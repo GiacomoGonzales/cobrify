@@ -1,4 +1,5 @@
 import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
+import { lineasDeFechaYHora, mostrarTitulosDeSeccion, lineasDeItem } from '@/utils/ticketCompacto';
 import { getRealPayments } from '@/utils/receivables'
 import { getNotaVentaLegend, wrapLegend } from '@/utils/documentLegends'
 import { documentLabel } from '@/utils/documentType'
@@ -943,6 +944,10 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
 
     // Items text - columnas fijas para alinear precios correctamente
     const lineWidth = format.charsPerLine; // Usar ancho real configurado (58mm: 24, 80mm: 42)
+    // "Impresion compacta (ahorro de papel)" de Configuracion > Impresion. Este
+    // es el servicio que usa ANDROID; blePrinterService es el respaldo de iOS.
+    let compacto = false;
+    try { compacto = JSON.parse(localStorage.getItem('factuya_printerConfig') || '{}').compactPrint === true; } catch { /* ignore */ }
     const cantWidth = 6; // Columna cantidad
     const descWidth = paperWidth === 80 ? 20 : 12; // Columna descripción ajustada
     const priceWidth = paperWidth === 80 ? 12 : 10; // Columna precio ajustada
@@ -1003,7 +1008,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
       if (paperWidth === 80) {
         // FORMATO 80MM - EXACTAMENTE IGUAL AL WEB
         // Línea 1: Nombre del producto completo (con unidad/presentacion opcional)
-        itemsText += `${namePrefix}${itemName}\n`;
+        // el nombre lo arma lineasDeItem junto con la cantidad y el total
 
         // Línea 2: "cantidad X precio unitario" (izq) y "total" (der) - CON ESPACIOS PARA ALINEAR
         // Formatear cantidad: con decimales si tiene, sino entero
@@ -1016,8 +1021,10 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
         const desglose80 = getItemPriceBreakdown(item, unitPrice, item.quantity);
         const qtyAndPrice = `${qtyFormatted}${unitSuffix} X ${currencySymbol} ${desglose80.baseUnit.toFixed(2)}`;
         const totalStr = `${currencySymbol} ${desglose80.baseTotal.toFixed(2)}`;
-        const spaceBetween = lineWidth - qtyAndPrice.length - totalStr.length;
-        itemsText += `${qtyAndPrice}${' '.repeat(Math.max(1, spaceBetween))}${totalStr}\n`;
+        for (const l of lineasDeItem({
+          nombre: `${namePrefix}${itemName}`, cantidadYPrecio: qtyAndPrice,
+          total: totalStr, charsPerLine: lineWidth, compacto,
+        })) itemsText += l + '\n';
 
         desglose80.lineas.forEach((l) => {
           const etiqueta = `  + ${convertSpanishText(l.texto)}`;
@@ -1071,7 +1078,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
       } else {
         // FORMATO 58MM - IGUAL QUE 80MM pero adaptado al ancho de 24 caracteres
         // Línea 1: Nombre del producto completo (con unidad/presentacion opcional)
-        itemsText += `${namePrefix}${itemName}\n`;
+        // el nombre lo arma lineasDeItem junto con la cantidad y el total
 
         // Línea 2: "cantidad x precio unitario" (izq) y "total" (der) - CON ESPACIOS PARA ALINEAR
         // Formatear cantidad: con decimales si tiene, sino entero
@@ -1080,8 +1087,10 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
         const desglose58 = getItemPriceBreakdown(item, unitPrice, item.quantity);
         const qtyAndPrice = `${qtyFormatted}${unitSuffix}x ${currencySymbol} ${desglose58.baseUnit.toFixed(2)}`;
         const totalStr = `${currencySymbol} ${desglose58.baseTotal.toFixed(2)}`;
-        const spaceBetween = lineWidth - qtyAndPrice.length - totalStr.length;
-        itemsText += `${qtyAndPrice}${' '.repeat(Math.max(1, spaceBetween))}${totalStr}\n`;
+        for (const l of lineasDeItem({
+          nombre: `${namePrefix}${itemName}`, cantidadYPrecio: qtyAndPrice,
+          total: totalStr, charsPerLine: lineWidth, compacto,
+        })) itemsText += l + '\n';
 
         // En 58mm el ancho es de 24 caracteres: la sangría se reduce a uno
         // para que el nombre del adicional no quede partido.
@@ -1263,8 +1272,9 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
 
     printer = printer
       .align('left')
-      .text(convertSpanishText(`Fecha: ${invoiceDate.toLocaleDateString('es-PE')}\n`))
-      .text(`Hora: ${timeString}\n`);
+      .text(convertSpanishText(
+        lineasDeFechaYHora(invoiceDate.toLocaleDateString('es-PE'), timeString, compacto).join('\n') + '\n'
+      ));
 
     // De qué documento salió (cotización, nota de venta o guía). Con el
     // ticket en la mano es lo único que ata el cobro a lo que se cotizó.
@@ -1277,11 +1287,10 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
     // ========== Datos del Cliente (ticket-section) ==========
     // Mostrar para facturas, boletas y notas de venta
     if (isInvoice || invoice.documentType === 'boleta' || invoice.documentType === 'nota_venta') {
-      printer = printer
-        .align('left')
-        .bold()
-        .text('DATOS DEL CLIENTE\n')
-        .clearFormatting();
+      printer = printer.align('left');
+      if (mostrarTitulosDeSeccion(compacto)) {
+        printer = printer.bold().text('DATOS DEL CLIENTE\n').clearFormatting();
+      }
 
       // Codigo de cliente (solo si el cliente lo tiene configurado)
       if (invoice.customer?.code) {
@@ -1376,12 +1385,11 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
     }
 
     // ========== Detalle de Productos/Servicios (ticket-section) ==========
-    printer = printer
-      .align('left')
-      .bold()
-      .text('DETALLE\n')
-      .clearFormatting()
-      .text(itemsText);
+    printer = printer.align('left');
+    if (mostrarTitulosDeSeccion(compacto)) {
+      printer = printer.bold().text('DETALLE\n').clearFormatting();
+    }
+    printer = printer.text(itemsText);
 
     printer = addSeparator(printer, format.separator, paperWidth, 'left')
       // Totales - alineados a la derecha
