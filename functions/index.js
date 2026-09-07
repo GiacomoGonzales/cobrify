@@ -15253,13 +15253,18 @@ export const sembrarCuentaNueva = onRequest(
       // Quién puede sembrar: un admin, un reseller, o el propio dueño de la
       // cuenta. Lo último es lo que hace posible el formulario de alta, y no
       // abre nada: la semilla es idempotente y solo escribe una cuenta vacía.
+      // OJO: el criterio de "es administrador" es `esAdministrador`, NO leer
+      // `admins/{uid}.isAdmin`. Ese campo no existe en el documento del admin
+      // de verdad (tiene `role: 'admin'`), asi que preguntando por el no
+      // pasaba NADIE. Es el mismo fallo que ya se barrio en las otras 26
+      // funciones; esta se escribio despues y lo heredo.
       let permitido = quien.uid === uid
       if (!permitido) {
-        const [fichaAdmin, fichaReseller] = await Promise.all([
-          db.collection('admins').doc(quien.uid).get(),
+        const [esAdmin, fichaReseller] = await Promise.all([
+          esAdministrador(quien.uid),
           db.collection('resellers').doc(quien.uid).get(),
         ])
-        permitido = fichaAdmin.data()?.isAdmin === true || fichaReseller.exists
+        permitido = esAdmin || fichaReseller.exists
       }
       if (!permitido) {
         res.status(403).json({ success: false, error: 'No puedes crear esta cuenta' }); return
@@ -15305,8 +15310,8 @@ export const crearAltaPendiente = onRequest(
         res.status(401).json({ success: false, error: 'No autorizado' }); return
       }
       const admin = await auth.verifyIdToken(cabecera.split('Bearer ')[1])
-      const fichaAdmin = await db.collection('admins').doc(admin.uid).get()
-      if (fichaAdmin.data()?.isAdmin !== true) {
+      // Mismo criterio unico que el resto: estar en `admins` ES ser admin.
+      if (!(await esAdministrador(admin.uid))) {
         res.status(403).json({ success: false, error: 'Solo administradores' }); return
       }
 
