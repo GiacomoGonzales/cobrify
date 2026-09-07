@@ -38,11 +38,13 @@ struct SplashView: View {
                         .foregroundStyle(Color(hex: "#0F2E20").opacity(0.55))
                 }
             }
+            // Solo el bloque del logo se mueve, no la pantalla entera: es
+            // una imagen y dos textos, barato de animar.
             .opacity(entro ? 1 : 0)
-            .scaleEffect(entro ? 1 : 0.94)
+            .scaleEffect(entro ? 1 : 0.96)
         }
         .onAppear {
-            withAnimation(.easeOut(duration: 0.45)) { entro = true }
+            withAnimation(.easeOut(duration: 0.4)) { entro = true }
         }
     }
 }

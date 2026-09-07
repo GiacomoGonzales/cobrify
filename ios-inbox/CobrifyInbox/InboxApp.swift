@@ -57,20 +57,18 @@ struct RootView: View {
                     LoginView()
                 }
             }
-            // La app no aparece de golpe: entra creciendo un pelín desde
-            // atrás mientras el splash se va. Es el mismo gesto que usa iOS
-            // al abrir una app desde el icono.
-            .opacity(enSplash ? 0 : 1)
-            .scaleEffect(enSplash ? 0.97 : 1)
+            // OJO: la app NO se anima. Escalarla y atenuarla obligaba al
+            // sistema a rasterizar toda la pantalla —pestañas, vidrios, foto
+            // de fondo— y en el telefono se veia rayada y tosca. Se queda
+            // quieta y entera; lo unico que se mueve es el splash, que es una
+            // vista simple y se desvanece encima sin coste.
 
             if enSplash {
                 SplashView()
-                    // Y el splash se va hacia adelante, como si uno lo
-                    // atravesara. Sin esto los dos se cruzaban en seco.
-                    .transition(.opacity.combined(with: .scale(scale: 1.06)))
+                    .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.5), value: enSplash)
+        .animation(.easeOut(duration: 0.45), value: enSplash)
         .task {
             try? await Task.sleep(for: .milliseconds(900))
             minimoCumplido = true
