@@ -6,7 +6,8 @@ import SplashMarca from '@/components/SplashMarca'
 import { useAuth } from '@/contexts/AuthContext'
 import { useBranding } from '@/contexts/BrandingContext'
 import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { signOut } from 'firebase/auth'
+import { auth, db } from '@/lib/firebase'
 import { getVendedor } from '@/services/vendedorService'
 import { getCompanySettings } from '@/services/firestoreService'
 import { createDeliveryRecord } from '@/services/motoristaService'
@@ -44,6 +45,31 @@ export default function MainLayout() {
   const location = useLocation()
   const sidebarCollapsed = useStore(state => state.sidebarCollapsed)
   const setOrderAlertCount = useStore(state => state.setOrderAlertCount)
+  const [sesionSoporte, setSesionSoporte] = useState(null)
+
+  // ¿Esta sesión la abrió soporte con un pase, en vez de el dueño con su
+  // clave? La marca viene en el token; sessionStorage es la red por si el
+  // token se renueva y la pierde. Al cerrar la ventana se va sola.
+  useEffect(() => {
+    let vivo = true
+    if (!auth.currentUser) { setSesionSoporte(null); return }
+    auth.currentUser.getIdTokenResult()
+      .then((r) => {
+        if (!vivo) return
+        let guardado = null
+        try { guardado = sessionStorage.getItem('sesionSoporte') } catch { /* da igual */ }
+        if (r.claims?.soporte) setSesionSoporte(r.claims.soporteNegocio || guardado || 'este cliente')
+        else setSesionSoporte(guardado)
+      })
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [user])
+
+  const salirDeSoporte = async () => {
+    try { sessionStorage.removeItem('sesionSoporte') } catch { /* da igual */ }
+    await signOut(auth)
+    window.location.replace('/login')
+  }
 
   // ====== NOTIFICACIONES GLOBALES DE ÓRDENES DEL MENÚ DIGITAL ======
   const [globalOrderAlerts, setGlobalOrderAlerts] = useState([])
@@ -617,6 +643,24 @@ export default function MainLayout() {
       {/* Status Bar spacer - Fondo azul detrás del status bar nativo (iOS y Android) */}
       {Capacitor.isNativePlatform() && (
         <div className="bg-primary-800 flex-shrink-0" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }} />
+      )}
+
+      {/* Sesion de soporte: mientras dure, se ve de quien es la cuenta. Suena
+          obvio hasta el dia que se edita el inventario equivocado. */}
+      {sesionSoporte && (
+        <div className="bg-gray-900 text-white px-4 py-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 flex-shrink-0 text-sm">
+          <span>
+            Sesión de soporte — estás dentro de la cuenta de{' '}
+            <span className="font-semibold">{sesionSoporte}</span>
+          </span>
+          <button
+            type="button"
+            onClick={salirDeSoporte}
+            className="underline underline-offset-2 font-medium hover:text-gray-200"
+          >
+            Salir
+          </button>
+        </div>
       )}
 
       {/* Banner de vencimiento: desde 4 dias antes, escalando.

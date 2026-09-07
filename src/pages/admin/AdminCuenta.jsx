@@ -19,6 +19,7 @@ import SucursalesModal from '@/components/admin/cuenta/SucursalesModal'
 import ContactoModal from '@/components/admin/cuenta/ContactoModal'
 import AsignarVendedorModal from '@/components/admin/cuenta/AsignarVendedorModal'
 import EliminarCuentaModal from '@/components/admin/cuenta/EliminarCuentaModal'
+import EntrarComoModal from '@/components/admin/cuenta/EntrarComoModal'
 import {
   Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Estado, Pastilla, Boton, ListaDatos, Dato, Cifras, Cifra, Aviso,
   Selector, Entrada, AreaTexto, useTituloAdmin,
@@ -332,6 +333,7 @@ export default function AdminCuenta() {
           <Boton tamano="sm" onClick={() => setModal('plan')}>Cambiar plan</Boton>
           <Boton tamano="sm" onClick={() => setModal('vencimiento')}>Cambiar vencimiento</Boton>
           <Boton tamano="sm" onClick={abrirWhatsApp}>Recordar por WhatsApp</Boton>
+          <Boton tamano="sm" onClick={() => setModal('entrarComo')}>Entrar como este cliente</Boton>
           {c.status !== 'suspended' ? (
             <Boton tamano="sm" onClick={() => cambiarAcceso(true)}>Suspender</Boton>
           ) : (
@@ -704,6 +706,7 @@ export default function AdminCuenta() {
       {modal === 'contacto' && <ContactoModal cuenta={c} onClose={cerrarModal} onGuardado={cambios => parchar(cambios)} />}
       {modal === 'vendedor' && <AsignarVendedorModal cuenta={c} vendedores={vendedores} onClose={cerrarModal} onGuardado={cambios => parchar(cambios)} />}
       {modal === 'eliminar' && <EliminarCuentaModal cuenta={c} onClose={cerrarModal} onEliminada={() => navigate('/app/admin/users')} />}
+      {modal === 'entrarComo' && <EntrarComoModal cuenta={c} onClose={cerrarModal} />}
     </Pagina>
   )
 }

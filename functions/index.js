@@ -15062,6 +15062,101 @@ export const logSunatGuiasTransp = crearLogeadorSunat('carrierDispatchGuides', '
 
 
 // =====================================================================
+// ENTRAR COMO UN CLIENTE (sesión de soporte)
+// =====================================================================
+
+/**
+ * Le da al admin un pase temporal para entrar a la cuenta de un cliente SIN
+ * saber su contraseña.
+ *
+ * Hace falta porque los clientes ponen y cambian su propia clave, y a veces
+ * piden que les subamos sus productos o revisemos cómo les quedó el catálogo.
+ * Las alternativas eran peores: resetearles la contraseña los deja fuera de su
+ * propia cuenta, y guardarla en algún lado deja de hacerla una contraseña.
+ *
+ * Es un permiso fuerte, así que:
+ * - Lo comprueba el SERVIDOR contra `admins/{uid}.isAdmin`. Nada de confiar en
+ *   lo que diga el navegador.
+ * - El pase dura una hora (es lo que dura un token de Firebase) y no se guarda.
+ * - Cada uso queda anotado en `accesosSoporte`, y el cliente puede leer los
+ *   suyos. Eso es lo que separa una herramienta de soporte de una puerta
+ *   trasera, y con la Ley 29733 es lo que deja a Cobrify en terreno firme.
+ * - El pase lleva la marca `soporte`, que la app usa para pintar la franja de
+ *   "estás dentro de la cuenta de X" mientras dure la sesión.
+ */
+export const entrarComoCliente = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 30,
+    memory: '256MiB',
+    invoker: 'public',
+    cors: true,
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') {
+      res.status(405).json({ success: false, error: 'Method not allowed' }); return
+    }
+
+    try {
+      const cabecera = req.headers.authorization
+      if (!cabecera || !cabecera.startsWith('Bearer ')) {
+        res.status(401).json({ success: false, error: 'No autorizado' }); return
+      }
+      const admin = await auth.verifyIdToken(cabecera.split('Bearer ')[1])
+      const fichaAdmin = await db.collection('admins').doc(admin.uid).get()
+      if (!fichaAdmin.exists || fichaAdmin.data()?.isAdmin !== true) {
+        res.status(403).json({ success: false, error: 'Solo administradores' }); return
+      }
+
+      const targetUid = req.body?.targetUid
+      if (!targetUid || typeof targetUid !== 'string') {
+        res.status(400).json({ success: false, error: 'Falta la cuenta' }); return
+      }
+      if (targetUid === admin.uid) {
+        res.status(400).json({ success: false, error: 'Esa ya es tu cuenta' }); return
+      }
+
+      // Que la cuenta exista de verdad, y de paso su nombre para el registro.
+      const ficha = await db.collection('users').doc(targetUid).get()
+      if (!ficha.exists) {
+        res.status(404).json({ success: false, error: 'Esa cuenta ya no existe' }); return
+      }
+      const negocioDoc = await db.collection('businesses').doc(targetUid).get()
+      const negocio = negocioDoc.data()?.businessName
+        || negocioDoc.data()?.razonSocial
+        || ficha.data()?.businessName
+        || ficha.data()?.email
+        || targetUid
+
+      // La marca viaja en el token: la app la lee para pintar la franja, y las
+      // reglas podrían usarla si algún día se quiere limitar qué se puede tocar
+      // desde una sesión de soporte.
+      const token = await auth.createCustomToken(targetUid, {
+        soporte: true,
+        soporteAdmin: admin.uid,
+        soporteNegocio: String(negocio).slice(0, 80),
+      })
+
+      await db.collection('accesosSoporte').add({
+        adminUid: admin.uid,
+        adminEmail: admin.email || null,
+        targetUid,
+        negocio,
+        createdAt: FieldValue.serverTimestamp(),
+      })
+      console.log(`🔑 ${admin.email} pidió entrar a la cuenta ${targetUid} (${negocio})`)
+
+      res.status(200).json({ success: true, token, negocio })
+    } catch (error) {
+      console.error('Error al preparar la sesión de soporte:', error)
+      res.status(500).json({ success: false, error: 'No se pudo preparar el acceso' })
+    }
+  }
+)
+
+// =====================================================================
 // CÓDIGO DE CLIENTE (correlativo desde 1000001) y RUBRO
 // =====================================================================
 

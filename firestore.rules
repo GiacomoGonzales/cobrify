@@ -106,6 +106,19 @@ service cloud.firestore {
       allow write: if false; // lo administra el servidor
     }
 
+    // ============================================
+    // ENTRAR COMO UN CLIENTE (sesiones de soporte)
+    // Cada vez que soporte entra a la cuenta de alguien queda una fila aquí.
+    // La escribe SOLO el servidor (entrarComoCliente), y la puede leer el
+    // admin y —esto es lo importante— el propio dueño de la cuenta: si
+    // entramos a su casa, tiene derecho a verlo. Eso es lo que separa una
+    // herramienta de soporte de una puerta trasera.
+    // ============================================
+    match /accesosSoporte/{accesoId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.targetUid == request.auth.uid);
+      allow write: if false; // lo escribe el servidor
+    }
+
     match /whatsappConversations/{conversationId} {
       allow read: if isAdmin();
       // La pantalla puede tocar SOLO los campos de organización (estado,

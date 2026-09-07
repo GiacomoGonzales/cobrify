@@ -67,6 +67,7 @@ const ResellerBalance = lazy(() => import('./pages/reseller/ResellerBalance'))
 const ResellerSettings = lazy(() => import('./pages/reseller/ResellerSettings'))
 const Users = lazy(() => import('./pages/Users'))
 const GetMyUID = lazy(() => import('./pages/GetMyUID'))
+const EntrarComo = lazy(() => import('./pages/EntrarComo'))
 const NotificationTest = lazy(() => import('./pages/NotificationTest'))
 const Quotations = lazy(() => import('./pages/Quotations'))
 const BulkEmission = lazy(() => import('./pages/BulkEmission'))
@@ -566,6 +567,10 @@ function App() {
 
             {/* Ruta especial para obtener UID (sin layout) */}
             <Route path="/get-my-uid" element={<GetMyUID />} />
+
+            {/* Sesión de soporte: el admin entra a la cuenta de un cliente con
+                un pase que viaja detrás del "#", sin saber su contraseña. */}
+            <Route path="/entrar-como" element={<EntrarComo />} />
 
             {/* Rutas protegidas con layout */}
             <Route path="/app" element={<MainLayout />}>
