@@ -98,7 +98,7 @@ struct ConversationView: View {
                 // queda pegada al cuadro de escribir. Y tiene que ser al menos
                 // lo que mide la banda que desvanece, o el último mensaje se
                 // vería siempre medio apagado aun estando quieto.
-                .padding(.bottom, 34)
+                .padding(.bottom, 22)
                 .background(SondaDeScroll(espia: espia))
             }
             // El texto se DESVANECE al meterse detrás de la cabecera y del
@@ -790,7 +790,7 @@ struct ConversationView: View {
     /// pantalla. Y como se desvanece el CONTENIDO en vez de pintar un velo
     /// encima, funciona igual con fondo claro, oscuro o una foto.
     private var mascaraDeBordes: some View {
-        let banda: CGFloat = 34
+        let banda: CGFloat = 20
         return VStack(spacing: 0) {
             // Aparece justo al salir de la cabecera…
             LinearGradient(colors: [.black.opacity(0), .black],
