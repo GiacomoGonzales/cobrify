@@ -112,6 +112,40 @@ export function valoresPosibles(variants = [], seleccion = {}, atributo, { conSt
 }
 
 /**
+ * Los atributos de TODO un catálogo, para filtrar la lista de productos.
+ *
+ * Sirve para "muéstrame lo que hay en talla M" sin entrar producto por
+ * producto. Solo se devuelven los que tienen más de un valor: un atributo con
+ * una sola opción no filtra nada y solo ocupa pantalla.
+ *
+ * Un catálogo sin variantes —un restaurante, una bodega— devuelve lista vacía y
+ * la barra de filtros no se dibuja.
+ */
+export function atributosDeProductos(productos = []) {
+  const todas = []
+  for (const p of productos) {
+    if (p?.hasVariants && Array.isArray(p.variants)) todas.push(...p.variants)
+  }
+  return atributosDeVariantes(todas).filter(a => a.valores.length > 1)
+}
+
+/**
+ * ¿Este producto tiene ALGUNA variante que cumpla todo lo filtrado?
+ *
+ * Es "alguna" y no "todas" a propósito: al filtrar por talla M, el polo entra
+ * si existe en M, aunque también venga en S y en L.
+ *
+ * Un producto SIN variantes queda fuera en cuanto hay un filtro activo: no
+ * tiene tallas, así que no puede estar en la M.
+ */
+export function productoCoincideConAtributos(producto, filtros = {}) {
+  const activos = Object.entries(filtros).filter(([, v]) => v)
+  if (activos.length === 0) return true
+  if (!producto?.hasVariants || !Array.isArray(producto.variants)) return false
+  return producto.variants.some(v => coincideConSeleccion(v, Object.fromEntries(activos)))
+}
+
+/**
  * ¿Conviene mostrar selectores por atributo en vez de la lista de combinaciones?
  *
  * Con un solo atributo (Vino: Copa / Botella) la lista de siempre se lee mejor

@@ -73,6 +73,7 @@ import { BedDouble,
 } from 'lucide-react'
 import { repreciarPorCantidad } from '@/utils/autoPriceByQty'
 import { promoParaProducto, precioConPromo, CANAL_CATALOGO } from '@/services/scheduledDiscountService'
+import { atributosDeProductos, productoCoincideConAtributos } from '@/utils/variantesPorAtributo'
 
 // Estilos de animacion para fade-in escalonado
 const fadeInStyle = `
@@ -296,6 +297,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // mostraban en el orden en que Firestore los devuelve (por ID), que para el
   // cliente se ve aleatorio.
   const [sortBy, setSortBy] = useState('name_asc') // name_asc | name_desc | price_asc | price_desc
+  // Filtro por talla / color sobre la LISTA. Pedido de CITEX: entrar producto
+  // por producto para ver quién tiene la M es inviable con un catálogo grande.
+  const [filtrosDeAtributo, setFiltrosDeAtributo] = useState({})
   // Fase 2 (port shopifree): el header reacciona al scroll — sombra que
   // aparece, o filete del acento en el tema bold.
   // Barra del navegador con el color del negocio + sin banner de instalar
@@ -690,6 +694,53 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     })
   }, [products, hiddenCategoryIds, hideOutOfStock, ignoreStockSetting])
 
+  // Qué se puede filtrar en ESTE catálogo. Sale de todos los productos
+  // publicados, no de los que quedaron a la vista: si se recalculara sobre lo
+  // filtrado, elegir la M dejaría solo la M en la lista de tallas y no habría
+  // forma de cambiar a la L.
+  const atributosDelCatalogo = useMemo(
+    () => atributosDeProductos(publicProducts),
+    [publicProducts],
+  )
+
+  // Los desplegables de talla / color. Es un componente y no JSX suelto porque
+  // la barra de herramientas está DOS veces en esta pantalla —la vista por
+  // categoría y el bloque "Todos los productos"— y la primera versión de esto
+  // salió solo en una: en la home, que es donde cae el visitante, no aparecía.
+  const FiltrosDeAtributo = () => {
+    if (atributosDelCatalogo.length === 0) return null
+    const hayFiltro = Object.values(filtrosDeAtributo).some(Boolean)
+    const conMayuscula = (t) => t.charAt(0).toUpperCase() + t.slice(1)
+    return (
+      <>
+        {atributosDelCatalogo.map((attr) => (
+          <select
+            key={attr.nombre}
+            value={filtrosDeAtributo[attr.nombre] || ''}
+            onChange={(e) => setFiltrosDeAtributo(prev => ({ ...prev, [attr.nombre]: e.target.value }))}
+            aria-label={`Filtrar por ${attr.nombre.toLowerCase()}`}
+            className={`text-sm rounded-lg px-2 py-1.5 border ${
+              filtrosDeAtributo[attr.nombre] ? 'border-current font-medium' : 'border-gray-200'
+            } ${thSearchClassic} ${thBorderColor}`}
+          >
+            <option value="">{conMayuscula(attr.nombre)}: todas</option>
+            {attr.valores.map((valor) => (
+              <option key={valor} value={valor}>{conMayuscula(attr.nombre)}: {valor}</option>
+            ))}
+          </select>
+        ))}
+        {hayFiltro && (
+          <button
+            onClick={() => setFiltrosDeAtributo({})}
+            className="text-sm px-2 py-1.5 underline opacity-70 hover:opacity-100"
+          >
+            Quitar filtros
+          </button>
+        )}
+      </>
+    )
+  }
+
   const filteredProducts = useMemo(() => {
     const list = publicProducts.filter(product => {
       // Búsqueda flexible e insensible a tildes/acentos: cada palabra (parcial) del término
@@ -723,7 +774,12 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         matchesCategory = allCategoryIds.includes(product.category)
       }
 
-      return matchesSearch && matchesCategory
+      // Talla / color: el producto entra si ALGUNA de sus variantes cumple todo
+      // lo filtrado. Un producto sin variantes queda fuera en cuanto hay un
+      // filtro activo — no tiene tallas, así que no puede estar en la M.
+      const matchesAtributos = productoCoincideConAtributos(product, filtrosDeAtributo)
+
+      return matchesSearch && matchesCategory && matchesAtributos
     })
     // Orden elegido por el visitante. Por defecto A-Z: sin esto los productos
     // salían en el orden de Firestore (por ID), que se ve aleatorio.
@@ -760,7 +816,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         sorted.sort(byName)
     }
     return sorted
-  }, [publicProducts, searchQuery, selectedCategory, selectedSubcategory, categories, sortBy, business, catalogExchangeRate])
+  }, [publicProducts, searchQuery, selectedCategory, selectedSubcategory, categories, sortBy, business, catalogExchangeRate, filtrosDeAtributo])
 
   // Productos destacados
   const featuredProducts = useMemo(() => {
@@ -2786,7 +2842,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 </strong></span>
               )}
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              <FiltrosDeAtributo />
+
               {/* Orden de los productos. Las opciones de precio solo tienen
                   sentido si el catálogo muestra precios. */}
               <select
@@ -2880,7 +2938,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               <div className="flex items-center gap-4 pt-2">
                 <div className={`flex-1 border-t ${thBorderColor}`} />
                 <span className={`text-sm font-medium ${thTextFaint}`}>Todos los productos</span>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                  <FiltrosDeAtributo />
                   {/* Mismo selector de orden que la vista por categoría */}
                   <select
                     value={sortBy}
