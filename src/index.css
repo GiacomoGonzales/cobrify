@@ -494,7 +494,13 @@
    la capa no se escape por detras del fondo del chat. */
 .chat-vidrio {
   position: relative;
-  isolation: isolate;
+  /* Por encima del hilo. Hace falta porque la capa de vidrio obliga a que la
+     barra tenga su propio contexto de apilado, y dentro de el se queda su
+     menu: sin este z-index las burbujas de imagen —que vienen despues en el
+     documento— le pasaban por encima al menu de la cabecera. El velo de
+     arrastre (z-40) y los visores a pantalla completa (z-50 y mas) siguen
+     ganando, que es lo que se busca. */
+  z-index: 20;
   background-color: transparent;
 }
 .chat-vidrio::before {
