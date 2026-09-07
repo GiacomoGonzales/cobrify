@@ -36,6 +36,7 @@ struct ConversationView: View {
     @State private var mediaPendiente: MediaBiblioteca?
     @FocusState private var cuadroEnfocado: Bool
     @State private var mostrarVincular = false
+    @State private var mostrarAlta = false
     @State private var mostrarBuscar = false
     @State private var mostrarArchivosDelChat = false
     /// La foto abierta en el visor (por id de mensaje): el visor vive aquí,
@@ -298,6 +299,14 @@ struct ConversationView: View {
                             Label("Desvincular negocio", systemImage: "link.badge.minus")
                         }
                     } else {
+                        // Un lead que acaba de pagar: se le manda el formulario
+                        // para que se cree la cuenta el mismo. Solo aparece sin
+                        // negocio vinculado, que es cuando tiene sentido.
+                        Button {
+                            mostrarAlta = true
+                        } label: {
+                            Label("Enviar formulario de alta", systemImage: "person.badge.plus")
+                        }
                         Button {
                             mostrarVincular = true
                         } label: {
@@ -346,6 +355,14 @@ struct ConversationView: View {
         }
         .sheet(isPresented: $mostrarVincular) {
             VincularSheet(conversationId: conv.id)
+        }
+        .sheet(isPresented: $mostrarAlta) {
+            // El mensaje cae en el compositor, no sale solo: a un cliente que
+            // acaba de pagar no conviene mandarle nada a ciegas.
+            EnviarAltaSheet(conv: conv) { mensaje in
+                borrador = mensaje
+                cuadroEnfocado = true
+            }
         }
         .sheet(isPresented: $mostrarApariencia) {
             NavigationStack {
