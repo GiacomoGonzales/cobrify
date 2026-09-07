@@ -20,6 +20,7 @@ export default function EntrarComoModal({ cuenta, onClose }) {
   const toast = useToast()
   const [preparando, setPreparando] = useState(false)
   const [enlace, setEnlace] = useState(null)
+  const [fallo, setFallo] = useState(null)
 
   async function preparar() {
     setPreparando(true)
@@ -33,8 +34,13 @@ export default function EntrarComoModal({ cuenta, onClose }) {
       const datos = await r.json()
       if (!datos.success) {
         toast.error(datos.error || 'No se pudo preparar el acceso')
+        // El `motivo` es el mensaje crudo de Google: dice a qué cuenta de
+        // servicio exacta le falta el permiso. Sin verlo hay que adivinar, y
+        // adivinar con permisos sale caro.
+        if (datos.motivo) setFallo(datos.motivo)
         return
       }
+      setFallo(null)
       setEnlace(`${window.location.origin}/entrar-como#t=${datos.token}`)
     } catch (error) {
       console.error('Error preparando la sesión de soporte:', error)
@@ -72,6 +78,11 @@ export default function EntrarComoModal({ cuenta, onClose }) {
       }
     >
       <div className="space-y-3">
+        {fallo && (
+          <Aviso tono="rojo" titulo="Lo que respondió Google">
+            <p className="break-words font-mono text-[11px] leading-relaxed">{fallo}</p>
+          </Aviso>
+        )}
         {!enlace ? (
           <>
             <p className="text-[12.5px] text-gray-700">
