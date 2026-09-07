@@ -14,9 +14,10 @@ import { matchesPrebuilt } from '@/lib/utils'
 import { origenDeCuenta, ORIGEN_DIRECTO, ORIGEN_RESELLER, ORIGEN_VENDEDOR } from '@/utils/subscriptionOwnership'
 import { buildAccountHaystack } from '@/utils/adminSearch'
 import VendedoresModal from '@/components/admin/cuenta/VendedoresModal'
+import EntrarComoModal from '@/components/admin/cuenta/EntrarComoModal'
 import {
   Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Filtros, FiltroSelect, Buscador, Estado, Pastilla, Boton,
-  useMenuDeFila, BotonDeFila, CajaMenu, ItemMenu,
+  useMenuDeFila, BotonDeFila, CajaMenu, ItemMenu, SeparadorMenu,
 } from '@/components/admin/ui'
 
 // Lista de cuentas: buscador, filtros y tabla. Clic en una fila abre la ficha
@@ -408,6 +409,10 @@ export default function AdminUsers() {
   // Es una funcion y no un componente para que no se remonte en cada render.
   const menuAcciones = (user, vencida) => (
             <CajaMenu posicion={menu.posicion} refMenu={menu.refMenu}>
+              {/* Entrar a su cuenta sin saber su contrasena. Va primero
+                  porque es lo que se hace a diario cuando piden ayuda. */}
+              <ItemMenu onClick={() => abrirModal('entrarComo', user)}>Entrar como este cliente</ItemMenu>
+              <SeparadorMenu />
               {user.status !== 'suspended' ? (
                 <ItemMenu onClick={() => toggleUserAccess(user.id, true)}>Suspender</ItemMenu>
               ) : (
@@ -711,6 +716,7 @@ export default function AdminUsers() {
       {menu.abiertoEn && <div className="fixed inset-0 z-40" onClick={menu.cerrar} />}
 
       {modal?.tipo === 'vendedores' && <VendedoresModal vendedores={vendedores} cuentas={users} onClose={cerrarModal} onCambio={loadVendedores} />}
+      {modal?.tipo === 'entrarComo' && <EntrarComoModal cuenta={modal.cuenta} onClose={cerrarModal} />}
     </Pagina>
   )
 }
