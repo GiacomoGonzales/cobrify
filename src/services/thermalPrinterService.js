@@ -570,6 +570,53 @@ export const isPrinterReady = () => {
  * @param {string} userId - ID del usuario (usado como prefijo para evitar conflictos)
  * @param {Object} printerConfig - Configuración de la impresora
  */
+/**
+ * LAS OPCIONES DEL TICKET, QUE NO SON DEL DISPOSITIVO.
+ *
+ * La configuración de impresora vive en localStorage, y eso está bien para lo
+ * que de verdad cambia entre equipos: qué impresora es, cómo se conecta, su
+ * dirección. Pero "mostrar la unidad de medida" o "letra más grande" son
+ * decisiones DEL NEGOCIO — las mismas en las cinco PCs del mostrador.
+ *
+ * Guardarlas solo en el navegador tiene dos costos que JC&AN viene pagando
+ * desde junio: si el equipo borra los datos del sitio al cerrar, la
+ * configuración desaparece y hay que rehacerla cada mañana; y cada PC nueva
+ * arranca en blanco, así que la misma venta sale distinta según desde qué
+ * máquina se imprima.
+ *
+ * Por eso se guarda una copia en el negocio y se usa para RELLENAR lo que
+ * falte localmente. Rellenar, no pisar: si este equipo ya tiene una opción
+ * decidida, manda la suya.
+ */
+const OPCIONES_DEL_TICKET = [
+  'showItemUnit', 'ticketFontSize', 'webPrintLegible', 'kitchenFontSize',
+  'compactPrint', 'ultraCompactKitchen', 'printMargins', 'simplePrint',
+  'a4SheetPrint', 'ajustarHojaAlTicket', 'cutFeedLines',
+];
+
+/** Copia las opciones del ticket al negocio. No lanza: es un respaldo. */
+const guardarRespaldoDelTicket = async (userId, configData) => {
+  if (!userId) return;
+  try {
+    const opciones = {};
+    for (const campo of OPCIONES_DEL_TICKET) {
+      if (configData[campo] !== undefined) opciones[campo] = configData[campo];
+    }
+    if (Object.keys(opciones).length === 0) return;
+    const { doc, setDoc } = await import('firebase/firestore');
+    const { db } = await import('@/lib/firebase');
+    await setDoc(
+      doc(db, 'businesses', userId),
+      { printerTicketOptions: { ...opciones, updatedAt: new Date().toISOString() } },
+      { merge: true },
+    );
+  } catch (error) {
+    // Que no se pueda respaldar no puede impedir guardar la configuración: lo
+    // que manda sigue siendo el localStorage.
+    console.warn('No se pudo respaldar la configuración del ticket:', error?.message || error);
+  }
+};
+
 export const savePrinterConfig = async (userId, printerConfig) => {
   try {
     // MERGE con lo ya guardado, no reemplazo.
@@ -626,6 +673,10 @@ export const savePrinterConfig = async (userId, printerConfig) => {
     localStorage.setItem('factuya_printerConfig', JSON.stringify(configData));
     console.log('✅ Configuración de impresora guardada localmente');
 
+    // Y una COPIA de las opciones del ticket en el negocio, para poder
+    // recuperarlas. Ver `OPCIONES_DEL_TICKET`.
+    guardarRespaldoDelTicket(userId, configData);
+
     return { success: true };
   } catch (error) {
     console.error('Error saving printer config:', error);
@@ -641,17 +692,70 @@ export const getPrinterConfig = async (userId) => {
   try {
     // Leer de localStorage (configuración local por dispositivo)
     const savedConfig = localStorage.getItem('factuya_printerConfig');
+    const local = savedConfig ? JSON.parse(savedConfig) : null;
 
-    if (savedConfig) {
-      const config = JSON.parse(savedConfig);
+    // Si a este equipo le faltan opciones del ticket, se completan con las del
+    // negocio: es lo que salva a la PC que borra los datos del sitio al cerrar
+    // y a la que se estrena hoy. Nunca pisa lo que el equipo ya decidió.
+    if (userId && faltanOpcionesDelTicket(local)) {
+      const respaldo = await leerRespaldoDelTicket(userId);
+      const config = completarConRespaldo(local, respaldo);
+      if (config) {
+        // Se deja escrito para no volver a consultar en cada impresión.
+        try { localStorage.setItem('factuya_printerConfig', JSON.stringify(config)); } catch { /* sin espacio */ }
+        console.log('📱 Configuración de impresora completada con la del negocio');
+        return { success: true, config };
+      }
+    }
+
+    if (local) {
       console.log('📱 Configuración de impresora cargada desde dispositivo');
-      return { success: true, config };
+      return { success: true, config: local };
     }
 
     return { success: true, config: null };
   } catch (error) {
     console.error('Error getting printer config:', error);
     return { success: false, error: error.message, config: null };
+  }
+};
+
+/** ¿A este equipo le falta alguna opción del ticket? */
+export const faltanOpcionesDelTicket = (local) =>
+  OPCIONES_DEL_TICKET.some(c => local?.[c] === undefined);
+
+/**
+ * Rellena con el respaldo del negocio SOLO lo que este equipo no tiene
+ * decidido. Devuelve null si no había nada que completar — así quien llama
+ * sabe que no hace falta reescribir el localStorage.
+ *
+ * Rellenar y no pisar es lo importante: una PC puede tener a propósito una
+ * letra distinta (la del mostrador con lentes, la de la trastienda sin ellos),
+ * y el respaldo no puede llevársela por delante.
+ */
+export const completarConRespaldo = (local, respaldo) => {
+  if (!respaldo) return null;
+  const config = { ...(local || {}) };
+  let completo = 0;
+  for (const campo of OPCIONES_DEL_TICKET) {
+    if (config[campo] === undefined && respaldo[campo] !== undefined) {
+      config[campo] = respaldo[campo];
+      completo++;
+    }
+  }
+  return completo > 0 ? config : null;
+};
+
+/** El respaldo guardado en el negocio, o null. No lanza. */
+const leerRespaldoDelTicket = async (userId) => {
+  try {
+    const { doc, getDoc } = await import('firebase/firestore');
+    const { db } = await import('@/lib/firebase');
+    const snap = await getDoc(doc(db, 'businesses', userId));
+    return snap.exists() ? (snap.data()?.printerTicketOptions || null) : null;
+  } catch (error) {
+    console.warn('No se pudo leer el respaldo de la configuración:', error?.message || error);
+    return null;
   }
 };
 
