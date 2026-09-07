@@ -232,8 +232,14 @@ export async function cargarCuenta(id, { customPlans = {} } = {}) {
     getDoc(doc(db, 'users', id)),
     getDocs(query(collection(db, 'users'), where('ownerId', '==', id))),
   ])
-  if (!subSnap.exists()) return null
-  const data = subSnap.data()
+  // Sin suscripcion la ficha SI abre: es una cuenta a medio crear, y es
+  // justamente la que hay que poder mirar y eliminar. Devolver null aqui era
+  // lo que hacia que la lista las mostrara y al entrar dijera que no existen.
+  if (!subSnap.exists() && !userSnap.exists() && !bizSnap.exists()) return null
+  const data = subSnap.exists() ? subSnap.data() : {}
+  const aMedioCrear = !subSnap.exists()
+    ? (bizSnap.exists() ? 'Sin plan' : 'Sin negocio ni plan')
+    : null
 
   const resellersMap = {}
   if (data.resellerId) {
@@ -241,11 +247,20 @@ export async function cargarCuenta(id, { customPlans = {} } = {}) {
     if (r?.exists()) resellersMap[data.resellerId] = nombreDeReseller(r.data(), data.resellerId)
   }
 
-  return armarCuenta(id, data, bizSnap.exists() ? bizSnap.data() : {}, userSnap.exists() ? userSnap.data() : null, {
-    resellersMap,
-    subUsers: subUsersSnap.docs.map(d => armarSubUsuario(d.id, d.data())),
-    customPlans,
-  })
+  const cuenta = armarCuenta(
+    id,
+    // Sin suscripcion no hay de donde sacar correo ni fecha: se toman del
+    // documento del usuario, igual que en la lista.
+    subSnap.exists() ? data : { email: userSnap.data()?.email, createdAt: userSnap.data()?.createdAt },
+    bizSnap.exists() ? bizSnap.data() : {},
+    userSnap.exists() ? userSnap.data() : null,
+    {
+      resellersMap,
+      subUsers: subUsersSnap.docs.map(d => armarSubUsuario(d.id, d.data())),
+      customPlans,
+    },
+  )
+  return aMedioCrear ? { ...cuenta, aMedioCrear, status: 'a-medio-crear' } : cuenta
 }
 
 // Dias que faltan para el vencimiento (negativo si ya paso); null sin fecha.

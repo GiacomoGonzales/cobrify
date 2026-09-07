@@ -15,6 +15,7 @@ import { origenDeCuenta, ORIGEN_DIRECTO, ORIGEN_RESELLER, ORIGEN_VENDEDOR } from
 import { buildAccountHaystack } from '@/utils/adminSearch'
 import VendedoresModal from '@/components/admin/cuenta/VendedoresModal'
 import EntrarComoModal from '@/components/admin/cuenta/EntrarComoModal'
+import EliminarCuentaModal from '@/components/admin/cuenta/EliminarCuentaModal'
 import {
   Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Filtros, FiltroSelect, Buscador, Estado, Pastilla, Boton,
   useMenuDeFila, BotonDeFila, CajaMenu, ItemMenu, SeparadorMenu,
@@ -427,6 +428,10 @@ export default function AdminUsers() {
               {(user.status === 'suspended' || vencida || user.archived) && (
                 <ItemMenu onClick={() => archivar(user, !user.archived)}>{user.archived ? 'Desarchivar' : 'Archivar'}</ItemMenu>
               )}
+              {/* Eliminar vivia solo dentro de la ficha, y la ficha de una
+                  cuenta a medio crear no abria. Aqui esta a un clic. */}
+              <SeparadorMenu />
+              <ItemMenu rojo onClick={() => abrirModal('eliminar', user)}>Eliminar cuenta</ItemMenu>
             </CajaMenu>
   )
 
@@ -726,6 +731,13 @@ export default function AdminUsers() {
 
       {modal?.tipo === 'vendedores' && <VendedoresModal vendedores={vendedores} cuentas={users} onClose={cerrarModal} onCambio={loadVendedores} />}
       {modal?.tipo === 'entrarComo' && <EntrarComoModal cuenta={modal.cuenta} onClose={cerrarModal} />}
+      {modal?.tipo === 'eliminar' && (
+        <EliminarCuentaModal
+          cuenta={modal.cuenta}
+          onClose={cerrarModal}
+          onEliminada={id => { setUsers(prev => prev.filter(u => u.id !== id)); cerrarModal() }}
+        />
+      )}
     </Pagina>
   )
 }
