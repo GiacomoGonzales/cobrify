@@ -8,6 +8,9 @@ const URL_ALTA = 'https://us-central1-cobrify-395fe.cloudfunctions.net/crearAlta
 
 const PLANES = SELLABLE_PLAN_IDS.filter((id) => !PLANS[id]?.isAddon)
 
+/** Los mismos que usa Admin > Pagos, para que el listado no mezcle etiquetas. */
+const METODOS = { yape: 'Yape', plin: 'Plin', transferencia: 'Transferencia', efectivo: 'Efectivo', tarjeta: 'Tarjeta', otro: 'Otro' }
+
 /**
  * Manda el formulario de alta a un lead que acaba de pagar.
  *
@@ -25,6 +28,7 @@ export default function EnviarAltaModal({ conversacion, onClose, onPonerEnElComp
   const [plan, setPlan] = useState('')
   const [monto, setMonto] = useState('')
   const [montoTocado, setMontoTocado] = useState(false)
+  const [metodo, setMetodo] = useState('yape')
   const [nombre, setNombre] = useState(conversacion?.nombre || '')
   const [creando, setCreando] = useState(false)
   const [hecho, setHecho] = useState(null)
@@ -50,6 +54,7 @@ export default function EnviarAltaModal({ conversacion, onClose, onPonerEnElComp
           planNombre: PLANS[plan]?.name || '',
           meses: PLANS[plan]?.months || 1,
           precio: monto ? Number(monto) : null,
+          metodo,
           limites: PLANS[plan]?.limits || null,
         }),
       })
@@ -105,14 +110,24 @@ export default function EnviarAltaModal({ conversacion, onClose, onPonerEnElComp
               ))}
             </Selector>
           </Campo>
-          <Campo etiqueta="Monto que pagó (S/)" ayuda="Queda congelado como su precio de renovación.">
-            <Entrada
-              type="number" step="0.01" inputMode="decimal"
-              value={monto}
-              onChange={(e) => { setMonto(e.target.value); setMontoTocado(true) }}
-              placeholder="0.00"
-            />
-          </Campo>
+          <div className="grid grid-cols-2 gap-3">
+            <Campo etiqueta="Monto que pagó (S/)">
+              <Entrada
+                type="number" step="0.01" inputMode="decimal"
+                value={monto}
+                onChange={(e) => { setMonto(e.target.value); setMontoTocado(true) }}
+                placeholder="0.00"
+              />
+            </Campo>
+            <Campo etiqueta="Cómo pagó">
+              <Selector value={metodo} onChange={(e) => setMetodo(e.target.value)}>
+                {Object.entries(METODOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </Selector>
+            </Campo>
+          </div>
+          <p className="-mt-1 text-[11.5px] text-gray-500">
+            El monto queda congelado como su precio de renovación, y el pago aparece en Pagos.
+          </p>
         </div>
       ) : (
         <div className="space-y-3">

@@ -29,6 +29,13 @@ enum PlanesVendibles {
     static var lista: [PlanCatalogo.Plan] {
         ids.compactMap { PlanCatalogo.plan($0) }
     }
+
+    /// Los mismos que usa Admin > Pagos, para que el listado no mezcle
+    /// etiquetas. La clave viaja al servidor; el nombre es lo que se ve.
+    static let metodos: [(id: String, nombre: String)] = [
+        ("yape", "Yape"), ("plin", "Plin"), ("transferencia", "Transferencia"),
+        ("efectivo", "Efectivo"), ("tarjeta", "Tarjeta"), ("otro", "Otro"),
+    ]
 }
 
 /// Manda el formulario de alta a un lead que acaba de pagar.
@@ -51,6 +58,7 @@ struct EnviarAltaSheet: View {
     @State private var monto = ""
     @State private var montoTocado = false
     @State private var nombre = ""
+    @State private var metodo = "yape"
     @State private var creando = false
     @State private var error: String?
     @State private var hecho: (enlace: String, mensaje: String)?
@@ -107,10 +115,15 @@ struct EnviarAltaSheet: View {
                                 .keyboardType(.decimalPad)
                                 .onChange(of: monto) { _, _ in montoTocado = true }
                         }
+                        Picker("Cómo pagó", selection: $metodo) {
+                            ForEach(PlanesVendibles.metodos, id: \.id) { m in
+                                Text(m.nombre).tag(m.id)
+                            }
+                        }
                     } header: {
-                        Text("Monto que pagó")
+                        Text("El pago")
                     } footer: {
-                        Text("Queda congelado como su precio de renovación.")
+                        Text("El monto queda congelado como su precio de renovación, y el pago aparece en Pagos.")
                     }
 
                     if let error {
@@ -164,6 +177,7 @@ struct EnviarAltaSheet: View {
                 "planNombre": plan.nombre,
                 "meses": plan.meses,
                 "precio": Double(monto.replacingOccurrences(of: ",", with: ".")) as Any,
+                "metodo": metodo,
                 "limites": [
                     "maxInvoicesPerMonth": plan.maxComprobantes,
                     "maxBranches": plan.maxSucursales,

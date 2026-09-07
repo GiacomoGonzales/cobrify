@@ -15467,6 +15467,9 @@ export const crearAltaPendiente = onRequest(
         planNombre: b.planNombre || '',
         meses: Number(b.meses),
         precio: b.precio != null ? Number(b.precio) : null,
+        // Como pago. Va aqui y no se supone al activar: en Admin > Pagos se
+        // ve el metodo de verdad (Yape, transferencia...) y no un generico.
+        metodo: b.metodo || 'manual',
         limites: b.limites || null,
         adminUid: admin.uid,
         adminEmail: admin.email || null,
@@ -15604,7 +15607,7 @@ export const completarAlta = onRequest(
         meses: alta.meses,
         precio: alta.precio != null ? Number(alta.precio) : null,
         limites: alta.limites,
-        metodo: 'alta',
+        metodo: alta.metodo || 'manual',
         FieldValue,
         Timestamp,
       })

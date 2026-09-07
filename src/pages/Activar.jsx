@@ -92,11 +92,19 @@ export default function Activar() {
     return () => { vivo = false }
   }, [codigo])
 
-  /** El rubro que adivina el clasificador con el nombre del negocio. */
+  /**
+   * El rubro que adivina el clasificador con el nombre del negocio.
+   *
+   * OJO con el campo: el clasificador lee `nombre`, no `businessName`. Pasarle
+   * el que no era devolvia null siempre y la sugerencia no aparecia nunca.
+   * Se le da el nombre comercial si lo hay —suele decir mas— y si no la razon
+   * social.
+   */
   const sugerido = useMemo(() => {
-    if (!f.businessName) return null
-    return sugerirRubroDeCuenta({ businessName: f.businessName })?.rubro || null
-  }, [f.businessName])
+    const nombre = f.tradeName?.trim() || f.businessName?.trim()
+    if (!nombre) return null
+    return sugerirRubroDeCuenta({ nombre })?.rubro || null
+  }, [f.tradeName, f.businessName])
 
   useEffect(() => {
     if (sugerido && !f.rubro) set('rubro', sugerido)
@@ -226,27 +234,7 @@ export default function Activar() {
       {paso === 1 && (
         <>
           <Titulo texto="¿A qué se dedica?" ayuda="Esto decide qué ves al entrar. Se puede cambiar después." />
-          {sugerido && (
-            <p className="text-[12px] text-gray-500">
-              Por el nombre parece <b className="text-gray-900">{RUBROS.find((r) => r.id === sugerido)?.nombre}</b>. Cámbialo si no es.
-            </p>
-          )}
-          <div className="grid gap-1.5 sm:grid-cols-2">
-            {RUBROS_ALFABETICOS.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => set('rubro', r.id)}
-                className={`rounded-md border px-3 py-2 text-left text-[13px] transition-colors ${
-                  f.rubro === r.id
-                    ? 'border-primary-600 bg-primary-50 font-medium text-primary-900'
-                    : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                {r.nombre}
-              </button>
-            ))}
-          </div>
+          <SelectorRubro valor={f.rubro} onElegir={(id) => set('rubro', id)} sugerido={sugerido} />
         </>
       )}
 
@@ -294,6 +282,92 @@ export default function Activar() {
  * Centrado en vertical y no pegado arriba: en una computadora la tarjeta
  * quedaba flotando en medio de un vacío enorme y parecía a medio cargar.
  */
+/**
+ * El rubro, en un desplegable con buscador.
+ *
+ * Son 51 y en tarjetas era un muro de scroll: nadie lee 51 opciones, y la que
+ * busca está siempre a media pantalla de distancia. Cerrado ocupa una línea;
+ * abierto se escribe y se filtra.
+ *
+ * Cuando el clasificador acierta —8 de cada 10 veces— ni se abre: ya viene
+ * puesto y solo hay que confirmarlo.
+ */
+function SelectorRubro({ valor, onElegir, sugerido }) {
+  const [abierto, setAbierto] = useState(false)
+  const [q, setQ] = useState('')
+
+  const elegido = RUBROS.find((r) => r.id === valor)
+  const normal = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const filtrados = q.trim()
+    ? RUBROS_ALFABETICOS.filter((r) => normal(r.nombre).includes(normal(q.trim())))
+    : RUBROS_ALFABETICOS
+
+  if (!abierto) {
+    return (
+      <div className="space-y-2">
+        <button
+          type="button"
+          onClick={() => { setAbierto(true); setQ('') }}
+          className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3.5 py-3 text-left transition-colors ${
+            elegido ? 'border-primary-600 bg-primary-50' : 'border-gray-300 bg-white hover:border-gray-400'
+          }`}
+        >
+          <span className="min-w-0">
+            <span className={`block text-[14px] ${elegido ? 'font-medium text-primary-900' : 'text-gray-400'}`}>
+              {elegido ? elegido.nombre : 'Elige a qué se dedica tu negocio'}
+            </span>
+            {elegido && valor === sugerido && (
+              <span className="mt-0.5 block text-[11.5px] text-primary-700">
+                Lo dedujimos por el nombre. Tócalo si no es.
+              </span>
+            )}
+          </span>
+          <svg viewBox="0 0 24 24" className="h-4 w-4 flex-none text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-gray-300">
+      <div className="border-b border-gray-200 p-2">
+        <input
+          autoFocus
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Busca tu rubro…"
+          className="w-full rounded-md bg-gray-100 px-3 py-2 text-[14px] outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-primary-500"
+        />
+      </div>
+      <div className="max-h-72 overflow-y-auto">
+        {filtrados.length === 0 ? (
+          <p className="px-3.5 py-6 text-center text-[13px] text-gray-500">
+            Nada con “{q}”. Prueba con otra palabra.
+          </p>
+        ) : (
+          filtrados.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => { onElegir(r.id); setAbierto(false) }}
+              className={`block w-full border-b border-gray-100 px-3.5 py-2.5 text-left text-[13.5px] last:border-b-0 hover:bg-gray-50 ${
+                r.id === valor ? 'bg-primary-50 font-medium text-primary-900' : 'text-gray-700'
+              }`}
+            >
+              {r.nombre}
+              {r.id === sugerido && r.id !== valor && (
+                <span className="ml-2 text-[11px] text-gray-400">sugerido</span>
+              )}
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
 function Marco({ children }) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4 py-10">
