@@ -15167,10 +15167,33 @@ export const entrarComoCliente = onRequest(
       res.status(200).json({ success: true, token, negocio })
     } catch (error) {
       console.error('Error al preparar la sesión de soporte:', error)
-      res.status(500).json({ success: false, error: 'No se pudo preparar el acceso' })
+      // Aquí solo se llega habiendo pasado el control de admin, así que el
+      // motivo real puede salir: sin él, un fallo de permisos de Google se ve
+      // igual que cualquier otro y hay que ir a los registros para saberlo.
+      res.status(500).json({
+        success: false,
+        error: esFaltaDeFirmante(error)
+          ? 'A la cuenta de servicio le falta el permiso para firmar pases (Service Account Token Creator).'
+          : 'No se pudo preparar el acceso',
+        motivo: error?.message || String(error),
+      })
     }
   }
 )
+
+/**
+ * Firmar un pase para otro usuario NO es una operación de Firestore: el
+ * servidor tiene que pedirle a Google que le firme el token, y para eso su
+ * cuenta de servicio necesita el permiso `iam.serviceAccounts.signBlob`, que
+ * no viene puesto de fábrica. Todo lo demás de la función funciona sin él, así
+ * que el fallo aparece solo aquí y despista.
+ */
+function esFaltaDeFirmante(error) {
+  const t = `${error?.code || ''} ${error?.message || ''}`.toLowerCase()
+  return t.includes('signblob') || t.includes('iam.serviceaccounts')
+    || t.includes('permission') && t.includes('sign')
+    || t.includes('service account token creator')
+}
 
 // =====================================================================
 // SEMILLA DE CUENTA NUEVA
@@ -15465,8 +15488,17 @@ export const completarAlta = onRequest(
       await ref.update({ uid }).catch(() => {})
       console.log(`🌱 Alta ${codigo} completada: ${usuario.email} (${uid})`)
 
-      // Un pase para entrar de una, sin volver a escribir la contraseña.
-      const pase = await auth.createCustomToken(uid)
+      // Un pase para entrar de una, sin volver a escribir la contraseña. Si
+      // Google no nos deja firmarlo, NO se tira todo por la borda: la cuenta
+      // ya está creada y el código ya se gastó. Se devuelve sin pase y la
+      // pantalla le pide que entre con su correo y su clave, que acaba de
+      // escribir. Perder la comodidad es molesto; perder la cuenta, no.
+      let pase = null
+      try {
+        pase = await auth.createCustomToken(uid)
+      } catch (e) {
+        console.error('No se pudo firmar el pase de entrada (la cuenta SÍ quedó creada):', e?.message || e)
+      }
       res.status(200).json({ success: true, uid, email: usuario.email, pase, hasta: hasta.toISOString() })
     } catch (error) {
       if (error?.message === 'SIN_ALTA') {

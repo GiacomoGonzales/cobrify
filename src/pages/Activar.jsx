@@ -135,8 +135,9 @@ export default function Activar() {
       if (!d.success) { setError(d.error || 'No se pudo crear la cuenta'); return }
       setListo(d)
       // Queda con la sesión abierta: acaba de escribir su clave, no tiene por
-      // qué escribirla otra vez para entrar.
-      signInWithCustomToken(auth, d.pase).catch(() => {})
+      // qué escribirla otra vez. Si el pase no vino, la cuenta está igual de
+      // creada — solo tendrá que entrar por el login como cualquier otro día.
+      if (d.pase) signInWithCustomToken(auth, d.pase).catch(() => {})
     } catch {
       setError('No se pudo crear la cuenta. Revisa tu conexión.')
     } finally {
