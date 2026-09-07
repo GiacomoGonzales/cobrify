@@ -12,6 +12,7 @@ import {
   Timestamp,
   serverTimestamp
 } from 'firebase/firestore';
+import { limitesAlRegistrarPago } from '@/utils/topeDeComprobantes'
 import { db } from '../lib/firebase';
 import { notifyPaymentReceived, notifySubscriptionRenewed, notifyPlanChanged, notifyWelcome } from './notificationService';
 import { getCustomPlans } from './customPlanService';
@@ -885,9 +886,13 @@ export const registerPayment = async (userId, amount, method = 'Transferencia', 
     //    cobrado pasa a ser su nuevo precio pactado.
     const isSamePlan = selectedPlan === subscription.plan;
     const amountNum = Number(amount) || 0;
-    const newLimits = isSamePlan
-      ? (subscription.limits || planConfig?.limits)
-      : (planConfig?.limits || subscription.limits);
+    // Con `topeFijadoPorAdmin`, el tope pactado a mano sobrevive al cambio de
+    // plan: se queda el MAYOR entre lo fijado y lo que da el plan nuevo.
+    const newLimits = limitesAlRegistrarPago({
+      suscripcion: subscription,
+      limitesDelPlan: planConfig?.limits,
+      esMismoPlan: isSamePlan,
+    });
     // `updateRenewalPrice` = el admin vio que este cobro NO coincide con el
     // precio pactado y decidió a propósito que el nuevo monto pase a ser el
     // precio (subida de tarifa, corrección). Sin ese permiso explícito se

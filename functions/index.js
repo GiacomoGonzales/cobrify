@@ -14,6 +14,7 @@ import { generateVoidedDocumentsXML, generateVoidedDocumentId, getDocumentTypeCo
 import { generateSummaryDocumentsXML, generateSummaryDocumentId, canVoidBoleta, CONDITION_CODES, getIdentityTypeCode } from './src/utils/summaryDocumentsXmlGenerator.js'
 import { signXML } from './src/utils/xmlSigner.js'
 import { esAdminSegunDoc } from './src/utils/admin.js'
+import { topeAlAplicarPlan } from './src/utils/topeDeComprobantes.js'
 import { sendSummary, getStatus, getStatusCdr } from './src/utils/sunatClient.js'
 import { voidBoletaViaQPse, voidInvoiceViaQPse, obtenerToken, consultarEstado, leerEstadoQPse } from './src/services/qpseService.js'
 import { tocaResetear } from './src/utils/cicloMensual.js'
@@ -9393,6 +9394,10 @@ export const resellerRenewClient = onCall(
         }
 
         // 6. Actualizar suscripción del cliente
+        // El tope fijado a mano por el admin es parte del acuerdo con el
+        // cliente: esta renovación lo pisaba en CADA cobro con el del plan.
+        // `topeAlAplicarPlan` devuelve null cuando no hay que tocarlo.
+        const topeARegistrar = topeAlAplicarPlan({ suscripcion: clientData, topeDelPlan: maxInvoices })
         transaction.update(clientRef, {
           plan: plan,
           currentPeriodEnd: newPeriodEnd,
@@ -9400,7 +9405,7 @@ export const resellerRenewClient = onCall(
           accessBlocked: false,
           blockReason: null,
           blockedAt: null,
-          'limits.maxInvoicesPerMonth': maxInvoices,
+          ...(topeARegistrar !== null ? { 'limits.maxInvoicesPerMonth': topeARegistrar } : {}),
           updatedAt: FieldValue.serverTimestamp(),
           lastRenewalAt: FieldValue.serverTimestamp(),
           lastRenewalBy: resellerId,
@@ -13565,7 +13570,12 @@ export const flowConfirmation = onRequest(
           updates.renewalPrice = SUB_PLAN_PRICE[pay.plan]
           updates.pricingFrozenAt = FieldValue.serverTimestamp()
           const lim = SUB_PLAN_LIMITS[pay.plan] || {}
-          if (lim.maxInvoicesPerMonth !== undefined) updates['limits.maxInvoicesPerMonth'] = lim.maxInvoicesPerMonth
+          // Mismo criterio que la renovación por intermediario: el tope fijado
+          // a mano no lo pisa un upgrade, salvo que el plan nuevo dé más.
+          if (lim.maxInvoicesPerMonth !== undefined) {
+            const tope = topeAlAplicarPlan({ suscripcion: sub, topeDelPlan: lim.maxInvoicesPerMonth })
+            if (tope !== null) updates['limits.maxInvoicesPerMonth'] = tope
+          }
           if (lim.maxBranches !== undefined) updates['limits.maxBranches'] = lim.maxBranches
         }
 

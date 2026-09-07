@@ -253,8 +253,17 @@ export default function AdminCuenta() {
   async function guardarLimite() {
     const valor = nuevoLimite === '' || Number(nuevoLimite) === -1 ? -1 : parseInt(nuevoLimite, 10) || 500
     try {
-      await updateDoc(doc(db, 'subscriptions', id), { 'limits.maxInvoicesPerMonth': valor, updatedAt: serverTimestamp() })
-      parchar({ limit: valor, limits: { ...(cuenta.limits || {}), maxInvoicesPerMonth: valor } })
+      // `topeFijadoPorAdmin` marca que este numero es parte del acuerdo con el
+      // cliente y no una consecuencia del plan. Sin esa marca, la renovacion y
+      // el cambio de plan lo pisaban con el del catalogo (ver
+      // utils/topeDeComprobantes).
+      await updateDoc(doc(db, 'subscriptions', id), {
+        'limits.maxInvoicesPerMonth': valor,
+        topeFijadoPorAdmin: true,
+        topeFijadoEn: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+      parchar({ limit: valor, topeFijadoPorAdmin: true, limits: { ...(cuenta.limits || {}), maxInvoicesPerMonth: valor } })
       toast.success(`Límite: ${valor === -1 ? 'ilimitado' : `${valor} comprobantes al mes`}`)
       setEditandoLimite(false)
     } catch (error) {
