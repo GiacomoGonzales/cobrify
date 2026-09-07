@@ -1258,8 +1258,14 @@ export default function Chat() {
             </div>
           </div>
         ) : (
-          <>
-            <header className="px-4 py-3 bg-white border-b border-gray-200 flex items-center gap-3">
+          // El fondo del chat envuelve TODO —cabecera, hilo y compositor— y no
+          // solo el hilo. Sin eso, poner de vidrio la cabecera no se nota: lo
+          // que asomaría por detrás no es la foto, es el gris del contenedor.
+          <div
+            className="flex-1 flex flex-col min-h-0"
+            style={estiloFondo(apariencia, tema === 'oscuro')}
+          >
+            <header className="px-4 py-3 chat-vidrio border-b border-gray-200 flex items-center gap-3">
               <button
                 onClick={() => setActivaId(null)}
                 className="md:hidden p-1 -ml-1 text-gray-600"
@@ -1503,11 +1509,10 @@ export default function Chat() {
                 pegadoAlFondo.current = abajo
                 setLejosDelFondo((antes) => (antes === !abajo ? antes : !abajo))
               }}
-              // El fondo va en el contenedor que hace scroll. Por defecto el
-              // navegador lo deja QUIETO respecto del elemento, no pegado al
-              // contenido: la foto se queda fija mientras pasan los mensajes,
-              // como en WhatsApp.
-              style={estiloFondo(apariencia, tema === 'oscuro')}
+              // Transparente a propósito: el fondo lo pone el envoltorio, que
+              // no se desplaza. Así la foto se queda quieta mientras pasan los
+              // mensajes, como en WhatsApp, y además se ve por detrás de la
+              // cabecera y del compositor.
               className="flex-1 overflow-y-auto px-4 py-4 space-y-2"
             >
               {elementos.map((el) => {
@@ -1752,7 +1757,7 @@ export default function Chat() {
                           ? (
                             <TextoWhatsapp
                               texto={m.texto}
-                              claseEnlace={`underline break-all ${'text-blue-600'}`}
+                              claseEnlace="underline break-all enlace-chat"
                             />
                           )
                           : !['image', 'sticker', 'video', 'audio', 'document'].includes(m.tipo)
@@ -1817,7 +1822,7 @@ export default function Chat() {
             {ventanaAbierta ? (
               <form
                 onSubmit={handleEnviar}
-                className="relative px-4 py-3 bg-white border-t border-gray-200 flex items-end gap-2"
+                className="relative px-4 py-3 chat-vidrio border-t border-gray-200 flex items-end gap-2"
               >
                 <input
                   ref={selectorArchivo}
@@ -2049,7 +2054,7 @@ export default function Chat() {
                 </div>
               </div>
             )}
-          </>
+          </div>
         )}
       </main>
 
