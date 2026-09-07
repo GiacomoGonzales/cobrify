@@ -302,6 +302,32 @@ export function formatDate(date) {
  * @param {string} boleta.documentType - Tipo de documento
  * @returns {Object} { canVoid: boolean, reason: string }
  */
+/**
+ * El plazo que da SUNAT para anular un comprobante ya aceptado: 7 días
+ * calendario desde la emisión.
+ *
+ * Gemelo de `src/utils/plazoDeAnulacion.js` — el front y las functions se
+ * empaquetan por separado y no pueden compartir el módulo, pero el criterio
+ * tiene que ser el mismo. Si cambia uno, cambia el otro.
+ */
+export const PLAZO_ANULACION_DIAS = 7
+
+/**
+ * La fecha de emisión del comprobante, leyendo el campo que de verdad existe.
+ *
+ * ⚠️ Esta validación leía SOLO `issueDate`, y los comprobantes no lo traen: en
+ * una muestra de 970 reales, 966 no lo tenían y los 970 tenían `emissionDate`.
+ * `new Date(undefined)` es Invalid Date, la resta da NaN y **`NaN > 7` es
+ * false**: el plazo no cortaba nunca y se podía pedir la baja de un comprobante
+ * de hace meses. SUNAT la rechazaba y quedaba en "Anulando..." para siempre.
+ */
+function fechaDeEmision(boleta) {
+  const bruto = boleta?.emissionDate || boleta?.issueDate || boleta?.createdAt
+  if (!bruto) return null
+  const d = bruto?.toDate ? bruto.toDate() : (bruto instanceof Date ? bruto : new Date(bruto))
+  return Number.isNaN(d?.getTime?.()) ? null : d
+}
+
 export function canVoidBoleta(boleta) {
   // Verificar que sea una boleta
   const boletaTypes = ['boleta', 'receipt', '03']
@@ -336,25 +362,29 @@ export function canVoidBoleta(boleta) {
   }
 
   // Debe estar dentro del plazo de 7 días
-  const issueDate = boleta.issueDate?.toDate
-    ? boleta.issueDate.toDate()
-    : (boleta.issueDate instanceof Date ? boleta.issueDate : new Date(boleta.issueDate))
+  const emision = fechaDeEmision(boleta)
 
-  const today = new Date()
-  const diffTime = Math.abs(today - issueDate)
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-
-  if (diffDays > 7) {
+  // Sin fecha usable no se bloquea: que conteste SUNAT. Lo que ya no pasa es
+  // dar por válido un plazo que no se pudo calcular (ver abajo).
+  if (emision) {
+    const diffDays = Math.ceil((new Date() - emision) / 86400000)
+    if (diffDays > PLAZO_ANULACION_DIAS) {
+      return {
+        canVoid: false,
+        reason: `Han pasado ${diffDays} días desde la emisión. El plazo máximo es ${PLAZO_ANULACION_DIAS} días. Debe emitir una Nota de Crédito.`
+      }
+    }
     return {
-      canVoid: false,
-      reason: `Han pasado ${diffDays} días desde la emisión. El plazo máximo es 7 días. Debe emitir una Nota de Crédito.`
+      canVoid: true,
+      reason: 'La boleta puede ser anulada',
+      daysRemaining: PLAZO_ANULACION_DIAS - diffDays
     }
   }
 
   return {
     canVoid: true,
     reason: 'La boleta puede ser anulada',
-    daysRemaining: 7 - diffDays
+    daysRemaining: null
   }
 }
 

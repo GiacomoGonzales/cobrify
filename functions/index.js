@@ -6202,7 +6202,11 @@ export const voidBoleta = onRequest(
       const validationResult = canVoidBoleta({
         sunatStatus: boletaData.sunatStatus,
         delivered: boletaData.delivered || false,
+        // Las tres: `issueDate` casi nunca existe y `emissionDate` sí. Pasar
+        // solo la primera dejaba el plazo de 7 días sin efecto.
+        emissionDate: boletaData.emissionDate,
         issueDate: boletaData.issueDate,
+        createdAt: boletaData.createdAt,
         documentType: boletaData.documentType,
         series: series
       })
@@ -6733,7 +6737,11 @@ export const voidBoletaQPse = onRequest(
       const validationResult = canVoidBoleta({
         sunatStatus: boletaData.sunatStatus,
         delivered: boletaData.delivered || false,
+        // Las tres: `issueDate` casi nunca existe y `emissionDate` sí. Pasar
+        // solo la primera dejaba el plazo de 7 días sin efecto.
+        emissionDate: boletaData.emissionDate,
         issueDate: boletaData.issueDate,
+        createdAt: boletaData.createdAt,
         documentType: boletaData.documentType,
         series: series
       })

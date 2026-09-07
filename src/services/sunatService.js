@@ -7,6 +7,7 @@ import axios from 'axios'
 import JSZip from 'jszip'
 import { generateInvoiceXML, generateXMLFileName, validateInvoiceData } from './sunatXMLService'
 import { cuerpoDeConsulta } from '@/utils/bajaSunat'
+import { plazoDeAnulacion, motivoDePlazoVencido } from '@/utils/plazoDeAnulacion'
 
 /**
  * URLs de los servicios de SUNAT según ambiente
@@ -431,19 +432,15 @@ export const canVoidInvoice = (invoice) => {
     }
   }
 
-  // Debe estar dentro del plazo de 7 días
-  const issueDate = invoice.issueDate?.toDate ? invoice.issueDate.toDate() : new Date(invoice.issueDate)
-  const today = new Date()
-  const diffTime = Math.abs(today - issueDate)
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  // Debe estar dentro del plazo que da SUNAT (ver utils/plazoDeAnulacion: el
+  // cálculo estaba copiado acá y leía `issueDate`, un campo que los
+  // comprobantes no traen, así que nunca cortaba).
+  const plazo = plazoDeAnulacion(invoice)
 
-  if (diffDays > 7) {
-    const alternativa = invoice.documentType === 'nota_credito'
-      ? 'Debe emitir una Nota de Débito para revertirla.'
-      : 'Debe emitir una Nota de Crédito.'
+  if (plazo.vencido) {
     return {
       canVoid: false,
-      reason: `Han pasado ${diffDays} días desde la emisión. El plazo máximo es 7 días. ${alternativa}`
+      reason: motivoDePlazoVencido(invoice)
     }
   }
 
@@ -453,7 +450,7 @@ export const canVoidInvoice = (invoice) => {
       canVoid: true,
       reason: 'El documento está en proceso de anulación. Puede reintentar.',
       isRetry: true,
-      daysRemaining: 7 - diffDays
+      daysRemaining: plazo.quedan
     }
   }
 
@@ -468,7 +465,7 @@ export const canVoidInvoice = (invoice) => {
   return {
     canVoid: true,
     reason: 'El documento puede ser anulado',
-    daysRemaining: 7 - diffDays
+    daysRemaining: plazo.quedan
   }
 }
 
@@ -553,16 +550,13 @@ export const canVoidBoleta = (boleta) => {
     }
   }
 
-  // Debe estar dentro del plazo de 7 días
-  const issueDate = boleta.issueDate?.toDate ? boleta.issueDate.toDate() : new Date(boleta.issueDate)
-  const today = new Date()
-  const diffTime = Math.abs(today - issueDate)
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  // Mismo criterio que las facturas: utils/plazoDeAnulacion.
+  const plazo = plazoDeAnulacion(boleta)
 
-  if (diffDays > 7) {
+  if (plazo.vencido) {
     return {
       canVoid: false,
-      reason: `Han pasado ${diffDays} días desde la emisión. El plazo máximo es 7 días. Debe emitir una Nota de Crédito.`
+      reason: motivoDePlazoVencido(boleta)
     }
   }
 
@@ -572,7 +566,7 @@ export const canVoidBoleta = (boleta) => {
       canVoid: true,
       reason: 'La boleta está en proceso de anulación. Puede reintentar.',
       isRetry: true,
-      daysRemaining: 7 - diffDays
+      daysRemaining: plazo.quedan
     }
   }
 
@@ -587,7 +581,7 @@ export const canVoidBoleta = (boleta) => {
   return {
     canVoid: true,
     reason: 'La boleta puede ser anulada',
-    daysRemaining: 7 - diffDays
+    daysRemaining: plazo.quedan
   }
 }
 

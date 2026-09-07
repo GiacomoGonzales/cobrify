@@ -71,6 +71,7 @@ import { doc, updateDoc } from 'firebase/firestore'
 import { storage, db } from '@/lib/firebase'
 import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured, voidDocument, canVoidDocument, checkVoidStatus } from '@/services/sunatService'
 import { referenciaDeBaja } from '@/utils/bajaSunat'
+import { plazoDeAnulacion } from '@/utils/plazoDeAnulacion'
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 import { aplicarTamanoDeHoja } from '@/utils/printPageSize'
@@ -2046,8 +2047,15 @@ Gracias por tu preferencia.`
             await refreshOneInvoice(inv.id)
           } else if (estado.status === 'rejected' || estado.status === 'unconfirmed') {
             // Importante decirlo: el comprobante NO está anulado y el negocio
-            // puede llevar meses creyendo que sí.
-            toast.error(`SUNAT no anuló ${nombre}: ${estado.error || 'la baja fue rechazada'}. El comprobante sigue vigente.`, 9000)
+            // puede llevar meses creyendo que sí. Y decirle también qué puede
+            // hacer HOY: el plazo de SUNAT son 7 días y se vence callado.
+            const plazo = plazoDeAnulacion(inv)
+            const queHacer = plazo.vencido
+              ? 'Ya venció el plazo para anularlo: debe emitir una nota de crédito.'
+              : plazo.quedan === null
+                ? 'Puede volver a intentar la anulación.'
+                : `Puede volver a intentar la anulación: ${plazo.texto.toLowerCase()}.`
+            toast.error(`SUNAT no anuló ${nombre}: ${estado.error || 'la baja fue rechazada'}. El comprobante sigue vigente. ${queHacer}`, 12000)
             await refreshOneInvoice(inv.id)
           }
           // 'pending' se deja como está: SUNAT todavía la está procesando.
@@ -2935,7 +2943,7 @@ Gracias por tu preferencia.`
     return type
   }
 
-  const getSunatStatusBadge = sunatStatus => {
+  const getSunatStatusBadge = (sunatStatus, invoice = null) => {
     switch (sunatStatus) {
       case 'accepted':
         return (
@@ -2979,13 +2987,23 @@ Gracias por tu preferencia.`
             Anulado
           </Badge>
         )
-      case 'voiding':
+      case 'voiding': {
+        // El reloj de SUNAT corre: son 7 días desde la emisión y después ya no
+        // se puede anular. Antes el badge se veía igual el día 1 que el día 8,
+        // así que el plazo se vencía sin que nadie lo notara.
+        const plazo = invoice ? plazoDeAnulacion(invoice) : null
         return (
           <Badge variant="warning" className="flex items-center gap-1">
             <Loader2 className="w-3 h-3 animate-spin" />
             Anulando...
+            {plazo && plazo.quedan !== null && (
+              <span className="opacity-75">
+                {plazo.vencido ? '(plazo vencido)' : `(${plazo.texto.toLowerCase()})`}
+              </span>
+            )}
           </Badge>
         )
+      }
       case 'SIGNED':
       case 'signed':
         return (
@@ -3529,7 +3547,7 @@ Gracias por tu preferencia.`
                     </div>
                     <div className="flex items-center gap-1.5">
                       <div className="scale-90 origin-right">{getStatusBadge(invoice.status, invoice.documentType)}</div>
-                      <div className="scale-75 origin-right">{getSunatStatusBadge(invoice.sunatStatus || 'pending')}</div>
+                      <div className="scale-75 origin-right">{getSunatStatusBadge(invoice.sunatStatus || 'pending', invoice)}</div>
                     </div>
                   </div>
 
@@ -3745,7 +3763,7 @@ Gracias por tu preferencia.`
                       </div>
                     </TableCell>
                     <TableCell className="py-2.5 px-1 w-20">
-                      <div className="scale-75 origin-left">{getSunatStatusBadge(invoice.sunatStatus || 'pending')}</div>
+                      <div className="scale-75 origin-left">{getSunatStatusBadge(invoice.sunatStatus || 'pending', invoice)}</div>
                     </TableCell>
                     <TableCell className="py-2.5 px-1 w-12">
                       <div className="flex items-center justify-end">
@@ -4478,7 +4496,7 @@ Gracias por tu preferencia.`
                 </div>
                 <div className="text-right space-y-2">
                   {getStatusBadge(viewingInvoice.status)}
-                  <div className="mt-1">{getSunatStatusBadge(viewingInvoice.sunatStatus)}</div>
+                  <div className="mt-1">{getSunatStatusBadge(viewingInvoice.sunatStatus, viewingInvoice)}</div>
                 </div>
               </div>
             </div>
