@@ -4536,20 +4536,32 @@ export const retryPendingInvoices = onSchedule(
         // Buscar facturas/boletas pendientes de este negocio
         const invoicesRef = db.collection('businesses').doc(businessId).collection('invoices')
 
-        const pendingInvoices = await invoicesRef
-          .where('sunatStatus', '==', 'pending')
-          .where('documentType', 'in', skipFacturas
-            ? ['boleta', 'nota_credito', 'nota_debito']
-            : ['factura', 'boleta', 'nota_credito', 'nota_debito'])
-          .limit(BATCH_SIZE)
-          .get()
+        const TIPOS_A_REINTENTAR = skipFacturas
+          ? ['boleta', 'nota_credito', 'nota_debito']
+          : ['factura', 'boleta', 'nota_credito', 'nota_debito']
 
-        if (!pendingInvoices.empty) {
-          console.log(`📋 [RETRY] Negocio ${businessId}: ${pendingInvoices.size} documentos pendientes${skipFacturas ? ' (solo boletas)' : ''}`)
+        // También los 'signed'. Un comprobante FIRMADO sin CDR está en la misma
+        // situación que uno pendiente: falta que SUNAT lo reciba. Quedaban fuera
+        // porque la consulta solo miraba 'pending', y lo que veía el cliente era
+        // "descárgalo del panel de QPse y envíalo a mano", cosa que nadie hace.
+        // Al 7-set-2026 había 15 así, el más viejo de noviembre, todos con el
+        // mismo error temporal (`PENDING_MANUAL`, "no se recibió respuesta SOAP")
+        // que esta misma función ya trata como reintentable.
+        // Son dos consultas y no un `in`: dos cláusulas `in` en la misma consulta
+        // multiplican las combinaciones y piden índices nuevos.
+        const [porEnviar, firmadosSinEnviar] = await Promise.all([
+          invoicesRef.where('sunatStatus', '==', 'pending')
+            .where('documentType', 'in', TIPOS_A_REINTENTAR).limit(BATCH_SIZE).get(),
+          invoicesRef.where('sunatStatus', '==', 'signed')
+            .where('documentType', 'in', TIPOS_A_REINTENTAR).limit(BATCH_SIZE).get(),
+        ])
+        const aReintentar = [...porEnviar.docs, ...firmadosSinEnviar.docs]
+
+        if (aReintentar.length > 0) {
+          console.log(`📋 [RETRY] Negocio ${businessId}: ${porEnviar.size} pendientes + ${firmadosSinEnviar.size} firmados sin enviar${skipFacturas ? ' (solo boletas)' : ''}`)
         }
 
-
-        for (const invoiceDoc of pendingInvoices.docs) {
+        for (const invoiceDoc of aReintentar) {
           const invoiceData = invoiceDoc.data()
           const invoiceId = invoiceDoc.id
 
