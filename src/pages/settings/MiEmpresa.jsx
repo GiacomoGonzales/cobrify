@@ -21,6 +21,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Loader2, Search, Edit, Check, Trash2 } from 'lucide-react'
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 import { storage } from '@/lib/firebase'
+import { nombreComercialParaEditar } from '@/utils/nombreDelNegocio'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useGuardado } from '@/components/settings/useGuardado'
@@ -156,7 +157,10 @@ export default function MiEmpresa() {
     reset({
       ruc: businessSettings.ruc || '',
       businessName: businessSettings.businessName || '',
-      tradeName: businessSettings.name || '',
+      // Se lee con `nombreComercialParaEditar`: si lo que hay en `name` es la
+      // razon social copiada, el campo va VACIO. Antes se cargaba `name` a
+      // secas y por eso la razon social reaparecia sola y no se podia borrar.
+      tradeName: nombreComercialParaEditar(businessSettings),
       phone: businessSettings.phone || '',
       email: businessSettings.email || '',
       website: businessSettings.website || '',
@@ -475,7 +479,11 @@ export default function MiEmpresa() {
     const ok = await guardar({
       ruc: data.ruc,
       businessName: data.businessName,
+      // `name` sigue con el respaldo porque lo usa todo el sistema como "el
+      // nombre del negocio", pero el nombre comercial se guarda aparte y tal
+      // cual: vacio es un valor valido, no todas las empresas tienen uno.
       name: data.tradeName || data.businessName,
+      tradeName: (data.tradeName || '').trim(),
       phone: data.phone,
       email: data.email,
       website: data.website,
@@ -547,7 +555,7 @@ export default function MiEmpresa() {
             <Campo id="opcion-businessName" etiqueta={<>Razón social<Obligatorio /></>}>
               <Input placeholder="MI EMPRESA SAC" error={errors.businessName?.message} {...register('businessName')} />
             </Campo>
-            <Campo id="opcion-name" etiqueta="Nombre comercial" ayuda="Si lo dejas vacío se usa la razón social.">
+            <Campo id="opcion-name" etiqueta="Nombre comercial" ayuda="Opcional: no todas las empresas tienen uno. Si lo dejas vacío, los documentos salen con la razón social.">
               <Input placeholder="Mi Empresa" error={errors.tradeName?.message} {...register('tradeName')} />
             </Campo>
             <Campo id="opcion-mtcRegistration" etiqueta="N° de registro MTC" ayuda="Solo para guías de remisión transportista. Opcional.">

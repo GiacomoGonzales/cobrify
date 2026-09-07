@@ -1,4 +1,5 @@
 import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
+import { nombreParaMostrar, razonSocialSiAporta } from '@/utils/nombreDelNegocio';
 import { lineasDeFechaYHora, mostrarTitulosDeSeccion, lineasDeItem, usarFuentePequena, anchoDeLinea, tamanoDeQr, mostrarSeparadores } from '@/utils/ticketCompacto';
 import { getRealPayments } from '@/utils/receivables'
 import { getNotaVentaLegend, wrapLegend } from '@/utils/documentLegends'
@@ -1202,7 +1203,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
 
     // Nombre del negocio (company-name) - Formato elegante con bold - CENTRADO.
     // Prefiere el nombre comercial de la sucursal emisora (snapshot en la factura).
-    const businessName = convertSpanishText(invoice.branchTradeName || invoice.branchName || business.tradeName || business.name || 'MI EMPRESA');
+    const businessName = convertSpanishText(nombreParaMostrar(business, invoice));
     printer = printer
       .align('center')
       .bold()
@@ -1215,8 +1216,11 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
     }
 
     // Razón Social (si existe y es diferente del nombre comercial) - CENTRADO
-    if (business.businessName && business.businessName !== business.tradeName) {
-      printer = printer.align('center').text(convertSpanishText(business.businessName + '\n'));
+    // La razon social solo si NO es lo que ya se imprimio arriba: comparar
+    // contra `tradeName` (que no se guardaba) la repetia siempre.
+    const razonSocialTicket = razonSocialSiAporta(business, nombreParaMostrar(business, invoice));
+    if (razonSocialTicket) {
+      printer = printer.align('center').text(convertSpanishText(razonSocialTicket + '\n'));
     }
 
     // Dirección (company-info) - CENTRADO - Priorizar: sucursal > almacén > empresa
