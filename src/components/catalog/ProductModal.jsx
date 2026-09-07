@@ -11,6 +11,12 @@ import { getCatalogAccent } from '@/themes/catalogThemes'
 import { useCatalogTheme } from '@/components/catalog/CatalogThemeProvider'
 import { conElEnlace } from '@/utils/modificadorInsumo'
 import {
+  atributosDeVariantes,
+  variantePorSeleccion,
+  valoresPosibles,
+  convieneSelectores,
+} from '@/utils/variantesPorAtributo'
+import {
   getShortUnitLabel,
   formatQty,
   isProductOutOfStock,
@@ -33,6 +39,11 @@ import {
 } from 'lucide-react'
 
 // Modal de producto con soporte para modificadores
+/** "talla, color y manga" — con comas y una sola "y" al final. */
+const enumerar = (palabras) => palabras.length <= 1
+  ? (palabras[0] || '')
+  : `${palabras.slice(0, -1).join(', ')} y ${palabras[palabras.length - 1]}`
+
 export default function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, showPrices: globalShowPrices = true, business, ignoreStock = false, catalogCurrency = 'PEN', catalogExchangeRate = 1, themeClasses = null }) {
   // Tipografía del tema para nombre y precio: la MISMA familia que las
   // tarjetas, para que tarjeta → detalle se sienta continuo (reporte de
@@ -68,6 +79,10 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
   const [selectedPresentation, setSelectedPresentation] = useState(null)
   const [variantError, setVariantError] = useState(false)
   const [selectedPriceLevel, setSelectedPriceLevel] = useState('price1')
+  // Elegir la variante por atributos (Talla / Color), no de una lista de
+  // combinaciones. `seleccionAttrs` guarda lo elegido en cada uno.
+  const [seleccionAttrs, setSeleccionAttrs] = useState({})
+
   // Qué variante entró al carrito recién, para avisarlo sin cerrar la ventana.
   // Va ACÁ y no junto a `handleAddToCart`: más abajo hay un
   // `if (!isOpen || !product) return null`, y un hook debajo de un early return
@@ -136,6 +151,62 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
       document.body.style.overflow = 'unset'
     }
   }, [isOpen, product])
+
+  // Selectores por atributo, o la lista de siempre. El criterio (y por qué) está
+  // en `utils/variantesPorAtributo`.
+  //
+  // Va ACÁ ARRIBA, antes del efecto que lo nombra: el array de dependencias de
+  // un `useEffect` se evalúa DURANTE el render, en la línea donde está escrito,
+  // así que una const declarada más abajo todavía está en zona muerta y la
+  // página entera revienta con "Cannot access 'usarSelectores' before
+  // initialization". Pasó de verdad al escribir esto: el lint y `vite build`
+  // pasaron en verde y el catálogo salía en blanco.
+  const variantesDelProducto = product?.variants || []
+  const usarSelectores = !!product?.hasVariants && convieneSelectores(variantesDelProducto)
+  const atributos = usarSelectores ? atributosDeVariantes(variantesDelProducto) : []
+
+  // Qué falta por elegir, para decirlo con nombre y no "elige una opción".
+  // Los de una sola opción no cuentan: ya vienen elegidos.
+  const faltaElegir = atributos
+    .filter(a => a.valores.length > 1 && !seleccionAttrs[a.nombre])
+    .map(a => a.nombre.toLowerCase())
+
+  // Al tocar un valor: se fija, y si lo elegido deja de existir en los otros
+  // atributos, esos se limpian. Sin eso quedaría una combinación imposible
+  // seleccionada y el botón de agregar apagado sin explicación.
+  const elegirAtributo = (nombre, valor) => {
+    setSeleccionAttrs((prev) => {
+      const siguiente = { ...prev, [nombre]: prev[nombre] === valor ? undefined : valor }
+      for (const attr of atributos) {
+        if (attr.nombre === nombre || !siguiente[attr.nombre]) continue
+        const posibles = valoresPosibles(variantesDelProducto, { ...siguiente, [attr.nombre]: undefined }, attr.nombre)
+        if (!posibles.has(siguiente[attr.nombre])) siguiente[attr.nombre] = undefined
+      }
+      return siguiente
+    })
+  }
+
+  // La variante sale de lo elegido en los selectores. Mientras falte algo es
+  // null, que es lo que mantiene apagado el botón de agregar.
+  useEffect(() => {
+    if (!usarSelectores) return
+    setSelectedVariant(variantePorSeleccion(variantesDelProducto, seleccionAttrs, atributos))
+    // `atributos` se recalcula en cada render pero depende solo de las variantes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usarSelectores, seleccionAttrs, product?.id])
+
+  // Al cambiar de producto se arranca de cero, pero con los atributos de UNA
+  // SOLA opción ya elegidos: hacer tocar "Manga: Corta" cuando no hay otra
+  // manga es fricción sin ninguna decisión detrás. En CITEX tres de los cuatro
+  // atributos tienen un único valor, así que el comprador solo elige la talla.
+  useEffect(() => {
+    const unicos = {}
+    for (const attr of atributos) {
+      if (attr.valores.length === 1) unicos[attr.nombre] = attr.valores[0]
+    }
+    setSeleccionAttrs(unicos)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.id, usarSelectores])
 
   // El aviso de "agregado" se borra solo a los dos segundos y medio.
   useEffect(() => {
@@ -220,6 +291,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
   }
 
   const hasVariants = product.hasVariants && product.variants?.length > 0
+
   // Unidad suelta + presentaciones. Con variantes devuelve solo la base.
   const purchaseOptions = getPurchaseOptions(product)
   const hasPresentations = purchaseOptions.length > 1
@@ -679,8 +751,87 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
             </div>
           )}
 
-          {/* Variantes */}
-          {hasVariants && (
+          {/* Variantes: selectores por atributo (Talla / Color), como en
+              cualquier tienda. Antes era la lista de TODAS las combinaciones —
+              catorce filas de texto largo y con los atributos en orden distinto
+              en cada una, porque se guardan así. El criterio de cuándo conviene
+              uno u otro está en `utils/variantesPorAtributo`. */}
+          {hasVariants && usarSelectores && (
+            <div className="mb-6 space-y-4">
+              {atributos.filter(a => a.valores.length > 1).map((attr) => {
+                const posibles = valoresPosibles(product.variants, seleccionAttrs, attr.nombre)
+                const conStock = valoresPosibles(product.variants, seleccionAttrs, attr.nombre,
+                  { conStock: true, stockDe: (v) => (ignoreStock ? 1 : (v.stock ?? 1)) })
+                return (
+                  <div key={attr.nombre}>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-semibold text-sm" style={{ color: tokens.colors.text }}>
+                        {attr.nombre.charAt(0).toUpperCase() + attr.nombre.slice(1)}
+                        {seleccionAttrs[attr.nombre] && (
+                          <span className="font-normal" style={{ color: tokens.colors.textMuted }}>
+                            : {seleccionAttrs[attr.nombre]}
+                          </span>
+                        )}
+                      </h3>
+                      {variantError && !seleccionAttrs[attr.nombre] && (
+                        <span className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded">Elige una</span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {attr.valores.map((valor) => {
+                        const elegido = seleccionAttrs[attr.nombre] === valor
+                        // No existe con lo ya elegido → no se puede tocar.
+                        // Existe pero agotado → se puede tocar y se ve tachado,
+                        // así el comprador entiende que esa talla EXISTE y está
+                        // sin stock, que no es lo mismo que no venderla.
+                        const existe = posibles.has(valor)
+                        const hay = conStock.has(valor)
+                        return (
+                          <button
+                            key={valor}
+                            type="button"
+                            disabled={!existe}
+                            onClick={() => elegirAtributo(attr.nombre, valor)}
+                            className={`px-4 py-2 text-sm font-medium border-2 transition-all ${
+                              !existe
+                                ? 'opacity-30 cursor-not-allowed'
+                                : elegido
+                                  ? 'border-current'
+                                  : 'hover:opacity-70'
+                            } ${!hay && existe ? 'line-through' : ''}`}
+                            style={{
+                              borderRadius: tokens.radius.md,
+                              borderColor: elegido ? getCatalogAccent(business) : tokens.colors.border,
+                              backgroundColor: elegido ? getCatalogAccent(business) : 'transparent',
+                              color: elegido ? tokens.colors.textInverted : tokens.colors.text,
+                            }}
+                          >
+                            {valor}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+              {!selectedVariant && faltaElegir.length > 0 && (
+                <p className="text-xs" style={{ color: tokens.colors.textMuted }}>
+                  Elige {enumerar(faltaElegir)} para continuar
+                </p>
+              )}
+              {!selectedVariant && faltaElegir.length === 0 && (
+                <p className="text-xs text-red-500">
+                  Esa combinación no está disponible. Prueba con otra.
+                </p>
+              )}
+            </div>
+          )}
+
+
+          {/* Lista de combinaciones: se usa cuando NO conviene el selector por
+              atributo (una sola dimensión, tipo Copa / Botella). Ahí la lista se lee
+              mejor porque muestra el precio de cada opción. */}
+          {hasVariants && !usarSelectores && (
             <div className="mb-6">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold" style={{ color: tokens.colors.text }}>
