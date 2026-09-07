@@ -49,6 +49,9 @@ struct ConversationView: View {
     /// de saltar desde dentro: mientras la hoja se va, el scroll de abajo no
     /// esta listo para recibir la orden.
     @State private var saltarA: String?
+    /// Para saber sobre qué fondo cae el título de la cabecera.
+    @ObservedObject private var apariencia = Apariencia.shared
+    @Environment(\.colorScheme) private var esquema
 
     var body: some View {
       VStack(spacing: 0) {
@@ -193,6 +196,11 @@ struct ConversationView: View {
         // Por defecto iOS le mete una capa gris en cuanto el hilo se mueve, y
         // sobre una foto eso se lee como un bloque pegado arriba.
         .toolbarBackground(.hidden, for: .navigationBar)
+        // Y como no pinta nada, el título cae sobre el fondo del chat: su
+        // color lo decide el FONDO, no el modo del sistema. Con una foto de
+        // noche en modo claro, el negro de siempre no se lee.
+        .toolbarColorScheme(apariencia.luminanciaArriba(esquema) < 0.45 ? .dark : .light,
+                            for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .principal) {

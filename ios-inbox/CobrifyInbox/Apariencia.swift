@@ -90,6 +90,53 @@ final class Apariencia: ObservableObject {
 
     /// El fondo listo para pintarse detrás de la conversación.
     func fondoView() -> some View { FondoChat() }
+
+    // ---------- Qué tan claro es el fondo ----------
+    // La cabecera ya no pinta nada detrás, así que el título cae directo sobre
+    // el fondo del chat. Si el color del título dependiera del modo del
+    // sistema, una foto de noche en modo CLARO dejaría el nombre en negro
+    // sobre el cielo negro — ilegible (reporte de Giacomo). Así que no se
+    // pregunta por el modo: se mira el fondo.
+
+    private var lumFoto: (version: Int, valor: Double)?
+
+    /// Lo clara que es la franja de ARRIBA del fondo, de 0 (negra) a 1 (blanca).
+    func luminanciaArriba(_ esquema: ColorScheme) -> Double {
+        let porDefecto = esquema == .dark ? 0.06 : 0.95
+        switch fondoId {
+        case "foto":
+            guard tieneFoto else { return porDefecto }
+            return luminanciaDeLaFoto() * (1 - veloFoto(esquema))
+        case "clasico":
+            return porDefecto
+        default:
+            let par = Apariencia.fondos.first { $0.id == fondoId }
+            let arriba = (esquema == .dark ? par?.oscuros : par?.claros)?.first
+            return arriba?.luminancia ?? porDefecto
+        }
+    }
+
+    /// Promedio del cuarto superior de la foto, que es lo que queda detrás de
+    /// la cabecera. Se calcula una vez por foto: se dibuja en un solo píxel y
+    /// se lee su color, que es lo mismo que promediarla y cuesta nada.
+    private func luminanciaDeLaFoto() -> Double {
+        if let c = lumFoto, c.version == versionFoto { return c.valor }
+        guard let cg = fotoFondo?.cgImage,
+              let franja = cg.cropping(to: CGRect(x: 0, y: 0,
+                                                  width: cg.width,
+                                                  height: max(1, cg.height / 4)))
+        else { return 0.5 }
+        var pixel = [UInt8](repeating: 0, count: 4)
+        guard let ctx = CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8,
+                                  bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return 0.5 }
+        ctx.interpolationQuality = .medium
+        ctx.draw(franja, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        let l = (0.2126 * Double(pixel[0]) + 0.7152 * Double(pixel[1]) + 0.0722 * Double(pixel[2])) / 255
+        lumFoto = (versionFoto, l)
+        return l
+    }
 }
 
 /// El fondo del chat, consciente del modo claro/oscuro del sistema.

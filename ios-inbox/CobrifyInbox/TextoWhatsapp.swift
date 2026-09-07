@@ -119,12 +119,16 @@ enum TextoWhatsapp {
 }
 
 extension Color {
-    /// El azul de los enlaces, el de WhatsApp: oscuro de día, claro de noche.
-    /// Va puesto a mano y no por el tinte: en la burbuja propia el tinte era
-    /// blanco, y sobre su fondo pastel el enlace no se veía.
+    /// El verde de los enlaces, como los pone WhatsApp: oscuro de día, claro
+    /// de noche. Va puesto a mano y no por el tinte: en la burbuja propia el
+    /// tinte era blanco, y sobre su fondo pastel el enlace no se veía.
+    ///
+    /// Además del gusto, se lee mejor: el azul de antes se quedaba en 3.7:1
+    /// sobre la burbuja propia clara —por debajo del mínimo legible— y el
+    /// verde llega a 5.4:1. De noche, 4.0:1 pasa a 5.5:1.
     static let enlace = Color(uiColor: UIColor { rasgos in
         rasgos.userInterfaceStyle == .dark
-            ? UIColor(red: 0.325, green: 0.741, blue: 0.922, alpha: 1)   // #53BDEB
-            : UIColor(red: 0.008, green: 0.494, blue: 0.710, alpha: 1)   // #027EB5
+            ? UIColor(red: 0.482, green: 0.890, blue: 0.706, alpha: 1)   // #7BE3B4
+            : UIColor(red: 0.043, green: 0.420, blue: 0.227, alpha: 1)   // #0B6B3A
     })
 }

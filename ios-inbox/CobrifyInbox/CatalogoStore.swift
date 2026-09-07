@@ -223,6 +223,14 @@ final class CatalogoStore: ObservableObject {
 }
 
 extension Color {
+    /// De 0 (negro) a 1 (blanco). Sirve para decidir si encima va texto claro
+    /// u oscuro, en vez de suponerlo por el modo del sistema.
+    var luminancia: Double {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(self).getRed(&r, green: &g, blue: &b, alpha: &a)
+        return 0.2126 * Double(r) + 0.7152 * Double(g) + 0.0722 * Double(b)
+    }
+
     /// "#1B6E4A" -> Color. Negro si viene malformado.
     init(hex: String) {
         var h = hex.trimmingCharacters(in: .whitespaces)
