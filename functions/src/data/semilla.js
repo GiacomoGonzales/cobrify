@@ -142,7 +142,12 @@ export const SERIES_NEGOCIO = {
   guia_transportista: { serie: 'VV01', lastNumber: 0 },
 }
 
-/** Las series de la sucursal número `n` (la primera es la 001). */
+/**
+ * Las series de una sucursal ADICIONAL (`n` = 1 para la primera que se cree).
+ *
+ * La semilla NO las usa: la Sucursal Principal es el negocio y sus series son
+ * las de arriba. Esto es para cuando el cliente cree su segunda sede.
+ */
 export function seriesDeSucursal(n = 1) {
   const s = String(n).padStart(3, '0')
   return {

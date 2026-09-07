@@ -19,7 +19,7 @@ const { rubros } = require('../data/rubros.json')
 
 import {
   OPCIONES_SEMILLA, VALORES_SEMILLA, SERIES_NEGOCIO, SUNAT_SEMILLA,
-  seriesDeSucursal, opcionesDelRubro, modoDelRubro,
+  opcionesDelRubro, modoDelRubro,
 } from '../data/semilla.js'
 
 /** Sube de número cuando cambie lo que siembra, para poder distinguir cuentas. */
@@ -41,7 +41,7 @@ const texto = (v) => (typeof v === 'string' ? v.trim() : '')
  * @param {string} p.email
  * @param {Object} p.datos          ruc, businessName, tradeName, telefonos, direccion, rubro…
  * @param {Object} p.FieldValue     el FieldValue del Admin SDK (para serverTimestamp)
- * @returns {Promise<{sembrada: boolean, branchId?: string, warehouseId?: string, businessMode?: string}>}
+ * @returns {Promise<{sembrada: boolean, warehouseId?: string, businessMode?: string}>}
  */
 export async function sembrarCuenta(db, { uid, email, datos = {}, FieldValue }) {
   if (!uid) throw new Error('Falta el uid')
@@ -65,7 +65,10 @@ export async function sembrarCuenta(db, { uid, email, datos = {}, FieldValue }) 
   const razonSocial = texto(datos.businessName)
   const nombreComercial = texto(datos.tradeName) || razonSocial
 
-  const branchRef = negocioRef.collection('branches').doc()
+  // OJO: NO se crea documento de sucursal. La "Sucursal Principal" ES el
+  // negocio y se identifica por `branchId === null` (ver
+  // `src/utils/branchCatalog.js`); `branches` guarda solo las ADICIONALES.
+  // Crear uno ahi le aparece al cliente una segunda sucursal en el selector.
   const warehouseRef = negocioRef.collection('warehouses').doc()
   const ahora = FieldValue.serverTimestamp()
   const lote = db.batch()
@@ -105,8 +108,9 @@ export async function sembrarCuenta(db, { uid, email, datos = {}, FieldValue }) 
     ...VALORES_SEMILLA,
     ...opciones,
 
+    // Las series del negocio SON las de la Sucursal Principal. `branchSeries`
+    // se queda vacio: solo lo llenan las sucursales adicionales.
     series: SERIES_NEGOCIO,
-    branchSeries: { [branchRef.id]: seriesDeSucursal(1) },
     sunat: SUNAT_SEMILLA,
 
     semillaVersion: VERSION_SEMILLA,
@@ -114,32 +118,11 @@ export async function sembrarCuenta(db, { uid, email, datos = {}, FieldValue }) 
     updatedAt: ahora,
   }, { merge: true })
 
-  // 3) La sucursal. Sin sucursal no puede existir un almacén, y hasta hoy no
-  //    la creaba nadie.
-  lote.set(branchRef, {
-    name: 'Principal',
-    tradeName: '',
-    logoUrl: '',
-    address: texto(datos.address),
-    phone: texto(datos.phone),
-    email,
-    location: '',
-    department: texto(datos.department),
-    province: texto(datos.province),
-    district: texto(datos.district),
-    ubigeo: texto(datos.ubigeo),
-    businessMode: null, // hereda el del negocio
-    isDefault: true,
-    isActive: true,
-    createdAt: ahora,
-    updatedAt: ahora,
-    createdBy: 'semilla',
-  })
-
-  // 4) El almacén, dentro de esa sucursal.
+  // 3) El almacén, en la Sucursal Principal: `branchId: null` es exactamente
+  //    lo que significa "la principal". Es lo que hacia el alta de siempre.
   lote.set(warehouseRef, {
     name: 'Almacén Principal',
-    branchId: branchRef.id,
+    branchId: null,
     isDefault: true,
     isActive: true,
     createdAt: ahora,
@@ -150,7 +133,6 @@ export async function sembrarCuenta(db, { uid, email, datos = {}, FieldValue }) 
 
   return {
     sembrada: true,
-    branchId: branchRef.id,
     warehouseId: warehouseRef.id,
     businessMode,
     rubro,
