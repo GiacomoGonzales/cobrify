@@ -57,6 +57,8 @@ const PASOS = ['Tu negocio', 'Tu rubro', 'Tus datos']
 export default function Activar() {
   const { codigo } = useParams()
   const [alta, setAlta] = useState(null)
+  /** { texto, yaUsada } — que el enlace ya se haya usado NO es un error: la
+      cuenta existe y lo que toca ofrecerle es entrar. */
   const [errorCarga, setErrorCarga] = useState(null)
   const [paso, setPaso] = useState(0)
   const [enviando, setEnviando] = useState(false)
@@ -79,11 +81,14 @@ export default function Activar() {
       .then((r) => r.json())
       .then((d) => {
         if (!vivo) return
-        if (!d.success) { setErrorCarga(d.error || 'Este enlace no sirve'); return }
+        if (!d.success) {
+          setErrorCarga({ texto: d.error || 'Este enlace no sirve', yaUsada: !!d.yaUsada })
+          return
+        }
         setAlta(d.alta)
         setF((p) => ({ ...p, displayName: d.alta.nombre || '', contactPhone: d.alta.whatsapp || '' }))
       })
-      .catch(() => vivo && setErrorCarga('No se pudo abrir el enlace. Revisa tu conexión.'))
+      .catch(() => vivo && setErrorCarga({ texto: 'No se pudo abrir el enlace. Revisa tu conexión.' }))
     return () => { vivo = false }
   }, [codigo])
 
@@ -163,9 +168,16 @@ export default function Activar() {
     }
   }
 
-  if (errorCarga) return <Marco><Aviso tono="rojo" titulo="No pudimos abrir este enlace">{errorCarga}</Aviso></Marco>
-  if (!alta) return <Marco><p className="text-[13px] text-gray-500">Un momento…</p></Marco>
-  if (listo) return <Marco ancho><Final listo={listo} alta={alta} correo={f.email.trim()} /></Marco>
+  if (errorCarga) return <Marco><SinEnlace error={errorCarga} /></Marco>
+  if (!alta) return (
+    <Marco>
+      <div className="py-6 text-center">
+        <div className="mx-auto h-7 w-7 animate-spin rounded-full border-2 border-gray-200 border-t-primary-600" />
+        <p className="mt-3 text-[13px] text-gray-500">Un momento…</p>
+      </div>
+    </Marco>
+  )
+  if (listo) return <Marco><Final listo={listo} alta={alta} correo={f.email.trim()} /></Marco>
 
   const puedeSeguir =
     paso === 0 ? f.businessName.trim().length > 2
@@ -276,13 +288,65 @@ export default function Activar() {
 
 // ---------- piezas ----------
 
-function Marco({ children, ancho = false }) {
+/**
+ * El marco de todas las pantallas.
+ *
+ * Centrado en vertical y no pegado arriba: en una computadora la tarjeta
+ * quedaba flotando en medio de un vacío enorme y parecía a medio cargar.
+ */
+function Marco({ children }) {
   return (
-    <div className="min-h-screen bg-gray-50 px-4 py-8">
-      <div className={`mx-auto ${ancho ? 'max-w-md' : 'max-w-md'}`}>
-        <p className="mb-4 text-center text-[13px] font-semibold text-gray-900">Cobrify</p>
-        <div className="space-y-3.5 rounded-lg border border-gray-200 bg-white p-5">{children}</div>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4 py-10">
+      <div className="w-full max-w-md">
+        <p className="mb-4 text-center text-[15px] font-semibold tracking-tight text-gray-900">Cobrify</p>
+        <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">{children}</div>
+        <p className="mt-4 text-center text-[11.5px] text-gray-400">
+          Sistema de facturación electrónica · cobrifyperu.com
+        </p>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Cuando el enlace no sirve. Se separan los dos motivos porque piden cosas
+ * distintas: si la cuenta YA se activó no hay nada roto —solo tiene que
+ * entrar—, y si el enlace no existe hay que escribirle a quien se lo mandó.
+ */
+function SinEnlace({ error }) {
+  if (error.yaUsada) {
+    return (
+      <div className="text-center">
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary-50">
+          <svg viewBox="0 0 24 24" className="h-6 w-6 text-primary-600" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m5 13 4 4L19 7" />
+          </svg>
+        </div>
+        <h1 className="text-[18px] font-semibold text-gray-900">Esta cuenta ya está activada</h1>
+        <p className="mx-auto mt-1.5 max-w-[30ch] text-[13px] leading-relaxed text-gray-500">
+          El enlace sirve una sola vez. Entra con el correo y la contraseña que creaste.
+        </p>
+        <a
+          href="https://cobrifyperu.com/login"
+          className="mt-5 flex items-center justify-center rounded-lg bg-primary-600 px-4 py-3 text-[14px] font-medium text-white hover:bg-primary-700"
+        >
+          Iniciar sesión
+        </a>
+      </div>
+    )
+  }
+  return (
+    <div className="text-center">
+      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
+        <svg viewBox="0 0 24 24" className="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+        </svg>
+      </div>
+      <h1 className="text-[18px] font-semibold text-gray-900">Este enlace no sirve</h1>
+      <p className="mx-auto mt-1.5 max-w-[32ch] text-[13px] leading-relaxed text-gray-500">{error.texto}</p>
+      <p className="mt-4 text-[12.5px] text-gray-500">
+        Escríbele a quien te lo mandó y te envía uno nuevo.
+      </p>
     </div>
   )
 }
