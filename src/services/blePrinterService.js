@@ -12,6 +12,10 @@ import { prepareLogoForPrinting } from './imageProcessingService';
 import { buildKitchenLines } from '@/utils/kitchenComandaFormat';
 import { formatQuantity } from '@/lib/utils'
 import { nibbleDeTamano } from '@/utils/escposCharSize';
+import {
+  separadorDeTicket, lineasDeFechaYHora, mostrarTitulosDeSeccion,
+  mostrarContactoDelNegocio, lineasDeItem,
+} from '@/utils/ticketCompacto';
 import { getItemPriceBreakdown } from '@/utils/modifierHelpers';
 import { getUnitShortLabel } from '@/utils/units'
 
@@ -350,6 +354,21 @@ const getCutFeedLines = () => {
 };
 
 /**
+ * ¿Está activada "Impresión compacta (ahorro de papel)"?
+ *
+ * Vive en la configuración de impresora del DISPOSITIVO (localStorage), igual
+ * que el avance de corte. La opción existía desde antes pero solo llegaba a la
+ * impresión web y al PDF: el ticket por Bluetooth nunca la miró.
+ */
+const usaImpresionCompacta = () => {
+  try {
+    const saved = localStorage.getItem('factuya_printerConfig');
+    if (saved) return JSON.parse(saved).compactPrint === true;
+  } catch { /* ignore */ }
+  return false;
+};
+
+/**
  * Crear comandos ESC/POS
  */
 export const ESCPOSCommands = {
@@ -665,8 +684,11 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
   }
 
   try {
-    const separator = paperWidth === 58 ? '------------------------' : '------------------------------------------';
+    // "Impresion compacta": el mismo ajuste que ya usaban el PDF y la impresion
+    // web. Cada decision de que se acorta vive en utils/ticketCompacto.
+    const compacto = usaImpresionCompacta();
     const charsPerLine = paperWidth === 58 ? 24 : 42;
+    const separator = separadorDeTicket(charsPerLine, compacto);
 
     // Extraer datos
     const {
@@ -800,13 +822,12 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       commands.push(ESCPOSCommands.text('Tel: ' + phone + '\n'));
     }
 
-    // Email
-    if (email) {
+    // Email y redes: no forman parte del comprobante y son dos lineas.
+    if (mostrarContactoDelNegocio(compacto) && email) {
       commands.push(ESCPOSCommands.text('Email: ' + email + '\n'));
     }
 
-    // Redes sociales
-    if (socialMedia) {
+    if (mostrarContactoDelNegocio(compacto) && socialMedia) {
       commands.push(ESCPOSCommands.text(convertSpanishText(socialMedia) + '\n'));
     }
 
@@ -846,13 +867,16 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
     const timeString = `${hours}:${minutes}:${seconds}`;
 
     commands.push(ESCPOSCommands.align(0)); // Izquierda
-    commands.push(ESCPOSCommands.text('Fecha: ' + invoiceDate.toLocaleDateString('es-PE') + '\n'));
-    commands.push(ESCPOSCommands.text('Hora: ' + timeString + '\n'));
+    for (const l of lineasDeFechaYHora(invoiceDate.toLocaleDateString('es-PE'), timeString, compacto)) {
+      commands.push(ESCPOSCommands.text(l + '\n'));
+    }
 
     // ========== Datos del Cliente ==========
-    commands.push(ESCPOSCommands.bold(true));
-    commands.push(ESCPOSCommands.text('DATOS DEL CLIENTE\n'));
-    commands.push(ESCPOSCommands.bold(false));
+    if (mostrarTitulosDeSeccion(compacto)) {
+      commands.push(ESCPOSCommands.bold(true));
+      commands.push(ESCPOSCommands.text('DATOS DEL CLIENTE\n'));
+      commands.push(ESCPOSCommands.bold(false));
+    }
 
     const custName = customer?.name || customerName || 'Cliente';
     const custDoc = customer?.documentNumber || customerDocument || '-';
@@ -923,9 +947,11 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
     commands.push(ESCPOSCommands.text(separator + '\n'));
 
     // ========== Detalle de Productos ==========
-    commands.push(ESCPOSCommands.bold(true));
-    commands.push(ESCPOSCommands.text('DETALLE\n'));
-    commands.push(ESCPOSCommands.bold(false));
+    if (mostrarTitulosDeSeccion(compacto)) {
+      commands.push(ESCPOSCommands.bold(true));
+      commands.push(ESCPOSCommands.text('DETALLE\n'));
+      commands.push(ESCPOSCommands.bold(false));
+    }
 
     if (items && items.length > 0) {
       for (const item of items) {
@@ -956,10 +982,8 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
         const itemDiscount = item.itemDiscount || 0;
         const itemTotalWithDiscount = itemTotal - itemDiscount;
 
-        // Línea 1: Nombre del producto
-        commands.push(ESCPOSCommands.text(itemName + '\n'));
-
-        // Línea 2: cantidad x precio -> total
+        // Nombre y "cantidad x precio -> total". En compacto van en UNA sola
+        // linea cuando el nombre entra (ver utils/ticketCompacto).
         const qtyFormatted = formatQuantity(item.quantity);
         const unitSuffix = item.unit && item.allowDecimalQuantity ? getUnitShortLabel(item.unit) : '';
         // Precio de LISTA; los adicionales bajan como líneas que suman.
@@ -968,8 +992,12 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
         const desgloseBLE = getItemPriceBreakdown(item, unitPrice, item.quantity);
         const qtyAndPrice = `${qtyFormatted}${unitSuffix}x ${currencySymbol} ${desgloseBLE.baseUnit.toFixed(2)}`;
         const totalStr = `${currencySymbol} ${desgloseBLE.baseTotal.toFixed(2)}`;
-        const spaceBetween = charsPerLine - qtyAndPrice.length - totalStr.length;
-        commands.push(ESCPOSCommands.text(qtyAndPrice + ' '.repeat(Math.max(1, spaceBetween)) + totalStr + '\n'));
+        for (const linea of lineasDeItem({
+          nombre: itemName, cantidadYPrecio: qtyAndPrice, total: totalStr,
+          charsPerLine, compacto,
+        })) {
+          commands.push(ESCPOSCommands.text(linea + '\n'));
+        }
 
         for (const l of desgloseBLE.lineas) {
           const etiqueta = '  + ' + convertSpanishText(l.texto);
