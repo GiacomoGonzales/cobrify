@@ -136,3 +136,18 @@ export function anchoDeLinea(charsPerLineNormal, compacto) {
 export function tamanoDeQr(compacto) {
   return compacto ? 4 : 6
 }
+
+/**
+ * LOS SEPARADORES ENTRE SECCIONES
+ *
+ * Un ticket tiene una docena de lineas de guiones separando cabecera, cliente,
+ * detalle, totales, pagos y pie. Cada una cuesta una linea entera de papel y no
+ * dice nada: las secciones ya se distinguen por su contenido.
+ *
+ * En compacto no se imprimen. Se prefirio quitarlos antes que dejar una linea
+ * en blanco porque el gasto de papel es el mismo —una linea es una linea— y sin
+ * el separador el ticket queda igual de legible.
+ */
+export function mostrarSeparadores(compacto) {
+  return !compacto
+}
