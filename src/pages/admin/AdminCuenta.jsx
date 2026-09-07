@@ -41,6 +41,19 @@ const REGIMENES = {
 const METODOS = { qpse: 'QPse', sunat_direct: 'SUNAT directo', none: 'Sin configurar' }
 const TIPOS_DOC = { factura: 'Facturas', boleta: 'Boletas', nota_venta: 'Notas de venta', nota_credito: 'Notas de crédito', nota_debito: 'Notas de débito' }
 
+// Lo que QPse firma, y por lo tanto lo que se factura. La nota de venta no
+// está: es interna y no viaja a SUNAT. El orden es el de la lista.
+const TIPOS_FIRMADOS = {
+  factura: 'Facturas',
+  boleta: 'Boletas',
+  nota_credito: 'Notas de crédito',
+  nota_debito: 'Notas de débito',
+  guia_remision: 'Guías de remisión',
+  guia_transportista: 'Guías de transportista',
+  resumen_diario: 'Resúmenes diarios',
+  comunicacion_baja: 'Comunicaciones de baja',
+}
+
 const moneda = v => `S/ ${(Number(v) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const entero = v => (Number(v) || 0).toLocaleString('es-PE')
 const toDate = v => (v?.toDate ? v.toDate() : v instanceof Date ? v : v ? new Date(v) : null)
@@ -471,6 +484,11 @@ export default function AdminCuenta() {
             <>
               <Cifras>
                 <Cifra etiqueta="Comprobantes" valor={entero(uso.invoices.total)} nota={`${entero(uso.invoices.thisMonth)} este mes`} />
+                <Cifra
+                  etiqueta="Firmas consumidas"
+                  valor={entero(uso.invoices.firmas?.total)}
+                  nota={`de ${limite(c.limits?.maxInvoicesPerMonth)} al mes`}
+                />
                 <Cifra etiqueta="Facturado" valor={moneda(uso.invoices.totalAmount)} nota={`${moneda(uso.invoices.totalAmountThisMonth)} este mes`} />
                 <Cifra etiqueta="Ticket promedio" valor={moneda(uso.invoices.total ? uso.invoices.totalAmount / uso.invoices.total : 0)} />
                 <Cifra etiqueta="Clientes" valor={entero(uso.customers.total)} nota={`de ${limite(c.limits?.maxCustomers)}`} />
@@ -478,6 +496,16 @@ export default function AdminCuenta() {
               </Cifras>
               <p className="mt-3 text-[12px] text-gray-500">
                 {Object.entries(TIPOS_DOC).map(([k, n]) => `${n}: ${entero(uso.invoices.byType?.[k])}`).join(' · ')}
+              </p>
+              {/* El desglose de lo que se firma: no coincide con la línea de
+                  arriba porque las notas de venta no viajan a SUNAT, y las
+                  guías, los resúmenes y las bajas no viven en `invoices`. */}
+              <p className="mt-1 text-[12px] text-gray-500">
+                <span className="font-medium text-gray-700">Firmas: </span>
+                {Object.entries(TIPOS_FIRMADOS)
+                  .filter(([k]) => uso.invoices.firmas?.porDocumento?.[k])
+                  .map(([k, n]) => `${n}: ${entero(uso.invoices.firmas.porDocumento[k])}`)
+                  .join(' · ') || 'ninguna'}
               </p>
             </>
           ) : (
