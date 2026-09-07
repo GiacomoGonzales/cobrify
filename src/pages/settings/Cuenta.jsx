@@ -1,16 +1,28 @@
 /**
  * PESTAÑA "CUENTA Y SEGURIDAD" DE CONFIGURACIÓN.
  *
- * Junta lo que en Settings.jsx vivía repartido en cuatro pestañas:
- *   - Seguridad: el correo (solo lectura) y el cambio de contraseña.
- *   - Mi Empresa: "Nombre en la cabecera". Es el displayName de Firebase
- *     Auth —del usuario, no de la empresa—, por eso va acá junto al correo.
- *   - Documentos: "Privacidad y permisos", ahora "Qué ven los usuarios
- *     secundarios". El manual enlaza a sus tres anclas `opcion-<flag>`.
- *   - Notificaciones: las preferencias push y el detector de pagos Yape.
- *   - Limpieza: el borrado masivo, ahora "Zona de peligro", con la regla del
- *     commit 859a9dd0 intacta: solo dueño o administrador, ELIMINAR más la
- *     contraseña, y comprobantes/guías únicamente el administrador de Cobrify.
+ * EL ORDEN NO ES CASUAL. La página va de lo más personal a lo más peligroso,
+ * y las tres primeras responden todas a la misma pregunta —quién eres y quién
+ * puede entrar—, que es lo que se viene a mirar aquí:
+ *   1. Tu cuenta: el correo con el que entras y el nombre de la cabecera.
+ *      El displayName es de Firebase Auth, del USUARIO y no de la empresa,
+ *      por eso vive aquí y no en Mi Empresa.
+ *   2. Contraseña: en su propia sección. Antes estaba metida dentro del bloque
+ *      anterior, entre el correo y el nombre, y se perdía.
+ *   3. Accesos de soporte: cuándo entró el equipo de Cobrify a esta cuenta.
+ *      Va pegada a la contraseña porque responde a lo mismo: quién tiene
+ *      acceso. Enterrada al final no serviría de nada.
+ *   4. Qué ven los usuarios secundarios (antes "Privacidad y permisos" en la
+ *      pestaña Documentos). El manual enlaza a sus tres anclas `opcion-<flag>`.
+ *   5. Notificaciones: las preferencias push del negocio.
+ *   6. Detector de pagos Yape. AQUÍ ESTÁ DE PRESTADO: es una integración con
+ *      una app de fuera, como Rappi o Shopifree, y su sitio natural es la
+ *      pestaña Integraciones. Mover el bloque arrastra su estado y su guardado,
+ *      así que se dejó anotado en vez de hacerlo a medias.
+ *   7. Zona de peligro: el borrado masivo, con la regla del commit 859a9dd0
+ *      intacta: solo dueño o administrador, ELIMINAR más la contraseña, y
+ *      comprobantes/guías únicamente el administrador de Cobrify.
+ *   8. Versión: dato técnico para soporte, al final porque casi nunca se mira.
  *
  * Qué escribe y dónde (cada sección tiene su propio botón Guardar):
  *   - Nombre en la cabecera → Firebase Auth, vía `updateDisplayName` del contexto.
@@ -614,7 +626,7 @@ export default function Cuenta() {
       <Seccion
         id="cuenta"
         titulo="Tu cuenta"
-        descripcion="El correo con el que entras, el nombre que se ve en la cabecera y tu contraseña."
+        descripcion="El correo con el que entras y el nombre que se ve en la cabecera."
       >
         <div className="space-y-4">
           <Campo etiqueta="Correo electrónico">
@@ -643,12 +655,25 @@ export default function Cuenta() {
               </Button>
             </div>
           </Campo>
+        </div>
+      </Seccion>
 
+      <Separador />
+
+      {/* ── Contraseña ── */}
+      {/* Va en su propia sección y no metida entre el correo y el nombre: son
+          cosas distintas. Una se cambia una vez y se olvida; la otra es la
+          llave de todo. */}
+      <Seccion
+        id="contrasena"
+        titulo="Contraseña"
+        descripcion="La llave de tu cuenta. Nadie de Cobrify la conoce ni la puede ver."
+      >
+        <div className="space-y-4">
           {/* Cambio de contraseña: solo el dueño/admin del negocio. Los usuarios
               secundarios NO pueden cambiar su contraseña; la gestiona el administrador. */}
           {puedeCambiarContrasena ? (
-            <form onSubmit={handleChangePassword} className="space-y-4 max-w-md pt-2">
-              <p className="text-sm font-medium text-gray-900">Cambiar contraseña</p>
+            <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
               <CampoContrasena
                 etiqueta="Contraseña actual"
                 value={currentPassword}
@@ -700,6 +725,14 @@ export default function Cuenta() {
           )}
         </div>
       </Seccion>
+
+      <Separador />
+
+      {/* ── Accesos de soporte ── */}
+      {/* Junto a la contraseña a proposito: las dos responden a la misma
+          pregunta, quien puede entrar a esta cuenta. Enterrado al final no
+          serviria de nada. */}
+      <AccesosSoporte />
 
       <Separador />
 
@@ -1050,10 +1083,7 @@ export default function Cuenta() {
         </>
       )}
 
-      {/* Cuándo entró soporte a esta cuenta. Va aquí, entre las cosas de
-          seguridad, y no escondido: quien puede entrar sin la contraseña tiene
-          que rendir cuentas de cuándo lo hace. */}
-      <AccesosSoporte />
+      <Separador />
 
       {/* Qué versión está corriendo. En el celular son dos: la de la tienda y
           la web que va dentro. Sirve para soporte. */}
