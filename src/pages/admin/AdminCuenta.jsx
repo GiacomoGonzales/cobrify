@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { doc, updateDoc, serverTimestamp, Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { PLANS, registerPayment } from '@/services/subscriptionService'
+import { PLANS, registerPayment, registrarCambioDePlan } from '@/services/subscriptionService'
 import { getCustomPlans } from '@/services/customPlanService'
 import { getVendedores } from '@/services/vendedorService'
 import { getBranches } from '@/services/branchService'
@@ -144,8 +144,15 @@ export default function AdminCuenta() {
   async function registrarPago(userId, amount, method, planKey, customEndDate = null, options = {}) {
     setProcesando(true)
     try {
-      const r = await registerPayment(userId, parseFloat(amount), method, planKey, customEndDate, options)
-      toast.success(r?.newPeriodEnd ? `Pago registrado. Nuevo vencimiento: ${r.newPeriodEnd.toLocaleDateString('es-PE')}` : 'Pago registrado')
+      // Un cambio de plan cobra la diferencia y no mueve el vencimiento; una
+      // renovacion suma tiempo. Son operaciones distintas (ver utils/cambioDePlan).
+      if (options.esCambioDePlan) {
+        const r = await registrarCambioDePlan(userId, parseFloat(amount), method, planKey, options)
+        toast.success(`Cambio de plan registrado: ${r.planName}. Renueva a S/ ${r.renewalPrice}`)
+      } else {
+        const r = await registerPayment(userId, parseFloat(amount), method, planKey, customEndDate, options)
+        toast.success(r?.newPeriodEnd ? `Pago registrado. Nuevo vencimiento: ${r.newPeriodEnd.toLocaleDateString('es-PE')}` : 'Pago registrado')
+      }
       cerrarModal()
       await cargar()
     } catch (error) {

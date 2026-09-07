@@ -7,6 +7,7 @@ import {
   suspendUser,
   reactivateUser,
   registerPayment,
+  registrarCambioDePlan,
   changePlan,
   updateNotes,
   deleteUser,
@@ -178,7 +179,12 @@ export default function UserManagement() {
   const handleRegisterPayment = async (userId, amount, method, planKey, customEndDate = null, options = {}) => {
     try {
       setActionLoading(true);
-      await registerPayment(userId, amount, method, planKey, customEndDate, options);
+      // Cambio de plan: cobra la diferencia y NO mueve el vencimiento.
+      if (options.esCambioDePlan) {
+        await registrarCambioDePlan(userId, amount, method, planKey, options);
+      } else {
+        await registerPayment(userId, amount, method, planKey, customEndDate, options);
+      }
       await loadSubscriptions();
       setShowModal(false);
       toast.success('Pago registrado exitosamente');

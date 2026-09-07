@@ -6,6 +6,7 @@ import {
   Shield
 } from 'lucide-react';
 import { PLANS, SELLABLE_PLAN_IDS, extendSubscription } from '@/services/subscriptionService';
+import { diferenciaSugerida } from '@/utils/cambioDePlan'
 import { doc, updateDoc, setDoc, getDoc, increment } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
@@ -28,6 +29,9 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
   // Corrección manual del vencimiento (sin registrar pago): sirve para arreglar
   // altas duplicadas, cortesías o errores de carga.
   const [expiryDate, setExpiryDate] = useState('');
+  // 'renovacion' suma tiempo; 'cambio_de_plan' cobra la diferencia y NO mueve
+  // el vencimiento (ver utils/cambioDePlan).
+  const [tipoDeOperacion, setTipoDeOperacion] = useState('renovacion');
   const [savingExpiry, setSavingExpiry] = useState(false);
   // Unificar planes estándar + personalizados
   const allPlans = { ...PLANS, ...customPlans };
@@ -38,13 +42,22 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
   useEffect(() => {
     const plan = allPlans[selectedPlanForPayment];
     if (plan) {
-      const base = (selectedPlanForPayment === user.plan && user.renewalPrice != null)
-        ? user.renewalPrice
-        : (plan.totalPrice || 0);
+      // En un cambio de plan se sugiere la DIFERENCIA contra lo que hoy paga
+      // (el precio pactado manda sobre el catálogo); en una renovación, el
+      // precio del plan.
+      const base = tipoDeOperacion === 'cambio_de_plan'
+        ? diferenciaSugerida({
+          planActual: allPlans[user.plan],
+          planNuevo: plan,
+          precioPactado: user.renewalPrice ?? null,
+        })
+        : ((selectedPlanForPayment === user.plan && user.renewalPrice != null)
+          ? user.renewalPrice
+          : (plan.totalPrice || 0));
       setPaymentAmount(addIgv ? parseFloat((base * 1.18).toFixed(2)) : base);
     }
     setActualizarPrecioPactado(false);
-  }, [selectedPlanForPayment, addIgv]);
+  }, [selectedPlanForPayment, addIgv, tipoDeOperacion]);
 
   // Precio pactado vigente para ESTE plan (null si está cambiando de plan: ahí
   // el monto cobrado se congela solo y no hay nada que decidir).
@@ -117,17 +130,52 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                   selectedPlanForPayment,
                   useCustomDate && customEndDate ? new Date(customEndDate) : null,
                   {
-                    ...(addIgv ? { igvInfo: { includesIgv: true, baseAmount: selectedPlanConfig?.totalPrice || 0, igvAmount: parseFloat(((selectedPlanConfig?.totalPrice || 0) * 0.18).toFixed(2)) } } : {}),
+                    ...(addIgv ? { igvInfo: { includesIgv: true, baseAmount: parseFloat((Number(paymentAmount) / 1.18).toFixed(2)), igvAmount: parseFloat((Number(paymentAmount) - Number(paymentAmount) / 1.18).toFixed(2)) } } : {}),
                     updateRenewalPrice: difiereDelPactado && actualizarPrecioPactado,
+                    esCambioDePlan: tipoDeOperacion === 'cambio_de_plan',
                   }
                 );
               }}
               className="space-y-4"
             >
+              {/* Qué operación es. Un cambio de plan NO suma tiempo: si se
+                  registra como renovación, se le regala un mes y el precio de
+                  renovación queda en lo que pagó de diferencia. */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de operación</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    ['renovacion', 'Renovación', 'Suma tiempo al vencimiento'],
+                    ['cambio_de_plan', 'Cambio de plan', 'Paga la diferencia, no mueve el vencimiento'],
+                  ].map(([valor, titulo, ayuda]) => (
+                    <button
+                      key={valor}
+                      type="button"
+                      onClick={() => setTipoDeOperacion(valor)}
+                      className={`rounded-lg border p-3 text-left transition ${
+                        tipoDeOperacion === valor
+                          ? 'border-primary-500 bg-primary-50 ring-1 ring-primary-500'
+                          : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      <span className="block text-sm font-medium text-gray-900">{titulo}</span>
+                      <span className="block text-[12px] leading-snug text-gray-500">{ayuda}</span>
+                    </button>
+                  ))}
+                </div>
+                {tipoDeOperacion === 'cambio_de_plan' && (
+                  <p className="mt-2 text-[12.5px] leading-snug text-gray-600">
+                    Sigue venciendo el {periodEnd ? new Date(periodEnd).toLocaleDateString('es-PE') : '—'} y
+                    conserva los comprobantes que ya usó este mes. La próxima renovación se le cobra el
+                    precio del plan nuevo{selectedPlanConfig?.totalPrice != null ? ` (S/ ${selectedPlanConfig.totalPrice})` : ''}.
+                  </p>
+                )}
+              </div>
+
               {/* Selector de Plan */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Seleccionar Plan
+                  {tipoDeOperacion === 'cambio_de_plan' ? 'Plan nuevo' : 'Seleccionar Plan'}
                 </label>
 
                 {/* Planes vendibles (catálogo actual — los legacy ya migraron y no se ofrecen) */}

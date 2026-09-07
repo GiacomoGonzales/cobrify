@@ -13,6 +13,7 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { limitesAlRegistrarPago } from '@/utils/topeDeComprobantes'
+import { validarCambioDePlan, registroDeCambioDePlan } from '@/utils/cambioDePlan'
 import { db } from '../lib/firebase';
 import { notifyPaymentReceived, notifySubscriptionRenewed, notifyPlanChanged, notifyWelcome } from './notificationService';
 import { getCustomPlans } from './customPlanService';
@@ -814,6 +815,85 @@ export const reactivateUser = async (userId, extendDays = 30) => {
  *   monto pase a ser el precio pactado aunque sea el mismo plan
  * @returns {Promise<{success: boolean, newPeriodEnd: Date|null, planName: string}>}
  */
+/**
+ * Sube (o baja) de plan cobrando solo la diferencia, SIN mover el vencimiento.
+ *
+ * No es una renovación y por eso no pasa por `registerPayment`: ahí un pago de
+ * S/ 10 sumaría un mes entero, dejaría `renewalPrice` en 10 —y la próxima
+ * renovación le cobraría eso— y le reiniciaría el contador del mes.
+ *
+ * Acá el cliente paga una MEJORA, no tiempo:
+ *  - el vencimiento y el día de corte no se tocan;
+ *  - `renewalPrice` queda en el **precio del plan nuevo**, no en lo que pagó;
+ *  - el contador de comprobantes sigue como está: pagó por un tope más alto,
+ *    no por borrar lo que ya consumió (vuelve a cero en su corte de siempre);
+ *  - los límites salen del plan nuevo, respetando el tope fijado a mano
+ *    (ver utils/topeDeComprobantes).
+ *
+ * El pago queda en el historial marcado como `cambio_de_plan`, con el plan de
+ * origen: sin eso queda un pago de S/ 10 contra un plan de S/ 39.90 y nadie
+ * entiende qué pasó.
+ */
+export const registrarCambioDePlan = async (userId, amount, method = 'Transferencia', planNuevoId, options = {}) => {
+  try {
+    const subscriptionRef = doc(db, 'subscriptions', userId);
+    const subscriptionSnap = await getDoc(subscriptionRef);
+    if (!subscriptionSnap.exists()) throw new Error('Suscripción no encontrada');
+
+    const subscription = subscriptionSnap.data();
+    const now = new Date();
+
+    let planNuevo = PLANS[planNuevoId];
+    if (!planNuevo) {
+      const custom = await getCustomPlans();
+      planNuevo = custom?.[planNuevoId];
+    }
+
+    const { puede, motivo } = validarCambioDePlan({
+      planActualId: subscription.plan,
+      planNuevoId,
+      planNuevoConfig: planNuevo,
+    });
+    if (!puede) throw new Error(motivo);
+
+    const registro = registroDeCambioDePlan({
+      monto: amount,
+      metodo: method,
+      planActualId: subscription.plan,
+      planNuevoId,
+      planNuevoConfig: planNuevo,
+      fecha: Timestamp.fromDate(now),
+      igvInfo: options.igvInfo || null,
+    });
+
+    // El precio de renovación es el del plan NUEVO, no la diferencia pagada.
+    const precioDelPlan = Number(planNuevo.totalPrice ?? planNuevo.price ?? 0) || null;
+
+    await updateDoc(subscriptionRef, {
+      plan: planNuevoId,
+      planName: planNuevo.name || planNuevoId,
+      monthlyPrice: planNuevo.pricePerMonth || 0,
+      limits: limitesAlRegistrarPago({
+        suscripcion: subscription,
+        limitesDelPlan: planNuevo.limits,
+        esMismoPlan: false,
+      }),
+      renewalPrice: precioDelPlan,
+      pricingFrozenAt: serverTimestamp(),
+      lastPaymentDate: Timestamp.fromDate(now),
+      paymentHistory: [...(subscription.paymentHistory || []), registro],
+      updatedAt: serverTimestamp(),
+      // A propósito NO se tocan: currentPeriodEnd, currentPeriodStart,
+      // nextPaymentDate, usage.invoicesThisMonth ni lastCounterReset.
+    });
+
+    return { success: true, planName: planNuevo.name || planNuevoId, renewalPrice: precioDelPlan };
+  } catch (error) {
+    console.error('Error al registrar el cambio de plan:', error);
+    throw error;
+  }
+};
+
 export const registerPayment = async (userId, amount, method = 'Transferencia', selectedPlan = 'plan_3_months', customEndDate = null, options = {}) => {
   try {
     const subscriptionRef = doc(db, 'subscriptions', userId);
