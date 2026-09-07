@@ -39,13 +39,14 @@ export async function resumenDeUso(businessId) {
 
   const resumenes = collection(db, 'businesses', businessId, 'summaryDocuments')
 
-  const [todo, mes, aceptados, rechazados, pendientes, clientes, productos,
+  const [todo, mes, aceptados, rechazados, pendientes, sinEnviar, clientes, productos,
     ...resto] = await Promise.all([
     getAggregateFromServer(comprobantes, { n: count(), monto: sum('total') }),
     getAggregateFromServer(query(comprobantes, where('createdAt', '>=', inicioMes)), { n: count(), monto: sum('total') }),
     contar(query(comprobantes, where('sunatStatus', '==', 'accepted'))),
     contar(query(comprobantes, where('sunatStatus', 'in', RECHAZADOS))),
     contar(query(comprobantes, where('sunatStatus', 'in', PENDIENTES))),
+    contar(query(comprobantes, where('sunatStatus', '==', 'not_sent'))),
     contar(collection(db, 'businesses', businessId, 'customers')),
     contar(collection(db, 'businesses', businessId, 'products')),
     ...TIPOS.map(t => contar(query(comprobantes, where('documentType', '==', t)))),
@@ -81,8 +82,11 @@ export async function resumenDeUso(businessId) {
         accepted: aceptados,
         rejected: rechazados,
         pending: pendientes,
-        // Lo que no esta en ninguno de los tres: nunca se envio
-        not_sent: Math.max(0, total - aceptados - rechazados - pendientes),
+        // Se cuenta el estado, NO lo que sobra de una resta. Restando, las
+        // notas de venta (que son 'not_applicable' porque no viajan a SUNAT)
+        // caían todas acá: KIRLAN mostraba 12.528 "sin enviar" y 10.835 de
+        // esos eran notas de venta.
+        not_sent: sinEnviar,
       },
       totalAmount: todo.data().monto || 0,
       totalAmountThisMonth: mes.data().monto || 0,
