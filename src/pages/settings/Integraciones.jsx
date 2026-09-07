@@ -37,6 +37,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useGuardado } from '@/components/settings/useGuardado'
 import { Seccion, Ajuste, Campo, Fila, Nota, BarraGuardar, Separador } from '@/components/settings/kit'
+import DetectorYape from '@/components/settings/DetectorYape'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import {
@@ -1392,6 +1393,15 @@ export default function Integraciones() {
       </Seccion>
 
       <BarraGuardar onClick={guardarIntegraciones} guardando={guardando} />
+
+      <Separador />
+
+      {/* El detector de Yape vivía en "Cuenta y seguridad", que no era su sitio:
+          es una integración con una app de fuera, igual que las de arriba. Va al
+          final y con su propio botón Guardar porque no escribe en el documento
+          del negocio sino en su subdocumento, así que no puede compartir la
+          barra de esta pestaña. */}
+      <DetectorYape />
     </div>
   )
 }

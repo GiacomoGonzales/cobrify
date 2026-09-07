@@ -107,6 +107,11 @@ const OPCION_A_PESTANA = {
   metaAdsEnabled: 'integraciones',
   rappiEnabled: 'integraciones',
   shopifreeEnabled: 'integraciones',
+  // Cuenta → Integraciones (el detector de Yape se mudó el 2026-09-07: es una
+  // integración con una app de fuera, no un ajuste de la cuenta).
+  'yapeConfig.enabled': 'integraciones',
+  'yapeConfig.autoStartListening': 'integraciones',
+  'yapeConfig.notifyAllUsers': 'integraciones',
   // Documentos → Cuenta
   hideDashboardDataFromSecondary: 'cuenta',
   hideCashExpectedFromCashier: 'cuenta',
