@@ -29,6 +29,7 @@ import {
   ShoppingBag,
   AlertCircle,
   Info,
+  Check,
 } from 'lucide-react'
 
 // Modal de producto con soporte para modificadores
@@ -67,6 +68,11 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
   const [selectedPresentation, setSelectedPresentation] = useState(null)
   const [variantError, setVariantError] = useState(false)
   const [selectedPriceLevel, setSelectedPriceLevel] = useState('price1')
+  // Qué variante entró al carrito recién, para avisarlo sin cerrar la ventana.
+  // Va ACÁ y no junto a `handleAddToCart`: más abajo hay un
+  // `if (!isOpen || !product) return null`, y un hook debajo de un early return
+  // cambia el orden de los hooks entre renders (pantalla en blanco, error 310).
+  const [ultimaAgregada, setUltimaAgregada] = useState(null)
   const [activeImageIdx, setActiveImageIdx] = useState(0)
 
   // Galería: usa imageUrls si existe, si no cae a imageUrl (legacy).
@@ -130,6 +136,13 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
       document.body.style.overflow = 'unset'
     }
   }, [isOpen, product])
+
+  // El aviso de "agregado" se borra solo a los dos segundos y medio.
+  useEffect(() => {
+    if (!ultimaAgregada) return
+    const t = setTimeout(() => setUltimaAgregada(null), 2500)
+    return () => clearTimeout(t)
+  }, [ultimaAgregada])
 
   if (!isOpen || !product) return null
 
@@ -388,9 +401,16 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
         }),
       }
       onAddToCart(variantProduct, quantity, modifiersData, totalPrice, priceLevelLabel)
-    } else {
-      onAddToCart(product, quantity, modifiersData, totalPrice, priceLevelLabel)
+      // La ventana NO se cierra cuando el producto tiene variantes: quien compra
+      // ropa suele llevar varias tallas del mismo modelo, y cerrarla lo obligaba
+      // a buscar el producto otra vez para cada una (reporte de CITEX). Se avisa
+      // que entró al carrito y puede seguir eligiendo.
+      setUltimaAgregada(
+        Object.values(selectedVariant.attributes || {}).join(' / ') || selectedVariant.sku
+      )
+      return
     }
+    onAddToCart(product, quantity, modifiersData, totalPrice, priceLevelLabel)
     onClose()
   }
 
@@ -1031,6 +1051,22 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
               </div>
             )
           })()}
+
+          {/* Lo que acaba de entrar al carrito. Sin esto, como la ventana ya no
+              se cierra, no habría señal de que el toque hizo algo. */}
+          {ultimaAgregada && (
+            <div
+              className="flex items-center gap-2 px-3 py-2 mb-2 text-sm font-medium"
+              style={{
+                borderRadius: tokens.radius.lg,
+                backgroundColor: '#dcfce7',
+                color: '#15803d',
+              }}
+            >
+              <Check className="w-4 h-4 flex-shrink-0" />
+              <span className="truncate">Agregado: {ultimaAgregada}</span>
+            </div>
+          )}
 
           {/* Botón agregar */}
           <button

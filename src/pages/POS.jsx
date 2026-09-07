@@ -4774,9 +4774,11 @@ export default function POS() {
       setCart(applyAutoPricingToCart([...cart, cartItem]))
     }
 
-    // Close modal
-    setShowVariantModal(false)
-    setSelectedProductForVariant(null)
+    // El modal NO se cierra: en ropa una venta lleva varias tallas del mismo
+    // modelo, y cerrarlo obligaba a buscar el producto otra vez para cada una
+    // (reporte de CITEX). Queda abierto marcando lo agregado y lo cierra el
+    // vendedor con "Listo". El único cierre automático es el de más arriba,
+    // cuando hay que abrir el modal de niveles de precio.
   }
 
   const addCustomProductToCart = () => {
@@ -13737,6 +13739,7 @@ ${companySettings?.businessName || 'Tu Empresa'}`
         }}
         product={selectedProductForVariant}
         onSelect={addVariantToCart}
+        seguirAbierto
         warehouse={selectedWarehouse}
         allowNegativeStock={permiteSinStock}
         formatCurrency={formatCurrency}
