@@ -36,7 +36,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Eye, EyeOff, Loader2, Trash2 } from 'lucide-react'
 import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore'
-import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth'
+import { cambiarMiContrasena, confirmarConContrasena } from '@/utils/cambioDeContrasena'
 import { db, auth } from '@/lib/firebase'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -232,68 +232,34 @@ export default function Cuenta() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isChangingPassword, setIsChangingPassword] = useState(false)
 
-  // Cambio de contraseña: reautentica con la actual antes de escribir la nueva.
+  // Cambio de contraseña. Las reglas —validaciones, reautenticación y los
+  // mensajes de error— viven en `utils/cambioDeContrasena`, compartidas con la
+  // pantalla "Cambiar contraseña" que ve cualquier usuario: son la MISMA
+  // operación y no pueden pedir cosas distintas según desde dónde se entre.
   const handleChangePassword = async (e) => {
     e.preventDefault()
 
-    // MODO DEMO: No permitir cambios
     if (isDemoMode) {
       toast.error('No se pueden cambiar contraseñas en modo demo. Crea una cuenta para gestionar tu seguridad.')
       return
     }
-
     if (!user) return
 
-    // Validaciones
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      toast.error('Todos los campos son requeridos')
-      return
-    }
-
-    if (newPassword.length < 6) {
-      toast.error('La nueva contraseña debe tener al menos 6 caracteres')
-      return
-    }
-
-    if (newPassword !== confirmPassword) {
-      toast.error('Las contraseñas no coinciden')
-      return
-    }
-
-    if (currentPassword === newPassword) {
-      toast.error('La nueva contraseña debe ser diferente a la actual')
-      return
-    }
-
     setIsChangingPassword(true)
-
     try {
-      // Reautenticar al usuario con su contraseña actual
-      const credential = EmailAuthProvider.credential(user.email, currentPassword)
-      await reauthenticateWithCredential(auth.currentUser, credential)
-
-      // Actualizar la contraseña
-      await updatePassword(auth.currentUser, newPassword)
-
-      // Limpiar campos
+      const resultado = await cambiarMiContrasena(auth, {
+        actual: currentPassword,
+        nueva: newPassword,
+        repetida: confirmPassword,
+      })
+      if (!resultado.ok) {
+        toast.error(resultado.error)
+        return
+      }
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
-
       toast.success('Contraseña actualizada exitosamente')
-    } catch (error) {
-      console.error('Error al cambiar contraseña:', error)
-
-      // Mensajes de error específicos
-      if (error.code === 'auth/wrong-password') {
-        toast.error('La contraseña actual es incorrecta')
-      } else if (error.code === 'auth/weak-password') {
-        toast.error('La nueva contraseña es muy débil')
-      } else if (error.code === 'auth/requires-recent-login') {
-        toast.error('Por seguridad, debes cerrar sesión y volver a iniciar para cambiar tu contraseña')
-      } else {
-        toast.error('Error al cambiar la contraseña. Inténtalo nuevamente.')
-      }
     } finally {
       setIsChangingPassword(false)
     }
@@ -541,16 +507,9 @@ export default function Cuenta() {
 
     // Reautenticación, igual que para cambiar la contraseña: escribir ELIMINAR
     // lo puede hacer cualquiera que encuentre la sesión abierta.
-    try {
-      const credential = EmailAuthProvider.credential(user.email, bulkDeletePassword)
-      await reauthenticateWithCredential(auth.currentUser, credential)
-    } catch (error) {
-      console.error('Reautenticación para borrado masivo:', error)
-      toast.error(
-        error?.code === 'auth/wrong-password' || error?.code === 'auth/invalid-credential'
-          ? 'La contraseña es incorrecta'
-          : 'No se pudo verificar tu contraseña. Cierra sesión, vuelve a entrar e inténtalo de nuevo.',
-      )
+    const confirmada = await confirmarConContrasena(auth, bulkDeletePassword)
+    if (!confirmada.ok) {
+      toast.error(confirmada.error)
       return
     }
 

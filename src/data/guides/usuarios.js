@@ -6,7 +6,7 @@
  */
 export default {
   id: 'usuarios',
-  actualizado: '05/09/2026',
+  actualizado: '06/09/2026',
   intro:
     'Acá creas las cuentas de tu equipo y decides qué puede ver y hacer cada uno. Es la pantalla que evita que un cajero vea tus márgenes o cambie tus precios.',
 
@@ -100,6 +100,25 @@ export default {
       ],
     },
 
+    {
+      id: 'contrasenas',
+      title: 'Contraseñas: la suya y la que tú le pones',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Cada usuario puede **cambiar su propia contraseña** desde su sesión: en el menú de la izquierda, la opción **Cambiar contraseña**. Le pide la actual, la nueva y que la repita. No necesita permisos ni pedírtelo a ti.',
+        },
+        { type: 'ui', kind: 'boton', label: 'Cambiar contraseña' },
+        {
+          type: 'texto',
+          text: 'Si **olvidó** su contraseña actual, ahí sí entras tú: en Gestión de usuarios, abre su ficha y usa **Cambiar contraseña**. Le pones una nueva sin necesitar la anterior.',
+        },
+        {
+          type: 'consejo',
+          text: 'Cuando le crees el usuario, ponle una contraseña simple y dile que la cambie él desde **Cambiar contraseña**. Así la clave con la que trabaja no la sabe nadie más, ni tú.',
+        },
+      ],
+    },
     {
       id: 'ficha-y-acciones',
       title: 'Desactivar, archivar o eliminar',

@@ -46,6 +46,7 @@ const PurchaseOrders = lazy(() => import('./pages/PurchaseOrders'))
 const CashRegister = lazy(() => import('./pages/CashRegister'))
 const AccountSuspended = lazy(() => import('./pages/AccountSuspended'))
 const MySubscription = lazy(() => import('./pages/MySubscription'))
+const MiClave = lazy(() => import('./pages/MiClave'))
 const Manual = lazy(() => import('./pages/Manual'))
 const UserManagement = lazy(() => import('./pages/admin/UserManagement'))
 import AdminLayout from './layouts/AdminLayout'
@@ -613,6 +614,10 @@ function App() {
               <Route path="configuracion" element={<Settings />} />
               <Route path="usuarios" element={<Users />} />
               <Route path="mi-suscripcion" element={<MySubscription />} />
+              {/* Cambiar la propia contraseña: para TODOS, sin permiso de página.
+                  Estaba solo dentro de Configuración, que un sub-usuario no ve:
+                  su contraseña se la tenía que cambiar el dueño. */}
+              <Route path="mi-clave" element={<MiClave />} />
               {/* Manual de uso: accesible para todos los usuarios (no requiere permiso de página) */}
               <Route path="manual" element={<Manual />} />
               <Route path="manual/:guideId" element={<Manual />} />

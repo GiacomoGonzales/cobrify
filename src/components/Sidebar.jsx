@@ -80,6 +80,7 @@ import {
   FileSpreadsheet,
   // Iconos para modo clinica
   Sparkles,
+  KeyRound,
 } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -2331,6 +2332,16 @@ function Sidebar() {
       path: '/manual',
       icon: HelpCircle,
       label: 'Manual de uso',
+      pageId: null,
+      hideInDemo: true,
+    },
+    {
+      // Cambiar la propia contraseña: para TODOS, como el manual. La misma
+      // operación existe en Configuración, pero un sub-usuario no ve esa
+      // pantalla y su clave se la tenía que cambiar el dueño.
+      path: '/mi-clave',
+      icon: KeyRound,
+      label: 'Cambiar contraseña',
       pageId: null,
       hideInDemo: true,
     },
