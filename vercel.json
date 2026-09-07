@@ -27,6 +27,17 @@
       "destination": "/api/menu-meta?slug=:slug"
     },
     {
+      "source": "/",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|Googlebot|bingbot|Applebot|Google-InspectionTool|DuckDuckBot|YandexBot|Slurp).*"
+        }
+      ],
+      "destination": "/api/domain-meta"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

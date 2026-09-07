@@ -119,13 +119,61 @@ function generateHTML(business, domain) {
 </html>`
 }
 
+// Los dominios de Cobrify mismo: NO son el catálogo de nadie.
+//
+// Hacen falta porque el rewrite que trae acá a los bots se aplica a la raíz de
+// CUALQUIER host —Vercel usa RE2 en sus condiciones y RE2 no tiene lookahead,
+// así que no se puede escribir "cualquier dominio menos cobrifyperu.com"—. La
+// exclusión se resuelve entonces del lado del código, que además es donde se
+// puede leer y explicar.
+const DOMINIOS_DE_COBRIFY = [
+  'cobrifyperu.com',
+  'www.cobrifyperu.com',
+  'factuya.pe',
+  'www.factuya.pe',
+  'localhost',
+]
+
+const esDominioDeCobrify = (host) => {
+  const limpio = String(host || '').toLowerCase().split(':')[0]
+  if (!limpio) return true
+  if (DOMINIOS_DE_COBRIFY.includes(limpio)) return true
+  // Las URLs de despliegue y las vistas previas de Vercel.
+  return limpio.endsWith('.vercel.app')
+}
+
+const BOTS_SOCIALES = [
+  'facebookexternalhit', 'facebot', 'linkedinbot', 'twitterbot', 'whatsapp',
+  'telegrambot', 'slackbot', 'discordbot', 'pinterest', 'googlebot', 'bingbot',
+  'applebot', 'duckduckbot', 'yandexbot', 'slurp',
+]
+
+const esBotSocial = (userAgent) => {
+  const ua = String(userAgent || '').toLowerCase()
+  return !!ua && BOTS_SOCIALES.some(bot => ua.includes(bot))
+}
+
 export default async function handler(req, res) {
-  const domain = req.query.domain
   const userAgent = req.headers['user-agent'] || ''
+  // El dominio llega por query cuando alguien llama a la función a mano, y por
+  // el header Host cuando entra por el rewrite de la raíz.
+  const domain = req.query.domain || req.headers.host
 
   console.log(`[DomainMeta] domain=${domain}, UA=${userAgent.substring(0, 50)}`)
 
   if (!domain) {
+    return res.redirect(302, '/index.html')
+  }
+
+  // La home de Cobrify tiene sus propios meta tags en el index. Se manda ahí
+  // directo y no a `/`, que volvería a entrar por el rewrite: bucle infinito.
+  if (esDominioDeCobrify(domain)) {
+    return res.redirect(302, '/index.html')
+  }
+
+  // A una persona no se le sirve esto: se la deja seguir a la aplicación.
+  // Tampoco hay bucle — el rewrite solo trae acá a los bots.
+  if (!esBotSocial(userAgent)) {
     return res.redirect(302, '/')
   }
 
