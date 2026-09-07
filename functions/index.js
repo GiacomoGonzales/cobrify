@@ -15105,8 +15105,10 @@ export const entrarComoCliente = onRequest(
         res.status(401).json({ success: false, error: 'No autorizado' }); return
       }
       const admin = await auth.verifyIdToken(cabecera.split('Bearer ')[1])
-      const fichaAdmin = await db.collection('admins').doc(admin.uid).get()
-      if (!fichaAdmin.exists || fichaAdmin.data()?.isAdmin !== true) {
+      // Mismo criterio que el resto del sistema (src/utils/admin.js). Antes
+      // preguntaba por `isAdmin === true`, un campo que ningún documento de
+      // `admins` tiene: el control no dejaba pasar a NADIE.
+      if (!(await esAdministrador(admin.uid))) {
         res.status(403).json({ success: false, error: 'Solo administradores' }); return
       }
 
