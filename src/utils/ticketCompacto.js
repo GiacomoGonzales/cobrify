@@ -90,3 +90,49 @@ export function lineasQueOcupa(texto, charsPerLine) {
     .filter((l, i, todas) => i < todas.length - 1 || l !== '')
     .reduce((total, linea) => total + Math.max(1, Math.ceil(linea.length / ancho)), 0)
 }
+
+/**
+ * LA LETRA
+ *
+ * El escalado normal (`GS !`) ya está en su mínimo cuando el tamaño es
+ * "pequeño": no se puede achicar más por ahí. Lo que sí existe en ESC/POS es
+ * **otra fuente**, la Font B (`ESC M 1`), que es físicamente más chica —9 dots
+ * de ancho contra 12— y por eso entran más caracteres por línea.
+ *
+ * Achicar la letra acorta el ticket dos veces: cada línea es más baja, y como
+ * entran más caracteres, muchos textos que antes se partían en dos ahora entran
+ * en uno.
+ */
+export function usarFuentePequena(compacto) {
+  return compacto
+}
+
+/**
+ * Cuántos caracteres entran por línea con la fuente chica.
+ *
+ * Font A ocupa 12 dots por carácter y Font B, 9: entran un tercio más. Se
+ * redondea hacia abajo para no pasarse del papel, que se nota mucho más que
+ * desperdiciar un carácter.
+ */
+export function anchoDeLinea(charsPerLineNormal, compacto) {
+  const base = Math.max(8, Math.floor(charsPerLineNormal))
+  if (!compacto) return base
+  return Math.floor((base * 12) / 9)
+}
+
+/**
+ * EL QR DE SUNAT
+ *
+ * El tamaño es el del MÓDULO (cada cuadradito), de 1 a 16. El valor por defecto
+ * del generador es 6, y con los ~70 caracteres que lleva el QR de SUNAT eso da
+ * un cuadro de más de 200 dots: en papel de 58 mm ocupa casi todo el ancho y
+ * unas diez líneas de alto.
+ *
+ * En compacto baja a 4, un tercio menos de lado y la mitad de superficie. No se
+ * baja más: por debajo de 4 el QR empieza a fallar en lectores de celular con
+ * poca luz, y un QR que no se lee no sirve de nada — es el que usa el cliente
+ * para validar el comprobante en SUNAT.
+ */
+export function tamanoDeQr(compacto) {
+  return compacto ? 4 : 6
+}

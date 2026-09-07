@@ -1,5 +1,5 @@
 import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
-import { lineasDeFechaYHora, mostrarTitulosDeSeccion, lineasDeItem } from '@/utils/ticketCompacto';
+import { lineasDeFechaYHora, mostrarTitulosDeSeccion, lineasDeItem, usarFuentePequena, anchoDeLinea, tamanoDeQr } from '@/utils/ticketCompacto';
 import { getRealPayments } from '@/utils/receivables'
 import { getNotaVentaLegend, wrapLegend } from '@/utils/documentLegends'
 import { documentLabel } from '@/utils/documentType'
@@ -893,6 +893,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
   // 'small' = normal (no cambia nada). 'medium'/'large' escalan SOLO el alto, así las
   // columnas de precios se mantienen alineadas. El builder.init() lo aplica y lo consume.
   EscPosBuilder.baseSizeScale = ticketFontSize === 'large' ? 2 : ticketFontSize === 'medium' ? 1 : 0;
+  // La fuente chica se activa dentro de printInvoiceTicket, ya con la config leida.
 
   // Verificar si hay impresora de documentos configurada (prioridad sobre impresora principal)
   if (isNative) {
@@ -942,12 +943,17 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
     const tipoComprobante = isNotaVenta ? 'NOTA DE VENTA' : (isInvoice ? 'FACTURA' : 'BOLETA DE VENTA');
     const tipoComprobanteCompleto = isNotaVenta ? 'NOTA DE VENTA' : (isInvoice ? 'FACTURA ELECTRONICA' : 'BOLETA DE VENTA ELECTRONICA');
 
-    // Items text - columnas fijas para alinear precios correctamente
-    const lineWidth = format.charsPerLine; // Usar ancho real configurado (58mm: 24, 80mm: 42)
     // "Impresion compacta (ahorro de papel)" de Configuracion > Impresion. Este
     // es el servicio que usa ANDROID; blePrinterService es el respaldo de iOS.
     let compacto = false;
     try { compacto = JSON.parse(localStorage.getItem('factuya_printerConfig') || '{}').compactPrint === true; } catch { /* ignore */ }
+    // Con la fuente chica (Font B) entran mas caracteres por linea, asi que el
+    // ancho de referencia sube y los separadores se generan con ese ancho.
+    const anchoTicket = anchoDeLinea(format.charsPerLine, compacto);
+    const separadorTicket = '-'.repeat(anchoTicket);
+
+    // Items text - columnas fijas para alinear precios correctamente
+    const lineWidth = anchoTicket; // 58mm: 24 (32 con fuente chica), 80mm: 42 (56)
     const cantWidth = 6; // Columna cantidad
     const descWidth = paperWidth === 80 ? 20 : 12; // Columna descripción ajustada
     const priceWidth = paperWidth === 80 ? 12 : 10; // Columna precio ajustada
@@ -1153,6 +1159,10 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
 
     // Construir comando en cadena
     let printer = CapacitorThermalPrinter.begin();
+    // Font B: la fuente chica del ESC/POS (9 dots de ancho contra 12). El
+    // escalado normal ya estaba en su minimo, asi que esta es la unica forma
+    // de achicar mas la letra, y de paso entran mas caracteres por linea.
+    if (usarFuentePequena(compacto)) printer = printer.font('B');
 
     printer = printer.align('center');
 
@@ -1249,7 +1259,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
       .text(`${invoice.series || 'B001'}-${String(invoice.correlativeNumber || invoice.number || '000').padStart(8, '0')}\n`)
       .clearFormatting();
 
-    printer = addSeparator(printer, format.separator, paperWidth, 'center');
+    printer = addSeparator(printer, separadorTicket, paperWidth, 'center');
 
     // ========== Fecha y Hora (ticket-section) ==========
     // Formatear fecha y hora de manera compatible con impresoras térmicas
@@ -1381,7 +1391,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
         printer = printer.text(convertSpanishText(`T. Propiedad: ${String(invoice.customer.propertyCard).toUpperCase()}\n`));
       }
 
-      printer = addSeparator(printer, format.separator, paperWidth, 'left');
+      printer = addSeparator(printer, separadorTicket, paperWidth, 'left');
     }
 
     // ========== Detalle de Productos/Servicios (ticket-section) ==========
@@ -1391,7 +1401,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
     }
     printer = printer.text(itemsText);
 
-    printer = addSeparator(printer, format.separator, paperWidth, 'left')
+    printer = addSeparator(printer, separadorTicket, paperWidth, 'left')
       // Totales - alineados a la derecha
       .align('right');
 
@@ -1453,7 +1463,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
 
     // ========== Forma de Pago (ticket-section) ==========
     if (invoice.paymentMethod || invoice.payments) {
-      printer = addSeparator(printer, format.separator, paperWidth, 'left');
+      printer = addSeparator(printer, separadorTicket, paperWidth, 'left');
 
       printer = printer
         .align('left')
@@ -1506,7 +1516,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
     // ========== Estado de Pago para Notas de Venta (parcial/crédito) ==========
     console.log('🧾 [WiFi] Datos de pago parcial:', { paymentStatus: invoice.paymentStatus, amountPaid: invoice.amountPaid, balance: invoice.balance, paymentHistoryLength: invoice.paymentHistory?.length });
     if (invoice.paymentStatus === 'partial' || (invoice.paymentHistory && invoice.paymentHistory.length > 0)) {
-      printer = addSeparator(printer, format.separator, paperWidth, 'left');
+      printer = addSeparator(printer, separadorTicket, paperWidth, 'left');
 
       const statusTitle = invoice.paymentStatus === 'partial' ? 'ESTADO DE PAGO' : 'DETALLE DE PAGOS';
       printer = printer
@@ -1536,7 +1546,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
 
     // ========== Condiciones de Crédito (facturas, boletas y notas de venta al crédito) ==========
     if ((invoice.documentType === 'factura' || invoice.documentType === 'boleta' || invoice.documentType === 'nota_venta') && invoice.paymentType === 'credito') {
-      printer = addSeparator(printer, format.separator, paperWidth, 'left');
+      printer = addSeparator(printer, separadorTicket, paperWidth, 'left');
 
       printer = printer
         .align('left')
@@ -1572,7 +1582,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
     }
 
     // ========== FOOTER (ticket-footer) ==========
-    printer = addSeparator(printer, format.separator, paperWidth, 'center');
+    printer = addSeparator(printer, separadorTicket, paperWidth, 'center');
 
     printer = printer.align('center');
 
@@ -1607,7 +1617,7 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
       if (qrData) {
         printer = printer
           .align('center')
-          .qr(qrData)
+          .raw(Array.from(new EscPosBuilder().qr(qrData, tamanoDeQr(compacto)).build()))
           .text('Escanea para validar\n');
       }
 
@@ -1620,13 +1630,13 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
 
     // Observaciones generales (si existen)
     if (invoice.notes && invoice.notes.trim()) {
-      printer = addSeparator(printer, format.separator, paperWidth, 'left');
+      printer = addSeparator(printer, separadorTicket, paperWidth, 'left');
       printer = printer
         .bold()
         .text('OBSERVACIONES:\n')
         .clearFormatting()
         .text(convertSpanishText(invoice.notes + '\n'));
-      printer = addSeparator(printer, format.separator, paperWidth, 'left');
+      printer = addSeparator(printer, separadorTicket, paperWidth, 'left');
     }
 
     // Mensaje de agradecimiento
@@ -1776,7 +1786,7 @@ function renderKitchenLinesEscPos(builder, lines, format, escala = 0) {
       // El separador va SIEMPRE en tamaño normal: agrandado ocupaba dos
       // renglones y separaba menos de lo que estorbaba. Así queda la línea
       // fina de siempre entre bloques de letra grande.
-      builder.alignLeft().bold(false).charSize(0).text(format.separator).newLine();
+      builder.alignLeft().bold(false).charSize(0).text(separadorTicket).newLine();
       continue;
     }
     if (ln.blank) { builder.newLine(); continue; }
@@ -1805,7 +1815,7 @@ function renderKitchenLinesBT(printer, lines, format, escala = 0) {
 
   for (const ln of lines) {
     if (ln.sep) {
-      printer = printer.clearFormatting().align('left').text(format.separator + '\n');
+      printer = printer.clearFormatting().align('left').text(separadorTicket + '\n');
       continue;
     }
     if (ln.blank) { printer = printer.text('\n'); continue; }
@@ -2603,6 +2613,18 @@ class EscPosBuilder {
   // Cortar papel
   cut(partial = false) {
     this.commands.push(EscPosBuilder.GS, 0x56, partial ? 0x01 : 0x00);
+    return this;
+  }
+
+  /**
+   * Elegir la fuente: A (la normal, 12 dots de ancho) o B (9 dots).
+   *
+   * `GS !` solo ESCALA la fuente activa, asi que con el tamano en "pequeno" ya
+   * no se puede achicar mas por ahi. Font B es una fuente distinta, mas chica,
+   * y por eso entran mas caracteres por linea. Comando: ESC M n.
+   */
+  font(b = false) {
+    this.commands.push(EscPosBuilder.ESC, 0x4D, b ? 0x01 : 0x00);
     return this;
   }
 
