@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react'
 import { isPharmaLikeMode } from '@/utils/businessModes'
+import { estadoInicialSunat } from '@/utils/estadoInicialSunat'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import {
@@ -7244,8 +7245,12 @@ ${textoDeErrores(revision.errores)}`, 9000)
       // Defensa en profundidad: aunque el cron ya verifica autoSendToSunat,
       // marcar diferente garantiza que NUNCA se procese automáticamente.
       let shouldAutoSendToSunat = false
+      // El mismo doc sirve para saber si el negocio TIENE con qué emitir: sin
+      // método configurado no hay a dónde mandar nada (ver estadoInicialSunat).
+      let negocioParaSunat = companySettings
       try {
         const freshSettings = await getCompanySettings(businessId)
+        if (freshSettings?.success === true && freshSettings.data) negocioParaSunat = freshSettings.data
         shouldAutoSendToSunat = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
       } catch (settingsErr) {
         console.warn('No se pudo releer companySettings, usando valor en memoria:', settingsErr)
@@ -7443,9 +7448,11 @@ ${textoDeErrores(revision.errores)}`, 9000)
         // Estado de SUNAT - solo facturas y boletas pueden enviarse a SUNAT.
         // 'not_sent' cuando autoSendToSunat=false → invisible para crones de retry,
         // el cliente lo envía manualmente desde InvoiceList. 'pending' = candidato a retry.
-        sunatStatus: (documentType === 'factura' || documentType === 'boleta')
-          ? (shouldAutoSendToSunat ? 'pending' : 'not_sent')
-          : 'not_applicable',
+        sunatStatus: estadoInicialSunat({
+          documentType,
+          autoSend: shouldAutoSendToSunat,
+          negocio: negocioParaSunat,
+        }),
         sunatResponse: null,
         sunatSentAt: null,
         // Fecha de emisión

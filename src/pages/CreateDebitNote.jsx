@@ -5,6 +5,7 @@ import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { ArrowLeft, Loader2, FileText, AlertCircle, Send } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useLocationAccess } from '@/utils/locationAccess'
+import { estadoInicialSunat } from '@/utils/estadoInicialSunat'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -169,8 +170,11 @@ export default function CreateDebitNote() {
 
       // Lectura FRESH de autoSendToSunat para decidir sunatStatus inicial.
       let shouldAutoSendToSunat = false
+      // El mismo doc dice si el negocio TIENE con que emitir (estadoInicialSunat).
+      let negocioParaSunat = companySettings
       try {
         const freshSettings = await getCompanySettings(getBusinessId())
+        if (freshSettings?.success === true && freshSettings.data) negocioParaSunat = freshSettings.data
         shouldAutoSendToSunat = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
       } catch (settingsErr) {
         console.warn('No se pudo releer companySettings:', settingsErr)
@@ -219,7 +223,11 @@ export default function CreateDebitNote() {
 
         // Estado
         status: 'pending',
-        sunatStatus: shouldAutoSendToSunat ? 'pending' : 'not_sent',
+        sunatStatus: estadoInicialSunat({
+          documentType: 'nota_debito',
+          autoSend: shouldAutoSendToSunat,
+          negocio: negocioParaSunat,
+        }),
 
         // Metadata
         userId: user.uid,

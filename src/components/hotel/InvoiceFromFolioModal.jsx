@@ -10,6 +10,7 @@ import { formatCurrency } from '@/lib/utils'
 import { getCompanySettings, getNextDocumentNumber, createInvoice, sendInvoiceToSunat } from '@/services/firestoreService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import { calculateMixedInvoiceAmounts } from '@/utils/peruUtils'
+import { estadoInicialSunat } from '@/utils/estadoInicialSunat'
 
 const PAYMENT_METHODS = [
   { value: 'Efectivo', label: 'Efectivo' },
@@ -179,8 +180,11 @@ export default function InvoiceFromFolioModal({ isOpen, onClose, reservation, ch
 
       // Lectura FRESH de autoSendToSunat para decidir sunatStatus inicial.
       let shouldAutoSendToSunat = false
+      // El mismo doc dice si el negocio TIENE con que emitir (estadoInicialSunat).
+      let negocioParaSunat = companySettings
       try {
         const freshSettings = await getCompanySettings(businessId)
+        if (freshSettings?.success === true && freshSettings.data) negocioParaSunat = freshSettings.data
         shouldAutoSendToSunat = freshSettings?.success === true && freshSettings.data?.autoSendToSunat === true
       } catch (settingsErr) {
         console.warn('No se pudo releer companySettings:', settingsErr)
@@ -237,9 +241,11 @@ export default function InvoiceFromFolioModal({ isOpen, onClose, reservation, ch
         paymentMethod,
         status: 'paid',
         notes: `Reserva: ${reservation?.guestName || ''} - Hab. ${reservation?.roomNumber || ''}`,
-        sunatStatus: (documentType === 'factura' || documentType === 'boleta')
-          ? (shouldAutoSendToSunat ? 'pending' : 'not_sent')
-          : 'not_applicable',
+          sunatStatus: estadoInicialSunat({
+            documentType,
+            autoSend: shouldAutoSendToSunat,
+            negocio: negocioParaSunat,
+          }),
         sunatResponse: null,
         sunatSentAt: null,
         emissionDate,
