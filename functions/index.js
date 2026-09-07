@@ -13,6 +13,7 @@ import { emitirComprobante, emitirNotaCredito, emitirNotaDebito, emitirGuiaRemis
 import { generateVoidedDocumentsXML, generateVoidedDocumentId, getDocumentTypeCode as getVoidDocTypeCode, canVoidDocument } from './src/utils/voidedDocumentsXmlGenerator.js'
 import { generateSummaryDocumentsXML, generateSummaryDocumentId, canVoidBoleta, CONDITION_CODES, getIdentityTypeCode } from './src/utils/summaryDocumentsXmlGenerator.js'
 import { signXML } from './src/utils/xmlSigner.js'
+import { esAdminSegunDoc } from './src/utils/admin.js'
 import { sendSummary, getStatus, getStatusCdr } from './src/utils/sunatClient.js'
 import { voidBoletaViaQPse, voidInvoiceViaQPse, obtenerToken, consultarEstado, leerEstadoQPse } from './src/services/qpseService.js'
 import { tocaResetear } from './src/utils/cicloMensual.js'
@@ -244,8 +245,7 @@ async function verifyAdminFromRequest(req) {
   const idToken = authHeader.split('Bearer ')[1]
   try {
     const decoded = await auth.verifyIdToken(idToken)
-    const adminDoc = await db.collection('admins').doc(decoded.uid).get()
-    return adminDoc.exists ? decoded.uid : null
+    return (await esAdministrador(decoded.uid)) ? decoded.uid : null
   } catch (e) {
     return null
   }
@@ -626,6 +626,20 @@ function codigoSunat(valor) {
 }
 
 /**
+ * ¿Este uid es administrador de Cobrify? Único punto donde se pregunta.
+ * El criterio (y por qué es ese) vive en `src/utils/admin.js`.
+ */
+async function esAdministrador(uid) {
+  if (!uid) return false
+  try {
+    return esAdminSegunDoc(await db.collection('admins').doc(uid).get())
+  } catch (err) {
+    console.error('Error al verificar si es administrador:', err.message)
+    return false
+  }
+}
+
+/**
  * Devuelve el comprobante a su estado anterior cuando el envío se corta ANTES
  * de llegar a SUNAT.
  *
@@ -743,13 +757,7 @@ export const sendInvoiceToSunat = onRequest(
       // Verificar autorización: debe ser el owner, un usuario secundario del owner, O un admin
       if (authenticatedUserId !== userId) {
         // Primero verificar si es ADMIN (tiene documento en colección 'admins')
-        let isAdmin = false
-        try {
-          const adminDoc = await db.collection('admins').doc(authenticatedUserId).get()
-          isAdmin = adminDoc.exists && adminDoc.data()?.isAdmin === true
-        } catch (adminError) {
-          console.error('Error al verificar admin:', adminError)
-        }
+        const isAdmin = await esAdministrador(authenticatedUserId)
 
         if (isAdmin) {
           console.log(`✅ Admin autorizado: ${authenticatedUserId} operando en nombre de: ${userId}`)
@@ -8698,8 +8706,7 @@ export const calculateGlobalBillingStats = onCall(
     }
 
     // Verificar que es un admin (buscar en colección 'admins')
-    const adminDoc = await db.collection('admins').doc(request.auth.uid).get()
-    if (!adminDoc.exists) {
+    if (!(await esAdministrador(request.auth.uid))) {
       throw new HttpsError('permission-denied', 'Solo los administradores pueden ejecutar esta función')
     }
 
@@ -8873,8 +8880,7 @@ export const calculateInvestorReport = onCall(
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Debe estar autenticado')
     }
-    const adminDoc = await db.collection('admins').doc(request.auth.uid).get()
-    if (!adminDoc.exists) {
+    if (!(await esAdministrador(request.auth.uid))) {
       throw new HttpsError('permission-denied', 'Solo administradores')
     }
 
@@ -9925,8 +9931,7 @@ export const migrateProductsIgvRate = onRequest(
       }
       const idToken = authHeader.split('Bearer ')[1]
       const decodedToken = await auth.verifyIdToken(idToken)
-      const adminDoc = await db.collection('admins').doc(decodedToken.uid).get()
-      if (!adminDoc.exists || !adminDoc.data()?.isAdmin) {
+      if (!(await esAdministrador(decodedToken.uid))) {
         res.status(403).json({ error: 'Solo administradores' }); return
       }
 
@@ -10005,8 +10010,7 @@ export const sendBulkPushNotifications = onCall(
     }
 
     // Verificar que es admin
-    const adminDoc = await db.collection('admins').doc(request.auth.uid).get()
-    if (!adminDoc.exists) {
+    if (!(await esAdministrador(request.auth.uid))) {
       throw new HttpsError('permission-denied', 'Solo los administradores pueden ejecutar esta función')
     }
 
@@ -10240,8 +10244,7 @@ export const previewCampaignAudience = onCall(
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Debe estar autenticado')
     }
-    const adminDoc = await db.collection('admins').doc(request.auth.uid).get()
-    if (!adminDoc.exists) {
+    if (!(await esAdministrador(request.auth.uid))) {
       throw new HttpsError('permission-denied', 'Solo los administradores')
     }
 
@@ -10526,8 +10529,7 @@ export const migrateCloudinaryImages = onCall(
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Debe estar autenticado')
     }
-    const adminDoc = await db.collection('admins').doc(request.auth.uid).get()
-    if (!adminDoc.exists) {
+    if (!(await esAdministrador(request.auth.uid))) {
       throw new HttpsError('permission-denied', 'Solo administradores')
     }
 
@@ -10879,8 +10881,7 @@ export const migrateBusinessImagesToR2 = onCall(
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Debe estar autenticado')
     }
-    const adminDoc = await db.collection('admins').doc(request.auth.uid).get()
-    if (!adminDoc.exists) {
+    if (!(await esAdministrador(request.auth.uid))) {
       throw new HttpsError('permission-denied', 'Solo administradores')
     }
 
@@ -11074,8 +11075,7 @@ export const cleanupOrphanedCloudinaryAssets = onCall(
   },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Debe estar autenticado')
-    const adminDoc = await db.collection('admins').doc(request.auth.uid).get()
-    if (!adminDoc.exists) throw new HttpsError('permission-denied', 'Solo administradores')
+    if (!(await esAdministrador(request.auth.uid))) throw new HttpsError('permission-denied', 'Solo administradores')
 
     const dryRun = request.data?.dryRun !== false // default true por seguridad
     const startMs = Date.now()
@@ -12028,7 +12028,7 @@ export const testSireConnection = onRequest(
     try {
       const decoded = await auth.verifyIdToken(authHeader.split('Bearer ')[1])
       callerUid = decoded.uid
-      isAdminCaller = (await db.collection('admins').doc(callerUid).get()).exists
+      isAdminCaller = await esAdministrador(callerUid)
     } catch (e) { res.status(401).json({ error: 'token inválido' }); return }
     const ruc = String((req.query.ruc || (req.body && req.body.ruc)) || '')
     const codLibro = String((req.query.codLibro || (req.body && req.body.codLibro)) || '080000') // 080000 = RCE
@@ -14110,7 +14110,7 @@ export const sendWhatsappMessage = onRequest(
       // ofrezca algo que el servidor va a rechazar.
       const cuentaSnap = await db.collection('whatsappAccounts').doc(conv.phoneNumberId).get()
       const esDueno = cuentaSnap.data()?.ownerId === decoded.uid
-      const esAdmin = (await db.collection('admins').doc(decoded.uid).get()).exists
+      const esAdmin = await esAdministrador(decoded.uid)
       if (!esDueno && !esAdmin) {
         res.status(403).json({ error: 'No tienes acceso a esta conversacion' }); return
       }
@@ -14296,7 +14296,7 @@ export const sendWhatsappReactionFn = onRequest(
 
       const cuentaSnap = await db.collection('whatsappAccounts').doc(conv.phoneNumberId).get()
       const esDueno = cuentaSnap.data()?.ownerId === decoded.uid
-      const esAdmin = (await db.collection('admins').doc(decoded.uid).get()).exists
+      const esAdmin = await esAdministrador(decoded.uid)
       if (!esDueno && !esAdmin) { res.status(403).json({ error: 'Sin acceso' }); return }
 
       await sendWhatsappReaction({
@@ -14344,7 +14344,7 @@ export const markWhatsappRead = onRequest(
 
       const cuentaSnap = await db.collection('whatsappAccounts').doc(conv.phoneNumberId).get()
       const esDueno = cuentaSnap.data()?.ownerId === decoded.uid
-      const esAdmin = (await db.collection('admins').doc(decoded.uid).get()).exists
+      const esAdmin = await esAdministrador(decoded.uid)
       if (!esDueno && !esAdmin) { res.status(403).json({ error: 'Sin acceso' }); return }
 
       await markWhatsappMessageRead({
@@ -14506,7 +14506,7 @@ export const sendWhatsappMediaMessage = onRequest(
 
       const cuentaSnap = await db.collection('whatsappAccounts').doc(conv.phoneNumberId).get()
       const esDueno = cuentaSnap.data()?.ownerId === decoded.uid
-      const esAdmin = (await db.collection('admins').doc(decoded.uid).get()).exists
+      const esAdmin = await esAdministrador(decoded.uid)
       if (!esDueno && !esAdmin) {
         res.status(403).json({ error: 'No tienes acceso a esta conversacion' }); return
       }
@@ -14604,7 +14604,7 @@ async function autorizarAdminWa(req, res) {
     res.status(401).json({ error: 'No autorizado' }); return null
   }
   const decoded = await auth.verifyIdToken(authHeader.split('Bearer ')[1])
-  const esAdmin = (await db.collection('admins').doc(decoded.uid).get()).exists
+  const esAdmin = await esAdministrador(decoded.uid)
   if (!esAdmin) { res.status(403).json({ error: 'Solo administradores' }); return null }
   return decoded.uid
 }
