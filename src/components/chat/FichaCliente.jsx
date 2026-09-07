@@ -11,11 +11,13 @@ import {
   Lock,
   Search,
   ShieldCheck,
+  UserPlus,
   X,
 } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { Modal, Campo, Entrada, Selector, Boton, ListaDatos, Dato, Aviso } from '@/components/admin/ui'
+import EnviarAltaModal from './EnviarAltaModal'
 import {
   obtenerFichaCliente,
   cuentasDeLaConversacion,
@@ -56,7 +58,7 @@ const ETIQUETA_EMISION = {
  * renovar ahí mismo. Si no, ofrece vincularla a mano — el que escribe desde
  * otro número sigue siendo cliente aunque el cruce automático no lo vea.
  */
-export default function FichaCliente({ conversacion, onCerrar, onAbrirConversacion }) {
+export default function FichaCliente({ conversacion, onCerrar, onAbrirConversacion, onPonerEnElCompositor }) {
   const toast = useToast()
   const { isAdmin } = useAuth()
   const [ficha, setFicha] = useState(null)
@@ -67,6 +69,7 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
   const [reactivarAbierto, setReactivarAbierto] = useState(false)
   const [comprobantesAbierto, setComprobantesAbierto] = useState(false)
   const [emitirAbierto, setEmitirAbierto] = useState(false)
+  const [altaAbierta, setAltaAbierta] = useState(false)
   const [verTodosLosPagos, setVerTodosLosPagos] = useState(false)
   const [trabajando, setTrabajando] = useState(false)
 
@@ -283,12 +286,22 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
               )}
             </div>
 
-            {/* Un lead que ya pagó (una cuenta nueva, por ejemplo) también
-                necesita su comprobante, y todavía no hay a quién vincularlo:
-                el RUC se escribe a mano y se completa desde SUNAT. */}
+            {/* Lo que se hace con un lead que acaba de pagar: mandarle el
+                formulario para que se cree la cuenta él mismo, y emitirle su
+                comprobante (el RUC se escribe a mano y se completa desde SUNAT,
+                porque todavía no hay negocio al que vincularlo). */}
+            {isAdmin && (
+              <button
+                onClick={() => setAltaAbierta(true)}
+                className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2 text-[12px] font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 transition-colors"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                Enviar formulario de alta
+              </button>
+            )}
             <button
               onClick={() => setEmitirAbierto(true)}
-              className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2 text-[12px] font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-2 text-[12px] font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
             >
               <FileText className="w-3.5 h-3.5" />
               Emitir comprobante
@@ -641,6 +654,14 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
           ficha={ficha}
           onCerrar={() => setEmitirAbierto(false)}
           onEmitido={() => setEmitirAbierto(false)}
+        />
+      )}
+
+      {altaAbierta && (
+        <EnviarAltaModal
+          conversacion={conversacion}
+          onClose={() => setAltaAbierta(false)}
+          onPonerEnElCompositor={onPonerEnElCompositor}
         />
       )}
     </aside>

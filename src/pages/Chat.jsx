@@ -2188,6 +2188,10 @@ export default function Chat() {
               conversacion={activa}
               onCerrar={() => setFichaVisible(false)}
               onAbrirConversacion={(id) => setActivaId(id)}
+              // El mensaje del alta cae en el cuadro de escribir en vez de
+              // salir solo: a un cliente que acaba de pagar no conviene
+              // mandarle nada a ciegas.
+              onPonerEnElCompositor={(t) => { setTexto(t); setFichaVisible(false) }}
             />
           </div>
         </div>

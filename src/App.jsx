@@ -7,6 +7,7 @@ import AppLifecycleManager from './components/AppLifecycleManager'
 import MainLayout from './layouts/MainLayout'
 import LandingRouter from './components/LandingRouter'
 import { esDominioDelChat } from '@/utils/dominioChat'
+import { esDominioDeRegistro } from '@/utils/dominioRegistro'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
 // ============================================================
@@ -68,6 +69,7 @@ const ResellerSettings = lazy(() => import('./pages/reseller/ResellerSettings'))
 const Users = lazy(() => import('./pages/Users'))
 const GetMyUID = lazy(() => import('./pages/GetMyUID'))
 const EntrarComo = lazy(() => import('./pages/EntrarComo'))
+const Activar = lazy(() => import('./pages/Activar'))
 const NotificationTest = lazy(() => import('./pages/NotificationTest'))
 const Quotations = lazy(() => import('./pages/Quotations'))
 const BulkEmission = lazy(() => import('./pages/BulkEmission'))
@@ -309,6 +311,13 @@ function App() {
                     : <LandingRouter />
               }
             />
+
+            {/* Activar una cuenta nueva. En registro.cobrifyperu.com el código
+                va pelado en la raíz —es el enlace que se manda por WhatsApp a
+                quien acaba de pagar—; la ruta larga vale en cualquier dominio,
+                así que el enlace no depende de que el subdominio esté apuntado. */}
+            <Route path="/activar/:codigo" element={<Activar />} />
+            {esDominioDeRegistro() && <Route path="/:codigo" element={<Activar />} />}
 
             {/* Rutas públicas de autenticación */}
             <Route path="/login" element={<Login />} />

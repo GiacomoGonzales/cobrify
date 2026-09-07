@@ -114,6 +114,19 @@ service cloud.firestore {
     // entramos a su casa, tiene derecho a verlo. Eso es lo que separa una
     // herramienta de soporte de una puerta trasera.
     // ============================================
+    // ============================================
+    // ALTAS PENDIENTES (el enlace que se manda al que acaba de pagar)
+    // El codigo del enlace ES el secreto, asi que el documento NO se lee desde
+    // el navegador ni siquiera teniendolo: la pantalla de activacion pasa por
+    // `verAltaPendiente`, que devuelve lo minimo (con que nombre saludar y que
+    // plan le vendieron) y nunca el telefono ni quien lo mando. Escribe solo
+    // el servidor. El admin las lee para la lista de enlaces sin usar.
+    // ============================================
+    match /altasPendientes/{codigo} {
+      allow read: if isAdmin();
+      allow write: if false; // lo escribe el servidor
+    }
+
     match /accesosSoporte/{accesoId} {
       allow read: if isAdmin() || (isAuthenticated() && resource.data.targetUid == request.auth.uid);
       allow write: if false; // lo escribe el servidor

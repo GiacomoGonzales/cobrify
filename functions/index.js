@@ -50,6 +50,7 @@ import {
 import { resolveAudience } from './src/services/audienceService.js'
 import { siguienteCodigoCliente, sugerirRubro } from './src/services/clientesService.js'
 import { sembrarCuenta } from './src/services/semillaService.js'
+import { nuevoCodigoDeAlta, ESTADOS_ALTA, altaParaElFormulario, mensajeDeAlta } from './src/services/altasService.js'
 
 // Initialize Firebase Admin
 initializeApp()
@@ -15230,6 +15231,240 @@ export const sembrarCuentaNueva = onRequest(
     } catch (error) {
       console.error('Error al sembrar la cuenta:', error)
       res.status(500).json({ success: false, error: 'No se pudo preparar la cuenta' })
+    }
+  }
+)
+
+// =====================================================================
+// ALTA DEL CLIENTE NUEVO (el enlace que se manda al que acaba de pagar)
+// =====================================================================
+
+/**
+ * Crea el alta y devuelve el enlace. Solo un admin.
+ *
+ * El enlace ES la prueba de que pagó: por eso no hay una página de registro
+ * abierta. El plan, los meses y el precio se guardan AQUÍ, congelados en el
+ * momento de la venta, y no se vuelven a consultar de ningún catálogo: lo que
+ * se cobró es lo que se cobró.
+ */
+export const crearAltaPendiente = onRequest(
+  { region: 'us-central1', timeoutSeconds: 30, memory: '256MiB', invoker: 'public', cors: true },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ success: false, error: 'Method not allowed' }); return }
+
+    try {
+      const cabecera = req.headers.authorization
+      if (!cabecera || !cabecera.startsWith('Bearer ')) {
+        res.status(401).json({ success: false, error: 'No autorizado' }); return
+      }
+      const admin = await auth.verifyIdToken(cabecera.split('Bearer ')[1])
+      const fichaAdmin = await db.collection('admins').doc(admin.uid).get()
+      if (fichaAdmin.data()?.isAdmin !== true) {
+        res.status(403).json({ success: false, error: 'Solo administradores' }); return
+      }
+
+      const b = req.body || {}
+      if (!b.plan || !b.meses) {
+        res.status(400).json({ success: false, error: 'Falta el plan que le vendiste' }); return
+      }
+
+      // Un código libre. Chocar es casi imposible, pero comprobarlo cuesta una
+      // lectura y evita pisar un alta de otro cliente.
+      let codigo = null
+      for (let intento = 0; intento < 5 && !codigo; intento++) {
+        const tentativo = nuevoCodigoDeAlta()
+        const existe = await db.collection('altasPendientes').doc(tentativo).get()
+        if (!existe.exists) codigo = tentativo
+      }
+      if (!codigo) { res.status(500).json({ success: false, error: 'No se pudo generar el código' }); return }
+
+      await db.collection('altasPendientes').doc(codigo).set({
+        conversationId: b.conversationId || null,
+        waId: b.waId || null,
+        nombre: b.nombre || '',
+        plan: b.plan,
+        planNombre: b.planNombre || '',
+        meses: Number(b.meses),
+        precio: b.precio != null ? Number(b.precio) : null,
+        limites: b.limites || null,
+        adminUid: admin.uid,
+        adminEmail: admin.email || null,
+        estado: ESTADOS_ALTA.ENVIADA,
+        abiertaEn: null,
+        usadaEn: null,
+        uid: null,
+        createdAt: FieldValue.serverTimestamp(),
+      })
+
+      const enlace = `${b.base || 'https://registro.cobrifyperu.com'}/${codigo}`
+      res.status(200).json({
+        success: true,
+        codigo,
+        enlace,
+        mensaje: mensajeDeAlta({ nombre: b.nombre, planNombre: b.planNombre, enlace }),
+      })
+    } catch (error) {
+      console.error('Error al crear el alta:', error)
+      res.status(500).json({ success: false, error: 'No se pudo crear el enlace' })
+    }
+  }
+)
+
+/**
+ * Lo que el formulario necesita saber antes de que nadie se identifique: con
+ * qué nombre saludar y qué plan le vendieron. Público a propósito —el código
+ * es el secreto—, pero devuelve lo mínimo: ni el teléfono completo ni quién lo
+ * mandó salen de aquí.
+ */
+export const verAltaPendiente = onRequest(
+  { region: 'us-central1', timeoutSeconds: 30, memory: '256MiB', invoker: 'public', cors: true },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    try {
+      const codigo = String(req.query?.codigo || '').trim()
+      if (!codigo) { res.status(400).json({ success: false, error: 'Falta el código' }); return }
+
+      const ref = db.collection('altasPendientes').doc(codigo)
+      const alta = await ref.get()
+      if (!alta.exists) {
+        res.status(404).json({ success: false, error: 'Este enlace no existe o ya venció' }); return
+      }
+      const datos = alta.data()
+      if (datos.estado === ESTADOS_ALTA.USADA) {
+        res.status(409).json({ success: false, error: 'Esta cuenta ya fue activada', yaUsada: true }); return
+      }
+
+      // Saber que lo abrió sirve para la lista de "enlaces sin usar": no es lo
+      // mismo alguien que ni lo tocó que alguien que se atascó en el camino.
+      if (datos.estado === ESTADOS_ALTA.ENVIADA) {
+        ref.update({ estado: ESTADOS_ALTA.ABIERTA, abiertaEn: FieldValue.serverTimestamp() }).catch(() => {})
+      }
+
+      res.status(200).json({ success: true, alta: altaParaElFormulario(datos) })
+    } catch (error) {
+      console.error('Error al leer el alta:', error)
+      res.status(500).json({ success: false, error: 'No se pudo leer el enlace' })
+    }
+  }
+)
+
+/**
+ * El cliente terminó el formulario: se crea su cuenta de acceso, se siembra y
+ * se le activa el plan que pagó.
+ *
+ * Todo aquí y no en el navegador porque el código tiene que gastarse UNA vez:
+ * si el usuario de Auth lo creara la pantalla, dos toques seguidos crearían
+ * dos cuentas. Devuelve un pase para entrar de una, sin pedirle que escriba
+ * otra vez lo que acaba de escribir.
+ */
+export const completarAlta = onRequest(
+  { region: 'us-central1', timeoutSeconds: 60, memory: '256MiB', invoker: 'public', cors: true },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ success: false, error: 'Method not allowed' }); return }
+
+    try {
+      const { codigo, email, password, datos = {} } = req.body || {}
+      if (!codigo || !email || !password) {
+        res.status(400).json({ success: false, error: 'Faltan datos' }); return
+      }
+      if (String(password).length < 8) {
+        res.status(400).json({ success: false, error: 'La contraseña necesita al menos 8 caracteres' }); return
+      }
+      if (!datos.businessName || !datos.rubro) {
+        res.status(400).json({ success: false, error: 'Falta el nombre del negocio o el rubro' }); return
+      }
+
+      const ref = db.collection('altasPendientes').doc(String(codigo))
+
+      // El código se gasta ANTES de crear nada. Si dos toques llegan juntos,
+      // solo uno pasa de aquí: la transacción falla para el segundo.
+      const alta = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref)
+        if (!snap.exists) throw new Error('SIN_ALTA')
+        const d = snap.data()
+        if (d.estado === ESTADOS_ALTA.USADA) throw new Error('YA_USADA')
+        tx.update(ref, { estado: ESTADOS_ALTA.USADA, usadaEn: FieldValue.serverTimestamp() })
+        return d
+      })
+
+      let usuario
+      try {
+        usuario = await auth.createUser({
+          email: String(email).trim().toLowerCase(),
+          password: String(password),
+          displayName: datos.displayName || datos.businessName,
+        })
+      } catch (e) {
+        // Si no se pudo crear el acceso, el código no se gastó: se devuelve.
+        await ref.update({ estado: ESTADOS_ALTA.ABIERTA, usadaEn: null }).catch(() => {})
+        const yaExiste = e?.code === 'auth/email-already-exists'
+        res.status(400).json({
+          success: false,
+          error: yaExiste
+            ? 'Ese correo ya tiene una cuenta en Cobrify. Entra con él o usa otro.'
+            : 'No se pudo crear el acceso. Revisa el correo.',
+        })
+        return
+      }
+
+      const uid = usuario.uid
+      await sembrarCuenta(db, { uid, email: usuario.email, datos, FieldValue })
+
+      // La suscripción con lo que se vendió, congelado en el alta. No se
+      // consulta ningún catálogo: lo que se cobró es lo que se cobró.
+      const desde = new Date()
+      const hasta = new Date()
+      hasta.setMonth(desde.getMonth() + Number(alta.meses || 1))
+      await db.collection('subscriptions').doc(uid).set({
+        userId: uid,
+        email: usuario.email,
+        businessName: datos.businessName,
+        plan: alta.plan,
+        status: 'active',
+        startDate: Timestamp.fromDate(desde),
+        currentPeriodStart: Timestamp.fromDate(desde),
+        currentPeriodEnd: Timestamp.fromDate(hasta),
+        trialEndsAt: null,
+        lastPaymentDate: alta.precio != null ? Timestamp.fromDate(desde) : null,
+        nextPaymentDate: Timestamp.fromDate(hasta),
+        paymentMethod: 'alta',
+        monthlyPrice: alta.precio != null && alta.meses ? Number(alta.precio) / Number(alta.meses) : 0,
+        renewalPrice: alta.precio != null ? Number(alta.precio) : null,
+        pricingFrozenAt: alta.precio != null ? FieldValue.serverTimestamp() : null,
+        accessBlocked: false,
+        blockReason: null,
+        blockedAt: null,
+        limits: alta.limites || {},
+        usage: { invoicesThisMonth: 0, totalCustomers: 0, totalProducts: 0 },
+        features: { productImages: false },
+        paymentHistory: alta.precio != null
+          ? [{ amount: Number(alta.precio), method: 'alta', date: Timestamp.fromDate(desde), plan: alta.plan, note: 'Pago inicial (alta)' }]
+          : [],
+        notes: '',
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+
+      await ref.update({ uid }).catch(() => {})
+      console.log(`🌱 Alta ${codigo} completada: ${usuario.email} (${uid})`)
+
+      // Un pase para entrar de una, sin volver a escribir la contraseña.
+      const pase = await auth.createCustomToken(uid)
+      res.status(200).json({ success: true, uid, email: usuario.email, pase, hasta: hasta.toISOString() })
+    } catch (error) {
+      if (error?.message === 'SIN_ALTA') {
+        res.status(404).json({ success: false, error: 'Este enlace no existe o ya venció' }); return
+      }
+      if (error?.message === 'YA_USADA') {
+        res.status(409).json({ success: false, error: 'Esta cuenta ya fue activada', yaUsada: true }); return
+      }
+      console.error('Error al completar el alta:', error)
+      res.status(500).json({ success: false, error: 'No se pudo crear la cuenta' })
     }
   }
 )
