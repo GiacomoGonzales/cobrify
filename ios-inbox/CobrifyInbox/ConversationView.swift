@@ -98,7 +98,7 @@ struct ConversationView: View {
                 // queda pegada al cuadro de escribir. Y tiene que ser al menos
                 // lo que mide la banda que desvanece, o el último mensaje se
                 // vería siempre medio apagado aun estando quieto.
-                .padding(.bottom, 22)
+                .padding(.bottom, 18)
                 .background(SondaDeScroll(espia: espia))
             }
             // El texto se DESVANECE al meterse detrás de la cabecera y del
@@ -776,7 +776,10 @@ struct ConversationView: View {
                     }
                 }
             }
-            .padding(.top, 14)
+            // Poco aire encima: ese padding es parte del compositor, o sea
+            // que es alto que se le quita a la conversación. Cuanto menos,
+            // más pegado llega el texto al cuadro de escribir.
+            .padding(.top, 8)
             // El compositor NO pinta nada detrás: el fondo del chat se ve
             // limpio de arriba abajo.
         }
@@ -790,7 +793,7 @@ struct ConversationView: View {
     /// pantalla. Y como se desvanece el CONTENIDO en vez de pintar un velo
     /// encima, funciona igual con fondo claro, oscuro o una foto.
     private var mascaraDeBordes: some View {
-        let banda: CGFloat = 20
+        let banda: CGFloat = 14
         return VStack(spacing: 0) {
             // Aparece justo al salir de la cabecera…
             LinearGradient(colors: [.black.opacity(0), .black],
