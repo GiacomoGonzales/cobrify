@@ -52,6 +52,7 @@ import { resolveAudience } from './src/services/audienceService.js'
 import { siguienteCodigoCliente, sugerirRubro } from './src/services/clientesService.js'
 import { sembrarCuenta } from './src/services/semillaService.js'
 import { nuevoCodigoDeAlta, ESTADOS_ALTA, altaParaElFormulario, mensajeDeAlta } from './src/services/altasService.js'
+import { crearSuscripcion, deshacerCuenta } from './src/services/suscripcionesService.js'
 
 // Initialize Firebase Admin
 initializeApp()
@@ -15285,6 +15286,114 @@ export const sembrarCuentaNueva = onRequest(
   }
 )
 
+/**
+ * Crea una cuenta ENTERA de una sola vez: el acceso, la semilla y el plan.
+ *
+ * Antes esto eran tres pasos desde el navegador, y el acceso se creaba primero
+ * porque de ahí sale el identificador que necesita todo lo demás. Si algo
+ * fallaba después, quedaba un acceso sin cuenta — invisible en el panel, que
+ * lista por suscripción — y aparecía meses más tarde. El 07-sep-2026 había
+ * diez cuentas así, la más vieja de febrero.
+ *
+ * Aquí no hay estado a medias: si la semilla o el plan fallan, se deshace el
+ * acceso que se acaba de crear y se responde que no se pudo. O la cuenta queda
+ * completa, o no queda nada.
+ */
+export const crearCuentaCompleta = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 120,
+    memory: '256MiB',
+    invoker: 'public',
+    cors: true,
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') {
+      res.status(405).json({ success: false, error: 'Method not allowed' }); return
+    }
+
+    let uid = null
+    try {
+      const cabecera = req.headers.authorization
+      if (!cabecera || !cabecera.startsWith('Bearer ')) {
+        res.status(401).json({ success: false, error: 'No autorizado' }); return
+      }
+      const quien = await auth.verifyIdToken(cabecera.split('Bearer ')[1])
+
+      const [esAdmin, fichaReseller] = await Promise.all([
+        esAdministrador(quien.uid),
+        db.collection('resellers').doc(quien.uid).get(),
+      ])
+      if (!esAdmin && !fichaReseller.exists) {
+        res.status(403).json({ success: false, error: 'No puedes crear cuentas' }); return
+      }
+
+      const { email, password, datos = {}, plan = {} } = req.body || {}
+      if (!email || !password) {
+        res.status(400).json({ success: false, error: 'Falta el correo o la contraseña' }); return
+      }
+      if (!datos.businessName || !datos.rubro) {
+        res.status(400).json({ success: false, error: 'Falta el nombre del negocio o el rubro' }); return
+      }
+
+      // 1) El acceso. Si esto falla no hay nada que deshacer.
+      try {
+        const usuario = await auth.createUser({
+          email: String(email).trim().toLowerCase(),
+          password: String(password),
+          displayName: datos.displayName || datos.businessName,
+        })
+        uid = usuario.uid
+      } catch (e) {
+        const yaExiste = e?.code === 'auth/email-already-exists'
+        res.status(400).json({
+          success: false,
+          error: yaExiste
+            ? 'Ese correo ya tiene una cuenta en Cobrify.'
+            : 'No se pudo crear el acceso. Revisa el correo y la contraseña.',
+        })
+        return
+      }
+
+      // 2) y 3) La cuenta y su plan. A partir de aquí, si algo falla se
+      //    deshace TODO: mejor pedirle que lo intente de nuevo que dejarle un
+      //    acceso que no sirve para nada.
+      await sembrarCuenta(db, { uid, email, datos, FieldValue })
+      await crearSuscripcion(db, {
+        uid,
+        email,
+        businessName: datos.businessName,
+        plan: plan.id || 'trial',
+        meses: plan.meses || 1,
+        precio: plan.precio != null ? Number(plan.precio) : null,
+        limites: plan.limites || null,
+        metodo: plan.metodo || 'manual',
+        FieldValue,
+        Timestamp,
+      })
+
+      console.log(`✅ Cuenta completa creada por ${quien.email}: ${email} (${uid})`)
+      res.status(200).json({ success: true, uid })
+    } catch (error) {
+      console.error('Error al crear la cuenta completa:', error)
+      if (uid) {
+        const limpieza = await deshacerCuenta(db, auth, uid)
+        res.status(500).json({
+          success: false,
+          error: limpieza.limpio
+            ? 'No se pudo crear la cuenta. No quedó nada a medias: vuelve a intentarlo.'
+            : 'No se pudo crear la cuenta y quedaron restos. Avisa a soporte con el correo.',
+          motivo: error?.message || String(error),
+        })
+        return
+      }
+      res.status(500).json({ success: false, error: 'No se pudo crear la cuenta', motivo: error?.message || String(error) })
+    }
+  }
+)
+
 // =====================================================================
 // ALTA DEL CLIENTE NUEVO (el enlace que se manda al que acaba de pagar)
 // =====================================================================
@@ -15465,39 +15574,19 @@ export const completarAlta = onRequest(
       const uid = usuario.uid
       await sembrarCuenta(db, { uid, email: usuario.email, datos, FieldValue })
 
-      // La suscripción con lo que se vendió, congelado en el alta. No se
-      // consulta ningún catálogo: lo que se cobró es lo que se cobró.
-      const desde = new Date()
-      const hasta = new Date()
-      hasta.setMonth(desde.getMonth() + Number(alta.meses || 1))
-      await db.collection('subscriptions').doc(uid).set({
-        userId: uid,
+      // La suscripción con lo que se vendió, congelado en el alta. Misma
+      // función que usa el alta del admin: una sola forma de nacer.
+      const { hasta } = await crearSuscripcion(db, {
+        uid,
         email: usuario.email,
         businessName: datos.businessName,
         plan: alta.plan,
-        status: 'active',
-        startDate: Timestamp.fromDate(desde),
-        currentPeriodStart: Timestamp.fromDate(desde),
-        currentPeriodEnd: Timestamp.fromDate(hasta),
-        trialEndsAt: null,
-        lastPaymentDate: alta.precio != null ? Timestamp.fromDate(desde) : null,
-        nextPaymentDate: Timestamp.fromDate(hasta),
-        paymentMethod: 'alta',
-        monthlyPrice: alta.precio != null && alta.meses ? Number(alta.precio) / Number(alta.meses) : 0,
-        renewalPrice: alta.precio != null ? Number(alta.precio) : null,
-        pricingFrozenAt: alta.precio != null ? FieldValue.serverTimestamp() : null,
-        accessBlocked: false,
-        blockReason: null,
-        blockedAt: null,
-        limits: alta.limites || {},
-        usage: { invoicesThisMonth: 0, totalCustomers: 0, totalProducts: 0 },
-        features: { productImages: false },
-        paymentHistory: alta.precio != null
-          ? [{ amount: Number(alta.precio), method: 'alta', date: Timestamp.fromDate(desde), plan: alta.plan, note: 'Pago inicial (alta)' }]
-          : [],
-        notes: '',
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
+        meses: alta.meses,
+        precio: alta.precio != null ? Number(alta.precio) : null,
+        limites: alta.limites,
+        metodo: 'alta',
+        FieldValue,
+        Timestamp,
       })
 
       await ref.update({ uid }).catch(() => {})

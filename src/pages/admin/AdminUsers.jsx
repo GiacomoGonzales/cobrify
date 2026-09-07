@@ -23,7 +23,10 @@ import {
 // Lista de cuentas: buscador, filtros y tabla. Clic en una fila abre la ficha
 // (/app/admin/users/:id); el menu de la derecha tiene los atajos.
 
-const STATUS_LABELS = { active: 'Activo', suspended: 'Suspendido', expired: 'Vencido' }
+// 'a-medio-crear': su creacion se corto por el camino y le falta el negocio o
+// el plan. Antes ni siquiera salian en esta lista, porque se arma recorriendo
+// las suscripciones y esas cuentas no llegaron a tener una.
+const STATUS_LABELS = { active: 'Activo', suspended: 'Suspendido', expired: 'Vencido', 'a-medio-crear': 'A medio crear' }
 const PAGE_SIZE = 10
 
 // Nombre del plan con su precio
@@ -257,7 +260,7 @@ export default function AdminUsers() {
       const pEnd = u.currentPeriodEnd?.toDate?.() ? u.currentPeriodEnd.toDate() : u.currentPeriodEnd instanceof Date ? u.currentPeriodEnd : null
       return pEnd && pEnd > now && u.status !== 'suspended'
     }
-    const activos = users.filter(u => !u.archived)
+    const activos = users.filter(u => !u.archived && !u.aMedioCrear)
     return {
       total: activos.length,
       active: activos.filter(vigente).length,
@@ -267,6 +270,9 @@ export default function AdminUsers() {
       vendedor: activos.filter(u => origenDeCuenta(u) === ORIGEN_VENDEDOR).length,
       reseller: activos.filter(u => origenDeCuenta(u) === ORIGEN_RESELLER).length,
       archived: users.filter(u => u.archived).length,
+      // Las que se cortaron a mitad de la creacion: tienen acceso pero les
+      // falta el negocio o el plan. No cuentan como vencidas ni suspendidas.
+      aMedias: users.filter(u => u.aMedioCrear).length,
     }
   }, [users])
 
@@ -463,6 +469,9 @@ export default function AdminUsers() {
             <option value="estado:active">Activas ({stats.active})</option>
             <option value="estado:expired">Vencidas ({stats.expired})</option>
             <option value="estado:suspended">Suspendidas ({stats.suspended})</option>
+            {stats.aMedias > 0 && (
+              <option value="estado:a-medio-crear">A medio crear ({stats.aMedias})</option>
+            )}
             <option value="vence:archived">Archivadas{stats.archived ? ` (${stats.archived})` : ''}</option>
           </optgroup>
           <optgroup label="Por vencer">

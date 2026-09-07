@@ -12,7 +12,7 @@ import {
 } from 'firebase/auth'
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, secondaryAuth, db } from '@/lib/firebase'
-import { createSubscription } from './subscriptionService'
+import { createSubscription, PLANS } from './subscriptionService'
 import { setAsBusinessOwner } from './adminService'
 import { getStoredAttribution } from '@/utils/attribution'
 
@@ -22,6 +22,8 @@ import { getStoredAttribution } from '@/utils/attribution'
  * `functions/src/services/semillaService.js`.
  */
 const URL_SEMILLA = 'https://us-central1-cobrify-395fe.cloudfunctions.net/sembrarCuentaNueva'
+/** Crea la cuenta entera —acceso, semilla y plan— o no crea nada. */
+const URL_CREAR_CUENTA = 'https://us-central1-cobrify-395fe.cloudfunctions.net/crearCuentaCompleta'
 
 /**
  * Servicio de autenticación con Firebase
@@ -191,69 +193,51 @@ export const registerUser = async (email, password, displayName, businessData = 
 export { SERIES_NEGOCIO as DEFAULT_SERIES } from '@/data/semilla'
 
 /**
- * Crear una cuenta de negocio COMPLETA desde el panel de administración, SIN
- * desloguear al admin actual.
+ * Crear una cuenta de negocio COMPLETA desde el panel de administración.
  *
- * Usa la instancia secundaria de Firebase (`secondaryAuth`, con inMemoryPersistence)
- * para crear el usuario de Auth — igual que el flujo de sub-usuarios — y luego escribe
- * todos los documentos desde la sesión del admin (las reglas permiten a isAdmin escribir
- * users/businesses/subscriptions). Crea el negocio COMPLETO (series + datos) y el almacén
- * principal, porque el nuevo usuario NO pasará por el flujo de BusinessCreate.
+ * UNA sola llamada al servidor, que hace las tres cosas —el acceso, la semilla
+ * y el plan— y las deshace todas si alguna falla.
+ *
+ * Antes se hacían aquí, en tres pasos: se creaba el acceso con la instancia
+ * secundaria de Auth y luego se escribían los documentos. El acceso va primero
+ * porque de él sale el identificador que necesita el resto, así que cuando algo
+ * fallaba después quedaba un acceso sin cuenta. Y esas cuentas son INVISIBLES
+ * en el panel, que lista por suscripción: el 07-sep-2026 había diez, la más
+ * vieja de febrero. Por eso el trabajo se mudó entero al servidor.
  */
 export const registerBusinessAsAdmin = async (email, password, displayName, businessData = null, subscriptionOptions = null) => {
   try {
-    // 1. Crear el usuario en la instancia SECUNDARIA (no afecta la sesión del admin).
-    const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password)
-    const newUid = userCredential.user.uid
-    if (displayName) {
-      try { await updateProfile(userCredential.user, { displayName }) } catch (e) { /* no crítico */ }
-    }
-    // Cerrar la sesión secundaria de inmediato.
-    try { await signOut(secondaryAuth) } catch (e) { /* no crítico */ }
-
-    // 2. La SEMILLA, en el servidor: usuario, negocio con sus 40 opciones ya
-    //    decididas, sucursal Principal, su almacén y las series. Antes esto se
-    //    escribía aquí a mano, y el del reseller lo escribía distinto: por eso
-    //    había cuentas sin sucursal y con el nombre en campos que no coincidían.
-    //    Ahora los dos caminos llaman al mismo sitio.
-    try {
-      const idToken = await auth.currentUser.getIdToken()
-      const r = await fetch(URL_SEMILLA, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ uid: newUid, datos: { ...(businessData || {}), email, displayName } }),
-      })
-      const semilla = await r.json()
-      if (!semilla.success) throw new Error(semilla.error || 'La semilla no respondió')
-    } catch (semillaError) {
-      // Sin semilla la cuenta nace coja, que es justo lo que se venía
-      // arrastrando. Mejor decirlo que dejarlo pasar en silencio.
-      console.error('Error al sembrar la cuenta:', semillaError)
-      return {
-        success: false,
-        error: 'Se creó el acceso pero no se pudo configurar la cuenta. Avísale a soporte con el correo del cliente.',
-      }
-    }
-
-    // 3. Suscripción: con el plan ya pagado si se indicó, o trial si no. Esta
-    //    NO la toca la semilla: los planes, límites y precios pactados tienen
-    //    su propia lógica y ya viven en un solo servicio.
-    try {
-      await createSubscription(
-        newUid,
+    const idToken = await auth.currentUser.getIdToken()
+    const plan = subscriptionOptions?.plan ? PLANS[subscriptionOptions.plan] : null
+    const r = await fetch(URL_CREAR_CUENTA, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({
         email,
-        displayName || email,
-        subscriptionOptions?.plan || 'trial',
-        subscriptionOptions || {}
-      )
-    } catch (subscriptionError) {
-      console.error('Error al crear suscripción:', subscriptionError)
+        password,
+        datos: { ...(businessData || {}), email, displayName },
+        plan: {
+          id: subscriptionOptions?.plan || 'trial',
+          meses: plan?.months || 1,
+          // El monto pagado manda sobre el de catálogo: queda congelado como
+          // su precio de renovación.
+          precio: subscriptionOptions?.renewalPrice
+            ?? subscriptionOptions?.initialPayment?.amount
+            ?? null,
+          limites: plan?.limits || null,
+          metodo: subscriptionOptions?.initialPayment?.method || 'manual',
+        },
+      }),
+    })
+    const datos = await r.json()
+    if (!datos.success) {
+      console.error('Error creando la cuenta:', datos.motivo || datos.error)
+      return { success: false, error: datos.error || 'No se pudo crear la cuenta' }
     }
-
-    return { success: true, userId: newUid }
+    return { success: true, userId: datos.uid }
   } catch (error) {
     console.error('Error en registro (admin):', error)
-    return { success: false, error: getErrorMessage(error.code || error.message) }
+    return { success: false, error: 'No se pudo crear la cuenta. Revisa tu conexión.' }
   }
 }
 

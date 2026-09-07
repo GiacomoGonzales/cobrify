@@ -192,6 +192,35 @@ export async function cargarCuentas({ customPlans = {} } = {}) {
     }))
   })
 
+  // ── Cuentas A MEDIO CREAR ───────────────────────────────────────────────
+  // Tienen acceso y documento de dueño, pero les falta el negocio o el plan:
+  // la creación se cortó por el camino. Eran INVISIBLES aquí, porque esta lista
+  // se arma recorriendo las suscripciones. El 07-sep-2026 había diez, la más
+  // vieja de febrero, y para borrar una había que ir a la consola de Google.
+  //
+  // Se listan como cuentas normales, marcadas `aMedioCrear`, para poder verlas,
+  // escribirles o eliminarlas desde el panel como cualquier otra.
+  usersSnap.forEach(d => {
+    const u = d.data()
+    if (u.ownerId) return                 // sub-usuario, no es una cuenta
+    if (!u.isBusinessOwner) return
+    if (subsSnap.docs.some(x => x.id === d.id)) return  // ya salió arriba
+    const falta = !negocios[d.id] ? 'Sin negocio ni plan' : 'Sin plan'
+    cuentas.push({
+      // Sin suscripción no hay de dónde sacar correo ni fecha: se le pasan
+      // los del documento del usuario para que la fila no salga vacía.
+      ...armarCuenta(
+        d.id,
+        { email: u.email, createdAt: u.createdAt, businessName: negocios[d.id]?.businessName },
+        negocios[d.id] || {},
+        u,
+        { resellersMap, subUsers: subUsersByOwner[d.id] || [], customPlans },
+      ),
+      aMedioCrear: falta,
+      status: 'a-medio-crear',
+    })
+  })
+
   return { cuentas, huerfanas, resellers }
 }
 
