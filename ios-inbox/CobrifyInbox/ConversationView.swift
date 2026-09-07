@@ -45,6 +45,7 @@ struct ConversationView: View {
     /// propio visor dentro de la burbuja.
     @State private var videoAbierto: Mensaje?
     @State private var mostrarApariencia = false
+    @Environment(\.colorScheme) private var esquemaDelChat
     /// Mensaje al que hay que saltar cuando se cierra una hoja. Se guarda en vez
     /// de saltar desde dentro: mientras la hoja se va, el scroll de abajo no
     /// esta listo para recibir la orden.
@@ -171,13 +172,12 @@ struct ConversationView: View {
             }
           }
         }
-        // El compositor va DEBAJO de la lista y no como franja encima de
-        // ella: la lista termina donde empieza el cuadro, las burbujas se
-        // cortan ahí sobre el mismo fondo, y no hace falta ninguna barra ni
-        // raya de por medio (la que hubo se leía como un segundo contenedor).
-        barraDeRespuesta
       }
         .background(Apariencia.shared.fondoView())
+        // El compositor va ENCIMA de la lista, no debajo: así los mensajes
+        // pasan por abajo al desplazar y se disuelven en el degradado, en vez
+        // de cortarse en seco contra el borde del cuadro.
+        .safeAreaInset(edge: .bottom) { barraDeRespuesta }
         .navigationTitle(conv.titulo)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
@@ -763,8 +763,33 @@ struct ConversationView: View {
                     }
                 }
             }
-            .padding(.top, 4)
+            .padding(.top, 22)
+            // Un velo que se desvanece hacia arriba. NO es una barra: arriba
+            // es transparente del todo y el fondo del chat se sigue viendo;
+            // solo se cierra a la altura del cuadro de escribir, para que el
+            // texto que pasa por debajo se apague en vez de asomarse entre
+            // las cápsulas. Un material (vidrio) ya se probó en el build 38 y
+            // sobre una foto en modo oscuro salía como un gris opaco.
+            .background(
+                LinearGradient(
+                    stops: [
+                        .init(color: velo.opacity(0), location: 0),
+                        .init(color: velo.opacity(0.42), location: 0.32),
+                        .init(color: velo.opacity(0.86), location: 0.62),
+                        .init(color: velo.opacity(0.97), location: 1),
+                    ],
+                    startPoint: .top, endPoint: .bottom
+                )
+                .ignoresSafeArea(edges: .bottom)
+                .allowsHitTesting(false)
+            )
         }
+    }
+
+    /// El color del velo: negro de noche, blanco de día. Tiñe lo mínimo para
+    /// que el fondo del chat siga mandando.
+    private var velo: Color {
+        esquemaDelChat == .dark ? .black : .white
     }
 
     /// Reaccionar (tocar el mismo emoji la quita). El servidor actualiza el
