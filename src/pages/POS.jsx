@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react'
 import { isPharmaLikeMode } from '@/utils/businessModes'
 import { estadoInicialSunat } from '@/utils/estadoInicialSunat'
+import { cupoDeComprobantes, avisoDeCupo } from '@/utils/cupoDeComprobantes'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import {
@@ -347,7 +348,7 @@ const inferDocumentType = (docType, docNumber) => {
 
 export default function POS() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasFeature } = useAppContext()
-  const { filterWarehousesByAccess, allowedWarehouses, filterBranchesByAccess, allowedBranches, activeBranchId, setActiveBranch, allowedDocumentTypes, allowedPaymentMethods, assignedSellerId, independentCashRegister, hideStockInPOS, hideDiscountInPOS, userPermissions } = useAuth()
+  const { filterWarehousesByAccess, allowedWarehouses, filterBranchesByAccess, allowedBranches, activeBranchId, setActiveBranch, allowedDocumentTypes, allowedPaymentMethods, assignedSellerId, independentCashRegister, hideStockInPOS, hideDiscountInPOS, userPermissions, subscription, isAdmin } = useAuth()
   const { branding } = useBranding()
   const toast = useToast()
   const location = useLocation()
@@ -615,11 +616,22 @@ export default function POS() {
   // (enabledDocumentTypes — un RUS desactiva Factura), el permiso del
   // sub-usuario y la conexion SUNAT. Se calcula UNA vez y lo usan el <select>,
   // el estado inicial, el reset tras la venta y la correccion de tipo invalido.
+  // Cupo del mes: al agotarse, boleta y factura salen del selector y queda la
+  // Nota de Venta. Se corta antes de crear el documento para no consumir un
+  // numero que despues no puede llegar a SUNAT.
+  const cupo = useMemo(
+    () => cupoDeComprobantes(subscription, { esAdmin: isAdmin || isDemoMode }),
+    [subscription, isAdmin, isDemoMode]
+  )
+
+  const avisoCupo = useMemo(() => avisoDeCupo(cupo), [cupo])
+
   const docTypeOpts = useMemo(() => ({
     enabledForBusiness: companySettings?.enabledDocumentTypes || null,
     allowedForUser: allowedDocumentTypes || null,
     canEmitFiscal,
-  }), [companySettings?.enabledDocumentTypes, allowedDocumentTypes, canEmitFiscal])
+    cupoAgotado: cupo.agotado,
+  }), [companySettings?.enabledDocumentTypes, allowedDocumentTypes, canEmitFiscal, cupo.agotado])
 
   const availableDocTypes = useMemo(() => getAvailableDocumentTypes(docTypeOpts), [docTypeOpts])
 
@@ -10647,8 +10659,8 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                       <option value="" disabled>Selecciona un tipo…</option>
                     )}
                     {/* availableDocTypes ya cruza: comprobantes del negocio
-                        (un RUS desactiva Factura), permiso del sub-usuario y
-                        conexion SUNAT. */}
+                        (un RUS desactiva Factura), permiso del sub-usuario,
+                        conexion SUNAT y el cupo del mes. */}
                     {availableDocTypes.includes('boleta') && (
                       <option value="boleta">Boleta de Venta</option>
                     )}
@@ -10663,6 +10675,15 @@ ${companySettings?.businessName || 'Tu Empresa'}`
                     <span className="bg-primary-600 text-white text-xs font-bold px-2 py-1 rounded-full">
                       {cart.length}
                     </span>
+                  )}
+                  {/* El cupo del mes, donde se elige el comprobante: enterarse
+                      recien al cobrar es enterarse con el cliente delante. */}
+                  {avisoCupo && (
+                    <p className={`mt-1 w-full text-[12px] leading-snug ${
+                      avisoCupo.tono === 'error' ? 'text-red-600 font-medium' : 'text-amber-700'
+                    }`}>
+                      {avisoCupo.texto}
+                    </p>
                   )}
                 </div>
                 {!canEmitFiscal && (

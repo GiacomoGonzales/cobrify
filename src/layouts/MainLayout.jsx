@@ -12,6 +12,7 @@ import { getVendedor } from '@/services/vendedorService'
 import { getCompanySettings } from '@/services/firestoreService'
 import { createDeliveryRecord } from '@/services/motoristaService'
 import { resumirItemsParaEnvio } from '@/utils/deliveryShare'
+import { cupoDeComprobantes } from '@/utils/cupoDeComprobantes'
 import Sidebar from '@/components/Sidebar'
 import Navbar from '@/components/Navbar'
 import UpdateBanner from '@/components/UpdateBanner'
@@ -397,10 +398,9 @@ export default function MainLayout() {
   // Iniciar listener de Yape automáticamente (solo en APK Android)
   useYapeListener()
 
-  // ¿El usuario superó su límite mensual de comprobantes? (incluye el bono; admins excluidos)
-  const _invMonthlyLimit = subscription?.limits?.maxInvoicesPerMonth
-  const overInvoiceLimit = !isAdmin && typeof _invMonthlyLimit === 'number' && _invMonthlyLimit !== -1 &&
-    (subscription?.usage?.invoicesThisMonth || 0) >= (_invMonthlyLimit + (subscription?.bonusInvoices || 0))
+  // ¿Se quedó sin comprobantes del mes? Mismo criterio que el POS, que es donde
+  // de verdad se le impide emitir (ver utils/cupoDeComprobantes).
+  const overInvoiceLimit = cupoDeComprobantes(subscription, { esAdmin: isAdmin }).agotado
 
   // Aviso de vencimiento (4 días antes, escalando). Solo al DUEÑO: el cajero
   // no tiene por qué recibir avisos de cobranza.

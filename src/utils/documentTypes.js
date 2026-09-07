@@ -10,10 +10,18 @@
 //   2. USUARIO  (`allowedDocumentTypes` del sub-usuario): permiso individual.
 //   3. SUNAT    (`canEmitFiscal`): sin conexión solo queda la Nota de Venta,
 //      que no es un comprobante electrónico.
+//   4. CUPO     (`cupoAgotado`): se acabaron los comprobantes del mes. Igual
+//      que arriba, queda la Nota de Venta para seguir vendiendo. Se corta ACÁ
+//      y no en el servidor a propósito: hasta junio de 2026 el servidor
+//      rechazaba el envío, pero el comprobante ya estaba creado y con número,
+//      así que quedaba un `rejected` que nunca llegó a SUNAT y un hueco en la
+//      correlatividad (ver utils/cupoDeComprobantes).
 //
 // En 1 y 2, **vacío significa "todos"** — es la semántica que ya tenía el
 // permiso de sub-usuario y cambiarla dejaría sin comprobantes a todos los
 // negocios que nunca tocaron la opción.
+
+import { consumeCupo } from '@/utils/cupoDeComprobantes'
 
 export const DOCUMENT_TYPES = ['boleta', 'factura', 'nota_venta']
 
@@ -28,6 +36,7 @@ export const getAvailableDocumentTypes = ({
   enabledForBusiness = null,
   allowedForUser = null,
   canEmitFiscal = true,
+  cupoAgotado = false,
 } = {}) => {
   let tipos = [...DOCUMENT_TYPES]
 
@@ -40,6 +49,10 @@ export const getAvailableDocumentTypes = ({
   // Boleta y factura son electrónicos: sin conexión SUNAT no se pueden emitir.
   if (!canEmitFiscal) {
     tipos = tipos.filter(t => t === 'nota_venta')
+  }
+  // Sin comprobantes del mes tampoco: son ventas nuevas y consumen cupo.
+  if (cupoAgotado) {
+    tipos = tipos.filter(t => !consumeCupo(t))
   }
 
   return tipos

@@ -6,6 +6,8 @@ import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { useToast } from '@/contexts/ToastContext'
+import { useAuth } from '@/contexts/AuthContext'
+import { cupoDeComprobantes, puedeEmitirse } from '@/utils/cupoDeComprobantes'
 import { useBranding } from '@/contexts/BrandingContext'
 import { getDispatchGuides, sendDispatchGuideToSunat, getCompanySettings, getProducts } from '@/services/firestoreService'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
@@ -107,6 +109,8 @@ export default function DispatchGuides() {
   // Verificar si el usuario tiene acceso a la sucursal principal
   const hasMainAccess = !allowedBranches || allowedBranches.length === 0 || allowedBranches.includes('main')
   const toast = useToast()
+  const { subscription, isAdmin } = useAuth()
+  const cupo = cupoDeComprobantes(subscription, { esAdmin: isAdmin || isDemoMode })
 
   const [guides, setGuides] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -289,6 +293,13 @@ export default function DispatchGuides() {
   }
 
   const handleCreateGuide = () => {
+    // Sin comprobantes del mes no se abre el formulario: la guia es una venta
+    // nueva y consume cupo. Cortar aca evita crear un documento con numero que
+    // despues no puede llegar a SUNAT (ver utils/cupoDeComprobantes).
+    if (cupo.agotado) {
+      toast.error(puedeEmitirse('guia_remision', cupo).motivo, 9000)
+      return
+    }
     setCloningGuide(null)
     setShowCreateModal(true)
   }

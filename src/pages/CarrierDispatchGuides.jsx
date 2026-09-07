@@ -6,6 +6,8 @@ import Input from '@/components/ui/Input'
 import Modal from '@/components/ui/Modal'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { useAuth } from '@/contexts/AuthContext'
+import { cupoDeComprobantes, puedeEmitirse } from '@/utils/cupoDeComprobantes'
 import { getCarrierDispatchGuides, sendCarrierDispatchGuideToSunat, getCompanySettings, updateCarrierDispatchGuide, deleteCarrierDispatchGuide } from '@/services/firestoreService'
 import CreateCarrierDispatchGuideModal from '@/components/CreateCarrierDispatchGuideModal'
 import { generateCarrierDispatchGuidePDF, previewCarrierDispatchGuidePDF, getCarrierDispatchGuidePDFBlob } from '@/utils/carrierDispatchGuidePdfGenerator'
@@ -32,6 +34,8 @@ const formatTransferDate = (dateString) => {
 export default function CarrierDispatchGuides() {
   const { getBusinessId, isDemoMode, businessSettings } = useAppContext()
   const toast = useToast()
+  const { subscription, isAdmin } = useAuth()
+  const cupo = cupoDeComprobantes(subscription, { esAdmin: isAdmin || isDemoMode })
 
   const [guides, setGuides] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -145,6 +149,11 @@ export default function CarrierDispatchGuides() {
   }
 
   const handleCreateGuide = () => {
+    // Mismo criterio que la guia de remision y el POS: sin cupo no se abre.
+    if (cupo.agotado) {
+      toast.error(puedeEmitirse('guia_transportista', cupo).motivo, 9000)
+      return
+    }
     setShowCreateModal(true)
   }
 
