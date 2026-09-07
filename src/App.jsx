@@ -54,6 +54,7 @@ import AdminLayout from './layouts/AdminLayout'
 const AdminResumen = lazy(() => import('./pages/admin/AdminResumen'))
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
 const AdminCuenta = lazy(() => import('./pages/admin/AdminCuenta'))
+const AdminAltas = lazy(() => import('./pages/admin/AdminAltas'))
 const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'))
 const AdminCpe = lazy(() => import('./pages/admin/AdminCpe'))
 const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'))
@@ -697,6 +698,7 @@ function App() {
               <Route path="resumen" element={<AdminResumen />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="users/:id" element={<AdminCuenta />} />
+              <Route path="altas" element={<AdminAltas />} />
               <Route path="resellers" element={<AdminResellers />} />
               <Route path="payments" element={<AdminPayments />} />
               <Route path="cpe" element={<AdminCpe />} />

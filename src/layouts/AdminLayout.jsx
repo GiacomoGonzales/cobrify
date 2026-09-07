@@ -14,6 +14,7 @@ import BotonTema from '@/components/BotonTema'
 const ITEMS = [
   { path: '/app/admin/resumen', label: 'Resumen' },
   { path: '/app/admin/users', label: 'Usuarios' },
+  { path: '/app/admin/altas', label: 'Altas' },
   { path: '/app/admin/resellers', label: 'Resellers' },
   { path: '/app/admin/payments', label: 'Pagos' },
   { path: '/app/admin/cpe', label: 'Comprobantes' },

@@ -18,3 +18,16 @@ export const esDominioDeRegistro = (hostname = window.location.hostname) =>
 
 /** Los códigos son 10 caracteres de un alfabeto sin letras que se confundan. */
 export const pareceCodigoDeAlta = (v) => /^[a-hj-km-np-z2-9]{10}$/.test(String(v || ''))
+
+/**
+ * El enlace que se le manda al cliente. La base vive aquí y no repartida por
+ * la app, para que el dia que cambie el dominio no queden enlaces viejos
+ * escritos a mano en tres sitios.
+ */
+export const BASE_REGISTRO = 'https://registro.cobrifyperu.com'
+
+export const enlaceDeAlta = (codigo) => `${BASE_REGISTRO}/${codigo}`
+
+/** El de respaldo, que funciona aunque el subdominio no este apuntado. */
+export const enlaceDeAltaLargo = (codigo, origen = 'https://cobrifyperu.com') =>
+  `${origen}/activar/${codigo}`
