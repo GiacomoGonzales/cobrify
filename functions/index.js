@@ -49,6 +49,7 @@ import {
 } from './src/services/flowService.js'
 import { resolveAudience } from './src/services/audienceService.js'
 import { siguienteCodigoCliente, sugerirRubro } from './src/services/clientesService.js'
+import { sembrarCuenta } from './src/services/semillaService.js'
 
 // Initialize Firebase Admin
 initializeApp()
@@ -15154,6 +15155,81 @@ export const entrarComoCliente = onRequest(
     } catch (error) {
       console.error('Error al preparar la sesión de soporte:', error)
       res.status(500).json({ success: false, error: 'No se pudo preparar el acceso' })
+    }
+  }
+)
+
+// =====================================================================
+// SEMILLA DE CUENTA NUEVA
+// =====================================================================
+
+/**
+ * Deja una cuenta recién creada lista para usar: sucursal Principal, su
+ * almacén, las 40 opciones ya decididas y un solo juego de nombres.
+ *
+ * La escribe el SERVIDOR porque tiene que ser la misma para todos los caminos
+ * que crean cuentas —el alta del admin, la del reseller, el formulario del
+ * cliente y el chat—. Hasta hoy cada uno escribía lo suyo a su manera y
+ * ninguno creaba la sucursal.
+ *
+ * El usuario de Auth ya tiene que existir: aquí solo se escriben documentos.
+ * Puede llamarla un admin, un reseller, o el propio dueño de la cuenta recién
+ * creada (que es el caso del formulario de alta). Es idempotente.
+ */
+export const sembrarCuentaNueva = onRequest(
+  {
+    region: 'us-central1',
+    timeoutSeconds: 60,
+    memory: '256MiB',
+    invoker: 'public',
+    cors: true,
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') {
+      res.status(405).json({ success: false, error: 'Method not allowed' }); return
+    }
+
+    try {
+      const cabecera = req.headers.authorization
+      if (!cabecera || !cabecera.startsWith('Bearer ')) {
+        res.status(401).json({ success: false, error: 'No autorizado' }); return
+      }
+      const quien = await auth.verifyIdToken(cabecera.split('Bearer ')[1])
+
+      const uid = req.body?.uid
+      const datos = req.body?.datos || {}
+      if (!uid || typeof uid !== 'string') {
+        res.status(400).json({ success: false, error: 'Falta el uid de la cuenta' }); return
+      }
+
+      // Quién puede sembrar: un admin, un reseller, o el propio dueño de la
+      // cuenta. Lo último es lo que hace posible el formulario de alta, y no
+      // abre nada: la semilla es idempotente y solo escribe una cuenta vacía.
+      let permitido = quien.uid === uid
+      if (!permitido) {
+        const [fichaAdmin, fichaReseller] = await Promise.all([
+          db.collection('admins').doc(quien.uid).get(),
+          db.collection('resellers').doc(quien.uid).get(),
+        ])
+        permitido = fichaAdmin.data()?.isAdmin === true || fichaReseller.exists
+      }
+      if (!permitido) {
+        res.status(403).json({ success: false, error: 'No puedes crear esta cuenta' }); return
+      }
+
+      const resultado = await sembrarCuenta(db, {
+        uid,
+        email: datos.email || quien.email || '',
+        datos,
+        FieldValue,
+      })
+      console.log(`🌱 Semilla en ${uid}: ${resultado.sembrada ? 'sembrada' : resultado.motivo}`)
+      res.status(200).json({ success: true, ...resultado })
+    } catch (error) {
+      console.error('Error al sembrar la cuenta:', error)
+      res.status(500).json({ success: false, error: 'No se pudo preparar la cuenta' })
     }
   }
 )

@@ -15,7 +15,13 @@ import { auth, secondaryAuth, db } from '@/lib/firebase'
 import { createSubscription } from './subscriptionService'
 import { setAsBusinessOwner } from './adminService'
 import { getStoredAttribution } from '@/utils/attribution'
-import { createWarehouse } from './warehouseService'
+
+/**
+ * La semilla de cuenta nueva vive en el servidor: es la MISMA para el alta del
+ * admin, la del reseller, el formulario del cliente y el chat. Ver
+ * `functions/src/services/semillaService.js`.
+ */
+const URL_SEMILLA = 'https://us-central1-cobrify-395fe.cloudfunctions.net/sembrarCuentaNueva'
 
 /**
  * Servicio de autenticación con Firebase
@@ -177,19 +183,12 @@ export const registerUser = async (email, password, displayName, businessData = 
  * SUNAT rechaza el comprobante. Las series de notas deben empezar con F o B
  * según el documento que afectan (regla SUNAT), así que esas no se duplican.
  * Todas son de 4 caracteres: letra + 3 alfanuméricos.
+ *
+ * La lista vive en la semilla, no aquí: es el mismo juego que escribe el
+ * servidor al crear una cuenta. Tener dos listas era pedir que un día dejaran
+ * de coincidir.
  */
-export const DEFAULT_SERIES = {
-  factura: { serie: 'FF01', lastNumber: 0 },
-  boleta: { serie: 'BB01', lastNumber: 0 },
-  nota_venta: { serie: 'NN01', lastNumber: 0 },
-  cotizacion: { serie: 'CC01', lastNumber: 0 },
-  nota_credito_factura: { serie: 'FC01', lastNumber: 0 },
-  nota_credito_boleta: { serie: 'BC01', lastNumber: 0 },
-  nota_debito_factura: { serie: 'FD01', lastNumber: 0 },
-  nota_debito_boleta: { serie: 'BD01', lastNumber: 0 },
-  guia_remision: { serie: 'TT01', lastNumber: 0 },
-  guia_transportista: { serie: 'VV01', lastNumber: 0 },
-}
+export { SERIES_NEGOCIO as DEFAULT_SERIES } from '@/data/semilla'
 
 /**
  * Crear una cuenta de negocio COMPLETA desde el panel de administración, SIN
@@ -212,101 +211,33 @@ export const registerBusinessAsAdmin = async (email, password, displayName, busi
     // Cerrar la sesión secundaria de inmediato.
     try { await signOut(secondaryAuth) } catch (e) { /* no crítico */ }
 
-    // 2. Marcar como Business Owner (users/{uid}).
+    // 2. La SEMILLA, en el servidor: usuario, negocio con sus 40 opciones ya
+    //    decididas, sucursal Principal, su almacén y las series. Antes esto se
+    //    escribía aquí a mano, y el del reseller lo escribía distinto: por eso
+    //    había cuentas sin sucursal y con el nombre en campos que no coincidían.
+    //    Ahora los dos caminos llaman al mismo sitio.
     try {
-      await setAsBusinessOwner(newUid, email, displayName)
-    } catch (ownerError) {
-      console.error('Error al marcar como business owner:', ownerError)
+      const idToken = await auth.currentUser.getIdToken()
+      const r = await fetch(URL_SEMILLA, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ uid: newUid, datos: { ...(businessData || {}), email, displayName } }),
+      })
+      const semilla = await r.json()
+      if (!semilla.success) throw new Error(semilla.error || 'La semilla no respondió')
+    } catch (semillaError) {
+      // Sin semilla la cuenta nace coja, que es justo lo que se venía
+      // arrastrando. Mejor decirlo que dejarlo pasar en silencio.
+      console.error('Error al sembrar la cuenta:', semillaError)
+      return {
+        success: false,
+        error: 'Se creó el acceso pero no se pudo configurar la cuenta. Avísale a soporte con el correo del cliente.',
+      }
     }
 
-    // 3. Crear el negocio COMPLETO con TODAS las series por defecto (mismo set que
-    //    BusinessCreate), para que la cuenta quede lista sin pasos extra.
-    try {
-      const businessRef = doc(db, 'businesses', newUid)
-      await setDoc(businessRef, {
-        ruc: businessData?.ruc || '',
-        businessName: businessData?.businessName || '',
-        name: businessData?.tradeName || businessData?.businessName || '',
-        phone: businessData?.phone || '',
-        // Teléfono de contacto del dueño (uso interno admin: contactarlo por
-        // renovaciones, etc.). NO se imprime en el ticket (eso usa `phone`).
-        contactPhone: businessData?.contactPhone || '',
-        email,
-        address: businessData?.address || '',
-        district: businessData?.district || '',
-        province: businessData?.province || '',
-        department: businessData?.department || '',
-        ubigeo: businessData?.ubigeo || '',
-        // Preferencias de arranque elegidas en el onboarding (modo + catálogo + menú)
-        businessMode: businessData?.businessMode || 'retail',
-        // Rubro elegido en el alta. Va como CONFIRMADO —lo dijo quien conoce el
-        // negocio— y de él sale el `businessMode` de arriba. Las reglas dejan
-        // escribirlo solo aquí, al crear.
-        ...(businessData?.rubro && { rubro: businessData.rubro, rubroConfirmadoEn: new Date() }),
-        enableProductLocation: businessData?.enableProductLocation || false,
-        enableManualStockEdit: businessData?.enableManualStockEdit || false,
-        defaultTaxAffectation: businessData?.defaultTaxAffectation || '10',
-        allowManualTaxAffectation: businessData?.allowManualTaxAffectation === true,
-        posCustomFields: businessData?.posCustomFields || {},
-        hiddenMenuItems: Array.isArray(businessData?.hiddenMenuItems) ? businessData.hiddenMenuItems : [],
-        // Ventas / POS (solo se escriben los que el onboarding envía; el resto usa
-        // los defaults del sistema al leerse).
-        ...(businessData?.allowNegativeStock !== undefined && { allowNegativeStock: businessData.allowNegativeStock }),
-        ...(businessData?.allowCustomProducts !== undefined && { allowCustomProducts: businessData.allowCustomProducts }),
-        ...(businessData?.allowPriceEdit !== undefined && { allowPriceEdit: businessData.allowPriceEdit }),
-        ...(businessData?.allowNameEdit !== undefined && { allowNameEdit: businessData.allowNameEdit }),
-        ...(businessData?.posClearSearchOnAdd !== undefined && { posClearSearchOnAdd: businessData.posClearSearchOnAdd }),
-        ...(businessData?.autoResetPOS !== undefined && { autoResetPOS: businessData.autoResetPOS }),
-        ...(businessData?.autoPrintTicket !== undefined && { autoPrintTicket: businessData.autoPrintTicket }),
-        ...(businessData?.showDescriptionInPOS !== undefined && { showDescriptionInPOS: businessData.showDescriptionInPOS }),
-        ...(businessData?.defaultDocumentType && { defaultDocumentType: businessData.defaultDocumentType }),
-        ...(businessData?.defaultPaymentMethod !== undefined && { defaultPaymentMethod: businessData.defaultPaymentMethod }),
-        ...(businessData?.hideRucIgvInNotaVenta !== undefined && { hideRucIgvInNotaVenta: businessData.hideRucIgvInNotaVenta }),
-        ...(businessData?.hideOnlyIgvInNotaVenta !== undefined && { hideOnlyIgvInNotaVenta: businessData.hideOnlyIgvInNotaVenta }),
-        ...(businessData?.allowPartialPayments !== undefined && { allowPartialPayments: businessData.allowPartialPayments }),
-        ...(businessData?.requireOpenCashRegister !== undefined && { requireOpenCashRegister: businessData.requireOpenCashRegister }),
-        ...(businessData?.cardCommissionEnabled !== undefined && { cardCommissionEnabled: businessData.cardCommissionEnabled }),
-        // Sin esto, un sub-usuario no ve el catalogo filtrado por su sucursal.
-        ...(businessData?.branchCatalogEnabled !== undefined && { branchCatalogEnabled: businessData.branchCatalogEnabled }),
-        ...(businessData?.cardCommissionRate !== undefined && { cardCommissionRate: businessData.cardCommissionRate }),
-        ...(businessData?.multiCurrencyEnabled !== undefined && { multiCurrencyEnabled: businessData.multiCurrencyEnabled }),
-        ...(businessData?.defaultCurrency && { defaultCurrency: businessData.defaultCurrency }),
-        ...(businessData?.priceLabels && { priceLabels: businessData.priceLabels }),
-        ...(businessData?.restaurantConfig && { restaurantConfig: businessData.restaurantConfig }),
-        // Documentos y comprobantes
-        ...(businessData?.pdfAccentColor && { pdfAccentColor: businessData.pdfAccentColor }),
-        ...(businessData?.pdfSpacious !== undefined && { pdfSpacious: businessData.pdfSpacious }),
-        ...(businessData?.pdfA5 !== undefined && { pdfA5: businessData.pdfA5 }),
-        ...(businessData?.showProductCodeInQuotation !== undefined && { showProductCodeInQuotation: businessData.showProductCodeInQuotation }),
-        ...(businessData?.showProductCodeInInvoices !== undefined && { showProductCodeInInvoices: businessData.showProductCodeInInvoices }),
-        ...(businessData?.showProductDescriptionInQuotation !== undefined && { showProductDescriptionInQuotation: businessData.showProductDescriptionInQuotation }),
-        ...(businessData?.showImagesInQuotations !== undefined && { showImagesInQuotations: businessData.showImagesInQuotations }),
-        ...(businessData?.showImagesInInvoices !== undefined && { showImagesInInvoices: businessData.showImagesInInvoices }),
-        ...(businessData?.hideBatchAndExpiryInDocuments !== undefined && { hideBatchAndExpiryInDocuments: businessData.hideBatchAndExpiryInDocuments }),
-        ...(businessData?.invoiceFooterTerms !== undefined && { invoiceFooterTerms: businessData.invoiceFooterTerms }),
-        ...(businessData?.showTermsOnTicket !== undefined && { showTermsOnTicket: businessData.showTermsOnTicket }),
-        ...(businessData?.purchaseOrderDefaultNotes !== undefined && { purchaseOrderDefaultNotes: businessData.purchaseOrderDefaultNotes }),
-        ...(businessData?.ticketFooterMessage !== undefined && { ticketFooterMessage: businessData.ticketFooterMessage }),
-        ...(businessData?.notaVentaLegend !== undefined && { notaVentaLegend: businessData.notaVentaLegend }),
-        ...(businessData?.ticketQrEnabled !== undefined && { ticketQrEnabled: businessData.ticketQrEnabled }),
-        ...(businessData?.ticketQrContent !== undefined && { ticketQrContent: businessData.ticketQrContent }),
-        ...(businessData?.ticketQrCaption !== undefined && { ticketQrCaption: businessData.ticketQrCaption }),
-        ...(businessData?.dispatchGuidesEnabled !== undefined && { dispatchGuidesEnabled: businessData.dispatchGuidesEnabled }),
-        ...(businessData?.exitNoteEnabled !== undefined && { exitNoteEnabled: businessData.exitNoteEnabled }),
-        ...(businessData?.autoSendToSunat !== undefined && { autoSendToSunat: businessData.autoSendToSunat }),
-        ...(businessData?.allowDeleteInvoices !== undefined && { allowDeleteInvoices: businessData.allowDeleteInvoices }),
-        ...(businessData?.hideDashboardDataFromSecondary !== undefined && { hideDashboardDataFromSecondary: businessData.hideDashboardDataFromSecondary }),
-        ...(businessData?.hideCashExpectedFromCashier !== undefined && { hideCashExpectedFromCashier: businessData.hideCashExpectedFromCashier }),
-        series: DEFAULT_SERIES,
-        sunat: { enabled: false, environment: 'beta', solUser: '', homologated: false },
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      }, { merge: true })
-    } catch (businessError) {
-      console.error('Error al guardar datos del negocio:', businessError)
-    }
-
-    // 4. Suscripción: con el plan ya pagado si se indicó, o trial si no.
+    // 3. Suscripción: con el plan ya pagado si se indicó, o trial si no. Esta
+    //    NO la toca la semilla: los planes, límites y precios pactados tienen
+    //    su propia lógica y ya viven en un solo servicio.
     try {
       await createSubscription(
         newUid,
@@ -317,13 +248,6 @@ export const registerBusinessAsAdmin = async (email, password, displayName, busi
       )
     } catch (subscriptionError) {
       console.error('Error al crear suscripción:', subscriptionError)
-    }
-
-    // 5. Almacén principal por defecto.
-    try {
-      await createWarehouse(newUid, { name: 'Almacén Principal', isDefault: true })
-    } catch (whError) {
-      console.error('Error al crear almacén principal:', whError)
     }
 
     return { success: true, userId: newUid }
