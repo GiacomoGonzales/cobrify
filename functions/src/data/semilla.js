@@ -1,7 +1,7 @@
 /**
  * Cómo nace una cuenta nueva.
  *
- * Hasta hoy nadie decidió esto: 40 opciones quedaban encendidas o apagadas
+ * Hasta hoy nadie decidió esto: las opciones quedaban encendidas o apagadas
  * solo porque el campo existía o no existía en el documento, y ni el registro
  * normal ni el del reseller creaban la sucursal ni el almacén. Cada camino que
  * creaba cuentas lo hacía a su manera.
@@ -15,7 +15,7 @@
  */
 
 /**
- * Las 40 opciones, con el valor con el que arranca toda cuenta nueva.
+ * Las 45 opciones, con el valor con el que arranca toda cuenta nueva.
  *
  * El criterio, en una línea: **que venda desde el primer minuto y no se meta
  * en líos**. Lo que hace falta para vender el día uno va encendido; lo que
@@ -31,7 +31,7 @@ export const OPCIONES_SEMILLA = {
   /** Excepción con reglas propias. Que la pida quien sabe lo que hace. */
   allowCustomEmissionDate: false,
 
-  // ---- Punto de venta (16) — lo que se toca cien veces al día ----
+  // ---- Punto de venta (17) — lo que se toca cien veces al día ----
   /** Una cuenta nueva no tiene stock: bloqueada, el POS parece roto. */
   allowNegativeStock: true,
   /** El compañero del anterior: vende, pero avisa qué falta cargar. */
@@ -40,20 +40,28 @@ export const OPCIONES_SEMILLA = {
   allowCustomProducts: true,
   /** Un descuento en el mostrador. Al nacer, el dueño es el cajero. */
   allowPriceEdit: true,
-  /** Renombrar al vuelo descuadra inventario y reportes. */
-  allowNameEdit: false,
-  /** La nota de venta no va a SUNAT: corregirla no rompe nada. */
-  allowEditNotaVenta: true,
+  /** Renombrar al vuelo descuadra inventario y reportes, pero al cargar el
+   *  catálogo el primer mes se necesita corregir nombres sin salir del POS. */
+  allowNameEdit: true,
+  /** Aunque la nota de venta no vaya a SUNAT, editarla descuadra el arqueo
+   *  del día y el cajero se acostumbra a arreglar en vez de anular. */
+  allowEditNotaVenta: false,
+  /** Limpiar la búsqueda sola obliga a volver a escribir cuando se cargan
+   *  varias unidades del mismo producto, que es lo normal sin pistola. */
+  posClearSearchOnAdd: false,
   /** Sin impresora configurada, cada venta abriría un diálogo que estorba. */
   autoPrintTicket: false,
   /** Terminada una venta, el mostrador queda limpio para la siguiente. */
   autoResetPOS: true,
-  /** Con el catálogo chico del primer día, verlos todos es más rápido. */
-  showAllProductsInPOS: true,
-  /** Alarga las tarjetas y la mayoría usa nombres que se entienden solos. */
+  /** Cargar el catálogo entero de golpe pone lento el POS apenas pasa de unos
+   *  cientos de productos, y el botón Ver más está a un clic. */
+  showAllProductsInPOS: false,
+  /** Alarga las tarjetas y en retail los nombres se entienden solos; en
+   *  restaurante la descripción ES la carta, así que ahí va encendida
+   *  (ver `AJUSTES_POR_MODO`). */
   showDescriptionInPOS: false,
-  /** Una ventanita más en cada venta. */
-  showChangeReminder: false,
+  /** Es una ventanita más, pero el vuelto mal dado sale del bolsillo del dueño. */
+  showChangeReminder: true,
   /** Disciplina de negocio andando, no de arranque. */
   requireOpenCashRegister: false,
   /** Un cuadre cerrado no se retoca: protege al dueño de su propio cajero. */
@@ -65,15 +73,19 @@ export const OPCIONES_SEMILLA = {
   /** Necesita un aparato que la mayoría no tiene. */
   enableCustomerDisplay: false,
 
-  // ---- Inventario y productos (6) — cargar el catálogo sin pelear ----
+  // ---- Inventario y productos (7) — cargar el catálogo sin pelear ----
   /** Sin esto, crear un producto pide un código que nadie sabe inventar. */
   autoSku: true,
   /** Se ven en el POS y en el catálogo; es de lo que más vende en una demo. */
   enableProductImages: true,
-  /** Al cargar el inventario inicial lo va a necesitar sí o sí. */
-  enableManualStockEdit: true,
+  /** El stock se mueve con compras y ventas; tocarlo a mano tapa los descuadres
+   *  en vez de mostrarlos. Se prende para el inventario inicial y se apaga. */
+  enableManualStockEdit: false,
   /** Útil con almacén grande; ruido con diez productos. */
   enableProductLocation: false,
+  /** Con una sola sucursal no muestra nada, y el día que abra la segunda ya
+   *  está lista: no hay que acordarse de prenderla. */
+  showOtherBranchesStock: true,
   /** Movimientos entre almacenes, y al nacer hay uno solo. */
   stockDischargeEnabled: false,
   /** Herramienta de obras y almacenes con control de salidas. */
@@ -97,6 +109,16 @@ export const OPCIONES_SEMILLA = {
   /** Igual: con una sola sucursal solo agrega confusión. */
   branchPricingEnabled: false,
 
+  // ---- Cómo salen impresos los comprobantes (3) ----
+  /** El código es de uso interno: al cliente le ocupa una columna del ticket
+   *  y no le dice nada. */
+  showProductCodeInInvoices: false,
+  /** En una cotización sí sirve: es con lo que el cliente pide después. */
+  showProductCodeInQuotation: true,
+  /** Lote y vencimiento son control interno; impresos confunden al cliente y
+   *  alargan el ticket. Los rubros que los necesitan lo prenden. */
+  hideBatchAndExpiryInDocuments: true,
+
   // ---- Notas de venta (3) — todo visible; ocultar es una elección ----
   hideCompanyDataInNotaVenta: false,
   hideRucIgvInNotaVenta: false,
@@ -109,8 +131,9 @@ export const OPCIONES_SEMILLA = {
   showOnlyOwnSalesToSecondary: true,
 
   // ---- Módulos (2) ----
-  /** Para quien traslada mercadería; al resto solo le agrega un menú. */
-  dispatchGuidesEnabled: false,
+  /** Casi todo negocio con productos mueve mercadería alguna vez; el
+   *  restaurante no, y ahí el menú sobra (ver `AJUSTES_POR_MODO`). */
+  dispatchGuidesEnabled: true,
   /** Según rubro: encendida donde la agenda ES el negocio (ver ajustes). */
   appointmentsEnabled: false,
 }
@@ -124,6 +147,15 @@ export const VALORES_SEMILLA = {
   /** 10 = gravado con IGV, que es el caso de casi todos. */
   defaultTaxAffectation: '10',
   allowManualTaxAffectation: false,
+  /** La cuenta nace con SUNAT apagado: si arrancara en boleta, cada venta
+   *  dejaría un comprobante pendiente de enviar. La nota de venta cobra igual
+   *  y no va a SUNAT. Se cambia a boleta el día que se configure SUNAT. */
+  defaultDocumentType: 'nota_venta',
+  /** Vacío = ninguno: el cajero elige con qué cobró. Marcar efectivo de fábrica
+   *  hace que todo lo pagado con Yape se registre como efectivo por descuido. */
+  defaultPaymentMethod: '',
+  /** 80 % del ancho: el logo se lee y no se come el ticket. */
+  logoPrintScale: 80,
   posCustomFields: {},
   hiddenMenuItems: [],
 }
@@ -167,17 +199,43 @@ export function seriesDeSucursal(n = 1) {
 export const SUNAT_SEMILLA = { enabled: false, environment: 'beta', solUser: '', homologated: false }
 
 /**
- * Las opciones con las que nace una cuenta de ESTE rubro: la semilla común más
- * los ajustes propios del rubro (una farmacia y una veterinaria no arrancan
- * igual). El catálogo entra por parámetro para que este archivo no dependa de
- * nada y lo puedan leer igual Node y el navegador.
+ * Lo que cambia por MOTOR, no por rubro.
+ *
+ * Hay opciones que no dependen de si el negocio vende tortas o cemento sino de
+ * con qué motor trabaja: en un restaurante la descripción del plato ES la
+ * carta, y las guías de remisión no las va a usar nunca. Ponerlo acá y no en
+ * los `ajustes` de cada rubro de `rubros.json` es para que un rubro nuevo de
+ * comida nazca bien sin que nadie se acuerde de copiarle estas dos líneas.
+ *
+ * El rubro sigue mandando: sus `ajustes` se aplican después y pueden
+ * contradecir a su motor.
+ */
+export const AJUSTES_POR_MODO = {
+  restaurant: {
+    /** La descripción del plato es lo que el mozo necesita leer. */
+    showDescriptionInPOS: true,
+    /** Un restaurante no traslada mercadería: el menú solo estorba. */
+    dispatchGuidesEnabled: false,
+  },
+}
+
+/**
+ * Las opciones con las que nace una cuenta de ESTE rubro: la semilla común,
+ * encima lo que cambia su motor (`AJUSTES_POR_MODO`) y encima los ajustes
+ * propios del rubro (una farmacia y una veterinaria no arrancan igual). El
+ * catálogo entra por parámetro para que este archivo no dependa de nada y lo
+ * puedan leer igual Node y el navegador.
  *
  * @param {string|null} rubroId
  * @param {Array<{id:string, modo:string, ajustes?:Object}>} catalogoRubros
  */
 export function opcionesDelRubro(rubroId, catalogoRubros = []) {
   const rubro = catalogoRubros.find((r) => r.id === rubroId)
-  return { ...OPCIONES_SEMILLA, ...(rubro?.ajustes || {}) }
+  return {
+    ...OPCIONES_SEMILLA,
+    ...(AJUSTES_POR_MODO[rubro?.modo] || {}),
+    ...(rubro?.ajustes || {}),
+  }
 }
 
 /** El modo de negocio (el motor) que le toca a un rubro. `retail` si no se sabe. */

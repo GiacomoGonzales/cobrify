@@ -1245,9 +1245,7 @@
         "quotations",
         "dispatch-guides"
       ],
-      "ajustes": {
-        "dispatchGuidesEnabled": true
-      },
+      "ajustes": {},
       "patronesSunat": [
         "FERRETER",
         "MATERIALES DE CONSTRUCCI",
@@ -1405,9 +1403,7 @@
         "quotations",
         "dispatch-guides"
       ],
-      "ajustes": {
-        "dispatchGuidesEnabled": true
-      },
+      "ajustes": {},
       "patronesSunat": [
         "MUEBLE",
         "COLCHON",
@@ -1971,9 +1967,7 @@
         "suppliers",
         "dispatch-guides"
       ],
-      "ajustes": {
-        "dispatchGuidesEnabled": true
-      },
+      "ajustes": {},
       "patronesSunat": [
         "COMBUSTIBLE",
         "GASOLINA",
@@ -2200,9 +2194,7 @@
         "sellers",
         "quotations"
       ],
-      "ajustes": {
-        "dispatchGuidesEnabled": true
-      },
+      "ajustes": {},
       "patronesSunat": [
         "VENTA AL POR MAYOR",
         "DISTRIBUCION"

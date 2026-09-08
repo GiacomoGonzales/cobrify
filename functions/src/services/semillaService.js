@@ -4,7 +4,7 @@
  * Antes cada camino que creaba cuentas —el registro del admin, el del
  * reseller— escribía lo suyo a su manera, y ninguno creaba la sucursal. El
  * resultado eran cuentas cojas: sin sucursal, sin almacén, con el nombre del
- * negocio guardado en campos distintos y con 40 opciones "apagadas" solo
+ * negocio guardado en campos distintos y con las opciones "apagadas" solo
  * porque el campo no existía.
  *
  * Esto lo escribe TODO de una vez y en el servidor. Los valores viven en
@@ -84,7 +84,7 @@ export async function sembrarCuenta(db, { uid, email, datos = {}, FieldValue }) 
     createdAt: ahora,
   }, { merge: true })
 
-  // 2) El negocio: datos, las 40 opciones ya decididas, y sus series.
+  // 2) El negocio: datos, las opciones ya decididas, y sus series.
   lote.set(negocioRef, {
     ruc: texto(datos.ruc),
     businessName: razonSocial,

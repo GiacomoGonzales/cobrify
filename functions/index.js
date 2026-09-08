@@ -15232,7 +15232,7 @@ function esFaltaDeFirmante(error) {
 
 /**
  * Deja una cuenta recién creada lista para usar: sucursal Principal, su
- * almacén, las 40 opciones ya decididas y un solo juego de nombres.
+ * almacén, las opciones ya decididas y un solo juego de nombres.
  *
  * La escribe el SERVIDOR porque tiene que ser la misma para todos los caminos
  * que crean cuentas —el alta del admin, la del reseller, el formulario del
