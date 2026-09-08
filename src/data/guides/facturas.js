@@ -18,7 +18,7 @@
  */
 export default {
   id: 'facturas',
-  actualizado: '06/09/2026',
+  actualizado: '08/09/2026',
   intro:
     'Ventas es el historial de todo lo que emitiste: facturas, boletas, notas de venta, notas de crédito y de débito. Desde acá consultas, cobras lo pendiente, corriges errores, reimprimes y descargas. Es la página a la que vuelves cuando algo de una venta pasada necesita atención.',
 
@@ -104,6 +104,10 @@ export default {
           text: 'Para la cobranza del día a día, el botón **Pagos Pendientes** de la cabecera abre las cuentas por cobrar **agrupadas por cliente**: quién te debe, cuánto en total y qué ya venció. Es la vista para salir a cobrar, en lugar de revisar factura por factura.',
         },
         { type: 'ui', kind: 'botonSecundario', label: 'Pagos Pendientes' },
+        {
+          type: 'texto',
+          text: 'Cada comprobante muestra su fecha **y su hora**. El buscador encuentra al cliente por su documento o por **cualquiera de sus nombres**: razón social, nombre comercial o la sede a la que le vendiste. Y con el icono de impresora de cada cliente sacas **su ticket** de pagos pendientes: qué debe, de qué comprobantes, desde cuándo y para cuándo se comprometió — para entregárselo o llevarlo a cobrar.',
+        },
         {
           type: 'ojo',
           text: 'No se puede registrar un pago mayor que el saldo, ni pagos sobre una venta anulada. Si te pagaron de más, el excedente es un tema aparte (vuelto o adelanto), no parte de este comprobante.',

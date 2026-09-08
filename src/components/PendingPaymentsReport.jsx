@@ -3,9 +3,11 @@ import { Loader2, Printer, FileText, FileSpreadsheet, ChevronDown, ChevronRight,
 import jsPDF from 'jspdf'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, matchesPrebuilt } from '@/lib/utils'
 import { getInvoices, updateInvoice } from '@/services/firestoreService'
-import { getInvoiceDate, parseLocalDateString } from '@/utils/invoiceDate'
+import { getInvoiceDate, getInvoiceTimeInfo, parseLocalDateString } from '@/utils/invoiceDate'
+import { etiquetaDeFechaYHora, nombresDelCliente, haystackDeCliente } from '@/utils/pagosPendientesCliente'
+import { documentLabel } from '@/utils/documentType'
 import { getVisiblePaymentMethods } from '@/utils/paymentMethods'
 import { downloadBlob } from '@/utils/nativeDownload'
 import { useToast } from '@/contexts/ToastContext'
@@ -190,8 +192,9 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
       const isGenericDoc = !rawDoc || /^0+$/.test(rawDoc)
       const docNumber = isGenericDoc ? '' : rawDoc
       const key = isGenericDoc ? `name:${name.toLowerCase()}` : `doc:${rawDoc}`
-      if (!map.has(key)) map.set(key, { key, name, docNumber, count: 0, totals: { PEN: 0, USD: 0 }, docs: [] })
+      if (!map.has(key)) map.set(key, { key, name, docNumber, count: 0, totals: { PEN: 0, USD: 0 }, docs: [], comprobantes: [] })
       const g = map.get(key)
+      g.comprobantes.push(inv)
       const ccy = inv.currency === 'USD' ? 'USD' : 'PEN'
       const pending = getPendingAmount(inv)
       g.count++
@@ -201,6 +204,9 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
         number: inv.number || '—',
         type: DOC_TYPE_LABEL[inv.documentType] || inv.documentType,
         date: getInvoiceDate(inv),
+        // La hora es la del registro; getInvoiceTimeInfo dice si pertenece al
+        // día que se muestra (ventas con fecha retroactiva no).
+        hora: getInvoiceTimeInfo(inv),
         total: Number(inv.total) || 0,
         paid: Number(inv.amountPaid) || 0,
         pending,
@@ -212,7 +218,14 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
       })
     }
     const list = [...map.values()]
-    for (const g of list) g.docs.sort((a, b) => (a.date?.getTime?.() || 0) - (b.date?.getTime?.() || 0))
+    for (const g of list) {
+      g.docs.sort((a, b) => (a.date?.getTime?.() || 0) - (b.date?.getTime?.() || 0))
+      // Todos los nombres con que aparece este cliente en sus comprobantes:
+      // razón social, nombre comercial, la sede elegida al vender. Se busca
+      // por cualquiera y se muestran los que no son el título.
+      g.nombres = nombresDelCliente(g.comprobantes)
+      g.haystack = haystackDeCliente(g)
+    }
     // Orden elegido: alfabético (default — más fácil ubicar a un cliente) o
     // mayor deuda primero (por PEN; a igual PEN, por USD). Aplica también a
     // los PDFs, el ticket y el Excel, que iteran esta misma lista.
@@ -224,11 +237,13 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
     return list
   }, [pendingInvoices, sortBy])
 
-  // Búsqueda por cliente (nombre o documento)
+  // Búsqueda por cliente: documento o CUALQUIERA de sus nombres (razón social,
+  // nombre comercial, la sede a la que se le vendió), con el mismo criterio
+  // que el buscador del POS.
   const visibleCustomers = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase()
+    const q = searchTerm.trim()
     if (!q) return customers
-    return customers.filter(c => c.name.toLowerCase().includes(q) || c.docNumber.toLowerCase().includes(q))
+    return customers.filter(c => matchesPrebuilt(q, c.haystack))
   }, [customers, searchTerm])
 
   const grandTotals = useMemo(() => {
@@ -439,7 +454,7 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
         ensureSpace(5)
         doc.setFontSize(8)
         const dueTxt = d.dueDate ? `  ·  Vence ${formatDate(d.dueDate)}${isOverdue(d.dueDate) ? ' (VENCIDO)' : ''}` : ''
-        doc.text(`${d.type} ${d.number}  ·  ${d.date ? formatDate(d.date) : '—'}${dueTxt}`, MX + 4, y)
+        doc.text(`${d.type} ${d.number}  ·  ${etiquetaDeFechaYHora(d.date, d.hora)}${dueTxt}`, MX + 4, y)
         doc.text(
           `Total ${formatCurrency(d.total, d.ccy)}  ·  Pagado ${formatCurrency(d.paid, d.ccy)}  ·  Debe ${formatCurrency(d.pending, d.ccy)}`,
           W - MX, y, { align: 'right' }
@@ -524,6 +539,80 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
       doc.text(formatCurrency(grandTotals.USD, 'USD'), W - MX, y, { align: 'right' })
     } else {
       doc.text(formatTotals(grandTotals), W - MX, y, { align: 'right' })
+    }
+    y += 6
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7)
+    doc.text(`Generado: ${formatDate(new Date())}`, W / 2, y, { align: 'center' })
+
+    openPdf(doc)
+  }
+
+  // ===== TICKET 80mm DE UN SOLO CLIENTE: sus comprobantes pendientes =====
+  // Para entregárselo al cliente o llevarlo a cobrar: qué debe, de qué
+  // comprobantes, desde cuándo y para cuándo se comprometió.
+  const handlePrintCustomerTicket = (c) => {
+    const W = 80, MX = 4
+    let height = 34 + (c.nombres?.length > 1 ? 4 : 0)
+    for (const d of c.docs) height += 8 + (d.dueDate ? 3.5 : 0)
+    height += 24
+    const doc = new jsPDF({ unit: 'mm', format: [W, Math.max(height, 60)] })
+    let y = 8
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(11)
+    doc.text('PAGOS PENDIENTES', W / 2, y, { align: 'center' })
+    y += 5
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    if (businessName) { doc.text(businessName.slice(0, 40), W / 2, y, { align: 'center' }); y += 4 }
+    doc.text(rangeLabel, W / 2, y, { align: 'center' })
+    y += 3
+    doc.setLineDashPattern([1, 1], 0)
+    doc.line(MX, y, W - MX, y)
+    doc.setLineDashPattern([], 0)
+    y += 5
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.text(c.name.slice(0, 40), MX, y)
+    y += 4
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    if (c.docNumber) { doc.text(`${documentLabel(undefined, c.docNumber)}: ${c.docNumber}`, MX, y); y += 3.5 }
+    const otrosNombres = (c.nombres || []).filter(n => n !== c.name)
+    if (otrosNombres.length > 0) { doc.text(otrosNombres.join(' / ').slice(0, 44), MX, y); y += 3.5 }
+    y += 1.5
+
+    for (const d of c.docs) {
+      doc.setFont('helvetica', 'bold')
+      doc.text(`${d.type} ${d.number}`, MX, y)
+      doc.text(formatCurrency(d.pending, d.ccy), W - MX, y, { align: 'right' })
+      y += 3.5
+      doc.setFont('helvetica', 'normal')
+      doc.text(etiquetaDeFechaYHora(d.date, d.hora), MX, y)
+      doc.text(`Total ${formatCurrency(d.total, d.ccy)} · Pagado ${formatCurrency(d.paid, d.ccy)}`, W - MX, y, { align: 'right' })
+      y += 3.5
+      if (d.dueDate) {
+        doc.text(`Vence ${formatDate(d.dueDate)}${isOverdue(d.dueDate) ? ' (VENCIDO)' : ''}`, MX, y)
+        y += 3.5
+      }
+      y += 1
+    }
+
+    doc.setLineDashPattern([1, 1], 0)
+    doc.line(MX, y, W - MX, y)
+    doc.setLineDashPattern([], 0)
+    y += 5
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.text(`TOTAL (${c.count} comp.)`, MX, y)
+    if (c.totals.PEN > 0.001 && c.totals.USD > 0.001) {
+      doc.text(formatCurrency(c.totals.PEN, 'PEN'), W - MX, y, { align: 'right' })
+      y += 4.5
+      doc.text(formatCurrency(c.totals.USD, 'USD'), W - MX, y, { align: 'right' })
+    } else {
+      doc.text(formatTotals(c.totals), W - MX, y, { align: 'right' })
     }
     y += 6
     doc.setFont('helvetica', 'normal')
@@ -842,8 +931,21 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
                       <p className="text-xs text-gray-500">
                         {c.docNumber ? `${c.docNumber} · ` : ''}{c.count} comprobante{c.count === 1 ? '' : 's'}
                       </p>
+                      {c.nombres?.length > 1 && (
+                        <p className="text-xs text-gray-400 truncate">
+                          También: {c.nombres.filter(n => n !== c.name).join(' · ')}
+                        </p>
+                      )}
                     </div>
                     <span className="text-sm font-bold text-primary-600 whitespace-nowrap">{formatTotals(c.totals)}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePrintCustomerTicket(c)}
+                    className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded shrink-0"
+                    title="Imprimir el ticket de pagos pendientes de este cliente"
+                  >
+                    <Printer className="w-4 h-4" />
                   </button>
                 </div>
                 {expanded.has(c.key) && (
@@ -857,7 +959,7 @@ export default function PendingPaymentsReport({ isOpen, onClose, businessId, dem
                           className="w-3.5 h-3.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500 shrink-0 cursor-pointer"
                         />
                         <span className="truncate flex-1">
-                          {d.type} {d.number} · {d.date ? formatDate(d.date) : '—'}
+                          {d.type} {d.number} · {etiquetaDeFechaYHora(d.date, d.hora)}
                           {d.dueDate && (
                             <span className={isOverdue(d.dueDate) ? 'text-red-600 font-medium' : 'text-gray-500'}>
                               {' · '}Vence {formatDate(d.dueDate)}{isOverdue(d.dueDate) ? ' (vencido)' : ''}
