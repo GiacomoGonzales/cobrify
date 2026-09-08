@@ -233,8 +233,14 @@
     scrollbar-color: rgba(156, 163, 175, 0.8) transparent; /* gray-400 @ 80% */
   }
 
+  /* 6 px, no 8. Ocho se veía como una barra de sistema operativo viejo al lado
+     del resto de la app (la del menú lateral tiene 3, la del catálogo 4). Se
+     queda en 6 y no en 4 porque esta es la de las tablas y el contenido largo:
+     ahí la barra se agarra con el mouse, y por debajo de 6 px se vuelve difícil
+     de pescar. */
   .custom-scrollbar::-webkit-scrollbar {
-    @apply w-2 h-2;
+    width: 6px;
+    height: 6px;
   }
 
   .custom-scrollbar::-webkit-scrollbar-track {
