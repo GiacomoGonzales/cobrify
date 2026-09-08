@@ -778,8 +778,16 @@ export default function Cuenta() {
               {!isBulkDeleting ? (
                 <div className="space-y-4">
                   <Campo etiqueta="Para confirmar, escribe ELIMINAR">
+                    {/* Un texto seguido de una contraseña le parece al navegador un
+                        inicio de sesión: Chrome rellenaba acá el correo de la cuenta
+                        (en mayúsculas, por el onChange) y el botón quedaba apagado sin
+                        que se entendiera por qué (PAKIIP, 8-set-2026). */}
                     <Input
                       type="text"
+                      name="palabra-de-confirmacion"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck={false}
                       value={bulkDeleteConfirmText}
                       onChange={(e) => setBulkDeleteConfirmText(e.target.value.toUpperCase())}
                       placeholder="Escribe ELIMINAR"
@@ -789,7 +797,9 @@ export default function Cuenta() {
                   <Campo etiqueta="Y tu contraseña">
                     <Input
                       type="password"
-                      autoComplete="current-password"
+                      // "new-password": el navegador no vuelca la contraseña guardada
+                      // (y con ella el correo en el campo de arriba). Acá se escribe.
+                      autoComplete="new-password"
                       value={bulkDeletePassword}
                       onChange={(e) => setBulkDeletePassword(e.target.value)}
                       placeholder="Contraseña de tu cuenta"
