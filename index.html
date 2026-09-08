@@ -166,7 +166,10 @@
             var el = document.querySelector(selector);
             if (el) el.setAttribute('content', contenido);
           };
-          meta('meta[name="theme-color"]', '#25BB6A');
+          // La barra de la ventana instalada. Blanca y no verde: es la
+          // continuación de la cabecera de la bandeja, que es blanca. Si el
+          // usuario tiene el chat en oscuro, Chat.jsx la retiñe al montar.
+          meta('meta[name="theme-color"]', '#FFFFFF');
           meta('meta[name="apple-mobile-web-app-title"]', 'Cobrify Chat');
           meta('meta[name="title"]', 'Cobrify Chat');
           meta('meta[name="description"]', 'Bandeja de WhatsApp de Cobrify.');

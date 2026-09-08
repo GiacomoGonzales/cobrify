@@ -212,6 +212,21 @@ export default function Chat() {
     StatusBar.setStyle({ style: tema === 'oscuro' ? Style.Dark : Style.Light }).catch(() => {})
     return () => { StatusBar.setStyle({ style: Style.Dark }).catch(() => {}) }
   }, [tema])
+
+  // Instalada como aplicación de escritorio, la barra de la ventana toma el
+  // `theme-color`. El manifiesto solo puede traer UN color, así que acá se
+  // retiñe con el tema puesto: blanco como la cabecera de la bandeja, o el
+  // mismo `--ad-superficie` del modo oscuro. Antes era el verde de la marca y
+  // se comía toda la franja de arriba.
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]')
+    if (!meta) return undefined
+    const antes = meta.getAttribute('content')
+    meta.setAttribute('content', tema === 'oscuro' ? '#161B22' : '#FFFFFF')
+    // Al salir se devuelve el que hubiera: el azul de la app de negocios si
+    // se entró navegando desde ella, o el blanco del propio chat.
+    return () => { if (antes) meta.setAttribute('content', antes) }
+  }, [tema])
   // La etiqueta del filtro, para nombrarla en el boton del desplegable.
   const etiquetaElegida = etiquetas.find((e) => e.id === filtroEtiqueta) || null
   const [buscarEnChat, setBuscarEnChat] = useState('')
