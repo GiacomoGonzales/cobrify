@@ -622,11 +622,78 @@ const ERRORES_DE_CONFIGURACION = [
  * deja `description` vacío. Mirar solo `description` era ver un error en blanco
  * y concluir "rechazo permanente".
  */
+/**
+ * Nuestros propios marcadores de "no se pudo leer la respuesta".
+ *
+ * No son códigos de SUNAT: los pone este sistema cuando la petición no llegó,
+ * cuando la respuesta no se pudo interpretar, o cuando no vino nada. Un
+ * comprobante con uno de estos NO fue rechazado — simplemente no se sabe qué
+ * pasó, que es una cosa muy distinta.
+ */
+const CODIGOS_SIN_RESPUESTA = ['error', 'parse_error', 'unknown', 'sin_respuesta']
+const TEXTOS_SIN_RESPUESTA = [
+  'error al comunicarse con sunat',   // sunatClient.js y su variante GRE
+  'error al parsear respuesta',        // la respuesta llegó ilegible
+  // Esta la inventamos nosotros cuando el CDR llegó pero no tenía ResponseCode
+  // ("No se encontró ResponseCode en el CDR"). Dice "Rechazado por SUNAT" con
+  // el aplomo de una respuesta oficial, y en realidad es justo lo contrario:
+  // no sabemos qué contestó. Es la peor de las tres, porque convence.
+  'rechazado por sunat (código unknown',
+  // La que ponemos nosotros en `motivoDelEnvio` cuando no vino nada. Va acá
+  // para que releer un comprobante ya guardado dé el mismo veredicto que darlo
+  // por primera vez.
+  'no se recibió respuesta de sunat',
+]
+
+/**
+ * ¿Sabemos siquiera qué contestó SUNAT?
+ *
+ * El silencio no es un rechazo. Rechazar es algo que SUNAT hace explícitamente,
+ * con un código suyo (2xxx, 3xxx, 4xxx) y un motivo; si lo que tenemos es un
+ * hueco o uno de nuestros marcadores, lo honesto es no dar el documento por
+ * perdido y volver a intentarlo.
+ */
+function sabemosQueContestoSunat(codigo, mensaje) {
+  const c = String(codigo || '').trim().toLowerCase()
+  const m = String(mensaje || '').trim().toLowerCase()
+  if (!c && !m) return false
+  if (CODIGOS_SIN_RESPUESTA.includes(c) && TEXTOS_SIN_RESPUESTA.some(t => m.startsWith(t) || !m)) return false
+  if (!c && TEXTOS_SIN_RESPUESTA.some(t => m.startsWith(t))) return false
+  return true
+}
+
+/**
+ * El motivo del envío, tal como se va a leer en pantalla.
+ *
+ * Los 45 comprobantes en blanco de GIDEA guardaban `code: ''` y
+ * `description: ''`, así que en el admin salían sin nada: imposible saber si el
+ * documento se perdió o si SUNAT lo rechazó. Guardar "no se supo" es más
+ * información que guardar el vacío, y además es la verdad.
+ */
+function motivoDelEnvio(resultado) {
+  const codigo = String(resultado?.responseCode || '').trim()
+  const mensaje = String(resultado?.error || resultado?.description || '').trim()
+  if (codigo || mensaje) return { code: codigo, description: mensaje }
+  return {
+    code: 'SIN_RESPUESTA',
+    description: 'No se recibió respuesta de SUNAT. El comprobante se reenviará automáticamente.',
+  }
+}
+
 function estadoDeEnvio(resultado, { pendienteManual = false } = {}) {
   if (resultado?.accepted) return 'accepted'
   if (pendienteManual) return 'signed'
   const codigo = resultado?.responseCode || ''
   const mensaje = resultado?.error || resultado?.description || ''
+
+  // Sin respuesta que interpretar no hay rechazo, hay un envío que no se sabe
+  // si llegó. Antes esto caía en `rejected`, o sea en un estado final que el
+  // reintento automático ni mira, y el comprobante se quedaba sin declarar.
+  // Solo en GIDEA S.A.C. había 106 así: 61 con "Error al comunicarse con SUNAT"
+  // y 45 sin código ni descripción —estos últimos con el motivo de verdad
+  // guardado en `lastRetryError`, un 0111 o un 0200, los dos pasajeros—.
+  if (!sabemosQueContestoSunat(codigo, mensaje)) return 'pending'
+
   return isTransientSunatError(codigo, mensaje) ? 'pending' : 'rejected'
 }
 
@@ -4739,11 +4806,11 @@ export const retryPendingInvoices = onSchedule(
             else totalFailed++
 
             // Actualizar documento
+            const motivo = motivoDelEnvio(result)
             const updateData = {
               sunatStatus: finalStatus,
               sunatResponse: sanitizeForFirestore({
-                code: result.responseCode || '',
-                description: result.description || '',
+                ...motivo,
                 method: result.method,
                 autoRetry: true
               }),
@@ -4754,8 +4821,7 @@ export const retryPendingInvoices = onSchedule(
             if (isTransient && !result.accepted) {
               updateData.retryCount = FieldValue.increment(1)
               updateData.lastRetryError = sanitizeForFirestore({
-                code: result.responseCode || '',
-                description: result.description || '',
+                ...motivo,
                 timestamp: new Date().toISOString()
               })
             }
