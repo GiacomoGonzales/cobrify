@@ -14,6 +14,7 @@ import {
 } from '@/services/brandingService'
 import { useLocation } from 'react-router-dom'
 import { estaEnElChat, MARCA_CHAT } from '@/utils/dominioChat'
+import { seccionDeLaRuta, recordarTitulo } from '@/utils/tituloDePestana'
 
 const BrandingContext = createContext({
   branding: DEFAULT_BRANDING,
@@ -199,6 +200,7 @@ export function BrandingProvider({ children }) {
     // sistema de facturacion.
     if (estaEnElChat()) {
       document.title = MARCA_CHAT.nombre
+      recordarTitulo(MARCA_CHAT.nombre)
       const ponerIcono = (selector, href) => {
         const el = document.querySelector(selector)
         if (el) el.setAttribute('href', href)
@@ -211,12 +213,21 @@ export function BrandingProvider({ children }) {
       return
     }
 
-    // Actualizar título de la pestaña
-    if (branding.companyName && branding.companyName !== DEFAULT_BRANDING.companyName) {
-      document.title = `${branding.companyName} - Sistema de Facturación Electrónica`
-    } else {
-      document.title = 'Sistema de Facturación Electrónica SUNAT | Retail y Restaurantes en Perú'
-    }
+    // El título de la pestaña: dónde estás y de quién es el sistema.
+    //
+    // Fuera del sistema (la landing) NO se toca el título largo: ese es el que
+    // lee Google y el que trae las visitas. Adentro manda el nombre de la
+    // página, que es lo que sirve para distinguir dos pestañas abiertas.
+    const marcaPropia = branding.companyName && branding.companyName !== DEFAULT_BRANDING.companyName
+    const marca = marcaPropia ? branding.companyName : 'Cobrify'
+    const seccion = seccionDeLaRuta(location.pathname)
+    const titulo = seccion
+      ? `${seccion} - ${marca}`
+      : marcaPropia
+        ? `${marca} - Sistema de Facturación Electrónica`
+        : 'Sistema de Facturación Electrónica SUNAT | Retail y Restaurantes en Perú'
+    document.title = titulo
+    recordarTitulo(titulo)
 
     // Actualizar favicon si hay logo personalizado
     if (branding.logoUrl) {
@@ -253,7 +264,9 @@ export function BrandingProvider({ children }) {
     }
 
     console.log('🎨 Updated page title and favicon for:', branding.companyName)
-  }, [branding, brandingLoaded])
+    // `location.pathname` va en las dependencias porque el título nombra la
+    // página: sin él se quedaba con el de la primera que se abrió.
+  }, [branding, brandingLoaded, location.pathname])
 
   // Mostrar loading mientras se carga el branding (evita flash de Cobrify)
   // También mostrar loading para dominios de reseller sin usuario logueado

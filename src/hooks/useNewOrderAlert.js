@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { playOrderAlertBeep, vibrateOrderAlert } from '@/utils/orderAlertSound'
+import { tituloBaseActual } from '@/utils/tituloDePestana'
 
 const REPEAT_INTERVAL_MS = 30000 // Recordatorio cada 30s mientras haya pendientes
 
@@ -15,7 +16,6 @@ const REPEAT_INTERVAL_MS = 30000 // Recordatorio cada 30s mientras haya pendient
  */
 export function useNewOrderAlert(orders, { enabled = true } = {}) {
   const knownPendingIdsRef = useRef(null) // null = primer snapshot, no alertar
-  const initialTitleRef = useRef(null)
   const flashIntervalRef = useRef(null)
   const reminderIntervalRef = useRef(null)
 
@@ -80,7 +80,9 @@ export function useNewOrderAlert(orders, { enabled = true } = {}) {
   // Flash del título mientras haya pendientes
   useEffect(() => {
     if (!enabled) return
-    if (initialTitleRef.current === null) initialTitleRef.current = document.title
+    // El titulo base se pregunta cada vez (`tituloBaseActual`) en vez de
+    // guardarse al montar: ahora cambia al navegar, y la copia vieja devolvia
+    // el nombre de la pagina donde se prendio el aviso.
 
     const pendingCount = (orders || []).filter(o => o.status === 'pending').length
 
@@ -91,14 +93,14 @@ export function useNewOrderAlert(orders, { enabled = true } = {}) {
     }
 
     if (pendingCount === 0) {
-      document.title = initialTitleRef.current
+      document.title = tituloBaseActual()
       return
     }
 
     const altTitle = `🔔 ${pendingCount} pedido${pendingCount > 1 ? 's' : ''} nuevo${pendingCount > 1 ? 's' : ''}`
     let toggle = false
     flashIntervalRef.current = setInterval(() => {
-      document.title = toggle ? initialTitleRef.current : altTitle
+      document.title = toggle ? tituloBaseActual() : altTitle
       toggle = !toggle
     }, 1000)
 
@@ -107,14 +109,14 @@ export function useNewOrderAlert(orders, { enabled = true } = {}) {
         clearInterval(flashIntervalRef.current)
         flashIntervalRef.current = null
       }
-      document.title = initialTitleRef.current
+      document.title = tituloBaseActual()
     }
   }, [orders, enabled])
 
   // Restaurar título al desmontar
   useEffect(() => {
     return () => {
-      if (initialTitleRef.current) document.title = initialTitleRef.current
+      document.title = tituloBaseActual()
     }
   }, [])
 
