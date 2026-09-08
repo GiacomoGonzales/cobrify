@@ -1,3 +1,4 @@
+import { clienteConElMismoDocumento, avisoDeDuplicado } from '@/utils/clienteDuplicado'
 import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -1033,6 +1034,16 @@ export default function Customers() {
     }
 
     const businessId = getBusinessId()
+
+    // Aviso instantáneo contra la lista que ya está en pantalla, antes de
+    // molestar al servidor. La guarda de verdad está en createCustomer, que
+    // cubre también el alta desde cotizaciones, la agenda y la venta.
+    const repetido = clienteConElMismoDocumento(customers, data.documentNumber, editingCustomer?.id)
+    if (repetido) {
+      toast.error(avisoDeDuplicado(repetido), 9000)
+      return
+    }
+
     setIsSaving(true)
 
     try {
@@ -1112,6 +1123,8 @@ export default function Customers() {
         )
         closeModal()
         loadCustomers()
+      } else if (result.duplicado) {
+        toast.error(result.error, 9000)
       } else {
         throw new Error(result.error)
       }

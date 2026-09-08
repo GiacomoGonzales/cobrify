@@ -1,3 +1,4 @@
+import { identificaAUnCliente, avisoDeDuplicado } from '@/utils/clienteDuplicado'
 import {
   collection,
   doc,
@@ -628,7 +629,13 @@ export const deleteInvoice = async (userId, invoiceId, auditInfo = null) => {
 // ==================== CLIENTES ====================
 
 /**
- * Crear un nuevo cliente
+ * Crear un nuevo cliente.
+ *
+ * Un documento identifica a UN cliente: si ya hay una ficha con ese número,
+ * no se crea otra. La guarda vive acá y no en el formulario porque un cliente
+ * también nace desde cotizaciones, la agenda veterinaria y la venta misma.
+ * Devuelve la ficha que ya estaba en `duplicado`, para que quien llamó pueda
+ * usarla en vez de fallar.
  */
 export const createCustomer = async (userId, customerData) => {
   try {
@@ -642,6 +649,15 @@ export const createCustomer = async (userId, customerData) => {
       } else if (docLen === 8 && customerData.documentType === 'RUC') {
         // DNI guardado como RUC - corregir
         correctedData.documentType = 'DNI'
+      }
+    }
+
+    // Los documentos genéricos (vacío, todo ceros) no identifican a nadie y se
+    // repiten sin problema: son las fichas de contacto y el consumidor final.
+    if (identificaAUnCliente(correctedData.documentNumber)) {
+      const yaEsta = await getCustomerByDocumentNumber(userId, String(correctedData.documentNumber).trim())
+      if (yaEsta.success && yaEsta.data) {
+        return { success: false, duplicado: yaEsta.data, error: avisoDeDuplicado(yaEsta.data) }
       }
     }
 
@@ -681,6 +697,14 @@ export const getCustomers = async userId => {
  */
 export const updateCustomer = async (userId, customerId, updates) => {
   try {
+    // Cambiarle el documento a una ficha tampoco puede pisar a otra.
+    if (updates.documentNumber && identificaAUnCliente(updates.documentNumber)) {
+      const yaEsta = await getCustomerByDocumentNumber(userId, String(updates.documentNumber).trim())
+      if (yaEsta.success && yaEsta.data && yaEsta.data.id !== customerId) {
+        return { success: false, duplicado: yaEsta.data, error: avisoDeDuplicado(yaEsta.data) }
+      }
+    }
+
     // Auto-corregir tipo de documento si hay mismatch con la longitud
     let correctedUpdates = { ...updates }
     if (updates.documentNumber) {
@@ -844,6 +868,13 @@ export const upsertCustomerFromSale = async (userId, customerData) => {
       }
 
       const createResult = await createCustomer(userId, newCustomerData)
+      // Si entre la búsqueda de arriba y esta línea alguien más creó la ficha,
+      // la guarda de duplicados la devuelve: la venta se queda con esa en vez
+      // de romperse por una carrera.
+      if (!createResult.success) {
+        if (createResult.duplicado) return { success: true, exists: true, id: createResult.duplicado.id }
+        return { success: false, error: createResult.error }
+      }
       return { success: true, created: true, id: createResult.id }
     }
   } catch (error) {

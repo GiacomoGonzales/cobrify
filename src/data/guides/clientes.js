@@ -30,6 +30,14 @@ export default {
         },
         { type: 'ui', kind: 'boton', label: 'Nuevo Cliente' },
         {
+          type: 'ojo',
+          text: 'Un documento identifica a **un solo cliente**: si intentas registrar un RUC o DNI que ya está en tu lista, el sistema te avisa y te dice de quién es, en vez de crear una ficha repetida. Con dos fichas del mismo cliente, su historial de compras, su deuda y sus pagos pendientes quedan partidos en dos.',
+        },
+        {
+          type: 'texto',
+          text: 'Si lo que quieres es registrar **otro local del mismo cliente** —el mismo RUC con otro nombre comercial o con otra dirección de entrega—, no crees una ficha nueva: agrégalo como una sede dentro de su ficha, en **Sedes y direcciones de entrega**. Al vender puedes elegir a cuál de sus sedes le facturas.',
+        },
+        {
           type: 'consejo',
           text: 'No hace falta registrar a todos. Registra a los que repiten, a los que compran con factura y a los que compran al crédito: son los que te ahorran tiempo después.',
         },
