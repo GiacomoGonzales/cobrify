@@ -71,14 +71,22 @@ export function tocaResetear(suscripcion, hoy) {
   if (!inicio) return { resetear: false, corte: null, motivo: 'sin fecha de inicio' }
 
   const corte = ultimoCorte(hoy, inicio.getUTCDate())
-
+  const crudo = suscripcion?.lastCounterReset
+  const ultimo = crudo ? (crudo.toDate ? crudo.toDate() : new Date(crudo)) : null
+  const hayUltimo = !!ultimo && !isNaN(ultimo.getTime())
+  // Una RENOVACION mueve el inicio del ciclo hacia adelante. Si el ultimo
+  // reseteo es anterior a ese inicio, el contador viene del periodo anterior y
+  // hay que ponerlo en cero sin esperar al proximo corte. Antes del 6-set-2026
+  // registrar un pago no reseteaba, y la guarda de abajo tomaba la renovacion
+  // por un alta: 160 cuentas quedaron arrastrando el cupo un mes entero, y una
+  // (MAMANI, 140/100) con la emision a SUNAT bloqueada por un cupo que no era.
+  if (hayUltimo && ultimo < inicio) {
+    return { resetear: true, corte, motivo: 'el ciclo se renovo despues del ultimo reseteo' }
+  }
   // Un corte anterior al alta no es un corte de esta suscripcion. Sin esto, a
   // quien se da de alta un dia 20 se le borraria el contador el mismo dia.
   if (corte <= inicio) return { resetear: false, corte, motivo: 'el ciclo todavia no cumple un mes' }
-
-  const crudo = suscripcion?.lastCounterReset
-  const ultimo = crudo ? (crudo.toDate ? crudo.toDate() : new Date(crudo)) : null
-  if (ultimo && !isNaN(ultimo.getTime()) && ultimo >= corte) {
+  if (hayUltimo && ultimo >= corte) {
     return { resetear: false, corte, motivo: 'ya se reseteo en este ciclo' }
   }
 
