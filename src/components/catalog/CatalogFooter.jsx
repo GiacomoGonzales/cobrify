@@ -132,7 +132,7 @@ export default function CatalogFooter({ business, sidebarNav = false }) {
                   {business.email}
                 </a>
               )}
-              {business?.address && (
+              {business?.address && !business?.catalogHideAddress && (
                 <a
                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(business.address)}`}
                   target="_blank"

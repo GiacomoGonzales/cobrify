@@ -127,6 +127,9 @@ export default function Catalogo() {
   const [catalogShowPrices, setCatalogShowPrices] = useState(true)
   const [catalogIgnoreStock, setCatalogIgnoreStock] = useState(false)
   const [catalogHideOutOfStock, setCatalogHideOutOfStock] = useState(false)
+  // La direccion del negocio en el catalogo. Se oculta SOLO ahi: en el
+  // comprobante es un dato obligatorio y no se toca.
+  const [catalogHideAddress, setCatalogHideAddress] = useState(false)
   const [catalogShowStock, setCatalogShowStock] = useState(false)
   // Cuentas de comprador en el catálogo. Default ON: solo agrega comodidades
   // (historial y direcciones) y nunca obliga a registrarse para comprar.
@@ -245,6 +248,7 @@ export default function Catalogo() {
     setCatalogShowPrices(businessData.catalogShowPrices !== false) // Por defecto true
     setCatalogIgnoreStock(businessData.catalogIgnoreStock || false)
     setCatalogHideOutOfStock(businessData.catalogHideOutOfStock || false)
+    setCatalogHideAddress(businessData.catalogHideAddress || false)
     setCatalogShowStock(businessData.catalogShowStock || false)
     setCatalogCustomerAccounts(businessData.catalogCustomerAccounts !== false)
     setCatalogWhatsapp(businessData.catalogWhatsapp || '')
@@ -506,6 +510,7 @@ export default function Catalogo() {
       catalogShowPrices,
       catalogIgnoreStock,
       catalogHideOutOfStock,
+      catalogHideAddress,
       catalogShowStock,
       catalogCustomerAccounts,
       catalogWhatsapp: catalogWhatsapp.trim(),
@@ -1058,6 +1063,18 @@ export default function Catalogo() {
                         type="checkbox"
                         checked={catalogShowPrices}
                         onChange={(e) => setCatalogShowPrices(e.target.checked)}
+                        className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-gray-900 block">Ocultar la dirección en el catálogo</span>
+                        <span className="text-xs text-gray-500">Tu dirección deja de mostrarse en el catálogo y en el menú. Solo afecta al catálogo: en los comprobantes se sigue imprimiendo, porque ahí es obligatoria.</span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={catalogHideAddress}
+                        onChange={(e) => setCatalogHideAddress(e.target.checked)}
                         className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                       />
                     </label>

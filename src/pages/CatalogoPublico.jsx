@@ -1848,7 +1848,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             {/* Info del negocio al pie de la columna (en modo sidebar el footer
                 ancho se oculta: hacía "saltar" el scroll al llegar abajo). */}
             <div className={`mt-5 pt-5 border-t ${thBorderColor} space-y-4`}>
-              {business?.address && (
+              {business?.address && !business?.catalogHideAddress && (
                 <p className={`text-xs flex items-start gap-1.5 px-3 ${thTextMuted}`}>
                   <MapPin className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                   <span>{business.address}</span>
@@ -2790,7 +2790,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             </div>
             {/* Info del negocio al pie del menú (igual que el sidebar de escritorio) */}
             <div className={`flex-shrink-0 border-t ${thBorderColor} p-4 space-y-3`}>
-              {business?.address && (
+              {business?.address && !business?.catalogHideAddress && (
                 <p className={`text-xs flex items-start gap-1.5 ${thTextMuted}`}>
                   <MapPin className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                   <span>{business.address}</span>

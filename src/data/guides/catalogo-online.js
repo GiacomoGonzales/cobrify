@@ -72,6 +72,10 @@ export default {
         },
         {
           type: 'texto',
+          text: 'Si atiendes desde tu casa o solo a domicilio y prefieres no publicar dónde estás, activa **Ocultar la dirección en el catálogo**. Tu dirección deja de aparecer en el catálogo y en el menú, pero **se sigue imprimiendo en los comprobantes**, donde es obligatoria.',
+        },
+        {
+          type: 'texto',
           text: 'Si un producto tiene **presentaciones** (Caja x12, Saco x49, Paquete x6), tu cliente las ve al abrirlo: elige entre comprar por unidad suelta o por la presentación, cada una con su precio. Lo que elija llega al pedido y al Punto de Venta, y el stock se descuenta por lo que trae dentro — una caja de 12 baja 12 del almacén, no 1.',
         },
         {
