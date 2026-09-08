@@ -1381,7 +1381,7 @@ export default function CreatePurchase() {
   // Cada fila queda editable (monto y fecha) después de generar.
   const generateInstallments = () => {
     const n = Math.max(2, Math.min(36, Number(numInstallments) || 2))
-    const total = Math.round((amounts.total || 0) * 100) / 100
+    const total = Math.round((calculateAmounts().total || 0) * 100) / 100
     if (total <= 0) {
       toast.error('Agrega productos antes de generar las cuotas')
       return
@@ -1413,7 +1413,7 @@ export default function CreatePurchase() {
   // Suma del cronograma vs total, para avisar el descuadre antes de guardar
   const installmentsSum = Math.round(installments.reduce((sum, r) => sum + (Number(r.amount) || 0), 0) * 100) / 100
   const installmentsMismatch = creditType === 'cuotas' && installments.length > 0 &&
-    Math.abs(installmentsSum - Math.round((amounts.total || 0) * 100) / 100) > 0.01
+    Math.abs(installmentsSum - Math.round((calculateAmounts().total || 0) * 100) / 100) > 0.01
 
   const openCreateProductModal = (itemIndex) => {
     setCurrentItemIndex(itemIndex)
@@ -1991,7 +1991,7 @@ export default function CreatePurchase() {
         return
       }
       if (installmentsMismatch) {
-        toast.error(`La suma de las cuotas (${installmentsSum.toFixed(2)}) no cuadra con el total (${(amounts.total || 0).toFixed(2)})`)
+        toast.error(`La suma de las cuotas (${installmentsSum.toFixed(2)}) no cuadra con el total (${(calculateAmounts().total || 0).toFixed(2)})`)
         return
       }
       if (installments.some(i => !i.dueDate || !(Number(i.amount) > 0))) {
@@ -2608,7 +2608,7 @@ export default function CreatePurchase() {
             result = await updateProduct(businessId, grouped.productId, cleanUndefined(extraUpdates))
           }
           if (!result.success) {
-            console.error('❌ Error actualizando producto:', grouped.productId, result.error, 'Updates:', JSON.stringify(updates, (key, value) => {
+            console.error('❌ Error actualizando producto:', grouped.productId, result.error, 'Updates:', JSON.stringify(extraUpdates, (key, value) => {
               if (value instanceof Date) return `Date(${value.toISOString()})`
               return value
             }, 2))
@@ -3530,7 +3530,7 @@ export default function CreatePurchase() {
                             <div className={`flex justify-between px-3 py-2 text-sm font-medium ${installmentsMismatch ? 'text-red-600 bg-red-50' : 'text-gray-700 bg-gray-50'}`}>
                               <span>Suma del cronograma</span>
                               <span>
-                                {installmentsSum.toFixed(2)} / {(amounts.total || 0).toFixed(2)}
+                                {installmentsSum.toFixed(2)} / {(calculateAmounts().total || 0).toFixed(2)}
                                 {installmentsMismatch && ' — no cuadra con el total'}
                               </span>
                             </div>
