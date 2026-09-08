@@ -6,6 +6,7 @@ import Select from '@/components/ui/Select'
 import { useToast } from '@/contexts/ToastContext'
 import { buildProductHaystack } from '@/utils/productSearch'
 import { matchesPrebuilt } from '@/lib/utils'
+import { lineasDeProducto, nombreDeLinea } from '@/utils/lineasDeStock'
 import {
   MOTIVOS_CONSUMO,
   motivoPorId,
@@ -20,7 +21,14 @@ import {
  * comprobante, no suma a ventas y no pasa por caja.
  *
  * Vive acá dentro y no como página propia: es una acción puntual de
- * inventario, del mismo tamaño que un recuento o un traslado.
+ * inventario, del mismo tamaño que un recuento o un traslado. Se abre desde
+ * Inventario y desde Órdenes; es el mismo modal, no una copia.
+ *
+ * Lo que se elige son LÍNEAS, no productos: un producto con variantes
+ * (Cerveza: personal / 610 ml) aparece como una fila por variante, con el
+ * stock de esa variante en el almacén elegido. El producto "Cerveza" a secas
+ * no se puede elegir, porque descontarlo no descuenta ninguna variante (ver
+ * utils/lineasDeStock).
  */
 export default function ConsumoInternoModal({
   isOpen,
@@ -47,52 +55,61 @@ export default function ConsumoInternoModal({
 
   const motivoActual = motivoPorId(motivo)
 
-  // La lista arranca mostrando los productos, no vacía: la mayoría de las veces
-  // el que consume el personal está a la vista y no hace falta escribir nada.
-  // El buscador usa el mismo criterio que el resto del sistema.
-  const resultados = useMemo(() => {
+  // La lista arranca mostrando las líneas, no vacía: la mayoría de las veces
+  // lo que consume el personal está a la vista y no hace falta escribir nada.
+  // El buscador usa el mismo criterio que el resto del sistema (y ya indexa el
+  // SKU y los atributos de las variantes). Se recalcula al cambiar de almacén
+  // porque el stock que se muestra es el de ESE almacén.
+  const lineas = useMemo(() => {
     const q = busqueda.trim()
-    if (!q) return productos.slice(0, 50)
-    return productos.filter((p) => matchesPrebuilt(q, buildProductHaystack(p))).slice(0, 50)
-  }, [productos, busqueda])
+    const base = q ? productos.filter((p) => matchesPrebuilt(q, buildProductHaystack(p))) : productos
+    const out = []
+    for (const p of base) {
+      out.push(...lineasDeProducto(p, { almacenId }))
+      if (out.length >= 60) break
+    }
+    return out.slice(0, 60)
+  }, [productos, busqueda, almacenId])
 
-  const yaElegido = (id) => carrito.some((x) => x.productId === id)
+  const productoPorId = useMemo(() => new Map(productos.map((p) => [p.id, p])), [productos])
 
-  /** El costo es lo que vale reponerlo, no lo que se cobra. */
-  const costoDe = (p) => Number(p.cost ?? p.costPrice ?? p.purchasePrice ?? 0) || 0
+  // El stock de una línea del carrito se mira en el momento, no cuando se
+  // agregó: si cambian de almacén a mitad, el aviso de "solo hay X" tiene que
+  // hablar del almacén nuevo.
+  const stockActualDe = (x) =>
+    lineasDeProducto(productoPorId.get(x.productId), { almacenId })
+      .find((l) => l.clave === x.clave)?.stockActual ?? x.stockActual
 
-  const agregar = (p) => {
+  const yaElegido = (clave) => carrito.some((x) => x.clave === clave)
+
+  const agregar = (l) => {
     setCarrito((prev) => {
-      const i = prev.findIndex((x) => x.productId === p.id)
+      const i = prev.findIndex((x) => x.clave === l.clave)
       if (i >= 0) {
         const copia = [...prev]
         copia[i] = { ...copia[i], cantidad: copia[i].cantidad + 1 }
         return copia
       }
-      return [...prev, {
-        productId: p.id,
-        nombre: p.name,
-        cantidad: 1,
-        costoUnitario: costoDe(p),
-        stockActual: Number(p.stock) || 0,
-        // Un plato del menú suele no llevar stock propio: lo que se descuenta
-        // son sus insumos, por la receta.
-        controlaStock: p.trackStock !== false,
-      }]
+      // Un plato del menú suele no llevar stock propio: lo que se descuenta
+      // son sus insumos, por la receta. El costo es lo que vale reponerlo, no
+      // lo que se cobra.
+      return [...prev, { ...l, cantidad: 1 }]
     })
     setBusqueda('')
   }
 
-  const cambiar = (productId, delta) => {
+  const cambiar = (clave, delta) => {
     setCarrito((prev) => prev
-      .map((x) => (x.productId === productId ? { ...x, cantidad: Math.max(0, x.cantidad + delta) } : x))
+      .map((x) => (x.clave === clave ? { ...x, cantidad: Math.max(0, x.cantidad + delta) } : x))
       .filter((x) => x.cantidad > 0))
   }
 
-  const fijar = (productId, valor) => {
+  const fijar = (clave, valor) => {
     const n = parseFloat(valor)
-    setCarrito((prev) => prev.map((x) => (x.productId === productId ? { ...x, cantidad: isNaN(n) ? 0 : n } : x)))
+    setCarrito((prev) => prev.map((x) => (x.clave === clave ? { ...x, cantidad: isNaN(n) ? 0 : n } : x)))
   }
+
+  const quitar = (clave) => setCarrito((prev) => prev.filter((x) => x.clave !== clave))
 
   const total = carrito.reduce((a, x) => a + (Number(x.costoUnitario) || 0) * Number(x.cantidad), 0)
 
@@ -110,7 +127,15 @@ export default function ConsumoInternoModal({
     setGuardando(true)
     try {
       const r = await createInternalConsumption(businessId, {
-        items: carrito,
+        items: carrito.map((x) => ({
+          productId: x.productId,
+          nombre: x.nombre,
+          cantidad: x.cantidad,
+          costoUnitario: x.costoUnitario,
+          controlaStock: x.controlaStock,
+          variantSku: x.variantSku || null,
+          variantLabel: x.etiqueta || null,
+        })),
         motivo,
         fecha: new Date(),
         empleadoNombre: motivoActual?.pideEmpleado ? (empleado.trim() || null) : null,
@@ -182,7 +207,7 @@ export default function ConsumoInternoModal({
           )}
         </div>
 
-        {/* Productos: la lista está a la vista y el buscador solo la filtra */}
+        {/* Líneas: la lista está a la vista y el buscador solo la filtra */}
         <div>
           <div className="relative mb-2">
             <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -190,33 +215,33 @@ export default function ConsumoInternoModal({
               type="text"
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Buscar producto por nombre o código"
+              placeholder="Buscar producto por nombre, código o variante"
               className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
             />
           </div>
 
           <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto divide-y divide-gray-100">
-            {resultados.length === 0 && (
+            {lineas.length === 0 && (
               <p className="text-sm text-gray-400 px-3 py-4 text-center">
                 {busqueda ? 'Ningún producto coincide.' : 'No hay productos cargados.'}
               </p>
             )}
-            {resultados.map((p) => (
+            {lineas.map((l) => (
               <button
-                key={p.id}
+                key={l.clave}
                 type="button"
-                onClick={() => agregar(p)}
+                onClick={() => agregar(l)}
                 className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-center justify-between gap-3"
               >
                 <div className="min-w-0">
-                  <p className="text-sm text-gray-900 truncate">{p.name}</p>
+                  <p className="text-sm text-gray-900 truncate">{nombreDeLinea(l)}</p>
                   <p className="text-xs text-gray-400">
-                    {p.trackStock === false
-                      ? 'Sin stock propio — descuenta sus insumos'
-                      : `Stock: ${Number(p.stock) || 0}`}
+                    {l.controlaStock
+                      ? `Stock: ${l.stockActual}`
+                      : 'Sin stock propio — descuenta sus insumos'}
                   </p>
                 </div>
-                {yaElegido(p.id)
+                {yaElegido(l.clave)
                   ? <Check className="w-4 h-4 text-primary-600 flex-none" />
                   : <Plus className="w-4 h-4 text-gray-400 flex-none" />}
               </button>
@@ -227,39 +252,42 @@ export default function ConsumoInternoModal({
         {/* Lo elegido */}
         {carrito.length > 0 && (
           <div className="space-y-2 max-h-56 overflow-y-auto">
-            {carrito.map((x) => (
-              <div key={x.productId} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2.5">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-900 truncate">{x.nombre}</p>
-                  {x.controlaStock && x.cantidad > x.stockActual && (
-                    <p className="text-[11px] text-amber-600">Solo hay {x.stockActual} en stock</p>
-                  )}
-                </div>
-                <div className="flex items-center gap-1 flex-none">
-                  <button type="button" onClick={() => cambiar(x.productId, -1)} className="p-1 text-gray-400 hover:text-gray-700">
-                    <Minus className="w-4 h-4" />
+            {carrito.map((x) => {
+              const stock = stockActualDe(x)
+              return (
+                <div key={x.clave} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-gray-900 truncate">{nombreDeLinea(x)}</p>
+                    {x.controlaStock && x.cantidad > stock && (
+                      <p className="text-[11px] text-amber-600">Solo hay {stock} en stock</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 flex-none">
+                    <button type="button" onClick={() => cambiar(x.clave, -1)} className="p-1 text-gray-400 hover:text-gray-700">
+                      <Minus className="w-4 h-4" />
+                    </button>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={x.cantidad}
+                      onChange={(e) => fijar(x.clave, e.target.value)}
+                      className="w-14 text-center px-1 py-1 text-sm border border-gray-300 rounded"
+                    />
+                    <button type="button" onClick={() => cambiar(x.clave, 1)} className="p-1 text-gray-400 hover:text-gray-700">
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => quitar(x.clave)}
+                    className="p-1 text-gray-300 hover:text-red-500 flex-none"
+                  >
+                    <X className="w-4 h-4" />
                   </button>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={x.cantidad}
-                    onChange={(e) => fijar(x.productId, e.target.value)}
-                    className="w-14 text-center px-1 py-1 text-sm border border-gray-300 rounded"
-                  />
-                  <button type="button" onClick={() => cambiar(x.productId, 1)} className="p-1 text-gray-400 hover:text-gray-700">
-                    <Plus className="w-4 h-4" />
-                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setCarrito((prev) => prev.filter((y) => y.productId !== x.productId))}
-                  className="p-1 text-gray-300 hover:text-red-500 flex-none"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
 

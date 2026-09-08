@@ -32,6 +32,14 @@ import { deductIngredients, restoreIngredients } from './ingredientService'
  * Si un producto tiene receta (modo restaurante), descuenta los INSUMOS igual
  * que lo haría una venta: registrar "2 lomo saltado" baja la carne, la papa y
  * la cebolla, no un producto llamado "lomo saltado".
+ *
+ * Un producto con variantes se descuenta POR VARIANTE, nunca como padre. Si
+ * llega una línea sin `variantSku` para un producto que las tiene, se rechaza
+ * acá y no se crea movimiento: la transacción no la rechazaría —caería a la
+ * rama de producto simple y tocaría el total del padre—, y la siguiente venta
+ * de cualquier variante recalcula ese total desde las variantes y deshace el
+ * descuento sin dejar rastro. Pasó en un restaurante con "Cerveza personal /
+ * 610 ml" (7-set-2026): no bajaba el stock y no quedaba historial.
  */
 
 export const MOTIVOS_CONSUMO = [
@@ -56,7 +64,7 @@ const coleccion = (businessId) => collection(db, 'businesses', businessId, 'inte
  * vez de stock descontado sin rastro de por qué.
  *
  * @param {Object} datos
- * @param {Array}  datos.items      [{ productId, nombre, cantidad, costoUnitario, variantSku?, unidad?, controlaStock? }]
+ * @param {Array}  datos.items      [{ productId, nombre, cantidad, costoUnitario, variantSku?, variantLabel?, unidad?, controlaStock? }]
  * @param {string} datos.motivo     id de MOTIVOS_CONSUMO
  * @param {Date}   datos.fecha      cuándo se consumió (puede ser anterior a hoy)
  * @param {string} [datos.empleadoNombre]
@@ -88,6 +96,7 @@ export const createInternalConsumption = async (businessId, datos) => {
         costoUnitario: Number(i.costoUnitario) || 0,
         subtotal: (Number(i.costoUnitario) || 0) * Number(i.cantidad),
         ...(i.variantSku ? { variantSku: i.variantSku } : {}),
+        ...(i.variantLabel ? { variantLabel: i.variantLabel } : {}),
         ...(i.unidad ? { unidad: i.unidad } : {}),
         ...(i.controlaStock === false ? { controlaStock: false } : {}),
       })),
@@ -129,11 +138,21 @@ export const createInternalConsumption = async (businessId, datos) => {
         // por qué el historial no cuadra con las existencias.
         if (item.controlaStock === false) continue
 
-        await updateProductStockTransaction(
+        // Con variantes, sin variante no hay qué descontar (ver cabecera).
+        const prodSnap = await getDoc(doc(db, 'businesses', businessId, 'products', item.productId))
+        const prod = prodSnap.exists() ? prodSnap.data() : null
+        if (prod?.hasVariants && prod.variants?.length > 0 && !item.variantSku) {
+          throw new Error('Elige la variante (talla, tamaño, presentación) que salió')
+        }
+
+        // La transacción devuelve { success:false } en vez de lanzar. Si no se
+        // mira, se anota un movimiento por stock que nunca se movió.
+        const descuento = await updateProductStockTransaction(
           businessId, item.productId, datos.warehouseId || null,
           -Number(item.cantidad), {}, item.variantSku || null,
           null, !!datos.permitirNegativo,
         )
+        if (!descuento?.success) throw new Error(descuento?.error || 'No se pudo descontar el stock')
 
         await createStockMovement(businessId, {
           productId: item.productId,
@@ -148,6 +167,7 @@ export const createInternalConsumption = async (businessId, datos) => {
           costoUnitario: Number(item.costoUnitario) || 0,
           userId: datos.usuario?.uid || '',
           ...(item.variantSku ? { variantSku: item.variantSku } : {}),
+          ...(item.variantLabel ? { variantLabel: item.variantLabel } : {}),
         })
       } catch (e) {
         console.error(`Error descontando ${item.nombre}:`, e)
@@ -211,10 +231,11 @@ export const voidInternalConsumption = async (businessId, consumoId, usuario) =>
         // Nunca se descontó: tampoco hay nada que devolver.
         if (item.controlaStock === false) continue
 
-        await updateProductStockTransaction(
+        const devolucion = await updateProductStockTransaction(
           businessId, item.productId, consumo.warehouseId || null,
           Number(item.cantidad), {}, item.variantSku || null,
         )
+        if (!devolucion?.success) throw new Error(devolucion?.error || 'No se pudo devolver el stock')
 
         await createStockMovement(businessId, {
           productId: item.productId,
@@ -227,6 +248,7 @@ export const voidInternalConsumption = async (businessId, consumoId, usuario) =>
           referenceId: consumoId,
           userId: usuario?.uid || '',
           ...(item.variantSku ? { variantSku: item.variantSku } : {}),
+          ...(item.variantLabel ? { variantLabel: item.variantLabel } : {}),
         })
       } catch (e) {
         console.error(`Error devolviendo ${item.nombre}:`, e)

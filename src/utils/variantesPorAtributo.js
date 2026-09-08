@@ -158,3 +158,18 @@ export function convieneSelectores(variants = []) {
   if (variants.some(v => Object.keys(v?.attributes || {}).length === 0)) return false
   return atributosDeVariantes(variants).length >= 2
 }
+
+/**
+ * Cómo se llama una variante para una persona: "M / Blanco", "610 ml".
+ *
+ * Son sus atributos en el orden guardado, separados por " / ", y si no tiene
+ * atributos queda el SKU. Este texto estaba escrito a mano en veintitrés
+ * lugares (POS, Inventario, Recuento, Traslado, exportaciones...) con el mismo
+ * `Object.values(attributes).join(' / ')`; acá vive una sola vez.
+ */
+export function nombreDeVariante(variant) {
+  const valores = Object.values(variant?.attributes || {})
+    .filter(v => v !== undefined && v !== null && String(v).trim() !== '')
+    .map(v => String(v).trim())
+  return valores.join(' / ') || String(variant?.sku || '').trim()
+}

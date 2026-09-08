@@ -1,14 +1,15 @@
 /**
  * GUÍA DE USO: Consumo Interno
  *
- * Nombres verificados contra src/pages/InternalConsumption.jsx.
+ * Nombres verificados contra src/components/inventory/ConsumoInternoModal.jsx
+ * (el mismo modal se abre desde Inventario y desde Órdenes).
  * Ver reglas de redacción en pos.js y en GuideRenderer.jsx.
  */
 export default {
   id: 'consumo-interno',
-  actualizado: '21/08/2026',
+  actualizado: '07/09/2026',
   intro:
-    'Descontar stock sin cobrar nada: lo que consumió el personal, lo que se echó a perder, una cortesía. Es como registrar una merma, pero diciendo por qué. Lo encuentras en **Inventario → Opciones → Consumo interno**.',
+    'Descontar stock sin cobrar nada: lo que consumió el personal, lo que se echó a perder, una cortesía. Es como registrar una merma, pero diciendo por qué. Lo encuentras en **Inventario → Opciones → Consumo interno** y, en el modo restaurante, también en **Órdenes**.',
 
   sections: [
     {
@@ -35,6 +36,7 @@ export default {
             'En **Inventario**, abre **Opciones** y elige **Consumo interno**.',
             'Elige el **motivo**. Si eliges *Consumo del personal* aparece un campo para anotar de quién fue.',
             'Busca los productos por nombre o código y ajusta las cantidades.',
+            'Si el producto tiene variantes (Cerveza: personal / 610 ml), cada variante aparece como una fila propia con su stock. Elige la que salió: el producto general no se puede elegir, porque no tiene stock propio.',
             'Si quieres, deja un comentario, y presiona **Descontar del stock**.',
           ],
         },
@@ -65,6 +67,10 @@ export default {
         {
           type: 'texto',
           text: 'Cada salida queda en **Movimientos de Inventario**, con su motivo y quién la registró, junto al resto del historial de tu stock.',
+        },
+        {
+          type: 'ojo',
+          text: 'Con variantes, lo que baja y lo que queda en el historial es de esa variante: verás "Cerveza — 610 ml", no solo "Cerveza". El stock que muestra la lista es el del almacén que elegiste arriba.',
         },
         {
           type: 'ojo',
