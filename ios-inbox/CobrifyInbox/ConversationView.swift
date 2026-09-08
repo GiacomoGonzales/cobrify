@@ -100,9 +100,11 @@ struct ConversationView: View {
                 .padding(.top, 8)
                 // Un respiro antes del compositor: sin esto la última burbuja
                 // queda pegada al cuadro de escribir. Y tiene que ser al menos
-                // lo que mide la banda que desvanece, o el último mensaje se
-                // vería siempre medio apagado aun estando quieto.
-                .padding(.bottom, 18)
+                // lo que mide la banda que desvanece (`bandaAbajo`), o el
+                // último mensaje se vería siempre medio apagado aun estando
+                // quieto. Bajó de 18 a 13 junto con la banda, para que el
+                // desvanecido quede pegado al campo de texto.
+                .padding(.bottom, 13)
                 .background(SondaDeScroll(espia: espia))
             }
             // El texto se DESVANECE al meterse detrás de la cabecera y del
@@ -818,18 +820,24 @@ struct ConversationView: View {
     /// pantalla. Y como se desvanece el CONTENIDO en vez de pintar un velo
     /// encima, funciona igual con fondo claro, oscuro o una foto.
     private var mascaraDeBordes: some View {
-        let banda: CGFloat = 14
+        // Las dos bandas NO miden igual. Arriba hay que empezar a desvanecer
+        // antes, porque bajo la cabecera translúcida el texto se lee un rato
+        // más y queda sucio. Abajo el cuadro de escribir es opaco y tapa de
+        // golpe, así que una banda corta pega el desvanecido al borde: con 14
+        // se notaba el corte demasiado arriba del campo de texto.
+        let bandaArriba: CGFloat = 14
+        let bandaAbajo: CGFloat = 10
         return VStack(spacing: 0) {
             // Aparece justo al salir de la cabecera…
             LinearGradient(colors: [.black.opacity(0), .black],
                            startPoint: .top, endPoint: .bottom)
-                .frame(height: banda)
+                .frame(height: bandaArriba)
             // …en medio se ve todo…
             Rectangle().fill(.black)
             // …y se desvanece justo al meterse en el cuadro de escribir.
             LinearGradient(colors: [.black, .black.opacity(0)],
                            startPoint: .top, endPoint: .bottom)
-                .frame(height: banda)
+                .frame(height: bandaAbajo)
         }
     }
 

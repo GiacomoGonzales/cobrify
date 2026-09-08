@@ -141,6 +141,24 @@ struct ConversationListView: View {
             .navigationDestination(for: String.self) { id in
                 if let conv = inbox.conversaciones.first(where: { $0.id == id }) {
                     ConversationView(conv: conv, alAbrir: { inbox.marcarLeida(conv) })
+                        // El `.id` es obligatorio, no un adorno.
+                        //
+                        // Al tocar un aviso estando YA dentro de otra
+                        // conversación, la ruta pasa de [A] a [B]. Para SwiftUI
+                        // es la misma vista en el mismo sitio, así que la
+                        // reutiliza: la cabecera se actualizaba a B —lee
+                        // `conv.titulo` en cada dibujado— pero los mensajes
+                        // seguían siendo los de A, porque el store se arranca en
+                        // `.onAppear` y eso no se vuelve a disparar. Salías con
+                        // el nombre de uno y la conversación del otro. Peor
+                        // todavía: el borrador a medio escribir para A se
+                        // quedaba en el cuadro de texto de B, listo para
+                        // mandárselo a quien no era.
+                        //
+                        // Con `.id(id)` la vista es OTRA cuando cambia la
+                        // conversación: se construye de nuevo, con su store y
+                        // su borrador limpios.
+                        .id(id)
                 }
             }
         }
