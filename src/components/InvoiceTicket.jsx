@@ -1,4 +1,5 @@
 import { forwardRef } from 'react'
+import { rucDeEmpresa } from '@/utils/rucDeEmpresa'
 import { getRealPayments } from '@/utils/receivables'
 import { getNotaVentaLegend } from '@/utils/documentLegends'
 import React from 'react'
@@ -150,7 +151,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
   // Generar código QR según formato SUNAT
   // Formato: RUC_EMISOR|TIPO_DOC|SERIE|NUMERO|IGV|TOTAL|FECHA_EMISION|TIPO_DOC_CLIENTE|NUM_DOC_CLIENTE|
   const generateQRData = () => {
-    const ruc = companySettings?.ruc || '00000000000'
+    const ruc = rucDeEmpresa(companySettings)
     const tipoDoc = getDocumentTypeCode()
     const serie = invoice.series || 'B001'
     const numero = invoice.number || '1'
@@ -724,8 +725,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
         )}
 
         <div className="company-name">{invoice.branchTradeName || invoice.branchName || companySettings?.tradeName || companySettings?.name || 'MI EMPRESA'}</div>
-        {!(invoice.documentType === 'nota_venta' && companySettings?.hideRucIgvInNotaVenta) && (
-          <div className="company-info">RUC: {companySettings?.ruc || '00000000000'}</div>
+        {!(invoice.documentType === 'nota_venta' && companySettings?.hideRucIgvInNotaVenta) && !!rucDeEmpresa(companySettings) && (
+          <div className="company-info">RUC: {rucDeEmpresa(companySettings)}</div>
         )}
         {companySettings?.businessName && (
           <div className="company-info">{companySettings.businessName}</div>

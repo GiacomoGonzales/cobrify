@@ -1,4 +1,5 @@
 import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
+import { rucDeEmpresa, lineaRuc } from '@/utils/rucDeEmpresa';
 import { nombreParaMostrar, razonSocialSiAporta } from '@/utils/nombreDelNegocio';
 import { lineasDeFechaYHora, mostrarTitulosDeSeccion, lineasDeItem, usarFuentePequena, anchoDeLinea, tamanoDeQr, mostrarSeparadores } from '@/utils/ticketCompacto';
 import { clienteDelComprobante, lineasDelCliente } from '@/utils/datosDelClienteEnComprobante';
@@ -1212,8 +1213,8 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
       .clearFormatting();
 
     // RUC (company-info) - CENTRADO
-    if (!(isNotaVenta && business.hideRucIgvInNotaVenta)) {
-      printer = printer.align('center').text(convertSpanishText(`RUC: ${business.ruc || '00000000000'}\n`));
+    if (!(isNotaVenta && business.hideRucIgvInNotaVenta) && rucDeEmpresa(business)) {
+      printer = printer.align('center').text(convertSpanishText(lineaRuc(business, '\n')));
     }
 
     // Razón Social (si existe y es diferente del nombre comercial) - CENTRADO
@@ -2097,7 +2098,7 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
       businessName: business?.name || '',
       tradeName: business?.tradeName || business?.name || '',
       businessLegalName: business?.businessName || '',
-      businessRuc: business?.ruc || '',
+      businessRuc: rucDeEmpresa(business),
       ruc: business?.ruc || '',
       address: business?.address || '',
       phone: business?.phone || '',
@@ -2739,8 +2740,8 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
       .bold(false);
 
     // RUC
-    if (!(isNotaVenta && business.hideRucIgvInNotaVenta)) {
-      builder.text(`RUC: ${business.ruc || '00000000000'}`).newLine();
+    if (!(isNotaVenta && business.hideRucIgvInNotaVenta) && rucDeEmpresa(business)) {
+      builder.text(lineaRuc(business)).newLine();
     }
 
     // Dirección - Priorizar: sucursal > almacén > empresa
@@ -3661,7 +3662,7 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
       .bold(true)
       .text(convertSpanishText(business?.tradeName || business?.name || 'MI EMPRESA') + '\n')
       .bold(false)
-      .text(`RUC: ${business?.ruc || '00000000000'}\n`);
+      .text(lineaRuc(business, '\n'));
 
     if (business?.address) {
       printer = printer.text(convertSpanishText(business.address) + '\n');
@@ -3941,8 +3942,7 @@ const printWifiCashClosure = async (sessionData, movements, business, paperWidth
       .text(convertSpanishText(business?.tradeName || business?.name || 'MI EMPRESA'))
       .newLine()
       .bold(false)
-      .text(`RUC: ${business?.ruc || '00000000000'}`)
-      .newLine();
+      .text(lineaRuc(business, '\n'));
 
     if (business?.address) {
       builder.text(convertSpanishText(business.address)).newLine();
@@ -4174,7 +4174,7 @@ const printBLECashClosure = async (sessionData, movements, business, paperWidth,
 
     // Header
     ticketText += `${convertSpanishText(business?.tradeName || business?.name || 'MI EMPRESA')}\n`;
-    ticketText += `RUC: ${business?.ruc || '00000000000'}\n`;
+    ticketText += lineaRuc(business, '\n');
     if (business?.address) ticketText += `${convertSpanishText(business.address)}\n`;
     if (branchName) ticketText += `Sucursal: ${convertSpanishText(branchName)}\n`;
     ticketText += '\n';
@@ -4364,7 +4364,7 @@ export const printCashMovementTicket = async (movement, business, paperWidth = 5
       const builder = new EscPosBuilder();
       builder.alignCenter()
         .bold(true).text(convertSpanishText(business?.tradeName || business?.name || 'MI EMPRESA')).newLine().bold(false)
-        .text(`RUC: ${business?.ruc || '00000000000'}`).newLine();
+        .text(lineaRuc(business, '\n'));
       if (business?.address) builder.text(convertSpanishText(business.address)).newLine();
       if (branchName) builder.text(`Sucursal: ${convertSpanishText(branchName)}`).newLine();
       builder.newLine().bold(true).text('CONSTANCIA DE CAJA').newLine().bold(false)
@@ -4400,7 +4400,7 @@ export const printCashMovementTicket = async (movement, business, paperWidth = 5
     try {
       let t = '';
       t += `${convertSpanishText(business?.tradeName || business?.name || 'MI EMPRESA')}\n`;
-      t += `RUC: ${business?.ruc || '00000000000'}\n`;
+      t += lineaRuc(business, '\n');
       if (business?.address) t += `${convertSpanishText(business.address)}\n`;
       if (branchName) t += `Sucursal: ${convertSpanishText(branchName)}\n`;
       t += '\n*** CONSTANCIA DE CAJA ***\n';
@@ -4441,7 +4441,7 @@ export const printCashMovementTicket = async (movement, business, paperWidth = 5
     }
     printer = printer
       .bold(true).text(convertSpanishText(business?.tradeName || business?.name || 'MI EMPRESA') + '\n').bold(false)
-      .text(`RUC: ${business?.ruc || '00000000000'}\n`);
+      .text(lineaRuc(business, '\n'));
     if (business?.address) printer = printer.text(convertSpanishText(business.address) + '\n');
     if (branchName) printer = printer.text(`Sucursal: ${convertSpanishText(branchName)}\n`);
     printer = printer
@@ -4522,7 +4522,7 @@ const buildDispatchGuideEscPos = (guide, business, paperWidth = 58) => {
   builder.init()
     .alignCenter()
     .bold().text(convertSpanishText(business.tradeName || business.name || 'MI EMPRESA') + '\n').clearFormatting()
-    .alignCenter().text('RUC: ' + (business.ruc || '00000000000') + '\n');
+    .alignCenter().text(lineaRuc(business, '\n'));
 
   if (business.address) builder.alignCenter().text(convertSpanishText(business.address) + '\n');
   if (business.phone) builder.alignCenter().text('Tel: ' + business.phone + '\n');
@@ -4720,7 +4720,7 @@ export const printDispatchGuideTicket = async (guide, business, paperWidth = 58)
       .bold()
       .text(convertSpanishText(business.tradeName || business.name || 'MI EMPRESA') + '\n')
       .clearFormatting()
-      .align('center').text('RUC: ' + (business.ruc || '00000000000') + '\n');
+      .align('center').text(lineaRuc(business, '\n'));
 
     if (business.address) printer = printer.align('center').text(convertSpanishText(business.address) + '\n');
     if (business.phone) printer = printer.align('center').text('Tel: ' + business.phone + '\n');
@@ -4886,7 +4886,7 @@ const buildQuotationEscPos = (quotation, business, paperWidth = 58) => {
   builder.init()
     .alignCenter()
     .bold().text(convertSpanishText(business.tradeName || business.name || business.businessName || 'MI EMPRESA') + '\n').clearFormatting()
-    .alignCenter().text('RUC: ' + (business.ruc || '00000000000') + '\n');
+    .alignCenter().text(lineaRuc(business, '\n'));
 
   const displayAddr = quotation.branchAddress || business.address;
   if (displayAddr) builder.alignCenter().text(convertSpanishText(displayAddr) + '\n');
@@ -5061,7 +5061,7 @@ export const printQuotationTicket = async (quotation, business, paperWidth = 58)
       .bold()
       .text(convertSpanishText(business.tradeName || business.name || business.businessName || 'MI EMPRESA') + '\n')
       .clearFormatting()
-      .align('center').text('RUC: ' + (business.ruc || '00000000000') + '\n');
+      .align('center').text(lineaRuc(business, '\n'));
 
     const displayAddr = quotation.branchAddress || business.address;
     if (displayAddr) printer = printer.align('center').text(convertSpanishText(displayAddr) + '\n');

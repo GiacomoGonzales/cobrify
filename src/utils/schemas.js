@@ -550,10 +550,10 @@ export const invoiceSchema = z.object({
 
 // Schema para Configuración de Empresa
 export const companySettingsSchema = z.object({
-  ruc: z
-    .string()
-    .length(11, 'RUC debe tener 11 dígitos')
-    .refine(validateRUC, 'RUC inválido'),
+  // El RUC se valida abajo, en el superRefine: es obligatorio salvo que el
+  // negocio haya marcado "No tengo RUC" (uso interno, sin emisión a SUNAT).
+  ruc: z.string().optional(),
+  sinRuc: z.boolean().optional(),
   businessName: z.string().min(1, 'Razón social es requerida'),
   tradeName: z.string().optional(),
   address: z.string().min(1, 'Dirección es requerida'),
@@ -573,6 +573,18 @@ export const companySettingsSchema = z.object({
   mtcRegistration: z.string().optional(),
   bankAccounts: z.string().optional(), // Cuentas bancarias (BCP, BBVA, Interbank, etc.)
   logo: z.string().optional(),
+}).superRefine((data, ctx) => {
+  // Sin RUC no hay nada que validar: el campo se guarda vacío. Pedido de un
+  // cliente que usa el sistema solo para control interno (8-set-2026): con el
+  // dígito verificador encendido ya no podía guardar Mi Empresa con un número
+  // inventado, y antes tampoco podía dejarlo vacío.
+  if (data.sinRuc === true) return
+  const ruc = data.ruc || ''
+  if (ruc.length !== 11) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['ruc'], message: 'RUC debe tener 11 dígitos' })
+  } else if (!validateRUC(ruc)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['ruc'], message: 'RUC inválido: revisa que los 11 dígitos estén bien copiados' })
+  }
 })
 
 // Schema para Configuración de Serie

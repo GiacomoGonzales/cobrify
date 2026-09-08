@@ -805,8 +805,10 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
     commands.push(ESCPOSCommands.bold(false));
 
     // RUC (si no es nota de venta con ocultación)
-    if (!(isNotaVenta && hideRucIgvInNotaVenta)) {
-      const rucValue = businessRuc || ruc || '00000000000';
+    // Sin RUC (negocio de uso interno) la línea no se imprime: `businessRuc`
+    // llega ya vacío desde rucDeEmpresa.
+    const rucValue = businessRuc || ruc || '';
+    if (!(isNotaVenta && hideRucIgvInNotaVenta) && rucValue) {
       commands.push(ESCPOSCommands.text('RUC: ' + rucValue + '\n'));
     }
 

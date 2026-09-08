@@ -1,4 +1,5 @@
 import { clienteDelComprobante, esEmpresa, nombrePrincipal, nombreComercialAparte } from '@/utils/datosDelClienteEnComprobante'
+import { rucDeEmpresa } from '@/utils/rucDeEmpresa'
 import jsPDF from 'jspdf'
 import { contrastTextColor } from '@/utils/pdfColors'
 import { getNotaVentaLegend } from '@/utils/documentLegends'
@@ -277,7 +278,7 @@ const generateSunatQR = async (invoice, companySettings) => {
     }
 
     const qrData = [
-      companySettings?.ruc || '',
+      rucDeEmpresa(companySettings),
       docTypeCode,
       serie,
       numero,
@@ -672,7 +673,8 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   const isNotaVenta = invoice.documentType === 'nota_venta'
   const hideRucIgvInNotaVenta = companySettings?.hideRucIgvInNotaVenta === true
   const hideOnlyIgvInNotaVenta = companySettings?.hideOnlyIgvInNotaVenta === true
-  const shouldHideRuc = isNotaVenta && (hideRucIgvInNotaVenta || hideCompanyData)
+  // Un negocio sin RUC (uso interno) tampoco lo imprime, sea el documento que sea.
+  const shouldHideRuc = (isNotaVenta && (hideRucIgvInNotaVenta || hideCompanyData)) || !rucDeEmpresa(companySettings)
   const shouldHideIgv = isNotaVenta && (hideRucIgvInNotaVenta || hideOnlyIgvInNotaVenta)
 
   // La banda de color de la parte superior existe para alojar el RUC. Si el RUC
@@ -704,7 +706,7 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.setFontSize(9)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(...ON_ACCENT)
-    doc.text(`R.U.C. ${companySettings?.ruc || ''}`, docBoxX + docColumnWidth / 2, docBoxY + 16, { align: 'center' })
+    doc.text(`R.U.C. ${rucDeEmpresa(companySettings)}`, docBoxX + docColumnWidth / 2, docBoxY + 16, { align: 'center' })
     doc.setTextColor(...BLACK) // Restaurar color negro para el resto
   }
 

@@ -1,4 +1,5 @@
 import { clienteDelComprobante, esEmpresa, nombrePrincipal, nombreComercialAparte } from '@/utils/datosDelClienteEnComprobante'
+import { rucDeEmpresa } from '@/utils/rucDeEmpresa'
 import jsPDF from 'jspdf'
 import { getComprobanteBreakdown } from './peruUtils'
 import { formatQuantity } from '@/lib/utils'
@@ -537,12 +538,16 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   // ===== COLUMNA 3: RECUADRO DEL DOCUMENTO =====
   const docBoxY = currentY
 
-  // Altura de la sección del RUC (parte superior con fondo de color)
-  const rucSectionHeight = 26
+  // La banda de color de arriba existe para alojar el RUC. Un negocio sin RUC
+  // (uso interno) no la lleva: el recuadro queda solo con el título y el número,
+  // igual que el PDF de comprobantes cuando el RUC se oculta.
+  const rucEmpresa = rucDeEmpresa(companySettings)
+  const rucSectionHeight = rucEmpresa ? 26 : 0
 
-  // Fondo de color para la sección del RUC
-  doc.setFillColor(...ACCENT_COLOR)
-  doc.rect(docBoxX, docBoxY, docColumnWidth, rucSectionHeight, 'F')
+  if (rucEmpresa) {
+    doc.setFillColor(...ACCENT_COLOR)
+    doc.rect(docBoxX, docBoxY, docColumnWidth, rucSectionHeight, 'F')
+  }
 
   // Recuadro completo con borde
   doc.setDrawColor(...BLACK)
@@ -551,15 +556,17 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
 
   // Línea separadora después del RUC
   const rucLineY = docBoxY + rucSectionHeight
-  doc.setLineWidth(0.5)
-  doc.line(docBoxX, rucLineY, docBoxX + docColumnWidth, rucLineY)
+  if (rucEmpresa) {
+    doc.setLineWidth(0.5)
+    doc.line(docBoxX, rucLineY, docBoxX + docColumnWidth, rucLineY)
 
-  // RUC (texto blanco sobre fondo de color)
-  doc.setFontSize(9)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(255, 255, 255)
-  doc.text(`R.U.C. ${companySettings?.ruc || ''}`, docBoxX + docColumnWidth / 2, docBoxY + 16, { align: 'center' })
-  doc.setTextColor(...BLACK) // Restaurar color negro
+    // RUC (texto blanco sobre fondo de color)
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(255, 255, 255)
+    doc.text(`R.U.C. ${rucEmpresa}`, docBoxX + docColumnWidth / 2, docBoxY + 16, { align: 'center' })
+    doc.setTextColor(...BLACK) // Restaurar color negro
+  }
 
   doc.setFontSize(10)
   doc.setFont('helvetica', 'bold')

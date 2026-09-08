@@ -1,4 +1,5 @@
 import { forwardRef } from 'react'
+import { rucDeEmpresa } from '@/utils/rucDeEmpresa'
 import { resumirProductosVendidos } from '@/utils/cashClosureProducts'
 import React from 'react'
 import { getSessionMoneyTotals } from '@/utils/cashTotals'
@@ -407,7 +408,7 @@ const CashClosureTicket = forwardRef(({
         )}
 
         <div className="company-name">{companySettings?.tradeName || companySettings?.name || 'MI EMPRESA'}</div>
-        <div className="company-info">RUC: {companySettings?.ruc || '00000000000'}</div>
+        {!!rucDeEmpresa(companySettings) && <div className="company-info">RUC: {rucDeEmpresa(companySettings)}</div>}
         <div className="company-info">{companySettings?.address || ''}</div>
 
         {branchName && (

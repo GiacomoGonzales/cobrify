@@ -92,6 +92,10 @@ export default {
         },
         {
           type: 'texto',
+          text: 'Si usas el sistema solo para control interno y no tienes RUC, marca **No tengo RUC** debajo del campo. El RUC deja de ser obligatorio, los tickets y PDF salen sin esa línea, y no se emiten facturas ni boletas a SUNAT: solo notas de venta. Cuando saques tu RUC, desmarca la casilla y escríbelo.',
+        },
+        {
+          type: 'texto',
           text: 'Si tienes locales anexos declarados ante SUNAT, cárgalos en **Establecimientos (SUNAT)**. Y si eres transportista, acá va el **N° Registro MTC**, que viaja en las guías de remisión.',
         },
         {

@@ -25,7 +25,7 @@ import { nombreComercialParaEditar } from '@/utils/nombreDelNegocio'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useGuardado } from '@/components/settings/useGuardado'
-import { Seccion, Campo, Fila, BarraGuardar, Separador } from '@/components/settings/kit'
+import { Seccion, Campo, Fila, BarraGuardar, Separador, Ajuste } from '@/components/settings/kit'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
@@ -40,6 +40,7 @@ import { invalidateLogoCache } from '@/utils/pdfGenerator'
 // `onSubmit` corta antes para no subir nada a Storage.
 const DATOS_DEMO = {
   ruc: '20123456789',
+  sinRuc: false,
   businessName: 'EMPRESA DEMO SAC',
   tradeName: 'Demo Store',
   phone: '01-2345678',
@@ -99,10 +100,15 @@ export default function MiEmpresa() {
     formState: { errors },
     reset,
     setValue,
+    clearErrors,
     watch,
   } = useForm({
     resolver: zodResolver(companySettingsSchema),
   })
+
+  // "No tengo RUC": el campo deja de ser obligatorio, se apaga y se guarda
+  // vacío. Los documentos omiten la línea del RUC (utils/rucDeEmpresa).
+  const sinRuc = watch('sinRuc') === true
 
   // Selector de ubicación: los tres códigos de 2 dígitos que forman el ubigeo
   const [locationDeptCode, setLocationDeptCode] = useState('')
@@ -156,6 +162,7 @@ export default function MiEmpresa() {
 
     reset({
       ruc: businessSettings.ruc || '',
+      sinRuc: businessSettings.sinRuc === true,
       businessName: businessSettings.businessName || '',
       // Se lee con `nombreComercialParaEditar`: si lo que hay en `name` es la
       // razon social copiada, el campo va VACIO. Antes se cargaba `name` a
@@ -294,6 +301,16 @@ export default function MiEmpresa() {
     setLogoFile(null)
     // Invalidar caché del logo
     invalidateLogoCache()
+  }
+
+  // Marcar "No tengo RUC" vacía el campo y borra su error, para que el
+  // formulario deje de reclamarlo en el acto. Desmarcarlo lo vuelve obligatorio.
+  const alternarSinRuc = (marcado) => {
+    setValue('sinRuc', marcado, { shouldDirty: true })
+    if (marcado) {
+      setValue('ruc', '', { shouldDirty: true })
+      clearErrors('ruc')
+    }
   }
 
   // ── Lupa del RUC ──────────────────────────────────────────────────────────
@@ -477,7 +494,10 @@ export default function MiEmpresa() {
     // SOLO lo que esta pestaña edita. `name` sigue siendo el nombre comercial
     // con la razón social de respaldo, como siempre.
     const ok = await guardar({
-      ruc: data.ruc,
+      // Sin RUC se guarda vacío, nunca un número inventado: los documentos
+      // omiten la línea y SUNAT no entra en juego.
+      ruc: data.sinRuc === true ? '' : data.ruc,
+      sinRuc: data.sinRuc === true,
       businessName: data.businessName,
       // `name` sigue con el respaldo porque lo usa todo el sistema como "el
       // nombre del negocio", pero el nombre comercial se guarda aparte y tal
@@ -534,22 +554,36 @@ export default function MiEmpresa() {
           <Fila>
             <Campo
               id="opcion-ruc"
-              etiqueta={<>RUC<Obligatorio /></>}
-              ayuda="Escribe los 11 dígitos y usa la lupa: trae razón social, domicilio y ubicación desde SUNAT."
+              etiqueta={<>RUC{!sinRuc && <Obligatorio />}</>}
             >
               <div className="flex items-start gap-2">
-                <Input placeholder="20123456789" inputMode="numeric" error={errors.ruc?.message} {...register('ruc')} />
+                <Input placeholder={sinRuc ? 'Sin RUC' : '20123456789'} inputMode="numeric" disabled={sinRuc} error={errors.ruc?.message} {...register('ruc')} />
                 <Button
                   type="button"
                   variant="outline"
                   onClick={handleLookupRuc}
-                  disabled={isLookingUpRuc}
+                  disabled={isLookingUpRuc || sinRuc}
                   className="shrink-0 px-3 py-2"
                   title="Buscar datos del RUC"
                   aria-label="Buscar datos del RUC"
                 >
                   {isLookingUpRuc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                 </Button>
+              </div>
+              {/* La ayuda va pegada al campo, no debajo de la casilla: Campo la pondría al final. */}
+              <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                {sinRuc
+                  ? 'Marcaste que no tienes RUC: el campo queda vacío y los documentos salen sin esa línea.'
+                  : 'Escribe los 11 dígitos y usa la lupa: trae razón social, domicilio y ubicación desde SUNAT.'}
+              </p>
+              <div className="mt-3">
+                <Ajuste
+                  id="opcion-sinRuc"
+                  checked={sinRuc}
+                  onChange={(e) => alternarSinRuc(e.target.checked)}
+                  titulo="No tengo RUC: uso el sistema solo para control interno"
+                  descripcion="El RUC deja de ser obligatorio y los tickets y PDF salen sin esa línea. Sin RUC no se emiten facturas ni boletas a SUNAT, solo notas de venta."
+                />
               </div>
             </Campo>
             <Campo id="opcion-businessName" etiqueta={<>Razón social<Obligatorio /></>}>
