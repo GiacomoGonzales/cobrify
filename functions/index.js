@@ -15954,3 +15954,59 @@ export const accesosHuerfanos = onCall(
     return { dryRun: false, revisados, huerfanos: huerfanos.length, borrados, fallos }
   },
 )
+
+/**
+ * Borra un alta de la lista. Solo un admin.
+ *
+ * Es una herramienta de limpieza: el enlace de un alta que ya no va a usarse
+ * ensucia el listado y, si sigue vivo, alguien podría abrirlo. Sirve para los
+ * tres estados, y lo que significa borrar es distinto en cada uno:
+ *
+ *   - enviada / abierta: el enlace deja de servir. Es la única forma de CANCELAR
+ *     un alta mandada por error, que hasta ahora no existía.
+ *   - usada: la cuenta ya se creó y NO se toca. Solo desaparece el registro del
+ *     alta. Para borrar la cuenta está Admin > Usuarios, que es donde se ve lo
+ *     que se está borrando de verdad.
+ *
+ * Se guarda quién y cuándo en el log, porque borrar un alta usada deja una
+ * cuenta sin rastro de por dónde entró.
+ */
+export const eliminarAlta = onRequest(
+  { region: 'us-central1', timeoutSeconds: 30, memory: '256MiB', invoker: 'public', cors: true },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ success: false, error: 'Method not allowed' }); return }
+
+    try {
+      const cabecera = req.headers.authorization
+      if (!cabecera || !cabecera.startsWith('Bearer ')) {
+        res.status(401).json({ success: false, error: 'No autorizado' }); return
+      }
+      const admin = await auth.verifyIdToken(cabecera.split('Bearer ')[1])
+      if (!(await esAdministrador(admin.uid))) {
+        res.status(403).json({ success: false, error: 'Solo administradores' }); return
+      }
+
+      const codigo = String(req.body?.codigo || '').trim()
+      if (!codigo) {
+        res.status(400).json({ success: false, error: 'Falta el código del alta' }); return
+      }
+
+      const ref = db.collection('altasPendientes').doc(codigo)
+      const snap = await ref.get()
+      if (!snap.exists) {
+        res.status(404).json({ success: false, error: 'Ese alta ya no existe' }); return
+      }
+
+      const datos = snap.data() || {}
+      await ref.delete()
+      console.log(`🗑️ Admin ${admin.uid} borró el alta ${codigo} (estado: ${datos.estado}, cuenta: ${datos.uid || 'ninguna'})`)
+
+      res.status(200).json({ success: true, estado: datos.estado || null, uid: datos.uid || null })
+    } catch (error) {
+      console.error('Error borrando el alta:', error)
+      res.status(500).json({ success: false, error: 'No se pudo borrar el alta' })
+    }
+  },
+)

@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { auth, db } from '@/lib/firebase'
 import { useToast } from '@/contexts/ToastContext'
 import { enlaceDeAlta, enlaceDeAltaLargo } from '@/utils/dominioRegistro'
 import {
   Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Filtros, FiltroSelect, Buscador,
   Estado, Boton, Cifras, Cifra,
-  useMenuDeFila, BotonDeFila, CajaMenu, ItemMenu,
+  useMenuDeFila, BotonDeFila, CajaMenu, ItemMenu, SeparadorMenu,
 } from '@/components/admin/ui'
 
 /**
@@ -46,6 +46,8 @@ const haceCuanto = (t) => {
 
 const moneda = (v) => (v == null ? '—' : new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(v)))
 
+const URL_ELIMINAR = 'https://us-central1-cobrify-395fe.cloudfunctions.net/eliminarAlta'
+
 export default function AdminAltas() {
   const toast = useToast()
   const menu = useMenuDeFila()
@@ -53,6 +55,45 @@ export default function AdminAltas() {
   const [cargando, setCargando] = useState(true)
   const [busqueda, setBusqueda] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('pendientes')
+
+  /**
+   * Borra el alta. Va por el servidor porque las reglas no dejan escribir
+   * `altasPendientes` desde el navegador: el documento lo lee cualquiera que
+   * tenga el enlace, así que dejarlo escribible sería dejar que lo borre.
+   *
+   * El aviso cambia según el estado, porque borrar significa cosas distintas:
+   * con un enlace vivo se está CANCELANDO, y con uno ya usado solo se limpia el
+   * registro — la cuenta del cliente no se toca.
+   */
+  const eliminar = async (a) => {
+    menu.cerrar()
+    const usada = a.estado === 'usada'
+    const aviso = usada
+      ? `Borrar el registro del alta de ${a.nombre || a.codigo}.\n\n` +
+        'La CUENTA del cliente NO se borra: sigue funcionando igual. Solo desaparece de esta lista. ' +
+        'Para borrar la cuenta, ve a Usuarios.\n\n¿Continuar?'
+      : `Borrar el alta de ${a.nombre || a.codigo}.\n\n` +
+        'El enlace deja de servir: si el cliente lo abre, no va a poder activar nada. ' +
+        'Esto es lo que se usa para cancelar un enlace mandado por error.\n\n¿Continuar?'
+    if (!confirm(aviso)) return
+    try {
+      const idToken = await auth.currentUser.getIdToken()
+      const r = await fetch(URL_ELIMINAR, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ codigo: a.codigo }),
+      })
+      const d = await r.json()
+      if (!d.success) { toast.error(d.error || 'No se pudo borrar el alta'); return }
+      // Se quita de la lista sin recargar: la consulta trae 200 y volver a
+      // pedirlas por una fila es gastar lecturas de balde.
+      setAltas((prev) => prev.filter((x) => x.codigo !== a.codigo))
+      toast.success(usada ? 'Registro del alta borrado' : 'Alta borrada y enlace anulado')
+    } catch (e) {
+      console.error('Error borrando el alta:', e)
+      toast.error('No se pudo borrar el alta')
+    }
+  }
 
   const cargar = () => {
     setCargando(true)
@@ -214,6 +255,10 @@ export default function AdminAltas() {
                               Abrir el chat
                             </ItemMenu>
                           )}
+                          <SeparadorMenu />
+                          <ItemMenu rojo onClick={() => eliminar(a)}>
+                            {a.estado === 'usada' ? 'Borrar de la lista' : 'Borrar y anular el enlace'}
+                          </ItemMenu>
                         </CajaMenu>
                       )}
                     </Td>
