@@ -1,4 +1,4 @@
-import { clienteDelComprobante, lineasDelCliente } from '@/utils/datosDelClienteEnComprobante';
+import { lineasDelCliente } from '@/utils/datosDelClienteEnComprobante';
 /**
  * Servicio alternativo de impresión Bluetooth usando @capacitor-community/bluetooth-le
  * Este servicio se usa como fallback en iOS cuando el plugin capacitor-thermal-printer falla

@@ -1,4 +1,4 @@
-import { clienteDelComprobante, lineasDelCliente, esEmpresa, nombrePrincipal, nombreComercialAparte } from '@/utils/datosDelClienteEnComprobante'
+import { clienteDelComprobante, esEmpresa, nombrePrincipal, nombreComercialAparte } from '@/utils/datosDelClienteEnComprobante'
 import jsPDF from 'jspdf'
 import { getComprobanteBreakdown } from './peruUtils'
 import { formatQuantity } from '@/lib/utils'

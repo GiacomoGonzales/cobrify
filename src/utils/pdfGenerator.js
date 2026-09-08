@@ -1,4 +1,4 @@
-import { clienteDelComprobante, lineasDelCliente, esEmpresa, nombrePrincipal, nombreComercialAparte } from '@/utils/datosDelClienteEnComprobante'
+import { clienteDelComprobante, esEmpresa, nombrePrincipal, nombreComercialAparte } from '@/utils/datosDelClienteEnComprobante'
 import jsPDF from 'jspdf'
 import { contrastTextColor } from '@/utils/pdfColors'
 import { getNotaVentaLegend } from '@/utils/documentLegends'
