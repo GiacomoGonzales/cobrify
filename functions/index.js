@@ -577,7 +577,27 @@ const ERRORES_DE_CONFIGURACION = [
   '0102',  // Usuario o contraseña incorrectos
   '0105',  // El Usuario ingresado no está activo
   '0106',  // El Usuario ingresado no existe (variante)
-  '0109',  // El sistema no puede responder su solicitud (usuario sin perfil)
+  // El 0109 NO va acá, aunque a veces signifique "usuario sin perfil".
+  //
+  // El código es genérico —"el sistema no puede responder su solicitud"— y lo
+  // que de verdad pasó viene entre paréntesis: unas veces es el perfil del
+  // usuario SOL (permanente) y otras es "el servicio de autenticación no está
+  // disponible", o sea SUNAT caído (pasajero). Estando en esta lista, que se
+  // consulta primero y corta, TODOS los 0109 se archivaban como permanentes.
+  //
+  // Costo real: la boleta B001-00006356 de GIDEA S.A.C. (07-set-2026, 12:24
+  // p.m.) quedó en `rejected` porque la autenticación de SUNAT estaba caída.
+  // `retryPendingInvoices` solo levanta las `pending`, así que nadie la iba a
+  // reenviar nunca: el comprobante simplemente no llegó, y sin que nadie se
+  // enterara.
+  //
+  // Tampoco se filtra por la frase del paréntesis: SUNAT devuelve "no tiene el
+  // perfil" por error cuando está caída —por eso el 0111 está entre los
+  // pasajeros—, así que buscar esa frase repetiría el mismo error con otro
+  // disfraz. Se trata como pasajero y punto. Si de verdad fuera el perfil, el
+  // reintento se rinde solo tras 50 intentos y lo deja en `failed_permanent`
+  // diciendo por qué. Rendirse tarde se arregla; rendirse temprano con un
+  // comprobante que SUNAT ni miró, no: nadie vuelve a mirarlo.
   'usuario ingresado no existe',
   'usuario o contraseña',
   'clave incorrecta',
@@ -683,7 +703,9 @@ function isTransientSunatError(responseCode, description) {
   const code = String(responseCode || '').toLowerCase()
   const desc = String(description || '').toLowerCase()
 
-  // Manda lo permanente: un usuario que no existe seguirá sin existir.
+  // Manda lo permanente: un usuario que no existe seguirá sin existir. Ojo con
+  // lo que se agrega a esa lista: corta antes de mirar los pasajeros, así que
+  // un código ambiguo puesto ahí condena también sus casos temporales.
   if (ERRORES_DE_CONFIGURACION.some(e => code.includes(e) || desc.includes(e))) {
     return false
   }
@@ -4433,13 +4455,14 @@ async function incrementInvoiceUsage(businessId) {
 /**
  * Cron Job: Reenviar documentos pendientes a SUNAT
  *
- * Se ejecuta cada 2 horas y busca:
+ * Se ejecuta cada 30 minutos y busca:
  * - Facturas/Boletas con sunatStatus = 'pending'
  * - Que tengan más de 5 minutos de creadas (para no interferir con envíos en curso)
  * - Que no hayan excedido el máximo de reintentos (50)
  *
- * Con 50 reintentos cada 2 horas = 100 horas (4+ días) de cobertura
- * Esto es más que suficiente para caídas prolongadas de SUNAT
+ * Con 50 reintentos cada 30 minutos = 25 horas de cobertura, suficiente para
+ * las caídas de SUNAT de un día. (Decía "cada 2 horas = 100 horas" de cuando
+ * el horario era ese; el horario cambió y el comentario no.)
  *
  * Esto soluciona el problema de cuando SUNAT se cae por horas:
  * - Los documentos quedan como 'pending'
@@ -4457,7 +4480,7 @@ export const retryPendingInvoices = onSchedule(
   async (event) => {
     console.log('🔄 [RETRY] Iniciando reenvío automático de documentos pendientes...')
 
-    const MAX_RETRIES = 50 // 50 reintentos x 2 horas = 100 horas de cobertura
+    const MAX_RETRIES = 50 // 50 reintentos x 30 minutos = 25 horas de cobertura
     const MIN_AGE_MINUTES = 5 // No procesar documentos muy recientes
     const BATCH_SIZE = 100 // Procesar máximo 100 por ejecución
 
