@@ -12,7 +12,7 @@ import {
   Timestamp
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { getIngredient, convertUnit } from './ingredientService'
+import { getIngredient, convertUnit, expandirInsumos } from './ingredientService'
 
 /**
  * Determina si una receta debe descontar/validar stock de ingredientes al vender.
@@ -253,7 +253,7 @@ export const deleteRecipe = async (businessId, recipeId) => {
 /**
  * Verificar si hay suficiente stock para preparar un plato
  */
-export const checkRecipeStock = async (businessId, productId, quantity = 1) => {
+export const checkRecipeStock = async (businessId, productId, quantity = 1, businessMode) => {
   try {
     const recipeResult = await getRecipeByProductId(businessId, productId)
 
@@ -269,8 +269,15 @@ export const checkRecipeStock = async (businessId, productId, quantity = 1) => {
       return { success: true, hasStock: true, missingIngredients: [] }
     }
     const missingIngredients = []
+    // Los platos que vienen como insumo (un combo) se abren en sus insumos, ya
+    // multiplicados por la cantidad, con la misma regla que el descuento.
+    const lista = await expandirInsumos(
+      businessId,
+      recipe.ingredients.map((i) => ({ ...i, quantity: (Number(i.quantity) || 0) * quantity })),
+      businessMode,
+    )
 
-    for (const ingredient of recipe.ingredients) {
+    for (const ingredient of lista) {
       if (ingredient.ingredientType === 'product') {
         // Producto terminado: verificar stock del producto
         const productRef = doc(db, 'businesses', businessId, 'products', ingredient.ingredientId)
@@ -278,8 +285,11 @@ export const checkRecipeStock = async (businessId, productId, quantity = 1) => {
 
         if (productSnap.exists()) {
           const productData = productSnap.data()
+          // Un plato sin stock propio que llegó hasta acá no tiene receta que
+          // descuente (expandirInsumos lo habría abierto): no hay qué validar.
+          if (productData.trackStock === false) continue
           const currentStock = productData.stock ?? productData.currentStock ?? 0
-          const quantityNeeded = ingredient.quantity * quantity
+          const quantityNeeded = ingredient.quantity
 
           if (currentStock < quantityNeeded) {
             missingIngredients.push({
@@ -303,7 +313,7 @@ export const checkRecipeStock = async (businessId, productId, quantity = 1) => {
           const currentStock = ingredientData.currentStock || 0
 
           const quantityNeeded = convertUnit(
-            ingredient.quantity * quantity,
+            ingredient.quantity,
             ingredient.unit,
             ingredientData.purchaseUnit
           )

@@ -145,6 +145,7 @@ export const createInternalConsumption = async (businessId, datos) => {
           const r = await deductIngredients(
             businessId, insumos, docRef.id, `${motivoNombre}: ${item.nombre}`,
             datos.warehouseId || null, 'internal_use', !!datos.permitirNegativo,
+            { businessMode: datos.businessMode },
           )
           if (r && r.success === false) throw new Error(r.error || 'No se pudieron descontar los insumos')
           // Se anota lo que deductIngredients APLICÓ (cantidad y almacén), no lo
@@ -281,7 +282,7 @@ export const voidInternalConsumption = async (businessId, consumoId, usuario, op
         if (via === 'insumos') {
           // Firma real: (businessId, ingredients, warehouseId). Cada insumo
           // anotado trae su almacén; el del consumo es el respaldo.
-          const r = await restoreIngredients(businessId, item.insumosDescontados || [], consumo.warehouseId || null)
+          const r = await restoreIngredients(businessId, item.insumosDescontados || [], consumo.warehouseId || null, { businessMode: opciones.businessMode ?? consumo.businessMode })
           if (r && r.success === false) throw new Error(r.error || 'No se pudieron devolver los insumos')
           continue
         }

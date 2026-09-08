@@ -6658,7 +6658,7 @@ ${textoDeErrores(revision.errores)}`, 9000)
       // Validar en PARALELO (antes era en serie).
       const _checks = await Promise.all(_itemsToCheck.map(async (item) => {
         try {
-          const stockCheck = await checkRecipeStock(businessId, item.id, item.quantity)
+          const stockCheck = await checkRecipeStock(businessId, item.id, item.quantity, businessMode)
           return { item, stockCheck }
         } catch (error) {
           console.warn(`No se pudo verificar receta de ${item.name}:`, error)
@@ -8815,7 +8815,7 @@ ${textoDeErrores(revision.errores)}`, 9000)
                 let _ingFail = false
                 for (const pass of _passes) {
                   try {
-                    await deductIngredients(businessId, pass, bgInvoiceId, 'Venta (varios productos)', bgSelectedWarehouse?.id || null, 'sale', !!permiteSinStock)
+                    await deductIngredients(businessId, pass, bgInvoiceId, 'Venta (varios productos)', bgSelectedWarehouse?.id || null, 'sale', !!permiteSinStock, { businessMode })
                   } catch (error) {
                     _ingFail = true
                     console.warn('⚠️ No se pudo descontar insumos (agregado):', error)

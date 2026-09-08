@@ -1209,7 +1209,7 @@ Gracias por tu preferencia.`
                     ...ing,
                     quantity: ing.quantity * item.quantity * (item.presentationFactor || 1)
                   }))
-                  await restoreIngredients(businessId, ingredientsToRestore, warehouseId)
+                  await restoreIngredients(businessId, ingredientsToRestore, warehouseId, { businessMode })
                   console.log(`✅ Ingredientes restaurados para ${item.name}`)
                 }
               } catch (err) {
@@ -1654,7 +1654,7 @@ Gracias por tu preferencia.`
                 ...ing,
                 quantity: ing.quantity * item.quantity * (item.presentationFactor || 1)
               }))
-              await restoreIngredients(businessId, ingredientsToRestore, warehouseId)
+              await restoreIngredients(businessId, ingredientsToRestore, warehouseId, { businessMode })
               console.log(`✅ Ingredientes restaurados para ${item.name}`)
             }
           } catch (err) {

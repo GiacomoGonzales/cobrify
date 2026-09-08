@@ -14,6 +14,54 @@ import {
 import { db } from '@/lib/firebase'
 import { esDeSucursal } from '@/utils/branchScope'
 import { computeBatchDeduction, computeProductBatchMetadata } from '@/utils/batchStock'
+import { aplanarInsumos, mezclarInsumos, productosAExpandir } from '@/utils/recetas'
+
+/**
+ * Abre los "insumos" que en realidad son platos de la carta.
+ *
+ * Un combo lleva como insumo a "Alitas Acevichadas", que no tiene stock: lo
+ * que baja son SUS insumos (las alitas). La regla vive en utils/recetas
+ * (aplanarInsumos, pura y probada); acá solo se cargan, por niveles, los
+ * productos que figuran como insumo y las recetas de los que no llevan stock.
+ * La usan deductIngredients, restoreIngredients y checkRecipeStock, así que
+ * vender, anular, producir y el consumo interno abren el combo igual.
+ *
+ * Si algo falla al cargar, se devuelve la lista tal cual: una venta no se
+ * cae por la cascada.
+ */
+export const expandirInsumos = async (businessId, insumos, businessMode) => {
+  try {
+    const productos = new Map()
+    const recetas = new Map()
+    let pendientes = productosAExpandir(insumos)
+    for (let nivel = 0; nivel < 5 && pendientes.length > 0; nivel++) {
+      const ids = pendientes.filter((id) => !productos.has(id))
+      if (ids.length === 0) break
+      const snaps = await Promise.all(ids.map((id) => getDoc(doc(db, 'businesses', businessId, 'products', id))))
+      ids.forEach((id, k) => productos.set(id, snaps[k].exists() ? snaps[k].data() : null))
+      const sinStock = ids.filter((id) => productos.get(id)?.trackStock === false)
+      // Misma consulta que getRecipeByProductId (recipeService importa de acá;
+      // importarlo de vuelta sería un ciclo).
+      const recs = await Promise.all(sinStock.map((id) =>
+        getDocs(query(collection(db, 'businesses', businessId, 'recipes'), where('productId', '==', id)))))
+      pendientes = []
+      sinStock.forEach((id, k) => {
+        const d = recs[k].docs[0]
+        const receta = d ? { id: d.id, ...d.data() } : null
+        recetas.set(id, receta)
+        if (receta) pendientes.push(...productosAExpandir(receta.ingredients))
+      })
+    }
+    return mezclarInsumos(aplanarInsumos(insumos, {
+      productoDe: (id) => productos.get(id) || null,
+      recetaDe: (id) => recetas.get(id) || null,
+      businessMode,
+    }))
+  } catch (e) {
+    console.warn('No se pudieron abrir los insumos compuestos; se descuenta la lista tal cual:', e)
+    return insumos
+  }
+}
 
 /**
  * Helper: Actualizar stock de ingrediente en un almacén específico
@@ -552,22 +600,24 @@ export const getPurchases = async (businessId, filters = {}) => {
  * con receta aunque falten insumos (consistencia con el comportamiento del
  * stock de productos).
  */
-export const deductIngredients = async (businessId, ingredients, relatedSaleId, productName, warehouseId = null, movementType = 'sale', allowNegative = false) => {
+export const deductIngredients = async (businessId, ingredients, relatedSaleId, productName, warehouseId = null, movementType = 'sale', allowNegative = false, opts = {}) => {
   try {
     const batch = writeBatch(db)
+    // Los platos que vienen como insumo se abren en sus insumos (ver expandirInsumos).
+    const lista = await expandirInsumos(businessId, ingredients, opts.businessMode)
     // M4: registrar de qué almacén se descontó cada insumo, para que la reversión
     // (deleteProduction) lo devuelva al MISMO almacén (deduct hace auto-pick).
     const deductions = []
 
     // Pre-leer todos los docs en PARALELO (antes era un getDoc EN SERIE por insumo, lento
     // con muchos insumos). El cálculo y el armado del batch se hacen después, sin awaits.
-    const _refs = ingredients.map(ing =>
+    const _refs = lista.map(ing =>
       doc(db, 'businesses', businessId, ing.ingredientType === 'product' ? 'products' : 'ingredients', ing.ingredientId)
     )
     const _snaps = await Promise.all(_refs.map(r => getDoc(r)))
 
-    for (let _i = 0; _i < ingredients.length; _i++) {
-      const ingredient = ingredients[_i]
+    for (let _i = 0; _i < lista.length; _i++) {
+      const ingredient = lista[_i]
       // Si es un producto terminado, descontar del stock del producto
       if (ingredient.ingredientType === 'product') {
         const productRef = _refs[_i]
@@ -800,11 +850,13 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
 /**
  * Restaurar ingredientes al anular una venta (inverso de deductIngredients)
  */
-export const restoreIngredients = async (businessId, ingredients, warehouseId = null) => {
+export const restoreIngredients = async (businessId, ingredients, warehouseId = null, opts = {}) => {
   try {
     const batch = writeBatch(db)
+    // Simétrico con deductIngredients: lo que se abrió al salir se abre al volver.
+    const lista = await expandirInsumos(businessId, ingredients, opts.businessMode)
 
-    for (const ingredient of ingredients) {
+    for (const ingredient of lista) {
       const isProduct = ingredient.ingredientType === 'product'
       const collectionName = isProduct ? 'products' : 'ingredients'
       const ref = doc(db, 'businesses', businessId, collectionName, ingredient.ingredientId)

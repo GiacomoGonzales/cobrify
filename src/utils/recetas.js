@@ -109,3 +109,69 @@ export function resultadoDeDescuento(insumosPedidos = [], deductions = []) {
   }
   return { aplicados, faltantes }
 }
+
+/** Ids de los productos que figuran como insumo: los únicos que pueden abrirse. */
+export function productosAExpandir(insumos = []) {
+  return [...new Set((insumos || [])
+    .filter((i) => i && i.ingredientType === 'product' && i.ingredientId)
+    .map((i) => i.ingredientId))]
+}
+
+/**
+ * UN COMBO DE PLATOS BAJA LOS INSUMOS DE CADA PLATO.
+ *
+ * Una receta puede tener como "insumo" a otro producto de la carta: el combo
+ * de alitas con gaseosa lleva 1 "Alitas Acevichadas" y 1 "Coca Cola". Si ese
+ * producto NO lleva stock propio y tiene una receta que descuenta, lo que
+ * sale son SUS insumos (las 6 alitas), no un producto llamado "Alitas
+ * Acevichadas" que no tiene existencias. Antes esa línea se saltaba y el
+ * combo no bajaba nada, ni al venderlo ni en el consumo interno (8-set-2026).
+ *
+ * Un producto CON stock propio se descuenta él mismo aunque tenga receta: una
+ * salsa que se produce y se guarda es una cosa con existencias, no una lista
+ * de ingredientes. Sin receta que descuente, la línea se queda como está y
+ * `deductIngredients` la salta como siempre.
+ *
+ * Es pura: recibe cómo mirar un producto y su receta, para poder probarla sin
+ * Firestore. Tope de profundidad y guarda de ciclos (un plato que se contiene
+ * a sí mismo por error no cuelga la venta).
+ *
+ * @param {Array} insumos            [{ ingredientId, ingredientType, quantity, unit, ... }]
+ * @param {{ productoDe: Function, recetaDe: Function, businessMode?: string, maxNivel?: number }} ctx
+ *   productoDe(id) → producto o null; recetaDe(productId) → receta (data) o null
+ */
+export function aplanarInsumos(insumos = [], ctx = {}, _nivel = 0, _camino = new Set()) {
+  const { productoDe, recetaDe, businessMode, maxNivel = 5 } = ctx
+  const out = []
+  for (const i of insumos || []) {
+    if (!i) continue
+    const esProducto = i.ingredientType === 'product' && i.ingredientId
+    if (!esProducto || _nivel >= maxNivel || _camino.has(i.ingredientId)) { out.push(i); continue }
+    const producto = productoDe?.(i.ingredientId)
+    if (!producto || producto.trackStock !== false) { out.push(i); continue }
+    const receta = recetaDe?.(i.ingredientId)
+    if (!receta || !shouldDeductIngredients(receta, businessMode)) { out.push(i); continue }
+    const camino = new Set(_camino)
+    camino.add(i.ingredientId)
+    out.push(...aplanarInsumos(insumosDeReceta(receta, i.quantity), ctx, _nivel + 1, camino))
+  }
+  return out
+}
+
+/**
+ * El mismo insumo en la misma unidad, una sola vez. Abrir un combo puede
+ * repetir un insumo que ya venía en la lista (alitas sueltas + combo de
+ * alitas), y dos entradas sobre el mismo documento en un mismo batch se pisan:
+ * la segunda escribe encima de la primera y un descuento se pierde.
+ */
+export function mezclarInsumos(insumos = []) {
+  const porClave = new Map()
+  for (const i of insumos || []) {
+    if (!i || !i.ingredientId) continue
+    const k = `${i.ingredientId}|${i.unit || ''}`
+    const previo = porClave.get(k)
+    if (previo) previo.quantity = (Number(previo.quantity) || 0) + (Number(i.quantity) || 0)
+    else porClave.set(k, { ...i, quantity: Number(i.quantity) || 0 })
+  }
+  return [...porClave.values()]
+}

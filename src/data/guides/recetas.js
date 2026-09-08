@@ -9,7 +9,7 @@
  */
 export default {
   id: 'recetas',
-  actualizado: '22/08/2026',
+  actualizado: '08/09/2026',
   intro:
     'Una receta conecta lo que vendes con lo que consumes: dice cuánto insumo lleva cada producto. Es lo que permite que venderlo descuente automáticamente sus insumos y que sepas cuánto te cuesta de verdad. En restaurante se llama **Recetas**; en los demás rubros, **Composición**.',
 
@@ -41,6 +41,10 @@ export default {
         {
           type: 'texto',
           text: 'La opción **Descontar insumos al vender** es la que hace la magia: con ella activa, cada venta de ese producto baja automáticamente sus insumos del inventario.',
+        },
+        {
+          type: 'texto',
+          text: 'Un insumo de la receta puede ser **otro producto de tu carta**. Si ese producto no lleva stock propio y tiene su propia receta —un combo de alitas con gaseosa, un menú con entrada y plato—, al vender el combo se descuentan los insumos de cada plato que lo compone. No hace falta repetir en el combo la lista de insumos de cada plato. Si el producto sí lleva stock propio (una salsa que preparas y guardas), se descuenta él.',
         },
         {
           type: 'ojo',
