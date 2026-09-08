@@ -331,6 +331,10 @@ export default {
         },
         {
           type: 'texto',
+          text: 'Si lo que quieres es la lista de compras, marca **Solo lo que hay que reponer** en el modal de exportación: el Excel sale únicamente con lo agotado y lo que llegó a su stock mínimo, contando solo los almacenes que elegiste. Es el mismo criterio que usan las tarjetas de arriba, así que el número coincide con lo que ves en pantalla.',
+        },
+        {
+          type: 'texto',
           text: 'Los productos con **variantes** salen con una fila por variante —cada color o talla con su propio código, su precio y su stock—, tanto en la hoja **Productos** como en **Stock por Almacén**. Las hojas de resumen (Por Marca, Valor por Categoría) siguen agrupando por producto, que es de lo que hablan.',
         },
         {

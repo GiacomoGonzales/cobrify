@@ -24,6 +24,7 @@ import {
   buildExcelFileName,
   saveAndShareExcel,
 } from './excelStyles'
+import { needsRestock } from '@/utils/stockAlerts'
 
 // =================== HELPERS LOCALES ===================
 
@@ -102,6 +103,9 @@ export const exportInventoryWithOptions = async ({
     includeIngredients = true,
     warehouseIds = [],
     includeNoStockTracking = false,
+    // Solo lo que hay que reponer. Usa el MISMO criterio que las tarjetas de
+    // Inventario y Productos (utils/stockAlerts): no se inventa otro umbral.
+    soloParaReponer = false,
     format: exportFormat = 'columns',
     // Inventario a una fecha pasada: etiqueta dd/MM/yyyy. Los items ya vienen
     // con el stock reconstruido desde la pantalla (stockSnapshotService).
@@ -132,6 +136,17 @@ export const exportInventoryWithOptions = async ({
         stock: i.currentStock || 0,
       }))
     items.push(...mapped)
+  }
+
+  // Filtro "solo lo que hay que reponer": se mira el stock EN LOS ALMACENES
+  // ELEGIDOS, no el total del negocio. Exportando un solo local, lo que
+  // importa es lo que falta ahí — el mismo producto puede estar sobrado en
+  // otra sede y aun así haber que reponerlo acá.
+  if (soloParaReponer) {
+    items = items.filter(item => {
+      const stock = selectedWarehouses.reduce((sum, w) => sum + getStockAtWarehouse(item, w.id), 0)
+      return needsRestock(item, stock)
+    })
   }
 
   if (items.length === 0) {

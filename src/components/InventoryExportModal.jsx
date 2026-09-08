@@ -32,6 +32,9 @@ export default function InventoryExportModal({
 
   // Filtros
   const [includeNoStockTracking, setIncludeNoStockTracking] = useState(false)
+  // "Solo lo que hay que reponer": lo pidio BOTICAS LOS ANGELES, que exportaba
+  // todo el inventario para revisar a mano cual estaba bajo.
+  const [soloParaReponer, setSoloParaReponer] = useState(false)
 
   // Formato
   const [format, setFormat] = useState('columns') // 'columns' | 'rows'
@@ -80,6 +83,7 @@ export default function InventoryExportModal({
       includeIngredients,
       warehouseIds: finalWarehouseIds,
       includeNoStockTracking,
+      soloParaReponer,
       format,
       snapshotDate: dateMode === 'fecha' && snapshotDate ? snapshotDate : null,
     })
@@ -241,6 +245,21 @@ export default function InventoryExportModal({
               <span className="text-gray-700">Incluir items que no manejan stock</span>
               <p className="text-xs text-gray-500 mt-0.5">
                 Servicios, combos y productos con <code>trackStock = false</code>.
+              </p>
+            </div>
+          </label>
+          <label className="flex items-start gap-2 cursor-pointer text-sm mt-3">
+            <input
+              type="checkbox"
+              checked={soloParaReponer}
+              onChange={e => setSoloParaReponer(e.target.checked)}
+              className="mt-0.5 w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+            />
+            <div>
+              <span className="text-gray-700">Solo lo que hay que reponer</span>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Deja fuera lo que está en su nivel: quedan los agotados y los que llegaron a su
+                stock mínimo, contando solo los almacenes que elegiste arriba.
               </p>
             </div>
           </label>
