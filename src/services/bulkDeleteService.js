@@ -395,6 +395,30 @@ export async function deleteAllProductions(businessId, onProgress = null) {
 }
 
 /**
+ * Historial de caja: las sesiones (aperturas y cierres diarios) y sus
+ * movimientos (ingresos y egresos). Van juntos porque un movimiento sin su
+ * sesión no significa nada. Pedido de un cliente (8-set-2026): la Limpieza
+ * vaciaba clientes y comprobantes pero dejaba la caja con historial viejo.
+ */
+export async function deleteAllCashHistory(businessId, onProgress = null) {
+  const sesiones = await deleteCollection(businessId, 'cashSessions', onProgress)
+  if (!sesiones.success) return sesiones
+  const movimientos = await deleteCollection(businessId, 'cashMovements', onProgress)
+  if (!movimientos.success) return movimientos
+  return { success: true, deleted: sesiones.deleted + movimientos.deleted }
+}
+
+/** Órdenes del salón y delivery: abiertas, cerradas y entregadas. */
+export async function deleteAllOrders(businessId, onProgress = null) {
+  return deleteCollection(businessId, 'orders', onProgress)
+}
+
+/** Las mesas configuradas. Las órdenes abiertas en ellas quedan huérfanas: conviene borrarlas antes. */
+export async function deleteAllTables(businessId, onProgress = null) {
+  return deleteCollection(businessId, 'tables', onProgress)
+}
+
+/**
  * Contar documentos en una colección
  */
 export async function countDocuments(businessId, collectionName) {

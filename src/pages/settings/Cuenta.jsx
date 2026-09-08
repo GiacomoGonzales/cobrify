@@ -64,6 +64,9 @@ import {
   resetAllIngredientStock,
   deleteIngredientStockMovements,
   deleteAllProductions,
+  deleteAllCashHistory,
+  deleteAllOrders,
+  deleteAllTables,
   countDocuments,
 } from '@/services/bulkDeleteService'
 
@@ -100,6 +103,9 @@ const bulkDeleteLabels = {
   stockMovements: { name: 'Movimientos de Stock', collection: 'stockMovements' },
   dispatchGuides: { name: 'Guías de Remisión', collection: 'dispatchGuides' },
   quotations: { name: 'Cotizaciones', collection: 'quotations' },
+  cashHistory: { name: 'Historial de caja', collection: 'cashSessions' },
+  orders: { name: 'Órdenes', collection: 'orders' },
+  tables: { name: 'Mesas', collection: 'tables' },
   resetStock: { name: 'Stock e Inventario', collection: 'products', actionVerb: 'limpiar', successMessage: 'Stock reseteado en {count} productos y movimientos eliminados' },
   resetIngredientStock: { name: 'Stock de Insumos', collection: 'ingredients', actionVerb: 'limpiar', successMessage: 'Stock reseteado en {count} insumos; movimientos y producciones eliminados' },
 }
@@ -120,11 +126,16 @@ const FILAS_BORRADO = [
   { tipo: 'stockMovements', titulo: 'Movimientos de stock', descripcion: 'Eliminar historial de movimientos de inventario' },
   { tipo: 'dispatchGuides', titulo: 'Guías de remisión', descripcion: 'Eliminar todas las guías de remisión', avisoSoloAdmin: 'Las guías emitidas se conservan. Escríbenos a soporte si necesitas limpiarlas.' },
   { tipo: 'quotations', titulo: 'Cotizaciones', descripcion: 'Eliminar todas las cotizaciones' },
+  // Pedido de un cliente (8-set-2026): faltaban la caja, las órdenes y las mesas.
+  { tipo: 'cashHistory', titulo: 'Historial de caja', descripcion: 'Eliminar las sesiones de caja (aperturas y cierres diarios) y sus movimientos de ingreso y egreso' },
+  { tipo: 'orders', titulo: 'Órdenes', descripcion: 'Eliminar todas las órdenes del salón y delivery: abiertas, cerradas y entregadas' },
+  { tipo: 'tables', titulo: 'Mesas', descripcion: 'Eliminar las mesas configuradas. Si tienen órdenes abiertas, elimina primero las órdenes' },
 ]
 
 const CONTEOS_EN_CERO = {
   products: 0, customers: 0, suppliers: 0, invoices: 0, purchases: 0,
   stockMovements: 0, dispatchGuides: 0, quotations: 0, ingredients: 0, productions: 0,
+  cashHistory: 0, cashMovements: 0, orders: 0, tables: 0,
 }
 
 /**
@@ -314,7 +325,7 @@ export default function Cuenta() {
   // insumos" abría deshabilitado hasta que se ejecutara otro borrado.
   const loadBulkDeleteCounts = useCallback(async () => {
     if (!mostrarZonaPeligro || !businessId) return
-    const [products, customers, suppliers, invoices, purchases, stockMovements, dispatchGuides, quotations, ingredients, productions] = await Promise.all([
+    const [products, customers, suppliers, invoices, purchases, stockMovements, dispatchGuides, quotations, ingredients, productions, cashHistory, cashMovements, orders, tables] = await Promise.all([
       countDocuments(businessId, 'products'),
       countDocuments(businessId, 'customers'),
       countDocuments(businessId, 'suppliers'),
@@ -325,8 +336,12 @@ export default function Cuenta() {
       countDocuments(businessId, 'quotations'),
       countDocuments(businessId, 'ingredients'),
       countDocuments(businessId, 'productions'),
+      countDocuments(businessId, 'cashSessions'),
+      countDocuments(businessId, 'cashMovements'),
+      countDocuments(businessId, 'orders'),
+      countDocuments(businessId, 'tables'),
     ])
-    setBulkDeleteCounts({ products, customers, suppliers, invoices, purchases, stockMovements, dispatchGuides, quotations, ingredients, productions })
+    setBulkDeleteCounts({ products, customers, suppliers, invoices, purchases, stockMovements, dispatchGuides, quotations, ingredients, productions, cashHistory, cashMovements, orders, tables })
   }, [mostrarZonaPeligro, businessId])
 
   // Contar al entrar. `mostrarZonaPeligro` está en las dependencias (a través
@@ -401,6 +416,15 @@ export default function Cuenta() {
           break
         case 'quotations':
           result = await deleteAllQuotations(businessId, onProgress)
+          break
+        case 'cashHistory':
+          result = await deleteAllCashHistory(businessId, onProgress)
+          break
+        case 'orders':
+          result = await deleteAllOrders(businessId, onProgress)
+          break
+        case 'tables':
+          result = await deleteAllTables(businessId, onProgress)
           break
         case 'resetStock': {
           // Paso 1: Resetear stock, lotes y vencimientos en todos los productos

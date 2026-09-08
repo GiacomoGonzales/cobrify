@@ -15,7 +15,7 @@
  */
 export default {
   id: 'configuracion',
-  actualizado: '22/08/2026',
+  actualizado: '08/09/2026',
   intro:
     'Configuración es donde el sistema se adapta a tu negocio: qué comprobantes emites, qué puede tocar tu cajero, qué aparece en el menú y cómo salen tus impresiones. Esta guía recorre las once pestañas y explica qué hace cada opción y qué cambia cuando la prendes.',
 
@@ -565,6 +565,10 @@ export default {
         {
           type: 'ojo',
           text: 'La pestaña **Limpieza** borra datos de forma masiva y **no hay deshacer**. Solo aparece en cuentas con ese permiso. No la abras por curiosidad: úsala nada más cuando estés seguro de que quieres vaciar algo, y confirma antes qué se lleva por delante.',
+        },
+        {
+          type: 'texto',
+          text: 'Se puede vaciar por separado: productos, clientes, proveedores, compras, movimientos de stock, cotizaciones, **historial de caja** (sesiones y movimientos), **órdenes** y **mesas**; y reiniciar a cero el stock de productos e insumos sin borrar el catálogo. Los comprobantes y guías emitidos no se borran desde aquí: tienen valor tributario. Cada borrado pide escribir ELIMINAR y tu contraseña.',
         },
       ],
     },
