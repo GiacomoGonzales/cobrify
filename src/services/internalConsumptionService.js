@@ -14,7 +14,8 @@ import {
 import { db } from '@/lib/firebase'
 import { updateProductStockTransaction } from './firestoreService'
 import { createStockMovement } from './warehouseService'
-import { getRecipeByProductId, shouldDeductIngredients } from './recipeService'
+import { getRecipeByProductId } from './recipeService'
+import { recetaParaDescontar, insumosDeReceta, viaDeDevolucion } from '@/utils/recetas'
 import { deductIngredients, restoreIngredients } from './ingredientService'
 
 /**
@@ -32,6 +33,14 @@ import { deductIngredients, restoreIngredients } from './ingredientService'
  * Si un producto tiene receta (modo restaurante), descuenta los INSUMOS igual
  * que lo haría una venta: registrar "2 lomo saltado" baja la carne, la papa y
  * la cebolla, no un producto llamado "lomo saltado".
+ *
+ * OJO: `getRecipeByProductId` devuelve un SOBRE { success, data }, no la
+ * receta. Se abre con `recetaParaDescontar` (utils/recetas). Del 21-ago al
+ * 8-set-2026 el sobre se trató como receta y en TODOS los restaurantes el
+ * consumo entraba al camino de la receta con una lista vacía: no bajaba nada,
+ * sin movimiento y sin error. Cada línea guarda ahora en `descuento` por qué
+ * camino salió ('insumos' | 'producto' | 'nada') y, si fueron insumos, cuáles
+ * y de qué almacén — la anulación devuelve exactamente eso.
  *
  * Un producto con variantes se descuenta POR VARIANTE, nunca como padre. Si
  * llega una línea sin `variantSku` para un producto que las tiene, se rechaza
@@ -85,21 +94,25 @@ export const createInternalConsumption = async (businessId, datos) => {
     )
     const fecha = datos.fecha instanceof Date ? datos.fecha : new Date()
 
+    const itemsDoc = items.map((i) => ({
+      productId: i.productId,
+      nombre: i.nombre || '',
+      cantidad: Number(i.cantidad),
+      costoUnitario: Number(i.costoUnitario) || 0,
+      subtotal: (Number(i.costoUnitario) || 0) * Number(i.cantidad),
+      ...(i.variantSku ? { variantSku: i.variantSku } : {}),
+      ...(i.variantLabel ? { variantLabel: i.variantLabel } : {}),
+      ...(i.unidad ? { unidad: i.unidad } : {}),
+      ...(i.controlaStock === false ? { controlaStock: false } : {}),
+    }))
+
     const docRef = await addDoc(coleccion(businessId), {
       motivo: datos.motivo,
       motivoNombre: motivoPorId(datos.motivo)?.nombre || datos.motivo,
       fecha: Timestamp.fromDate(fecha),
-      items: items.map((i) => ({
-        productId: i.productId,
-        nombre: i.nombre || '',
-        cantidad: Number(i.cantidad),
-        costoUnitario: Number(i.costoUnitario) || 0,
-        subtotal: (Number(i.costoUnitario) || 0) * Number(i.cantidad),
-        ...(i.variantSku ? { variantSku: i.variantSku } : {}),
-        ...(i.variantLabel ? { variantLabel: i.variantLabel } : {}),
-        ...(i.unidad ? { unidad: i.unidad } : {}),
-        ...(i.controlaStock === false ? { controlaStock: false } : {}),
-      })),
+      items: itemsDoc,
+      // La anulación necesita saber con qué regla se descontó.
+      businessMode: datos.businessMode || null,
       total,
       empleadoNombre: datos.empleadoNombre || null,
       nota: datos.nota || null,
@@ -113,21 +126,38 @@ export const createInternalConsumption = async (businessId, datos) => {
 
     const motivoNombre = motivoPorId(datos.motivo)?.nombre || 'Consumo interno'
     const errores = []
+    // Por dónde salió cada línea, y qué insumos si fueron insumos. Es lo que
+    // la anulación devuelve; sin esto habría que adivinar, y adivinar mal
+    // infla el stock.
+    const vias = items.map(() => null)
+    const insumosPorLinea = items.map(() => null)
 
-    for (const item of items) {
+    for (const [idx, item] of items.entries()) {
       try {
         // Con receta se descuentan los INSUMOS, no el producto terminado:
-        // mismo criterio que una venta en el POS.
-        const receta = await getRecipeByProductId(businessId, item.productId)
-        if (receta && shouldDeductIngredients(receta, datos.businessMode)) {
-          const insumos = (receta.ingredients || []).map((ing) => ({
-            ...ing,
-            quantity: (Number(ing.quantity) || 0) * Number(item.cantidad),
-          }))
-          await deductIngredients(
+        // mismo criterio que una venta en el POS. El sobre se abre en
+        // recetaParaDescontar (ver cabecera).
+        const receta = recetaParaDescontar(
+          await getRecipeByProductId(businessId, item.productId), datos.businessMode,
+        )
+        if (receta) {
+          const insumos = insumosDeReceta(receta, item.cantidad)
+          const r = await deductIngredients(
             businessId, insumos, docRef.id, `${motivoNombre}: ${item.nombre}`,
             datos.warehouseId || null, 'internal_use', !!datos.permitirNegativo,
           )
+          if (r && r.success === false) throw new Error(r.error || 'No se pudieron descontar los insumos')
+          // deductIngredients elige almacén por insumo; se guarda para devolver al mismo.
+          const almacenDe = new Map((r?.deductions || []).map((d) => [d.ingredientId, d.warehouseId || null]))
+          vias[idx] = 'insumos'
+          insumosPorLinea[idx] = insumos.map((i) => ({
+            ingredientId: i.ingredientId,
+            ingredientType: i.ingredientType === 'product' ? 'product' : 'ingredient',
+            ingredientName: i.ingredientName || i.name || '',
+            unit: i.unit || null,
+            quantity: i.quantity,
+            warehouseId: almacenDe.get(i.ingredientId) ?? datos.warehouseId ?? null,
+          }))
           continue
         }
 
@@ -136,7 +166,7 @@ export const createInternalConsumption = async (businessId, datos) => {
         // consumido, pero NO se crea un movimiento: anotar una salida de stock
         // que nunca ocurrió es peor que no anotar nada — después nadie entiende
         // por qué el historial no cuadra con las existencias.
-        if (item.controlaStock === false) continue
+        if (item.controlaStock === false) { vias[idx] = 'nada'; continue }
 
         // Con variantes, sin variante no hay qué descontar (ver cabecera).
         const prodSnap = await getDoc(doc(db, 'businesses', businessId, 'products', item.productId))
@@ -153,8 +183,9 @@ export const createInternalConsumption = async (businessId, datos) => {
           null, !!datos.permitirNegativo,
         )
         if (!descuento?.success) throw new Error(descuento?.error || 'No se pudo descontar el stock')
+        vias[idx] = 'producto'
 
-        await createStockMovement(businessId, {
+        const mov = await createStockMovement(businessId, {
           productId: item.productId,
           productName: item.nombre || '',
           warehouseId: datos.warehouseId || null,
@@ -169,19 +200,23 @@ export const createInternalConsumption = async (businessId, datos) => {
           ...(item.variantSku ? { variantSku: item.variantSku } : {}),
           ...(item.variantLabel ? { variantLabel: item.variantLabel } : {}),
         })
+        if (mov && mov.success === false) throw new Error(mov.error || 'No se pudo registrar el movimiento')
       } catch (e) {
         console.error(`Error descontando ${item.nombre}:`, e)
         errores.push(`${item.nombre}: ${e.message}`)
       }
     }
 
-    if (errores.length > 0) {
-      await updateDoc(doc(db, 'businesses', businessId, 'internalConsumptions', docRef.id), {
-        erroresDescuento: errores,
-      })
-      return { success: true, id: docRef.id, total, advertencias: errores }
-    }
+    await updateDoc(docRef, {
+      items: itemsDoc.map((it, i) => ({
+        ...it,
+        descuento: vias[i] || 'nada',
+        ...(insumosPorLinea[i] ? { insumosDescontados: insumosPorLinea[i] } : {}),
+      })),
+      ...(errores.length > 0 ? { erroresDescuento: errores } : {}),
+    })
 
+    if (errores.length > 0) return { success: true, id: docRef.id, total, advertencias: errores }
     return { success: true, id: docRef.id, total }
   } catch (error) {
     console.error('Error al registrar el consumo interno:', error)
@@ -203,8 +238,16 @@ export const createInternalConsumption = async (businessId, datos) => {
  *
  * Igual que el alta: lo que no se pudo devolver queda en el documento y se
  * devuelve como `advertencias`, no se pierde en la consola.
+ *
+ * Cada línea vuelve por donde salió (`viaDeDevolucion`, utils/recetas): los
+ * insumos anotados al almacén del que se descontaron, el producto, o nada.
+ * Las líneas de restaurante anteriores al 8-set-2026 no descontaron nada y no
+ * devuelven nada — se avisa.
+ *
+ * @param {{ businessMode?: string }} [opciones]  el modo actual del negocio,
+ *   para las líneas viejas que no guardaron el suyo.
  */
-export const voidInternalConsumption = async (businessId, consumoId, usuario) => {
+export const voidInternalConsumption = async (businessId, consumoId, usuario, opciones = {}) => {
   try {
     const ref = doc(db, 'businesses', businessId, 'internalConsumptions', consumoId)
     const snap = await getDoc(ref)
@@ -226,15 +269,19 @@ export const voidInternalConsumption = async (businessId, consumoId, usuario) =>
     const errores = []
     for (const item of consumo.items || []) {
       try {
-        const receta = await getRecipeByProductId(businessId, item.productId)
-        if (receta && shouldDeductIngredients(receta, consumo.businessMode)) {
-          const insumos = (receta.ingredients || []).map((ing) => ({
-            ...ing,
-            quantity: (Number(ing.quantity) || 0) * Number(item.cantidad),
-          }))
-          // Firma real: (businessId, ingredients, warehouseId). No recibe
-          // referencia ni descripción como deductIngredients.
-          await restoreIngredients(businessId, insumos, consumo.warehouseId || null)
+        const via = viaDeDevolucion(item, opciones.businessMode ?? consumo.businessMode)
+        if (via === 'nada') {
+          // Línea vieja de restaurante que sí "debía" descontar: nunca lo hizo.
+          if (!item.descuento && item.controlaStock !== false) {
+            throw new Error('se registró cuando el sistema no descontaba en restaurantes; no hay stock que devolver')
+          }
+          continue
+        }
+        if (via === 'insumos') {
+          // Firma real: (businessId, ingredients, warehouseId). Cada insumo
+          // anotado trae su almacén; el del consumo es el respaldo.
+          const r = await restoreIngredients(businessId, item.insumosDescontados || [], consumo.warehouseId || null)
+          if (r && r.success === false) throw new Error(r.error || 'No se pudieron devolver los insumos')
           continue
         }
 

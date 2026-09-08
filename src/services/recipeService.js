@@ -27,12 +27,9 @@ import { getIngredient, convertUnit } from './ingredientService'
  * validación de stock de ingredientes (ver POS.jsx handleCheckout) cuando el dueño
  * nunca configuró explícitamente que se descuente.
  */
-export const shouldDeductIngredients = (recipe, businessMode) => {
-  if (!recipe) return false
-  if (recipe.deductOnSale === true) return true
-  if (recipe.deductOnSale === false) return false
-  return businessMode === 'restaurant'
-}
+// El criterio vive en utils/recetas (puro, con pruebas) y se re-exporta desde
+// acá para que POS, InvoiceList y el consumo interno sigan importándolo igual.
+export { shouldDeductIngredients } from '@/utils/recetas'
 
 /**
  * Calcular el costo de una receta basado en sus ingredientes

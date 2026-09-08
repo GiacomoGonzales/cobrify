@@ -198,7 +198,7 @@ export default function ConsumoInternoModal({
   const anular = async (c) => {
     setAnulandoId(c.id)
     try {
-      const r = await voidInternalConsumption(businessId, c.id, usuario)
+      const r = await voidInternalConsumption(businessId, c.id, usuario, { businessMode })
       if (!r.success) throw new Error(r.error)
       if (r.advertencias?.length) {
         toast.warning(`Anulado, pero ${r.advertencias.length} línea(s) no devolvieron stock. Revisa el inventario.`, 8000)

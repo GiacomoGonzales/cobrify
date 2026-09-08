@@ -9,8 +9,7 @@ import {
   where,
   orderBy,
   Timestamp,
-  writeBatch,
-  increment
+  writeBatch
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { esDeSucursal } from '@/utils/branchScope'
@@ -21,7 +20,6 @@ import { computeBatchDeduction, computeProductBatchMetadata } from '@/utils/batc
  * Similar a updateWarehouseStock en warehouseService
  */
 export const updateIngredientWarehouseStock = (ingredient, warehouseId, quantityChange) => {
-  const currentStock = ingredient.currentStock || 0
   const warehouseStocks = ingredient.warehouseStocks || []
 
   // Buscar el almacén en el array
@@ -661,7 +659,7 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
           quantity: -quantityToDeduct,
           unit: productData.unit || 'unidades',
           warehouseId: effectiveWarehouseId || null,
-          reason: movementType === 'production_consumption' ? `Producción: ${productName}` : `Venta: ${productName}`,
+          reason: movementType === 'production_consumption' ? `Producción: ${productName}` : movementType === 'internal_use' ? productName : `Venta: ${productName}`,
           relatedSaleId: relatedSaleId,
           ...(consumedLot && { batchNumber: consumedLot }),
           beforeStock: currentStock,
@@ -761,7 +759,7 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
         quantity: -quantityToDeduct,
         unit: currentData.purchaseUnit,
         warehouseId: effectiveWarehouseId || null,
-        reason: movementType === 'production_consumption' ? `Producción: ${productName}` : `Venta: ${productName}`,
+        reason: movementType === 'production_consumption' ? `Producción: ${productName}` : movementType === 'internal_use' ? productName : `Venta: ${productName}`,
         relatedSaleId: relatedSaleId,
         beforeStock: currentStock,
         afterStock: newStock,
