@@ -17,7 +17,7 @@
  */
 export default {
   id: 'pos',
-  actualizado: '02/09/2026',
+  actualizado: '08/09/2026',
   intro:
     'El Punto de Venta es la pantalla para cobrar en el día a día. A la izquierda están tus productos; a la derecha, el **Carrito de Compras** y los datos de la venta. Esta guía recorre el flujo completo y las dudas más comunes.',
 
@@ -328,6 +328,10 @@ export default {
             'Si es nuevo, escribe su **RUC** o **DNI** y toca la lupa: el sistema consulta el padrón y trae el nombre o razón social automáticamente.',
             'Para boletas simples puedes cobrar sin datos del cliente.',
           ],
+        },
+        {
+          type: 'texto',
+          text: 'Si el cliente tiene **varios nombres comerciales** en su ficha (varias tiendas del mismo RUC), al seleccionarlo aparece un desplegable para elegir a cuál le vendes. Ese nombre sale en el comprobante con su dirección; a SUNAT van el RUC y la razón social. Los nombres se agregan desde la página Clientes.',
         },
         {
           type: 'consejo',

@@ -133,6 +133,7 @@ import KitchenTicket from '@/components/KitchenTicket'
 import { useReactToPrint } from 'react-to-print'
 import { getPrimaryPet } from '@/utils/petUtils'
 import { datosDeCliente, camposExtraConRespaldo } from '@/utils/posCustomerData'
+import { PRINCIPAL, opcionesDeNombreComercial, tieneVariosNombres, nombresParaBuscar, opcionQueCoincide, aplicarNombreComercial } from '@/utils/nombresComerciales'
 import { getVisiblePaymentMethods, getPaymentLabel, getPaymentKeyByLabel } from '@/utils/paymentMethods'
 import GuideLink from '@/components/guide/GuideLink'
 import { diasDeRecordatorio } from '@/utils/vetReminders'
@@ -6304,7 +6305,9 @@ export default function POS() {
         digitos,
         digitos.length === 9 ? `51${digitos}` : '',
         // Colegios: encontrar al apoderado por el nombre del alumno
-        c.studentName
+        c.studentName,
+        // Empresas con varias tiendas: cualquiera de sus nombres comerciales
+        ...nombresParaBuscar(c)
       ))
     }
     return map
@@ -6983,6 +6986,7 @@ ${textoDeErrores(revision.errores)}`, 9000)
             ? {
                 documentType: documentType === 'factura' ? ID_TYPES.RUC : inferDocumentType(customerData.documentType, customerData.documentNumber),
                 documentNumber: customerData.documentNumber || '00000000',
+                tradeNameId: customerData.tradeNameId || null,
                 name: documentType === 'factura'
                   ? (customerData.businessName || customerData.name || 'Cliente')
                   : (customerData.name || customerData.businessName || 'Cliente'),
@@ -7294,6 +7298,7 @@ ${textoDeErrores(revision.errores)}`, 9000)
           ? {
               documentType: documentType === 'factura' ? ID_TYPES.RUC : inferDocumentType(customerData.documentType, customerData.documentNumber),
               documentNumber: customerData.documentNumber || '00000000',
+                tradeNameId: customerData.tradeNameId || null,
               name: documentType === 'factura'
                 ? (customerData.businessName || customerData.name || 'Cliente')
                 : (customerData.name || customerData.businessName || 'Cliente'),
@@ -10835,7 +10840,12 @@ Gracias por tu preferencia.`
                                 // tarjeta de propiedad y los datos del vehiculo. El
                                 // cliente los tenia guardados y salian vacios, asi que
                                 // habia que teclearlos en cada venta.
-                                setCustomerData(datosDeCliente(customer))
+                                // Si se lo encontró escribiendo uno de sus nombres
+                                // comerciales, ese queda elegido; si no, el principal.
+                                setCustomerData(aplicarNombreComercial(
+                                  datosDeCliente(customer),
+                                  opcionQueCoincide(customer, customerSearchTerm),
+                                ))
                               }}
                               className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
                             >
@@ -10855,6 +10865,25 @@ Gracias por tu preferencia.`
                       </div>
                     )}
                   </div>
+                )}
+
+                {/* Cliente con varios nombres comerciales: a cuál se le vende. El
+                    elegido sale como "Nombre comercial" en el comprobante, con su
+                    dirección si la tiene; la razón social sigue yendo a SUNAT. */}
+                {selectedCustomer && tieneVariosNombres(selectedCustomer) && (
+                  <select
+                    value={customerData.tradeNameId || PRINCIPAL}
+                    onChange={e => {
+                      const opcion = opcionesDeNombreComercial(selectedCustomer).find(o => o.id === e.target.value)
+                      if (opcion) setCustomerData(aplicarNombreComercial(customerData, opcion))
+                    }}
+                    title="Nombre comercial al que se le vende"
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  >
+                    {opcionesDeNombreComercial(selectedCustomer).map(o => (
+                      <option key={o.id} value={o.id}>{o.name}{o.principal ? ' (principal)' : ''}</option>
+                    ))}
+                  </select>
                 )}
 
                 {/* Campos de documento según tipo */}

@@ -34,6 +34,8 @@ import FichaPacienteModal from '@/components/clinic/FichaPacienteModal'
 import { getInvoicesDeCliente } from '@/services/customerInvoiceService'
 import { normalizePets, createEmptyPet } from '@/utils/petUtils'
 import DeliveryAddressesEditor, { limpiarDireccionesParaGuardar } from '@/components/customer/DeliveryAddressesEditor'
+import NombresComercialesEditor from '@/components/customer/NombresComercialesEditor'
+import { limpiarNombresComercialesParaGuardar } from '@/utils/nombresComerciales'
 import LoyaltyManager from '@/components/loyalty/LoyaltyManager'
 import GuideLink from '@/components/guide/GuideLink'
 import { CAMPOS_EN_MAYUSCULA, enMayuscula } from '@/utils/posCustomerData'
@@ -773,6 +775,9 @@ export default function Customers() {
   // Direcciones de entrega del cliente (aparte del domicilio fiscal). Van fuera
   // de react-hook-form, igual que las mascotas, porque son una lista editable.
   const [deliveryAddresses, setDeliveryAddresses] = useState([])
+  // Nombres comerciales adicionales (tiendas/marcas del mismo RUC). Misma
+  // mecánica que las direcciones: lista aparte, se guarda en `tradeNames`.
+  const [nombresComerciales, setNombresComerciales] = useState([])
 
   const {
     register,
@@ -896,6 +901,7 @@ export default function Customers() {
       setPets([createEmptyPet()])
     }
     setDeliveryAddresses([])
+    setNombresComerciales([])
     setIsModalOpen(true)
   }
 
@@ -941,6 +947,7 @@ export default function Customers() {
     setDeliveryAddresses(
       Array.isArray(customer.deliveryAddresses) ? customer.deliveryAddresses : []
     )
+    setNombresComerciales(Array.isArray(customer.tradeNames) ? customer.tradeNames : [])
     setIsModalOpen(true)
   }
 
@@ -949,6 +956,7 @@ export default function Customers() {
     setEditingCustomer(null)
     setPets([])
     setDeliveryAddresses([])
+    setNombresComerciales([])
     reset()
   }
 
@@ -1059,6 +1067,8 @@ export default function Customers() {
       // borrar la última quede registrado). limpiarDireccionesParaGuardar quita
       // los tramos temporales del selector de ubigeo y las filas sin dirección.
       data.deliveryAddresses = limpiarDireccionesParaGuardar(deliveryAddresses)
+      // Nombres comerciales: también siempre, para que quitar el último quede.
+      data.tradeNames = limpiarNombresComercialesParaGuardar(nombresComerciales)
 
       // Historial de atenciones: filas vacías fuera y la más reciente primero,
       // como se lee una historia clínica. Los cuatro campos de la ficha vieja
@@ -2149,6 +2159,12 @@ export default function Customers() {
             error={errors.name?.message}
             {...register('name')}
           />
+
+          {/* Otras tiendas o marcas del mismo RUC: al vender, el POS pregunta a
+              cuál. El "Nombre" de arriba sigue siendo el principal. */}
+          {documentType === ID_TYPES.RUC && (
+            <NombresComercialesEditor value={nombresComerciales} onChange={setNombresComerciales} />
+          )}
 
           <Input
             label="Código (opcional)"

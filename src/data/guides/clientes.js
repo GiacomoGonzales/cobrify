@@ -6,7 +6,7 @@
  */
 export default {
   id: 'clientes',
-  actualizado: '12/08/2026',
+  actualizado: '08/09/2026',
   intro:
     'Acá vive tu cartera: a quién le vendes, cuánto te ha comprado cada uno y quién te debe. Un cliente bien registrado se completa solo la próxima vez que le vendas.',
 
@@ -59,6 +59,33 @@ export default {
         {
           type: 'texto',
           text: 'Traerlas de SUNAT una vez también te evita repetir esa consulta —que se paga— en cada guía, y hace que funcione sin internet.',
+        },
+      ],
+    },
+
+    {
+      id: 'nombres-comerciales',
+      title: 'Varios nombres comerciales en un mismo RUC',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Una empresa puede atender con varias tiendas o marcas: Bambú Picota, Bambú Tarapoto. El **Nombre** de la ficha es el nombre comercial principal; en el bloque **Nombres comerciales adicionales** (solo en clientes con RUC) agregas los demás, cada uno con su dirección y teléfono si los tiene.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Abre la ficha del cliente y presiona **Agregar** en Nombres comerciales adicionales.',
+            'Escribe el nombre y, si corresponde, la dirección y el teléfono de esa tienda. Guarda.',
+            'En el punto de venta, busca al cliente por su RUC, su razón social o **cualquiera** de sus nombres comerciales: aparecerá un desplegable para elegir a cuál le vendes.',
+          ],
+        },
+        {
+          type: 'texto',
+          text: 'El nombre elegido sale en el comprobante como **Nombre comercial**, con su dirección. A SUNAT siguen yendo el RUC y la razón social, que no cambian.',
+        },
+        {
+          type: 'consejo',
+          text: 'Si lo encontraste escribiendo uno de los nombres comerciales, ese queda elegido de una. Si lo buscaste por RUC, queda el principal y lo cambias en el desplegable.',
         },
       ],
     },
