@@ -87,25 +87,31 @@ export function viaDeDevolucion(item, businessMode) {
  * @returns {{ aplicados: Array, faltantes: Array<{nombre, pedido, aplicado}> }}
  */
 export function resultadoDeDescuento(insumosPedidos = [], deductions = []) {
-  const porId = new Map((deductions || []).map((d) => [d.ingredientId, d]))
+  const pedidoPorId = new Map((insumosPedidos || []).filter((i) => i?.ingredientId).map((i) => [i.ingredientId, i]))
   const aplicados = []
   const faltantes = []
-  for (const i of insumosPedidos || []) {
-    const d = porId.get(i.ingredientId)
-    const pedido = Number(i.quantity) || 0
+  // La verdad es lo que deductIngredients tocó. Con un combo abierto ahí
+  // aparecen insumos (las alitas) que no estaban en la lista pedida, y
+  // faltan los que no tenían nada que bajar (un plato sin stock propio): eso
+  // no es un recorte, es el diseño, y no se avisa.
+  for (const d of deductions || []) {
+    if (!d?.ingredientId) continue
+    const i = pedidoPorId.get(d.ingredientId)
+    const pedido = Number(d.pedido ?? i?.quantity) || 0
     // Un `deductions` viejo sin `quantity` significa que se aplicó completo.
-    const aplicado = d ? (Number(d.quantity ?? pedido) || 0) : 0
+    const aplicado = Number(d.quantity ?? pedido) || 0
+    const nombre = d.ingredientName || i?.ingredientName || i?.name || d.ingredientId
     if (aplicado > 0) {
       aplicados.push({
-        ingredientId: i.ingredientId,
-        ingredientType: d.ingredientType || (i.ingredientType === 'product' ? 'product' : 'ingredient'),
-        ingredientName: i.ingredientName || i.name || '',
-        unit: i.unit || null,
+        ingredientId: d.ingredientId,
+        ingredientType: d.ingredientType || (i?.ingredientType === 'product' ? 'product' : 'ingredient'),
+        ingredientName: nombre,
+        unit: d.unit ?? i?.unit ?? null,
         quantity: aplicado,
         warehouseId: d.warehouseId ?? null,
       })
     }
-    if (aplicado < pedido) faltantes.push({ nombre: i.ingredientName || i.name || i.ingredientId, pedido, aplicado })
+    if (aplicado < pedido) faltantes.push({ nombre, pedido, aplicado })
   }
   return { aplicados, faltantes }
 }

@@ -727,7 +727,7 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
           createdAt: Timestamp.now()
         })
 
-        deductions.push({ ingredientId: ingredient.ingredientId, ingredientType: 'product', warehouseId: effectiveWarehouseId || null, quantity: aplicado })
+        deductions.push({ ingredientId: ingredient.ingredientId, ingredientType: 'product', ingredientName: ingredient.ingredientName || '', unit: ingredient.unit || null, warehouseId: effectiveWarehouseId || null, quantity: aplicado, pedido: quantityToDeduct })
         continue
       }
 
@@ -836,11 +836,13 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
         createdAt: Timestamp.now()
       })
 
-      deductions.push({ ingredientId: ingredient.ingredientId, ingredientType: 'ingredient', warehouseId: effectiveWarehouseId || null, quantity: aplicado })
+      deductions.push({ ingredientId: ingredient.ingredientId, ingredientType: 'ingredient', ingredientName: ingredient.ingredientName || '', unit: ingredient.unit || null, warehouseId: effectiveWarehouseId || null, quantity: aplicado, pedido: quantityToDeduct })
     }
 
     await batch.commit()
-    return { success: true, deductions }
+    // `insumos` es la lista que de verdad se procesó (con los combos abiertos):
+    // quien anota lo descontado tiene que cruzar contra ESTA, no contra la que mandó.
+    return { success: true, deductions, insumos: lista }
   } catch (error) {
     console.error('Error al descontar ingredientes:', error)
     return { success: false, error: error.message }

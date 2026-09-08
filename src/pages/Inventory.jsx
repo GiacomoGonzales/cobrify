@@ -5662,7 +5662,7 @@ export default function Inventory() {
         permitirNegativo={!!businessSettings?.allowNegativeStock}
         businessId={getBusinessId()}
         usuario={{ uid: user?.uid, email: user?.email, nombre: user?.displayName }}
-        onRegistrado={loadProducts}
+        onRegistrado={() => { loadProducts(); loadIngredients() }}
       />
 
       <InventoryCountModal

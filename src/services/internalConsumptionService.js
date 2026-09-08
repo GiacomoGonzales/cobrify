@@ -152,7 +152,7 @@ export const createInternalConsumption = async (businessId, datos) => {
           // pedido: un plato sin stock propio puesto como insumo de un combo no
           // sale, y si solo había 3 de 6 salieron 3. Es lo que la anulación
           // devuelve. Lo que faltó se avisa, no se calla.
-          const { aplicados, faltantes } = resultadoDeDescuento(insumos, r?.deductions || [])
+          const { aplicados, faltantes } = resultadoDeDescuento(r?.insumos || insumos, r?.deductions || [])
           vias[idx] = aplicados.length > 0 ? 'insumos' : 'nada'
           if (aplicados.length > 0) insumosPorLinea[idx] = aplicados
           if (faltantes.length > 0) {
