@@ -4,6 +4,7 @@
 // lógica; solo se hicieron explícitos los imports.
 import { useState, useEffect, useMemo } from 'react'
 import { optimizeImageUrl } from '@/utils/cloudinary'
+import { almacenesDelCatalogo } from '@/utils/stockDeCatalogo'
 import { getCatalogMinQty, formatCurrency } from '@/lib/utils'
 import { convertFromBase } from '@/utils/currency'
 import { CatalogDetailImage } from '@/components/catalog/CatalogImages'
@@ -217,7 +218,8 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
 
   if (!isOpen || !product) return null
 
-  const outOfStock = isProductOutOfStock(product, ignoreStock)
+  const almacenesCatalogo = almacenesDelCatalogo(business)
+  const outOfStock = isProductOutOfStock(product, ignoreStock, almacenesCatalogo)
   const hasModifiers = product.modifiers?.length > 0
 
   // Helper: obtener total de selecciones para un modificador
@@ -1122,7 +1124,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
               ? null
               : (selectedPresentation
                 ? getOptionMaxQty(product, selectedPresentation)
-                : getAvailableStock(product, hasVariants ? selectedVariant : null))
+                : getAvailableStock(product, hasVariants ? selectedVariant : null, almacenesCatalogo))
             const hasStockCap = availableStock !== null && Number.isFinite(availableStock) && availableStock > 0
 
             const applyQty = (newQty) => {

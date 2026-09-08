@@ -38,6 +38,7 @@ import QRCode from 'qrcode'
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { limpiarSlug, problemaDelSlug } from '@/utils/catalogSlug'
+import { getWarehouses } from '@/services/warehouseService'
 import { normalizeCustomDomain } from '@/services/brandingService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -99,6 +100,16 @@ export default function Catalogo() {
   const [productosReservables, setProductosReservables] = useState(null) // null = sin cargar
   const [busquedaServicio, setBusquedaServicio] = useState('')
 
+  // Los almacenes, para poder elegir cuales cuentan en el catalogo.
+  // `currentBusinessId` en las deps y no `user`: los permisos llegan tarde y con
+  // solo el usuario la lista queda vacia.
+  useEffect(() => {
+    if (isDemoMode) return
+    getWarehouses(currentBusinessId).then(r => {
+      setAlmacenes(r?.success ? (r.data || []) : [])
+    }).catch(() => setAlmacenes([]))
+  }, [currentBusinessId, isDemoMode])
+
   useEffect(() => {
     if (!appointmentsBooking.enabled || productosReservables !== null || isDemoMode) return
     getProducts(getBusinessId()).then(r => {
@@ -130,6 +141,10 @@ export default function Catalogo() {
   // La direccion del negocio en el catalogo. Se oculta SOLO ahi: en el
   // comprobante es un dato obligatorio y no se toca.
   const [catalogHideAddress, setCatalogHideAddress] = useState(false)
+  // Almacenes cuyo stock cuenta en el catalogo. Vacio = todos, igual que en el
+  // resto del sistema (ver utils/stockDeCatalogo).
+  const [catalogWarehouseIds, setCatalogWarehouseIds] = useState([])
+  const [almacenes, setAlmacenes] = useState([])
   const [catalogShowStock, setCatalogShowStock] = useState(false)
   // Cuentas de comprador en el catálogo. Default ON: solo agrega comodidades
   // (historial y direcciones) y nunca obliga a registrarse para comprar.
@@ -249,6 +264,7 @@ export default function Catalogo() {
     setCatalogIgnoreStock(businessData.catalogIgnoreStock || false)
     setCatalogHideOutOfStock(businessData.catalogHideOutOfStock || false)
     setCatalogHideAddress(businessData.catalogHideAddress || false)
+    setCatalogWarehouseIds(Array.isArray(businessData.catalogWarehouseIds) ? businessData.catalogWarehouseIds : [])
     setCatalogShowStock(businessData.catalogShowStock || false)
     setCatalogCustomerAccounts(businessData.catalogCustomerAccounts !== false)
     setCatalogWhatsapp(businessData.catalogWhatsapp || '')
@@ -511,6 +527,7 @@ export default function Catalogo() {
       catalogIgnoreStock,
       catalogHideOutOfStock,
       catalogHideAddress,
+      catalogWarehouseIds,
       catalogShowStock,
       catalogCustomerAccounts,
       catalogWhatsapp: catalogWhatsapp.trim(),
@@ -1078,6 +1095,47 @@ export default function Catalogo() {
                         className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                       />
                     </label>
+                    {almacenes.length > 1 && (
+                      <div className="p-3 border border-gray-200 rounded-lg">
+                        <span className="text-sm font-medium text-gray-900 block">Almacenes que cuentan en el catálogo</span>
+                        <span className="text-xs text-gray-500">
+                          Solo se suma el stock de los almacenes marcados. Sirve para dejar fuera una bodega:
+                          lo que solo está ahí aparece agotado y nadie lo pide. No afecta a tus ventas ni a tus
+                          reportes — el stock se sigue descontando del almacén que corresponda.
+                          {catalogWarehouseIds.length === 0 && ' Ahora mismo cuentan todos.'}
+                        </span>
+                        <div className="mt-3 space-y-2">
+                          {almacenes.map((a) => {
+                            const marcado = catalogWarehouseIds.length === 0 || catalogWarehouseIds.includes(a.id)
+                            return (
+                              <label key={a.id} className="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+                                <input
+                                  type="checkbox"
+                                  checked={marcado}
+                                  onChange={(e) => {
+                                    // Partiendo de "todos", destildar uno significa dejar los demás.
+                                    const base = catalogWarehouseIds.length === 0 ? almacenes.map(w => w.id) : catalogWarehouseIds
+                                    const nuevos = e.target.checked
+                                      ? [...new Set([...base, a.id])]
+                                      : base.filter(id => id !== a.id)
+                                    // Si quedan todos marcados, se guarda vacío: es la forma
+                                    // de decir "todos" y así entran los almacenes nuevos.
+                                    setCatalogWarehouseIds(nuevos.length === almacenes.length ? [] : nuevos)
+                                  }}
+                                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                />
+                                <span>{a.name || 'Almacén'}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                        {catalogWarehouseIds.length > 0 && catalogWarehouseIds.length < almacenes.length && (
+                          <p className="mt-2 text-xs text-amber-700">
+                            Quedan fuera {almacenes.length - catalogWarehouseIds.length} de {almacenes.length} almacenes.
+                          </p>
+                        )}
+                      </div>
+                    )}
                     <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
                       <div className="flex-1">
                         <span className="text-sm font-medium text-gray-900 block">Ignorar stock en catálogo</span>

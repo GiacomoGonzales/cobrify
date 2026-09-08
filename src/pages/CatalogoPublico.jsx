@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { esVendible } from '@/utils/productSale'
+import { almacenesDelCatalogo } from '@/utils/stockDeCatalogo'
 import { optimizeImageUrl } from '@/utils/cloudinary'
 import ProductModal from '@/components/catalog/ProductModal'
 import CartDrawer, { TableAccountModal } from '@/components/catalog/CartDrawer'
@@ -683,7 +684,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       if (!esVendible(product)) return false
 
       // Excluir productos sin stock si la opción está activa (y no se ignora el stock)
-      if (hideOutOfStock && !ignoreStockSetting && isProductOutOfStock(product, false)) {
+      if (hideOutOfStock && !ignoreStockSetting && isProductOutOfStock(product, false, almacenesDelCatalogo(business))) {
         return false
       }
 
@@ -692,7 +693,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
       return true
     })
-  }, [products, hiddenCategoryIds, hideOutOfStock, ignoreStockSetting])
+    // `business?.catalogWarehouseIds` en las deps: si el negocio cambia los
+    // almacenes del catalogo, la grilla tiene que recalcular que esta agotado.
+  }, [products, hiddenCategoryIds, hideOutOfStock, ignoreStockSetting, business?.catalogWarehouseIds])
 
   // Qué se puede filtrar en ESTE catálogo. Sale de todos los productos
   // publicados, no de los que quedaron a la vista: si se recalculara sobre lo
@@ -1075,7 +1078,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // Funciones del carrito
   const addToCart = (product, quantity = 1, selectedModifiers = [], unitPrice = null, priceLevelLabel = null) => {
     // No permitir agregar productos agotados
-    if (isProductOutOfStock(product, ignoreStock)) return
+    if (isProductOutOfStock(product, ignoreStock, almacenesDelCatalogo(business))) return
 
     // Determinar precio según cantidad: para cada nivel de precio (price2/3/4)
     // que cumpla su cantidad mínima propia, elegimos el MÁS BARATO. Si ninguno

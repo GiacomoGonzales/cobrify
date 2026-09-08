@@ -76,6 +76,10 @@ export default {
         },
         {
           type: 'texto',
+          text: 'Si tienes varios almacenes y alguno es una bodega o está en otra ciudad, elige en **Almacenes que cuentan en el catálogo** cuáles se suman. Lo que solo esté en un almacén desmarcado aparece agotado, así nadie te pide algo que no puedes entregar desde el local. No cambia nada de tus ventas ni de tus reportes: el stock se sigue descontando del almacén que corresponda.',
+        },
+        {
+          type: 'texto',
           text: 'Si un producto tiene **presentaciones** (Caja x12, Saco x49, Paquete x6), tu cliente las ve al abrirlo: elige entre comprar por unidad suelta o por la presentación, cada una con su precio. Lo que elija llega al pedido y al Punto de Venta, y el stock se descuenta por lo que trae dentro — una caja de 12 baja 12 del almacén, no 1.',
         },
         {

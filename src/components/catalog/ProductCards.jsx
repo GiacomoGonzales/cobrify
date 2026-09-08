@@ -20,6 +20,7 @@
 // getCartQuantity, setSelectedProduct, addToCart, th:{...clases del tema} }.
 import { Package, Plus } from 'lucide-react'
 import { optimizeImageUrl } from '@/utils/cloudinary'
+import { almacenesDelCatalogo } from '@/utils/stockDeCatalogo'
 import { CatalogImage, preloadProductDetail } from '@/components/catalog/CatalogImages'
 import { getCatalogAccent } from '@/themes/catalogThemes'
 import {
@@ -171,7 +172,8 @@ export function CarouselCard({ product, ctx }) {
 export function GridCard({ product, index, uniform = false, ctx }) {
   const { business, showPrices, ignoreStock, categories, selectedCategory, fmtCatalog, fmtProductMain, getCartQuantity, setSelectedProduct, addToCart, th, effects, cardVariant } = ctx
   const cartQty = getCartQuantity(product.id)
-  const outOfStock = isProductOutOfStock(product, ignoreStock)
+  // Solo cuentan los almacenes elegidos para el catalogo (utils/stockDeCatalogo).
+  const outOfStock = isProductOutOfStock(product, ignoreStock, almacenesDelCatalogo(business))
   const priceRange = getProductPriceRange(product, business)
   // Efectos F2.7 (opt-in): reveal al montar + 2da imagen al hover.
   const revealClass = effects?.scrollReveal ? 'catalog-reveal' : ''
@@ -351,7 +353,8 @@ export function GridCard({ product, index, uniform = false, ctx }) {
 export function ListCard({ product, ctx }) {
   const { business, showPrices, ignoreStock, categories, selectedCategory, fmtCatalog, fmtProductMain, getCartQuantity, setSelectedProduct, addToCart, th, effects } = ctx
   const cartQty = getCartQuantity(product.id)
-  const outOfStock = isProductOutOfStock(product, ignoreStock)
+  // Solo cuentan los almacenes elegidos para el catalogo (utils/stockDeCatalogo).
+  const outOfStock = isProductOutOfStock(product, ignoreStock, almacenesDelCatalogo(business))
   const priceRange = getProductPriceRange(product, business)
   const revealClass = effects?.scrollReveal ? 'catalog-reveal' : ''
   return (

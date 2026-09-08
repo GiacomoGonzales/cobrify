@@ -1,3 +1,4 @@
+import { sumarStockDeAlmacenes, hayDesgloseUtil } from '@/utils/stockDeCatalogo'
 // Helpers puros del catálogo público (precios, stock, unidades, horario).
 // Extraídos de CatalogoPublico.jsx (F1.1 del plan de rediseño) SIN cambios de
 // lógica — solo se agregó `export`. Los usan la página principal, el modal
@@ -77,7 +78,11 @@ export const isBusinessOpen = (businessHours) => {
 
 
 // Helper: determinar si un producto está agotado
-export const isProductOutOfStock = (product, ignoreStock = false) => {
+//
+// `almacenes` (null = todos) son los que cuentan para el catálogo: un negocio
+// puede excluir su bodega para que lo que solo está ahí no figure disponible
+// (ver utils/stockDeCatalogo).
+export const isProductOutOfStock = (product, ignoreStock = false, almacenes = null) => {
   if (!product) return false
   if (ignoreStock) return false
   // Productos con trackStock explícitamente desactivado siempre disponibles
@@ -86,8 +91,8 @@ export const isProductOutOfStock = (product, ignoreStock = false) => {
   // Producto con variantes: agotado solo si TODAS las variantes están agotadas
   if (product.hasVariants && product.variants?.length > 0) {
     return product.variants.every(v => {
-      if (v.warehouseStocks?.length > 0) {
-        return v.warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0) <= 0
+      if (hayDesgloseUtil(v.warehouseStocks)) {
+        return sumarStockDeAlmacenes(v.warehouseStocks, almacenes) <= 0
       }
       if (v.stock !== null && v.stock !== undefined) return v.stock <= 0
       return false // Sin datos de stock = disponible
@@ -95,9 +100,11 @@ export const isProductOutOfStock = (product, ignoreStock = false) => {
   }
 
   // Verificar stock: prioridad warehouseStocks > stock directo
-  if (product.warehouseStocks?.length > 0) {
-    return product.warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0) <= 0
+  if (hayDesgloseUtil(product.warehouseStocks)) {
+    return sumarStockDeAlmacenes(product.warehouseStocks, almacenes) <= 0
   }
+  // Sin desglose no hay forma de saber a qué almacén pertenece: se usa el total,
+  // que es el único dato que hay.
   if (typeof product.stock === 'number') return product.stock <= 0
 
   // Sin datos de stock = disponible
@@ -107,12 +114,12 @@ export const isProductOutOfStock = (product, ignoreStock = false) => {
 // Helper: stock disponible total (suma de warehouseStocks o stock directo).
 // Devuelve `null` si el producto/variante no trackea stock (sin tope).
 // Soporta opcionalmente una variante específica.
-export const getAvailableStock = (product, variant = null) => {
+export const getAvailableStock = (product, variant = null, almacenes = null) => {
   if (!product) return null
   if (product.trackStock === false) return null
   const source = variant || product
-  if (source.warehouseStocks?.length > 0) {
-    return source.warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+  if (hayDesgloseUtil(source.warehouseStocks)) {
+    return sumarStockDeAlmacenes(source.warehouseStocks, almacenes)
   }
   if (typeof source.stock === 'number') return source.stock
   return null
