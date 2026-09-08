@@ -69,6 +69,13 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false) // Super admin (giiacomo@gmail.com)
   const [isBusinessOwner, setIsBusinessOwner] = useState(false) // Admin del negocio
+  /**
+   * Entró alguien cuyo acceso de Firebase existe pero que no tiene cuenta:
+   * ni ficha en `users`, ni plan, ni negocio. Suele ser un empleado al que le
+   * crearon el acceso y se le perdió la ficha. Antes se le regalaba el rol de
+   * dueño y caía en un negocio vacío; ahora Login lo dice y cierra la sesión.
+   */
+  const [accesoSinCuenta, setAccesoSinCuenta] = useState(false)
   const [isReseller, setIsReseller] = useState(false) // Reseller
   const [resellerData, setResellerData] = useState(null) // Datos del reseller
   const [subscription, setSubscription] = useState(null)
@@ -190,16 +197,35 @@ export const AuthProvider = ({ children }) => {
             try {
               businessOwnerStatus = await isBusinessAdmin(firebaseUser.uid)
 
-              // Si es un usuario legacy sin documento, crear su documento de Business Owner
-              if (businessOwnerStatus) {
-                const userDataCheck = await getUserData(firebaseUser.uid)
-                if (!userDataCheck.success || !userDataCheck.data) {
+              // Un acceso creado hace un momento es un REGISTRO EN CURSO: la
+              // cuenta de Firebase ya existe pero el negocio y el plan todavía
+              // se están escribiendo, así que `isBusinessAdmin` dice que no y
+              // acertaría por el motivo equivocado. Se le da margen para que
+              // nadie quede fuera de su propio registro.
+              const nacimiento = Date.parse(firebaseUser.metadata?.creationTime || '')
+              const accesoRecienCreado = Number.isFinite(nacimiento) && Date.now() - nacimiento < 10 * 60 * 1000
+
+              const userDataCheck = await getUserData(firebaseUser.uid)
+              const sinDocumento = !userDataCheck.success || !userDataCheck.data
+
+              if (sinDocumento) {
+                // El documento de dueño solo se crea si hay una cuenta detrás
+                // (plan o negocio a su nombre) o si el registro está en curso.
+                // Crearlo a ciegas era lo que convertía a un empleado sin ficha
+                // en dueño de un negocio vacío.
+                if (businessOwnerStatus || accesoRecienCreado) {
+                  businessOwnerStatus = true
                   try {
                     await setAsBusinessOwner(firebaseUser.uid, firebaseUser.email)
                   } catch (error) {
                     console.error('Error al crear documento de Business Owner:', error)
                   }
-                } else if (userDataCheck.data.ownerId) {
+                } else {
+                  console.warn('⚠️ Acceso sin cuenta: ni documento de usuario, ni plan, ni negocio')
+                  setAccesoSinCuenta(true)
+                }
+              } else if (businessOwnerStatus) {
+                if (userDataCheck.data.ownerId) {
                   // BLINDAJE: un doc con ownerId es SIEMPRE un sub-usuario. Si
                   // isBusinessAdmin devolvió true igual (flag heredado o lectura
                   // rara), NO tratarlo como dueño — eso lo dejaba en su propio
@@ -525,6 +551,7 @@ export const AuthProvider = ({ children }) => {
           setIsReseller(false)
           setResellerData(null)
           setIsBusinessOwner(false)
+          setAccesoSinCuenta(false)
           setSubscription(null)
           setHasAccess(false)
           setIsInGracePeriod(false)
@@ -733,6 +760,7 @@ export const AuthProvider = ({ children }) => {
       setIsReseller(false)
       setResellerData(null)
       setIsBusinessOwner(false)
+      setAccesoSinCuenta(false)
       setSubscription(null)
       setHasAccess(false)
       setIsInGracePeriod(false)
@@ -956,6 +984,7 @@ export const AuthProvider = ({ children }) => {
     isLoading,
     isAdmin, // Super Admin (giiacomo@gmail.com)
     isBusinessOwner, // Admin del negocio (usuarios registrados)
+    accesoSinCuenta, // acceso de Firebase sin ficha, sin plan y sin negocio
     isReseller, // Reseller
     rolesResolved, // Roles ya resueltos (ver arriba)
     resellerData, // Datos del reseller

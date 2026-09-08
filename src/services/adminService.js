@@ -50,9 +50,32 @@ export const isBusinessAdmin = async (userId) => {
       return true;
     }
 
-    // Si NO existe en la colección users, es un usuario registrado directamente
-    // antes de la implementación del sistema. Tratarlo como business owner.
-    return true;
+    // ── Sin documento en `users` ──────────────────────────────────────────
+    // Antes se devolvía `true` sin más: "es un usuario de antes de que
+    // existiera esta colección, trátalo como dueño". Eso convertía en dueño de
+    // un negocio vacío a CUALQUIERA que entrara sin documento, y el que entra
+    // sin documento casi nunca es un cliente antiguo: es un empleado al que le
+    // crearon el acceso y se le perdió la ficha, o alguien a quien le borraron
+    // la cuenta y le quedó vivo el acceso. Con siete casos así en producción
+    // —el más antiguo de febrero— cada uno aparecía en el admin como una
+    // "cuenta a medio crear" y, al entrar, veía un POS sin productos.
+    //
+    // Ahora se le pide una prueba de que la cuenta existe: un plan o un negocio
+    // a su nombre. El cliente antiguo de verdad los tiene; el fantasma no.
+    //
+    // La suscripción va primero porque su regla de lectura es la simple (cada
+    // quien lee la suya). La del negocio además exige acceso vigente, así que
+    // puede denegar en vez de responder "no existe": un fallo ahí se lee como
+    // que no hay negocio, que es justo lo que queremos concluir.
+    const tiene = async (coleccion) => {
+      try {
+        return (await getDoc(doc(db, coleccion, userId))).exists();
+      } catch {
+        return false;
+      }
+    };
+    if (await tiene('subscriptions')) return true;
+    return await tiene('businesses');
   } catch (error) {
     console.error('Error al verificar business admin:', error);
     return false;

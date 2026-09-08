@@ -20,7 +20,7 @@ export default function Login() {
   const [customBranding, setCustomBranding] = useState(null) // null = usar Cobrify
   const [isLoadingBranding, setIsLoadingBranding] = useState(true) // Empezar en true para esperar la detección
   const [searchParams] = useSearchParams()
-  const { login, logout, isAuthenticated, isLoading: isAuthLoading, isAdmin, isBusinessOwner, isReseller, userPermissions, rolesResolved } = useAuth()
+  const { login, logout, isAuthenticated, isLoading: isAuthLoading, isAdmin, isBusinessOwner, isReseller, userPermissions, rolesResolved, accesoSinCuenta } = useAuth()
   const navigate = useNavigate()
 
   const refId = searchParams.get('ref')
@@ -39,11 +39,17 @@ export default function Login() {
     }
   }, [isAuthenticated, isAuthLoading, rolesResolved, isBusinessUser, navigate])
 
+  // Dos casos distintos con el mismo final —se explica y se cierra la sesión—,
+  // pero con mensajes que no se pueden confundir: al comprador se le manda a su
+  // tienda; al empleado sin ficha, con su jefe. Decirle "eres un comprador de
+  // catálogo" a la cajera de un cliente no la ayuda en nada.
   useEffect(() => {
     if (!isShopperAccount) return
-    setError('Esta cuenta es de comprador de un catálogo, no tiene acceso al sistema. Vuelve a la tienda donde compras para iniciar sesión ahí.')
+    setError(accesoSinCuenta
+      ? 'Tu acceso existe pero no está asignado a ningún negocio. Pídele a quien administra tu sistema que te vuelva a crear como usuario.'
+      : 'Esta cuenta es de comprador de un catálogo, no tiene acceso al sistema. Vuelve a la tienda donde compras para iniciar sesión ahí.')
     logout()
-  }, [isShopperAccount, logout])
+  }, [isShopperAccount, accesoSinCuenta, logout])
 
   // Cargar branding del reseller por hostname (subdominio o dominio personalizado) o por parámetro ref
   useEffect(() => {
