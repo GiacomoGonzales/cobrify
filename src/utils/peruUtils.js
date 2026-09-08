@@ -325,25 +325,27 @@ export function validateRUC(ruc) {
   const firstDigit = parseInt(ruc[0])
   if (firstDigit !== 1 && firstDigit !== 2) return false
 
-  // Validación del dígito verificador (deshabilitada temporalmente)
-  // Si necesitas validación estricta, descomenta el código siguiente:
-  /*
-  const weights = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
-  let sum = 0
+  // DÍGITO VERIFICADOR (módulo 11). Estuvo comentado con la nota "deshabilitada
+  // temporalmente" y la fórmula que había ahí ESTABA MAL: le faltaban los dos
+  // casos de borde. Probada contra los 741 RUC de la base, rechazaba 176 —el
+  // 24% de los clientes, todos legítimos—, así que quien la encendió vio arder
+  // todo y la comentó en vez de corregirla. Con los casos de borde puestos
+  // fallan 47: 42 son inventados (todo ceros, 1234567…) y 5 son RUC de verdad
+  // con un dígito mal. Ni uno legítimo se cae.
+  //
+  // Sin esto, un RUC bien formado pero mal tecleado llegaba hasta SUNAT y volvía
+  // con el error 3385 "El Número de RUC del Remitente no existe" — pasó dos
+  // veces con las guías de JMC GERENCIA Y CONSTRUCCION, con el RUC 20608984765
+  // de ORTHODENTIS (termina en 5 y le toca 4). Se puede saber sin preguntarle a
+  // nadie, en microsegundos, y es lo que hace que el Excel de emisión masiva
+  // marque la fila antes de emitir.
+  const pesos = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
+  const suma = pesos.reduce((acc, peso, i) => acc + parseInt(ruc[i], 10) * peso, 0)
+  const resto = 11 - (suma % 11)
+  // Los dos casos de borde que faltaban: 10 vale 0 y 11 vale 1.
+  const digito = resto === 10 ? 0 : resto === 11 ? 1 : resto
 
-  for (let i = 0; i < 10; i++) {
-    sum += parseInt(ruc[i]) * weights[i]
-  }
-
-  const remainder = sum % 11
-  const checkDigit = remainder === 0 ? 0 : 11 - remainder
-  const lastDigit = parseInt(ruc[10])
-
-  return checkDigit === lastDigit
-  */
-
-  // Por ahora, solo validamos longitud y formato
-  return true
+  return digito === parseInt(ruc[10], 10)
 }
 
 /**

@@ -119,7 +119,11 @@ export const customerSchema = z.object({
     if (data.documentType === ID_TYPES.RUC && !validateRUC(data.documentNumber)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'RUC inválido (debe tener 11 dígitos)',
+        // El mensaje ya no puede decir solo "11 dígitos": ahora también se
+        // revisa el dígito verificador, así que un RUC de 11 cifras puede ser
+        // inválido igual. Si no se dice, el usuario mira el campo, cuenta once
+        // y no entiende qué le reclaman.
+        message: 'RUC inválido: revisa que los 11 dígitos estén bien copiados',
         path: ['documentNumber'],
       })
     }
