@@ -108,7 +108,7 @@ export default {
         },
         {
           type: 'ojo',
-          text: 'En **modo restaurante**, si quedan mesas ocupadas al presionar Cerrar Caja, el sistema avisa y las lista antes de que empieces a contar. Puedes ir a cobrarlas o cerrar igual — el aviso no bloquea, solo te da la oportunidad de no pasar una por alto.',
+          text: 'En **modo restaurante**, si al presionar Cerrar Caja quedan mesas ocupadas o pedidos abiertos sin cobrar —un delivery, uno para llevar, uno en local— el sistema avisa con un triángulo de alerta y los lista antes de que empieces a contar. Puedes ir a cobrarlos o cerrar igual: si cierras con cuentas abiertas, lo que cobres después ya no entra en este cierre y el monto esperado no va a cuadrar.',
         },
         {
           type: 'consejo',

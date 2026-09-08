@@ -10,7 +10,6 @@ import {
   orderBy,
   serverTimestamp,
   where,
-  writeBatch,
   setDoc,
   runTransaction,
   Timestamp,
@@ -18,6 +17,7 @@ import {
 import { db } from '@/lib/firebase'
 import { updateTableAmount, updateTableServedStatus } from './tableService'
 import { getPrecuentaSnapshot, saveOrderModification } from './firestoreService'
+import { ESTADOS_ABIERTOS } from '@/utils/ordenesAbiertas'
 import { montoDeEnvio } from '@/utils/deliveryFee'
 
 /**
@@ -112,6 +112,23 @@ export const getOrders = async (businessId) => {
   } catch (error) {
     console.error('Error al obtener órdenes:', error)
     return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Solo las órdenes abiertas (ESTADOS_ABIERTOS, utils/ordenesAbiertas): la
+ * misma consulta que Órdenes hace en vivo, para quien no necesita el historial
+ * (el aviso al cerrar caja).
+ */
+export const getOrdenesAbiertas = async (businessId) => {
+  try {
+    const ordersRef = collection(db, 'businesses', businessId, 'orders')
+    const q = query(ordersRef, where('status', 'in', ESTADOS_ABIERTOS))
+    const snapshot = await getDocs(q)
+    return { success: true, data: snapshot.docs.map((d) => ({ id: d.id, ...d.data() })) }
+  } catch (error) {
+    console.error('Error al obtener las órdenes abiertas:', error)
+    return { success: false, error: error.message, data: [] }
   }
 }
 

@@ -13,6 +13,7 @@ import { getActiveBranches } from '@/services/branchService'
 import { getProducts } from '@/services/firestoreService'
 import { getWarehouses } from '@/services/warehouseService'
 import ConsumoInternoModal from '@/components/inventory/ConsumoInternoModal'
+import { esOrdenAbierta, ESTADOS_ABIERTOS, etiquetaDeTipoDeOrden } from '@/utils/ordenesAbiertas'
 import { createBarTab, occupyTable } from '@/services/tableService'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -663,9 +664,7 @@ export default function Orders() {
     // Si estamos en modo demo, usar datos de demo
     if (isDemoMode && demoData?.orders) {
       // Solo mostrar órdenes activas (excluir delivered y cancelled)
-      const ordersData = demoData.orders.filter(o =>
-        ['pending', 'preparing', 'ready', 'dispatched'].includes(o.status)
-      )
+      const ordersData = demoData.orders.filter(esOrdenAbierta)
 
       // Ordenar por fecha de creación (más recientes primero)
       ordersData.sort((a, b) => {
@@ -704,7 +703,7 @@ export default function Orders() {
     // Ordenaremos los datos en el cliente después de recibirlos
     const q = query(
       ordersRef,
-      where('status', 'in', ['pending', 'preparing', 'ready', 'dispatched'])
+      where('status', 'in', ESTADOS_ABIERTOS)
     )
 
     // Listener en tiempo real - se ejecuta cada vez que hay cambios
@@ -763,8 +762,7 @@ export default function Orders() {
 
   // Etiqueta del tipo de pedido sin mesa. Antes era un binario delivery/llevar
   // repetido en 4 sitios, y una orden "En Local" (counter) salia como Para Llevar.
-  const ORDER_TYPE_LABEL = { delivery: 'Delivery', takeaway: 'Para Llevar', counter: 'En Local' }
-  const orderTypeLabel = (t) => ORDER_TYPE_LABEL[t] || 'Para Llevar'
+  const orderTypeLabel = etiquetaDeTipoDeOrden
 
   // El historial se pide bajo demanda (al abrir la pestaña o cambiar fechas):
   // son cientos de órdenes por mes y no tiene sentido bajarlas si nadie las mira.

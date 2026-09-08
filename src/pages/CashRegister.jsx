@@ -5,6 +5,8 @@ import { useDataPermissions } from '@/hooks/useDataPermissions'
 import { useToast } from '@/contexts/ToastContext'
 import { getActiveBranches } from '@/services/branchService'
 import { getTables } from '@/services/tableService'
+import { getOrdenesAbiertas } from '@/services/orderService'
+import { ordenesSinCobrar, filaDeOrden } from '@/utils/ordenesAbiertas'
 import { useUserNames } from '@/hooks/useUserNames'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -183,6 +185,9 @@ export default function CashRegister() {
   // Mesas que siguen ocupadas al ir a cerrar caja. Con contenido, se muestra
   // el aviso previo; vacío, no hay nada que advertir.
   const [mesasAbiertas, setMesasAbiertas] = useState([])
+  // Pedidos abiertos sin cobrar (delivery, para llevar, en local): descuadran
+  // el conteo igual que una mesa ocupada. Criterio en utils/ordenesAbiertas.
+  const [ordenesAbiertas, setOrdenesAbiertas] = useState([])
 
   const isRestaurantMode = businessMode === 'restaurant'
   const nombreDe = useUserNames()
@@ -1500,8 +1505,18 @@ export default function CashRegister() {
         if (t.groupId && t.isGroupPrimary === false) return false
         return true
       })
-      if (abiertas.length > 0) {
+      // Los pedidos sin mesa (delivery, para llevar, en local) también quedan
+      // sin cobrar y descuadran el conteo; misma sede que las mesas.
+      let pedidos = []
+      try {
+        const ordenes = await getOrdenesAbiertas(getBusinessId())
+        pedidos = ordenesSinCobrar(ordenes.data || [], { branchId: selectedBranch?.id || 'main' })
+      } catch (error) {
+        console.warn('No se pudieron revisar los pedidos abiertos:', error)
+      }
+      if (abiertas.length > 0 || pedidos.length > 0) {
         setMesasAbiertas(abiertas)
+        setOrdenesAbiertas(pedidos)
         return
       }
     } catch (error) {
@@ -4264,21 +4279,37 @@ export default function CashRegister() {
         </div>
       </Modal>
 
-      {/* Aviso previo: mesas que siguen ocupadas. Solo restaurante. */}
+      {/* Aviso previo: mesas ocupadas y pedidos sin cobrar. Solo restaurante. */}
       <Modal
-        isOpen={mesasAbiertas.length > 0}
-        onClose={() => setMesasAbiertas([])}
-        title="Hay mesas sin cerrar"
+        isOpen={mesasAbiertas.length > 0 || ordenesAbiertas.length > 0}
+        onClose={() => { setMesasAbiertas([]); setOrdenesAbiertas([]) }}
+        title={(
+          <span className="inline-flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-amber-500 flex-none" />
+            Hay cuentas sin cobrar
+          </span>
+        )}
         size="md"
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            {mesasAbiertas.length === 1
-              ? 'Todavía queda una mesa ocupada. Si ya consumió, conviene cobrarla antes de contar la caja: después del conteo el monto esperado ya no cuadra.'
-              : `Todavía quedan ${mesasAbiertas.length} mesas ocupadas. Si ya consumieron, conviene cobrarlas antes de contar la caja: después del conteo el monto esperado ya no cuadra.`}
+            {mesasAbiertas.length + ordenesAbiertas.length === 1
+              ? 'Todavía queda una cuenta abierta. Si ya consumió, conviene cobrarla antes de contar la caja: después del conteo el monto esperado ya no cuadra.'
+              : `Todavía quedan ${mesasAbiertas.length + ordenesAbiertas.length} cuentas abiertas entre mesas y pedidos. Si ya consumieron, conviene cobrarlas antes de contar la caja: después del conteo el monto esperado ya no cuadra.`}
           </p>
 
           <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-56 overflow-y-auto">
+            {ordenesAbiertas.map(filaDeOrden).map((o) => (
+              <div key={`orden-${o.id}`} className="flex items-center justify-between px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-sm text-gray-900 truncate">{o.titulo}</p>
+                  {o.detalle && <p className="text-xs text-gray-400 truncate">{o.detalle}</p>}
+                </div>
+                {o.monto > 0 && (
+                  <span className="text-sm font-semibold text-gray-900 flex-none">{formatCurrency(o.monto)}</span>
+                )}
+              </div>
+            ))}
             {mesasAbiertas.map((mesa) => (
               <div key={mesa.id} className="flex items-center justify-between px-3 py-2">
                 <div className="min-w-0">
@@ -4300,12 +4331,12 @@ export default function CashRegister() {
           </div>
 
           <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">
-            <Button variant="outline" onClick={() => setMesasAbiertas([])}>
+            <Button variant="outline" onClick={() => { setMesasAbiertas([]); setOrdenesAbiertas([]) }}>
               Volver a cobrarlas
             </Button>
             <Button
               variant="danger"
-              onClick={() => { setMesasAbiertas([]); setShowCloseModal(true) }}
+              onClick={() => { setMesasAbiertas([]); setOrdenesAbiertas([]); setShowCloseModal(true) }}
             >
               Cerrar caja igual
             </Button>
