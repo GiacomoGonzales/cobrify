@@ -92,7 +92,58 @@ const traerExcluidos = async (businessId, desde, hasta) => {
 }
 
 /**
- * Ventas del mes: total, cantidad y serie por día.
+ * Ventas por día de un rango, ya descontando lo que no cuenta como venta.
+ *
+ * Un tramo por día: sirve para el total (sumando) y para los gráficos. Como
+ * `emissionDate` tiene granularidad de día, cada tramo es una igualdad contra
+ * su fecha, no un rango de horas. El cursor se mueve al mediodía para que sumar
+ * un día nunca caiga en el borde por la zona horaria del navegador.
+ *
+ * @param {Date} desde  inicio (hora Perú)
+ * @param {Date} fin    fin EXCLUSIVO
+ * @returns {Promise<{ sales: number, count: number, porFecha: Object }>}  porFecha: { 'YYYY-MM-DD': total }
+ */
+const agregarPorDia = async (businessId, desde, fin) => {
+  const finExclusivo = diaLima(fin)
+  const fechas = []
+  const cursor = new Date(`${diaLima(desde)}T12:00:00-05:00`)
+  while (diaLima(cursor) < finExclusivo) {
+    fechas.push(diaLima(cursor))
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  if (fechas.length === 0) return { sales: 0, count: 0, porFecha: {} }
+  const [agregados, excluidos] = await Promise.all([
+    Promise.all(fechas.map(fecha =>
+      getAggregateFromServer(
+        query(invoicesRef(businessId), where('emissionDate', '==', fecha)),
+        { total: sum('total'), n: count() }
+      )
+    )),
+    traerExcluidos(businessId, desde, fin),
+  ])
+  const porFecha = {}
+  let sales = 0
+  let cantidad = 0
+  agregados.forEach((res, i) => {
+    const d = res.data()
+    const t = Number(d.total) || 0
+    porFecha[fechas[i]] = t
+    sales += t
+    cantidad += Number(d.n) || 0
+  })
+  // Restar lo que no cuenta, en su día y en el total.
+  for (const ex of excluidos) {
+    sales -= ex.total
+    cantidad -= 1
+    if (ex.fecha && porFecha[ex.fecha] != null) porFecha[ex.fecha] = porFecha[ex.fecha] - ex.total
+  }
+  // Un redondeo al final: restar decimales puede dejar -0.0000001.
+  for (const k of Object.keys(porFecha)) porFecha[k] = Math.round(porFecha[k] * 100) / 100
+  return { sales: Math.round(sales * 100) / 100, count: Math.max(0, cantidad), porFecha }
+}
+
+/**
+ * Ventas del mes: total, cantidad y serie por día (clave = día del mes).
  *
  * @param {string} businessId
  * @param {Date} monthStart  inicio del mes (hora Perú)
@@ -103,65 +154,33 @@ const traerExcluidos = async (businessId, desde, hasta) => {
 export const getMonthSalesAggregated = async (businessId, monthStart, monthEnd, hasta = null) => {
   try {
     const fin = hasta && hasta < monthEnd ? hasta : monthEnd
-
-    // Un tramo por día: sirve para el total (sumando) y para el gráfico diario.
-    // Como `emissionDate` tiene granularidad de día, cada tramo es una igualdad
-    // contra su fecha, no un rango de horas. El cursor se mueve al mediodía para
-    // que sumar un día nunca caiga en el borde por la zona horaria del navegador.
-    const finExclusivo = diaLima(fin)
-    const dias = []
-    const cursor = new Date(`${diaLima(monthStart)}T12:00:00-05:00`)
-    while (diaLima(cursor) < finExclusivo) {
-      const fecha = diaLima(cursor)
-      dias.push({ dia: Number(fecha.slice(8, 10)), fecha })
-      cursor.setDate(cursor.getDate() + 1)
-    }
-    if (dias.length === 0) return { ok: true, sales: 0, count: 0, daily: {} }
-
-    const [agregados, excluidos] = await Promise.all([
-      Promise.all(dias.map(d =>
-        getAggregateFromServer(
-          query(invoicesRef(businessId), where('emissionDate', '==', d.fecha)),
-          { total: sum('total'), n: count() }
-        )
-      )),
-      traerExcluidos(businessId, monthStart, fin),
-    ])
-
+    const r = await agregarPorDia(businessId, monthStart, fin)
     const daily = {}
-    let sales = 0
-    let cantidad = 0
-    agregados.forEach((res, i) => {
-      const d = res.data()
-      const t = Number(d.total) || 0
-      daily[dias[i].dia] = t
-      sales += t
-      cantidad += Number(d.n) || 0
-    })
-
-    // Restar lo que no cuenta, en su día y en el total.
-    for (const ex of excluidos) {
-      sales -= ex.total
-      cantidad -= 1
-      if (ex.fecha) {
-        const dia = Number(ex.fecha.slice(8, 10))
-        if (daily[dia] != null) daily[dia] = daily[dia] - ex.total
-      }
-    }
-
-    // Un redondeo al final: restar decimales puede dejar -0.0000001.
-    for (const k of Object.keys(daily)) daily[k] = Math.round(daily[k] * 100) / 100
-
-    return {
-      ok: true,
-      sales: Math.round(sales * 100) / 100,
-      count: Math.max(0, cantidad),
-      daily,
-    }
+    for (const [fecha, t] of Object.entries(r.porFecha)) daily[Number(fecha.slice(8, 10))] = t
+    return { ok: true, sales: r.sales, count: r.count, daily }
   } catch (error) {
     // El caso esperado es 'failed-precondition': el índice todavía se está
     // construyendo. El llamador debe caer al camino de siempre (descargar).
     console.warn('Agregación del mes no disponible, se usará la descarga:', error?.code || error?.message)
+    return { ok: false, error: error?.code || error?.message }
+  }
+}
+
+/**
+ * Serie diaria de un rango cualquiera (clave = 'YYYY-MM-DD'), para el gráfico
+ * de los últimos 7 días contra la semana anterior: 14 consultas chicas en vez
+ * de descargar dos semanas de facturas. Mismas exclusiones que el mes.
+ *
+ * @param {Date} desde  inicio (hora Perú)
+ * @param {Date} hasta  fin EXCLUSIVO
+ * @returns {Promise<{ok: boolean, daily?: Object, sales?: number, count?: number, error?: string}>}
+ */
+export const getDailySalesAggregated = async (businessId, desde, hasta) => {
+  try {
+    const r = await agregarPorDia(businessId, desde, hasta)
+    return { ok: true, daily: r.porFecha, sales: r.sales, count: r.count }
+  } catch (error) {
+    console.warn('Agregación por día no disponible, se usará la descarga:', error?.code || error?.message)
     return { ok: false, error: error?.code || error?.message }
   }
 }

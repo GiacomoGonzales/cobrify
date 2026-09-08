@@ -18,7 +18,8 @@ import {
 import { Link, useLocation } from 'react-router-dom'
 import { collection, query, where, getAggregateFromServer, sum } from 'firebase/firestore'
 import { esDeSucursal } from '@/utils/branchScope'
-import { getMonthSalesAggregated, getRangeSalesAggregated } from '@/services/dashboardStatsService'
+import { getMonthSalesAggregated, getRangeSalesAggregated, getDailySalesAggregated } from '@/services/dashboardStatsService'
+import { mapaPorDia, serieUltimos7Dias } from '@/utils/ventasSemana'
 import { db } from '@/lib/firebase'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useDataPermissions } from '@/hooks/useDataPermissions'
@@ -111,6 +112,10 @@ export default function Dashboard() {
   // enfrentaba un numero exacto contra el aggregate crudo (que suma notas de
   // credito y anuladas), y el porcentaje salia mal.
   const [prevMonthAgg, setPrevMonthAgg] = useState(null)
+  // Los 14 días del gráfico "últimos 7 días vs semana anterior", por día
+  // ('YYYY-MM-DD' -> total), cuando los resuelve el servidor. Null = se arma
+  // con las facturas descargadas (los casos en que la agregación no aplica).
+  const [weekAgg, setWeekAgg] = useState(null)
   // Los "top" necesitan los items de cada venta, asi que obligan a descargar el
   // mes. Se cargan cuando el usuario los pide.
   const [detalleMesPedido, setDetalleMesPedido] = useState(false)
@@ -492,13 +497,29 @@ export default function Dashboard() {
       // Esos casos siguen descargando, como antes.
       const puedeAgregar = !restringido && !sellerRestricted && !dashMultiCurrencyOn && filterBranch === 'all'
       let mesResuelto = false
+      // El gráfico de 7 días compara contra la semana previa, y esos 13 días
+      // los traía la fase 2, que ya no corre cuando el mes lo resuelve el
+      // servidor: el gráfico se quedaba con ayer y hoy (reporte de Foody,
+      // 8-set-2026). Se le piden al servidor igual que el mes: 14 consultas
+      // chicas, sin descargar facturas. Si falla, se descargan solo esos días.
+      let semanaResuelta = false
       if (puedeAgregar) {
         const monthEnd = getEndOfMonthPeru()
-        const agg = await getMonthSalesAggregated(businessId, monthStart, monthEnd)
+        const mananaInicio = new Date(getStartOfTodayPeru().getTime() + 24 * 60 * 60 * 1000)
+        const [agg, semana] = await Promise.all([
+          getMonthSalesAggregated(businessId, monthStart, monthEnd),
+          getDailySalesAggregated(businessId, twoWeeksAgo, mananaInicio),
+        ])
         if (!alive()) return
+        if (semana.ok) {
+          setWeekAgg(semana.daily)
+          semanaResuelta = true
+        } else {
+          setWeekAgg(null)
+        }
         if (agg.ok) {
           setMonthAgg(agg)
-          setMonthLoading(false)
+          if (semanaResuelta) setMonthLoading(false)
           mesResuelto = true
 
           // El mes anterior, para que el "% vs mes anterior" compare iguales.
@@ -514,19 +535,21 @@ export default function Dashboard() {
         // negocio guardado de antes, aunque ya no corresponda.
         setMonthAgg(null)
         setPrevMonthAgg(null)
+        setWeekAgg(null)
       }
 
       // --- Fase 2: resto del mes / últimos 14 días ---
       // Se salta si el servidor ya resolvió el mes. Los "top" del mes sí
       // necesitan los ítems de cada venta; se descargan cuando el usuario los
       // pide (botón "Ver detalle").
-      if (!mesResuelto && phase2Since < phase1Since) {
-        const r2 = await getRecentInvoices(businessId, phase2Since, phase1Since)
+      const desdeFase2 = mesResuelto ? twoWeeksAgo : phase2Since
+      if ((!mesResuelto || !semanaResuelta) && desdeFase2 < phase1Since) {
+        const r2 = await getRecentInvoices(businessId, desdeFase2, phase1Since)
         if (!alive()) return
         if (r2.success) {
           const older = sanitize(r2.data)
           setInvoices(prev => [...prev, ...older])
-          setLoadedSince(phase2Since)
+          setLoadedSince(desdeFase2)
         }
       }
       setMonthLoading(false)
@@ -974,33 +997,25 @@ export default function Dashboard() {
     ? ((monthSales - prevMonthSales) / prevMonthSales * 100).toFixed(1)
     : monthSales > 0 ? '+100.0' : '0.0'
 
-  // === Ventas de los últimos 7 días (memoized, single-pass con map por día) ===
+  // === Ventas de los últimos 7 días vs la semana anterior ===
+  // El cálculo vive en utils/ventasSemana. De dónde salen los totales por día
+  // depende del camino: la serie del servidor (weekAgg) o, cuando la
+  // agregación no aplica, las facturas descargadas de los últimos 14 días.
   const salesData = useMemo(() => {
-    const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
-    const fourteenDaysAgo = getDaysAgo(13) // 14 días = de hoy hasta 13 atrás
-    const todayEnd = new Date(getStartOfTodayPeru().getTime() + 24 * 60 * 60 * 1000 - 1)
-    // Bucketear por clave 'YYYY-MM-DD' en zona Perú
-    const dayMap = {}
-    for (const inv of validInvoicesForSales) {
-      const invDate = getInvoiceDate(inv)
-      if (!invDate || invDate < fourteenDaysAgo || invDate > todayEnd) continue
-      const key = invDate.toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
-      dayMap[key] = (dayMap[key] || 0) + getDocumentTotalInBase(inv)
-    }
-    const data = []
-    for (let i = 6; i >= 0; i--) {
-      const dayStart = getDaysAgo(i)
-      const prevDayStart = getDaysAgo(i + 7)
-      const dayKey = dayStart.toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
-      const prevDayKey = prevDayStart.toLocaleDateString('en-CA', { timeZone: 'America/Lima' })
-      data.push({
-        name: dayNames[dayStart.getDay()],
-        ventas: dayMap[dayKey] || 0,
-        ventasAnterior: dayMap[prevDayKey] || 0,
-      })
-    }
-    return data
-  }, [validInvoicesForSales, getDaysAgo, getStartOfTodayPeru, getInvoiceDate])
+    const inicioDeHoy = getStartOfTodayPeru()
+    const totalPorFecha = weekAgg
+      ? (k) => weekAgg[k] || 0
+      : (() => {
+          const mapa = mapaPorDia(validInvoicesForSales, {
+            fechaDe: getInvoiceDate,
+            totalDe: getDocumentTotalInBase,
+            desde: getDaysAgo(13),
+            hasta: new Date(inicioDeHoy.getTime() + 24 * 60 * 60 * 1000 - 1),
+          })
+          return (k) => mapa[k] || 0
+        })()
+    return serieUltimos7Dias({ totalPorFecha, inicioDeHoy })
+  }, [validInvoicesForSales, weekAgg, getDaysAgo, getStartOfTodayPeru, getInvoiceDate])
 
   // Formatear fecha corta en zona Perú (ej: "30 mar")
   const formatShortDate = (date) => {
