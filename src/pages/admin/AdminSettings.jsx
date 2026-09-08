@@ -370,6 +370,9 @@ function MaintenanceSection() {
               correrla clasifica bastante más que la vez pasada. */}
           <RubroSugeridoCard />
 
+          {/* Accesos huérfanos: cuentas de Firebase que no son de nadie. */}
+          <AccesosHuerfanosCard />
+
           {/* Info */}
           <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
             <div className="flex items-center gap-2 text-gray-900">
@@ -379,6 +382,119 @@ function MaintenanceSection() {
               </p>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Accesos huérfanos: cuentas de Firebase Auth que no son de nadie.
+ *
+ * Quedan cuando se borra a la persona pero no su entrada en Auth —lo que hacía
+ * el método viejo de eliminar sub-usuarios—. Mientras viven, el correo sigue
+ * ocupado (volver a crear al mismo empleado falla) y esa persona todavía puede
+ * iniciar sesión.
+ *
+ * La lista la arma el servidor y no se le manda ninguna desde acá: esto borra
+ * cuentas, y un endpoint que acepte una lista es un endpoint que borra la que
+ * le manden. Conserva a quien tenga ficha, plan, negocio, sea admin, reseller o
+ * vendedor, compre en el catálogo de algún cliente, o cuyo acceso sea de hoy.
+ */
+function AccesosHuerfanosCard() {
+  const [mirando, setMirando] = useState(false)
+  const [borrando, setBorrando] = useState(false)
+  const [visto, setVisto] = useState(null)
+  const [hecho, setHecho] = useState(null)
+  const [error, setError] = useState(null)
+
+  async function correr(dryRun) {
+    dryRun ? setMirando(true) : setBorrando(true)
+    setError(null)
+    if (dryRun) { setVisto(null); setHecho(null) }
+    try {
+      const fn = httpsCallable(functions, 'accesosHuerfanos', { timeout: 540000 })
+      const r = await fn({ dryRun })
+      dryRun ? setVisto(r.data) : setHecho(r.data)
+    } catch (e) {
+      console.error(e)
+      setError(e.message || String(e))
+    } finally {
+      dryRun ? setMirando(false) : setBorrando(false)
+    }
+  }
+
+  async function borrar() {
+    if (!confirm(
+      `Esto va a BORRAR ${visto?.huerfanos ?? 0} cuentas de Firebase Auth. Es irreversible.\n\n` +
+      'Se conserva a quien tenga ficha, plan, negocio, sea admin, reseller o vendedor, ' +
+      'compre en el catálogo de un cliente, o se haya registrado hoy.\n\n' +
+      '¿Confirmar?'
+    )) return
+    await correr(false)
+  }
+
+  return (
+    <div className="bg-red-50 rounded-lg p-5 border border-red-200">
+      <div className="flex items-start gap-3">
+        <Trash2 className="w-6 h-6 text-red-600 flex-shrink-0 mt-1" />
+        <div className="flex-1">
+          <h4 className="font-medium text-gray-900">Accesos huérfanos · cuentas de Firebase que no son de nadie</h4>
+          <p className="text-sm text-gray-600 mt-1">
+            Sobran de cuando se borraba a un sub-usuario y su acceso quedaba vivo. Mientras existen,
+            su correo no se puede volver a usar y esa persona todavía puede iniciar sesión. Mira
+            primero: el borrado solo se habilita después.
+          </p>
+
+          <div className="flex gap-2 mt-3">
+            <button
+              type="button"
+              onClick={() => correr(true)}
+              disabled={mirando || borrando}
+              className="px-3 py-1.5 text-sm rounded-md border border-gray-300 bg-white text-gray-700 hover:border-gray-400 disabled:opacity-50"
+            >
+              {mirando ? 'Buscando…' : 'Buscar'}
+            </button>
+            <button
+              type="button"
+              onClick={borrar}
+              disabled={!visto?.huerfanos || mirando || borrando}
+              className="px-3 py-1.5 text-sm rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {borrando ? 'Borrando…' : `Borrar ${visto?.huerfanos ?? 0}`}
+            </button>
+          </div>
+
+          {visto && !hecho && (
+            <div className="mt-3 text-sm text-gray-700">
+              <p><strong>{visto.huerfanos}</strong> huérfanos de {visto.revisados} accesos revisados.</p>
+              {!!visto.muestra?.length && (
+                <ul className="mt-2 max-h-48 overflow-y-auto rounded-md border border-gray-200 bg-white divide-y divide-gray-100">
+                  {visto.muestra.map(h => (
+                    <li key={h.uid} className="px-3 py-1.5 text-xs flex justify-between gap-3">
+                      <span className="truncate">{h.email || h.uid}</span>
+                      <span className="text-gray-400 whitespace-nowrap">
+                        {h.ultimoIngreso ? new Date(h.ultimoIngreso).toLocaleDateString('es-PE') : 'nunca entró'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {hecho && (
+            <div className="mt-3 text-sm text-gray-700">
+              <p>Borrados <strong>{hecho.borrados}</strong> de {hecho.huerfanos}.</p>
+              {!!hecho.fallos?.length && (
+                <ul className="mt-1 text-xs text-red-700 list-disc pl-4">
+                  {hecho.fallos.map((f, i) => <li key={i}>{f.correo}: {f.error}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
         </div>
       </div>
     </div>

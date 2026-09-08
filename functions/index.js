@@ -15762,3 +15762,103 @@ export const sugerirRubroSunat = onRequest(
     res.json({ success: true, rubro: sugerirRubro(actividad) })
   }
 )
+
+/**
+ * ACCESOS HUÉRFANOS — cuentas de Firebase Auth que no son de nadie.
+ *
+ * Un acceso queda huérfano cuando se borra a la persona pero no su entrada en
+ * Auth: pasaba con el método viejo de eliminar sub-usuarios. El correo queda
+ * ocupado para siempre —volver a crear al mismo empleado falla— y esa persona
+ * puede seguir iniciando sesión. Al 8-set-2026 había 101.
+ *
+ * La lista se arma ENTERA en el servidor y no se acepta ninguna desde el
+ * cliente: esto borra cuentas, y un endpoint que reciba uids es un endpoint que
+ * borra las que le manden. Se conserva a quien tenga cualquiera de estos:
+ *
+ *   ficha en `users` · plan · negocio · admin · reseller · vendedor
+ *   perfil de comprador en la tienda de algún cliente
+ *   acceso creado hace menos de un día (registro en curso)
+ *
+ * Lo de los compradores no es teórico: de los 114 sin ficha, 12 eran clientes
+ * comprando en catálogos de negocios reales. Viven en
+ * `businesses/{id}/catalogCustomers/{uid}` —el id del documento ES el uid— y
+ * borrarlos les habría roto la cuenta de la tienda donde compran.
+ */
+export const accesosHuerfanos = onCall(
+  { region: 'us-central1', cors: true, timeoutSeconds: 540, memory: '512MiB' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Debe estar autenticado')
+    if (!(await esAdministrador(request.auth.uid))) throw new HttpsError('permission-denied', 'Solo administradores')
+
+    const soloMirar = request.data?.dryRun !== false // por seguridad, mirar es lo que pasa si no se dice nada
+
+    /** Los ids de una colección de primer nivel. */
+    const idsDe = async (nombre) => {
+      const snap = await db.collection(nombre).select().get()
+      return new Set(snap.docs.map((d) => d.id))
+    }
+    /** Los uids que un documento pueda guardar en un campo, además de su id. */
+    const uidsEn = async (nombre) => {
+      const snap = await db.collection(nombre).get()
+      const out = new Set()
+      snap.docs.forEach((d) => {
+        out.add(d.id)
+        for (const c of ['uid', 'userId', 'authUid', 'ownerUid']) {
+          const v = d.get(c)
+          if (typeof v === 'string' && v) out.add(v)
+        }
+      })
+      return out
+    }
+
+    const [usuarios, planes, negocios, admins, resellers, vendedores] = await Promise.all([
+      idsDe('users'), idsDe('subscriptions'), idsDe('businesses'),
+      idsDe('admins'), uidsEn('resellers'), uidsEn('vendedores'),
+    ])
+    // Compradores de catálogo: el id del documento es el uid de Auth.
+    const compradores = new Set(
+      (await db.collectionGroup('catalogCustomers').select().get()).docs.map((d) => d.id),
+    )
+
+    const AYER = Date.now() - 24 * 60 * 60 * 1000
+    const conservado = (uid) =>
+      usuarios.has(uid) || planes.has(uid) || negocios.has(uid) ||
+      admins.has(uid) || resellers.has(uid) || vendedores.has(uid) || compradores.has(uid)
+
+    const huerfanos = []
+    let revisados = 0
+    let token
+    do {
+      const pagina = await auth.listUsers(1000, token)
+      for (const u of pagina.users) {
+        revisados++
+        if (conservado(u.uid)) continue
+        if (Date.parse(u.metadata?.creationTime || '') > AYER) continue
+        huerfanos.push({
+          uid: u.uid,
+          email: u.email || null,
+          creado: u.metadata?.creationTime || null,
+          ultimoIngreso: u.metadata?.lastSignInTime || null,
+        })
+      }
+      token = pagina.pageToken
+    } while (token)
+
+    if (soloMirar) {
+      return { dryRun: true, revisados, huerfanos: huerfanos.length, muestra: huerfanos.slice(0, 200) }
+    }
+
+    // De a 100, que es el tope de `deleteUsers`. Los fallos se cuentan y se
+    // devuelven: es mejor un informe con huecos que un borrado a medias mudo.
+    let borrados = 0
+    const fallos = []
+    for (let i = 0; i < huerfanos.length; i += 100) {
+      const lote = huerfanos.slice(i, i + 100)
+      const r = await auth.deleteUsers(lote.map((h) => h.uid))
+      borrados += r.successCount
+      r.errors.forEach((e) => fallos.push({ correo: lote[e.index]?.email || lote[e.index]?.uid, error: e.error.message }))
+    }
+    console.log(`🧹 Admin ${request.auth.uid} borró ${borrados} accesos huérfanos de ${huerfanos.length}`)
+    return { dryRun: false, revisados, huerfanos: huerfanos.length, borrados, fallos }
+  },
+)
