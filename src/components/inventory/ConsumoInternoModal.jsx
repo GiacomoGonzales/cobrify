@@ -1,16 +1,19 @@
 import { useState, useMemo } from 'react'
-import { Check, Minus, Plus, Search, X } from 'lucide-react'
+import { Check, History, Minus, Plus, Search, X } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
+import Badge from '@/components/ui/Badge'
 import Select from '@/components/ui/Select'
 import { useToast } from '@/contexts/ToastContext'
 import { buildProductHaystack } from '@/utils/productSearch'
-import { matchesPrebuilt } from '@/lib/utils'
+import { matchesPrebuilt, formatDateTime } from '@/lib/utils'
 import { lineasDeProducto, nombreDeLinea } from '@/utils/lineasDeStock'
 import {
   MOTIVOS_CONSUMO,
   motivoPorId,
   createInternalConsumption,
+  getInternalConsumptions,
+  voidInternalConsumption,
 } from '@/services/internalConsumptionService'
 
 /**
@@ -29,6 +32,10 @@ import {
  * stock de esa variante en el almacén elegido. El producto "Cerveza" a secas
  * no se puede elegir, porque descontarlo no descuenta ninguna variante (ver
  * utils/lineasDeStock).
+ *
+ * La vista de "últimos consumos" está acá adentro y no en una página: anular
+ * es la única acción que se hace sobre un consumo ya registrado, y los dos
+ * lugares que abren el modal la reciben a la vez.
  */
 export default function ConsumoInternoModal({
   isOpen,
@@ -43,6 +50,7 @@ export default function ConsumoInternoModal({
   onRegistrado,
 }) {
   const toast = useToast()
+  const [vista, setVista] = useState('registrar') // 'registrar' | 'historial'
   const [motivo, setMotivo] = useState('personal')
   const [empleado, setEmpleado] = useState('')
   const [nota, setNota] = useState('')
@@ -52,6 +60,12 @@ export default function ConsumoInternoModal({
   const [busqueda, setBusqueda] = useState('')
   const [carrito, setCarrito] = useState([])
   const [guardando, setGuardando] = useState(false)
+
+  // Últimos consumos: se cargan al entrar a esa vista, no al abrir el modal.
+  const [historial, setHistorial] = useState([])
+  const [cargandoHistorial, setCargandoHistorial] = useState(false)
+  const [confirmandoId, setConfirmandoId] = useState(null)
+  const [anulandoId, setAnulandoId] = useState(null)
 
   const motivoActual = motivoPorId(motivo)
 
@@ -162,13 +176,162 @@ export default function ConsumoInternoModal({
     }
   }
 
+  // ---- Últimos consumos ----
+
+  const cargarHistorial = async () => {
+    setCargandoHistorial(true)
+    try {
+      const r = await getInternalConsumptions(businessId, { max: 30 })
+      setHistorial(r.success ? (r.data || []) : [])
+      if (!r.success) toast.error('No se pudieron cargar los consumos')
+    } finally {
+      setCargandoHistorial(false)
+    }
+  }
+
+  const verHistorial = () => {
+    setVista('historial')
+    setConfirmandoId(null)
+    cargarHistorial()
+  }
+
+  const anular = async (c) => {
+    setAnulandoId(c.id)
+    try {
+      const r = await voidInternalConsumption(businessId, c.id, usuario)
+      if (!r.success) throw new Error(r.error)
+      if (r.advertencias?.length) {
+        toast.warning(`Anulado, pero ${r.advertencias.length} línea(s) no devolvieron stock. Revisa el inventario.`, 8000)
+      } else {
+        toast.success('Consumo anulado y stock devuelto')
+      }
+      setConfirmandoId(null)
+      onRegistrado?.()
+      await cargarHistorial()
+    } catch (e) {
+      toast.error(e.message || 'No se pudo anular')
+    } finally {
+      setAnulandoId(null)
+    }
+  }
+
+  const fechaDe = (c) => {
+    const f = c.fecha?.toDate ? c.fecha.toDate() : c.fecha
+    return f ? formatDateTime(f) : ''
+  }
+
+  // "2 × Cerveza — 610 ml · 1 × Papas": lo que salió, en una línea.
+  const resumenDe = (c) => (c.items || [])
+    .map((i) => `${i.cantidad} × ${i.nombre}${i.variantLabel ? ` — ${i.variantLabel}` : ''}`)
+    .join(' · ')
+
+  const nombreAlmacen = (id) => almacenes.find((a) => a.id === id)?.name || ''
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Consumo interno" size="lg">
+      {vista === 'historial' ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-gray-600">
+              Los últimos 30 consumos. Anular devuelve el stock al almacén del que salió.
+            </p>
+            <button
+              type="button"
+              onClick={() => setVista('registrar')}
+              className="text-sm text-primary-600 hover:underline flex-none"
+            >
+              Volver a registrar
+            </button>
+          </div>
+
+          <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-[28rem] overflow-y-auto">
+            {cargandoHistorial && (
+              <p className="text-sm text-gray-400 px-3 py-4 text-center">Cargando...</p>
+            )}
+            {!cargandoHistorial && historial.length === 0 && (
+              <p className="text-sm text-gray-400 px-3 py-4 text-center">Todavía no hay consumos registrados.</p>
+            )}
+            {!cargandoHistorial && historial.map((c) => {
+              const anulado = c.estado === 'anulado'
+              const almacen = almacenes.length > 1 ? nombreAlmacen(c.warehouseId) : ''
+              return (
+                <div key={c.id} className={`px-3 py-2.5 ${anulado ? 'opacity-60' : ''}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {c.motivoNombre || c.motivo}
+                        {c.empleadoNombre ? ` — ${c.empleadoNombre}` : ''}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {fechaDe(c)}
+                        {almacen ? ` · ${almacen}` : ''}
+                        {c.registradoPorNombre ? ` · ${c.registradoPorNombre}` : ''}
+                      </p>
+                      <p className="text-xs text-gray-700 mt-1">{resumenDe(c)}</p>
+                      {c.nota && <p className="text-xs text-gray-400 italic mt-0.5">{c.nota}</p>}
+                    </div>
+                    <div className="flex flex-col items-end gap-1.5 flex-none">
+                      <span className="text-sm font-semibold text-gray-900">
+                        S/ {(Number(c.total) || 0).toFixed(2)}
+                      </span>
+                      {anulado ? (
+                        <Badge>Anulado</Badge>
+                      ) : confirmandoId === c.id ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => anular(c)}
+                            disabled={anulandoId === c.id}
+                            className="text-xs px-2 py-1 rounded border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50"
+                          >
+                            {anulandoId === c.id ? 'Anulando...' : 'Sí, anular'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmandoId(null)}
+                            disabled={anulandoId === c.id}
+                            className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50"
+                          >
+                            No
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmandoId(c.id)}
+                          disabled={anulandoId !== null}
+                          className="text-xs text-red-600 hover:underline disabled:opacity-50"
+                        >
+                          Anular
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="flex justify-end pt-3 border-t border-gray-200">
+            <Button variant="outline" onClick={onClose}>Cerrar</Button>
+          </div>
+        </div>
+      ) : (
       <div className="space-y-4">
-        <p className="text-sm text-gray-600">
-          Descuenta stock sin cobrar nada: lo que consumió el personal, lo que se malogró,
-          una cortesía. No emite comprobante ni suma a tus ventas.
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-sm text-gray-600">
+            Descuenta stock sin cobrar nada: lo que consumió el personal, lo que se malogró,
+            una cortesía. No emite comprobante ni suma a tus ventas.
+          </p>
+          <button
+            type="button"
+            onClick={verHistorial}
+            className="text-sm text-primary-600 hover:underline flex items-center gap-1 flex-none"
+          >
+            <History className="w-4 h-4" />
+            Ver últimos consumos
+          </button>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Select
@@ -317,6 +480,7 @@ export default function ConsumoInternoModal({
           </div>
         </div>
       </div>
+      )}
     </Modal>
   )
 }

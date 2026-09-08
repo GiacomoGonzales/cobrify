@@ -194,6 +194,15 @@ export const createInternalConsumption = async (businessId, datos) => {
  *
  * Se marca el documento antes de devolver nada, y se corta si ya estaba
  * anulado: dos clics seguidos no pueden devolver el stock dos veces.
+ *
+ * Una línea de un producto con variantes que no trae `variantSku` (consumos
+ * anteriores a la guarda del alta) NO devuelve stock: nunca se descontó de
+ * una variante, y sumárselo al padre sería otro movimiento huérfano que la
+ * siguiente venta borra. Se anula igual y se avisa, para que lo cuadren con
+ * un recuento de esa variante.
+ *
+ * Igual que el alta: lo que no se pudo devolver queda en el documento y se
+ * devuelve como `advertencias`, no se pierde en la consola.
  */
 export const voidInternalConsumption = async (businessId, consumoId, usuario) => {
   try {
@@ -214,6 +223,7 @@ export const voidInternalConsumption = async (businessId, consumoId, usuario) =>
     })
 
     const motivoNombre = consumo.motivoNombre || 'Consumo interno'
+    const errores = []
     for (const item of consumo.items || []) {
       try {
         const receta = await getRecipeByProductId(businessId, item.productId)
@@ -230,6 +240,15 @@ export const voidInternalConsumption = async (businessId, consumoId, usuario) =>
 
         // Nunca se descontó: tampoco hay nada que devolver.
         if (item.controlaStock === false) continue
+
+        // Ver cabecera: sin variante no hay a quién devolverle.
+        if (!item.variantSku) {
+          const prodSnap = await getDoc(doc(db, 'businesses', businessId, 'products', item.productId))
+          const prod = prodSnap.exists() ? prodSnap.data() : null
+          if (prod?.hasVariants && prod.variants?.length > 0) {
+            throw new Error('el consumo no indicaba la variante; el stock no se devolvió')
+          }
+        }
 
         const devolucion = await updateProductStockTransaction(
           businessId, item.productId, consumo.warehouseId || null,
@@ -252,7 +271,13 @@ export const voidInternalConsumption = async (businessId, consumoId, usuario) =>
         })
       } catch (e) {
         console.error(`Error devolviendo ${item.nombre}:`, e)
+        errores.push(`${item.nombre}: ${e.message}`)
       }
+    }
+
+    if (errores.length > 0) {
+      await updateDoc(ref, { erroresDevolucion: errores })
+      return { success: true, advertencias: errores }
     }
 
     return { success: true }

@@ -79,6 +79,28 @@ export default {
       ],
     },
     {
+      id: 'anular',
+      title: 'Anular un consumo',
+      blocks: [
+        {
+          type: 'pasos',
+          items: [
+            'Abre **Consumo interno** y toca **Ver últimos consumos**, arriba a la derecha.',
+            'Ubica el registro —motivo, fecha, quién lo registró y qué salió— y presiona **Anular**.',
+            'Confirma con **Sí, anular**. El stock vuelve al almacén del que salió y queda un movimiento de entrada que apunta a esa anulación.',
+          ],
+        },
+        {
+          type: 'ojo',
+          text: 'Un consumo anulado no se borra: queda marcado como *Anulado* para que el historial cuente lo que pasó. Tampoco se puede anular dos veces: la segunda vez el sistema avisa que ya estaba anulado.',
+        },
+        {
+          type: 'ojo',
+          text: 'Si el consumo es de antes de que el sistema pidiera la variante, no hay una variante a la que devolverle el stock: el registro se anula igual, pero el stock no se mueve y el sistema te lo avisa. Cuádralo con un recuento de esa variante.',
+        },
+      ],
+    },
+    {
       id: 'sunat',
       title: 'Un tema para consultar con tu contador',
       blocks: [
