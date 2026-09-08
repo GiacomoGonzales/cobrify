@@ -104,7 +104,15 @@ export function lineasQueOcupa(texto, charsPerLine) {
  * en uno.
  */
 export function usarFuentePequena(compacto) {
-  return compacto
+  // DESACTIVADA. Font B es estandar, pero muchas ticketeras la ignoran: la
+  // MPT-II de la prueba siguio imprimiendo con la fuente normal, y ademas
+  // aparecieron caracteres sueltos junto a la razon social — con toda pinta de
+  // ser los bytes del comando `ESC M 1` impresos como texto por no entenderlo.
+  //
+  // Se deja la funcion y no el codigo suelto para que probarla de nuevo sea
+  // cambiar una linea, no volver a buscar donde iba.
+  void compacto
+  return false
 }
 
 /**
@@ -115,9 +123,18 @@ export function usarFuentePequena(compacto) {
  * desperdiciar un carácter.
  */
 export function anchoDeLinea(charsPerLineNormal, compacto) {
-  const base = Math.max(8, Math.floor(charsPerLineNormal))
-  if (!compacto) return base
-  return Math.floor((base * 12) / 9)
+  // Se devuelve SIEMPRE el ancho normal, incluso en compacto.
+  //
+  // Antes se ampliaba a 32 dando por hecho que la impresora aceptaba Font B.
+  // Muchas no la soportan (la MPT-II de la prueba, sin ir más lejos): siguen
+  // imprimiendo con la fuente normal y entonces una línea calculada para 32
+  // caracteres NO ENTRA — el total se partía en dos y salía "S/ 31" y abajo
+  // ".50", que es peor que no haber achicado nada.
+  //
+  // Con el ancho real, si la fuente chica se aplica el texto simplemente ocupa
+  // menos papel a lo ancho, y si no se aplica igual entra. Nunca se desborda.
+  void compacto
+  return Math.max(8, Math.floor(charsPerLineNormal))
 }
 
 /**

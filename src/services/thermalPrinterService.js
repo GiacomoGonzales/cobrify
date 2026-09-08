@@ -1407,6 +1407,10 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
     printer = printer.align('left');
     if (mostrarTitulosDeSeccion(compacto)) {
       printer = printer.bold().text('DETALLE\n').clearFormatting();
+    } else {
+      // Sin separadores ni titulo, los productos quedaban pegados al telefono.
+      // Una linea en blanco alcanza para que se vea donde empieza la compra.
+      printer = printer.text('\n');
     }
     printer = printer.text(itemsText);
 
