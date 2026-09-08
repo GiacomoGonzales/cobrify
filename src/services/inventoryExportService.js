@@ -103,9 +103,13 @@ export const exportInventoryWithOptions = async ({
     includeIngredients = true,
     warehouseIds = [],
     includeNoStockTracking = false,
-    // Solo lo que hay que reponer. Usa el MISMO criterio que las tarjetas de
+    // Solo stock bajo y agotado. Usa el MISMO criterio que las tarjetas de
     // Inventario y Productos (utils/stockAlerts): no se inventa otro umbral.
     soloParaReponer = false,
+    // Marca y categoria: vacio = todas, como el resto de los filtros del
+    // sistema. Solo aplican a PRODUCTOS; los insumos no tienen marca.
+    brandIds = [],
+    categoryIds = [],
     format: exportFormat = 'columns',
     // Inventario a una fecha pasada: etiqueta dd/MM/yyyy. Los items ya vienen
     // con el stock reconstruido desde la pantalla (stockSnapshotService).
@@ -142,6 +146,13 @@ export const exportInventoryWithOptions = async ({
   // ELEGIDOS, no el total del negocio. Exportando un solo local, lo que
   // importa es lo que falta ahí — el mismo producto puede estar sobrado en
   // otra sede y aun así haber que reponerlo acá.
+  if (brandIds.length > 0) {
+    items = items.filter(i => i.itemType !== 'product' || brandIds.includes(i.brand))
+  }
+  if (categoryIds.length > 0) {
+    items = items.filter(i => categoryIds.includes(i.category))
+  }
+
   if (soloParaReponer) {
     items = items.filter(item => {
       const stock = selectedWarehouses.reduce((sum, w) => sum + getStockAtWarehouse(item, w.id), 0)

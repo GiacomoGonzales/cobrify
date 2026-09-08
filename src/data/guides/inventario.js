@@ -331,7 +331,11 @@ export default {
         },
         {
           type: 'texto',
-          text: 'Si lo que quieres es la lista de compras, marca **Solo lo que hay que reponer** en el modal de exportación: el Excel sale únicamente con lo agotado y lo que llegó a su stock mínimo, contando solo los almacenes que elegiste. Es el mismo criterio que usan las tarjetas de arriba, así que el número coincide con lo que ves en pantalla.',
+          text: 'Si lo que quieres es la lista de compras, marca **Solo stock bajo y stock agotado** en el modal de exportación: el Excel sale únicamente con lo agotado y lo que llegó a su stock mínimo, contando solo los almacenes que elegiste. Es el mismo criterio que usan las tarjetas de arriba, así que el número coincide con lo que ves en pantalla.',
+        },
+        {
+          type: 'texto',
+          text: 'En ese mismo modal puedes acotar la exportación a una **marca** o a una **categoría**. Se combinan con lo anterior: marca "Solo stock bajo y stock agotado", elige la marca y te llevas la lista de compras de ese proveedor. La marca solo filtra productos — los insumos no tienen marca y salen igual si los incluiste.',
         },
         {
           type: 'texto',

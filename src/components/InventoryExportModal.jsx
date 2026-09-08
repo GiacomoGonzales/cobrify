@@ -21,6 +21,8 @@ export default function InventoryExportModal({
   onExport,
   isExporting = false,
   hasIngredients = false,
+  brands = [],
+  categories = [],
 }) {
   // Tipos de items
   const [includeProducts, setIncludeProducts] = useState(true)
@@ -32,9 +34,12 @@ export default function InventoryExportModal({
 
   // Filtros
   const [includeNoStockTracking, setIncludeNoStockTracking] = useState(false)
-  // "Solo lo que hay que reponer": lo pidio BOTICAS LOS ANGELES, que exportaba
+  // "Solo stock bajo y stock agotado": lo pidio BOTICAS LOS ANGELES, que exportaba
   // todo el inventario para revisar a mano cual estaba bajo.
   const [soloParaReponer, setSoloParaReponer] = useState(false)
+  // Marca y categoria: '' = todas.
+  const [brandId, setBrandId] = useState('')
+  const [categoryId, setCategoryId] = useState('')
 
   // Formato
   const [format, setFormat] = useState('columns') // 'columns' | 'rows'
@@ -84,6 +89,8 @@ export default function InventoryExportModal({
       warehouseIds: finalWarehouseIds,
       includeNoStockTracking,
       soloParaReponer,
+      brandIds: brandId ? [brandId] : [],
+      categoryIds: categoryId ? [categoryId] : [],
       format,
       snapshotDate: dateMode === 'fecha' && snapshotDate ? snapshotDate : null,
     })
@@ -256,13 +263,51 @@ export default function InventoryExportModal({
               className="mt-0.5 w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
             />
             <div>
-              <span className="text-gray-700">Solo lo que hay que reponer</span>
+              <span className="text-gray-700">Solo stock bajo y stock agotado</span>
               <p className="text-xs text-gray-500 mt-0.5">
                 Deja fuera lo que está en su nivel: quedan los agotados y los que llegaron a su
                 stock mínimo, contando solo los almacenes que elegiste arriba.
               </p>
             </div>
           </label>
+
+          {(brands.length > 0 || categories.length > 0) && (
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {brands.length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Marca</label>
+                  <select
+                    value={brandId}
+                    onChange={e => setBrandId(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
+                  >
+                    <option value="">Todas las marcas</option>
+                    {brands.map(b => (
+                      <option key={b.id} value={b.id}>{b.name || 'Sin nombre'}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {categories.length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Categoría</label>
+                  <select
+                    value={categoryId}
+                    onChange={e => setCategoryId(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
+                  >
+                    <option value="">Todas las categorías</option>
+                    {categories.map(c => (
+                      <option key={c.id} value={c.id}>{c.name || 'Sin nombre'}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <p className="sm:col-span-2 text-xs text-gray-500">
+                La marca solo filtra productos: los insumos no tienen marca y salen igual si los incluiste.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="border-t border-gray-200"></div>

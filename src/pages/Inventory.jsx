@@ -5649,6 +5649,8 @@ export default function Inventory() {
         onExport={handleExportWithOptions}
         isExporting={isExporting}
         hasIngredients={ingredients.length > 0}
+        brands={brands}
+        categories={productCategories}
       />
 
       <ConsumoInternoModal
