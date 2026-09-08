@@ -125,7 +125,20 @@ export const catalogRegisterWithEmail = async (businessId, { email, password, na
     if (name) {
       try { await updateProfile(result.user, { displayName: name }) } catch { /* no crítico */ }
     }
-    await ensureCatalogCustomerProfile(businessId, result.user, { name, phone })
+    try {
+      await ensureCatalogCustomerProfile(businessId, result.user, { name, phone })
+    } catch (errorPerfil) {
+      // Sin perfil, la cuenta recién creada no es de nadie: no aparece como
+      // cliente de esta tienda ni de ninguna, y deja el correo ocupado para
+      // cuando la persona vuelva a intentarlo. Se deshace.
+      console.error('No se pudo crear el perfil del comprador:', errorPerfil)
+      try {
+        await result.user.delete()
+      } catch (e) {
+        console.error('No se pudo deshacer el acceso, queda huérfano:', result.user.uid, e)
+      }
+      return { success: false, error: 'No se pudo crear tu cuenta. Vuelve a intentarlo.' }
+    }
     return { success: true, user: result.user, created: true }
   } catch (error) {
     if (error?.code === 'auth/email-already-in-use') {

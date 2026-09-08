@@ -347,8 +347,12 @@ export const createManagedUser = async (ownerId, userData) => {
     const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password)
     const newUserId = userCredential.user.uid
 
-    // Cerrar sesión en el auth secundario inmediatamente
-    await signOut(secondaryAuth)
+    // OJO con el orden: la sesión del auth secundario se cierra DESPUÉS de
+    // escribir la ficha, no antes. Cerrarla aquí dejaba sin manera de deshacer
+    // el acceso si la escritura fallaba, y entonces quedaba una cuenta de
+    // Firebase sin ficha: la persona no puede trabajar, su correo queda ocupado
+    // —volver a crearla falla— y, al entrar, el sistema la tomaba por dueña de
+    // un negocio vacío. Le pasó a una empleada de un cliente en setiembre 2026.
 
     // 2. Crear documento en Firestore con permisos
     const userDocRef = doc(db, 'users', newUserId)
@@ -396,7 +400,22 @@ export const createManagedUser = async (ownerId, userData) => {
       lastLogin: null,
     }
 
-    await setDoc(userDocRef, userDocData)
+    try {
+      await setDoc(userDocRef, userDocData)
+    } catch (errorFicha) {
+      // Sin ficha el acceso no sirve para nada y estorba: se deshace.
+      console.error('❌ No se pudo escribir la ficha del usuario:', errorFicha)
+      try {
+        await userCredential.user.delete()
+        console.log('🧹 Acceso deshecho: el correo queda libre para reintentar')
+      } catch (e) {
+        console.error('No se pudo deshacer el acceso, queda huérfano:', newUserId, e)
+      }
+      await signOut(secondaryAuth).catch(() => {})
+      return { success: false, error: 'No se pudo crear el usuario. Vuelve a intentarlo.' }
+    }
+
+    await signOut(secondaryAuth).catch(() => {})
 
     return {
       success: true,

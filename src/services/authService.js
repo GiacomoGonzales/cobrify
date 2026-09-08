@@ -115,13 +115,33 @@ export const registerUser = async (email, password, displayName, businessData = 
       await updateProfile(userCredential.user, { displayName })
     }
 
-    // Marcar como Business Owner (dueño del negocio) automáticamente
+    // A partir de acá, si algo falla se DESHACE el acceso recién creado.
+    //
+    // Antes cada paso iba en su propio try/catch que anotaba el error y seguía
+    // adelante: la cuenta de Firebase quedaba viva sin ficha, sin negocio o sin
+    // plan, y el registro respondía "listo". Así nacieron 101 accesos huérfanos
+    // en diez meses. Un registro a medias es peor que un registro fallido: el
+    // correo queda ocupado, la persona cree que tiene cuenta, y al entrar cae en
+    // un sistema vacío.
+    const deshacer = async (paso, error) => {
+      console.error(`Registro fallido en "${paso}":`, error)
+      try {
+        await userCredential.user.delete()
+        console.log('🧹 Acceso deshecho: el correo queda libre para reintentar')
+      } catch (e) {
+        // Si ni siquiera se puede borrar el acceso, al menos que quede dicho:
+        // es el caso que hay que ir a limpiar a mano.
+        console.error('No se pudo deshacer el acceso, queda huérfano:', userCredential.user.uid, e)
+      }
+    }
+
+    // Marcar como Business Owner (dueño del negocio)
     try {
       await setAsBusinessOwner(userCredential.user.uid, email, displayName)
       console.log('✅ Usuario marcado como Business Owner automáticamente')
     } catch (ownerError) {
-      console.error('Error al marcar como business owner:', ownerError)
-      // Continuar aunque falle
+      await deshacer('marcar como dueño', ownerError)
+      return { success: false, error: 'No se pudo crear la cuenta. Vuelve a intentarlo.' }
     }
 
     // Guardar datos del negocio si se proporcionaron
@@ -148,8 +168,8 @@ export const registerUser = async (email, password, displayName, businessData = 
         }, { merge: true })
         console.log('✅ Datos del negocio guardados')
       } catch (businessError) {
-        console.error('Error al guardar datos del negocio:', businessError)
-        // Continuar aunque falle
+        await deshacer('guardar el negocio', businessError)
+        return { success: false, error: 'No se pudieron guardar los datos del negocio. Vuelve a intentarlo.' }
       }
     }
 
@@ -165,8 +185,10 @@ export const registerUser = async (email, password, displayName, businessData = 
       )
       console.log('✅ Suscripción creada:', subscriptionOptions?.plan || 'trial')
     } catch (subscriptionError) {
-      console.error('Error al crear suscripción:', subscriptionError)
-      // No fallar el registro si hay error en la suscripción
+      // Sin plan la cuenta no abre: es justo el estado "a medio crear" que se ve
+      // en el admin. Mejor no dejarla nacer.
+      await deshacer('crear la suscripción', subscriptionError)
+      return { success: false, error: 'No se pudo activar el plan. Vuelve a intentarlo.' }
     }
 
     return { success: true, user: userCredential.user }

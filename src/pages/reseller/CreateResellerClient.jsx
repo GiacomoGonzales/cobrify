@@ -149,6 +149,12 @@ export default function CreateResellerClient() {
 
     setLoading(true)
 
+    // El acceso recién creado, para poder deshacerlo si algo falla después.
+    // Antes se creaba y, si alguna de las cinco escrituras posteriores fallaba,
+    // el mensaje de error salía pero la cuenta de Firebase quedaba viva: un
+    // cliente a medio crear, con el correo ocupado y sin poder reintentarlo.
+    let accesoCreado = null
+
     try {
       // 1. Create user in Firebase Auth usando secondaryAuth para no desloguear al reseller
       const userCredential = await createUserWithEmailAndPassword(
@@ -157,9 +163,10 @@ export default function CreateResellerClient() {
         formData.password
       )
       const newUserId = userCredential.user.uid
+      accesoCreado = userCredential.user
 
-      // Cerrar sesión en el auth secundario inmediatamente
-      await signOut(secondaryAuth)
+      // La sesión del auth secundario se cierra al final, no aquí: mientras siga
+      // abierta se puede deshacer el acceso.
 
       // 2. Calculate period end date
       const now = new Date()
@@ -258,6 +265,8 @@ export default function CreateResellerClient() {
         await refreshResellerData()
       }
 
+      await signOut(secondaryAuth).catch(() => {})
+      accesoCreado = null
       setSuccess(true)
 
       // Redirect after 2 seconds
@@ -267,6 +276,17 @@ export default function CreateResellerClient() {
 
     } catch (error) {
       console.error('Error creating client:', error)
+      // Si el acceso alcanzó a crearse, se deshace: sin sus documentos no sirve
+      // de nada y deja el correo ocupado.
+      if (accesoCreado) {
+        try {
+          await accesoCreado.delete()
+          console.log('🧹 Acceso deshecho: el correo queda libre para reintentar')
+        } catch (e) {
+          console.error('No se pudo deshacer el acceso, queda huérfano:', accesoCreado.uid, e)
+        }
+        await signOut(secondaryAuth).catch(() => {})
+      }
       if (error.code === 'auth/email-already-in-use') {
         setError('Este correo electrónico ya está registrado')
       } else if (error.code === 'auth/invalid-email') {
