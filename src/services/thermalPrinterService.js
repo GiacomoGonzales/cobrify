@@ -1799,10 +1799,7 @@ function renderKitchenLinesEscPos(builder, lines, format, escala = 0) {
       // El separador va SIEMPRE en tamaño normal: agrandado ocupaba dos
       // renglones y separaba menos de lo que estorbaba. Así queda la línea
       // fina de siempre entre bloques de letra grande.
-      // En compacto tampoco va el separador del pie (utils/ticketCompacto).
-      if (mostrarSeparadores(compacto)) {
-        builder.alignLeft().bold(false).charSize(0).text(separadorTicket).newLine();
-      }
+      builder.alignLeft().bold(false).charSize(0).text(format.separator).newLine();
       continue;
     }
     if (ln.blank) { builder.newLine(); continue; }
@@ -1831,9 +1828,7 @@ function renderKitchenLinesBT(printer, lines, format, escala = 0) {
 
   for (const ln of lines) {
     if (ln.sep) {
-      if (mostrarSeparadores(compacto)) {
-        printer = printer.clearFormatting().align('left').text(separadorTicket + '\n');
-      }
+      printer = printer.clearFormatting().align('left').text(format.separator + '\n');
       continue;
     }
     if (ln.blank) { printer = printer.text('\n'); continue; }
