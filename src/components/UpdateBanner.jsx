@@ -34,6 +34,24 @@ export default function UpdateBanner() {
   } = useRegisterSW({
     onRegistered(r) {
       swRegistrationRef.current = r || null
+      // EN LA APP NATIVA NO DEBE HABER SERVICE WORKER.
+      //
+      // Los archivos ya vienen dentro del APK: no hay nada que cachear. Pero el
+      // SW se registraba igual y, con `skipWaiting: false`, seguía sirviendo su
+      // copia del bundle ANTERIOR hasta que alguien viera y aceptara el cartel
+      // "Reiniciar para actualizar". Resultado: se actualizaba desde Play y la
+      // app seguía corriendo la versión vieja — un cambio podía no verse nunca.
+      //
+      // Se desregistra y se borran sus cachés. Va acá y no en un `if` antes del
+      // hook porque los hooks no pueden ser condicionales; el SW vive unos
+      // milisegundos y se va, y de paso limpia el de quienes ya lo tenían.
+      if (r && isNative) {
+        r.unregister().catch(() => {})
+        caches?.keys?.().then((claves) => {
+          for (const clave of claves) caches.delete(clave).catch(() => {})
+        }).catch(() => {})
+        return
+      }
       if (r && !isNative) {
         // Chequeo periódico de actualizaciones (cada 30 min).
         setInterval(() => {
