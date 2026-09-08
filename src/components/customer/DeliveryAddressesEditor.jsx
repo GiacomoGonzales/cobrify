@@ -14,8 +14,16 @@
  * lee del XML de la guía; la dirección escrita es texto libre. Una dirección sin
  * ubigeo no ahorra el trabajo real, que es elegir departamento/provincia/distrito.
  *
+ * Desde el 8-set-2026 la lista también es la de NOMBRES COMERCIALES del
+ * cliente (pedido de Giacomo): una empresa con varias tiendas (Bambú Picota,
+ * Bambú Tarapoto) tiene aquí cada sede con su nombre, dirección y teléfono, y
+ * al vender el POS pregunta a cuál (utils/nombresComerciales). Antes eran dos
+ * listas casi iguales, y el usuario llenaba lo mismo dos veces. Por eso una
+ * sede puede tener solo nombre: sirve para vender aunque no sea punto de
+ * entrega (las guías ya filtran las que traen dirección).
+ *
  * Forma guardada en el cliente (campo `deliveryAddresses`):
- *   { id, label, address, ubigeo, source: 'sunat' | 'manual', establishmentCode }
+ *   { id, label, address, phone, ubigeo, source: 'sunat' | 'manual', establishmentCode }
  *
  * Se guarda SOLO el ubigeo de 6 dígitos, no los tres tramos por separado: los
  * tramos se derivan con resolveUbigeoParts. Un solo dato que pueda estar mal es
@@ -42,6 +50,7 @@ export const crearDireccionVacia = () => ({
   id: nuevoId(),
   label: '',
   address: '',
+  phone: '',
   ubigeo: '',
   source: 'manual',
   establishmentCode: '',
@@ -61,17 +70,18 @@ const normalizar = (texto) =>
  * tramos a medias, que viven en campos temporales con guion bajo. Esos NO deben
  * llegar a la base: lo que persiste es el ubigeo de 6 dígitos ya armado.
  *
- * También descarta las filas sin dirección: agregar una fila y no llenarla es
- * lo más fácil del mundo, y una dirección vacía en el desplegable de la guía
- * solo estorba.
+ * También descarta las filas sin nombre ni dirección: agregar una fila y no
+ * llenarla es lo más fácil del mundo. Una sede con solo nombre SÍ se queda:
+ * sirve para elegirla al vender (las guías filtran por dirección aparte).
  */
 export const limpiarDireccionesParaGuardar = (lista) =>
   (Array.isArray(lista) ? lista : [])
-    .filter((d) => String(d?.address || '').trim())
+    .filter((d) => String(d?.address || '').trim() || String(d?.label || '').trim())
     .map((d) => ({
       id: d.id || nuevoId(),
       label: String(d.label || '').trim(),
       address: String(d.address || '').trim(),
+      phone: String(d.phone || '').trim(),
       ubigeo: String(d.ubigeo || '').trim(),
       source: d.source === 'sunat' ? 'sunat' : 'manual',
       establishmentCode: String(d.establishmentCode || ''),
@@ -181,6 +191,7 @@ export default function DeliveryAddressesEditor({
           // ("ALMACEN", "OFICINA ADMINISTRATIVA"); si no viene, queda el código.
           label: est.tipo || (codigo ? `Local ${codigo}` : ''),
           address,
+          phone: '',
           ubigeo: valid ? String(est.ubigeo).trim() : '',
           source: 'sunat',
           establishmentCode: codigo,
@@ -223,7 +234,7 @@ export default function DeliveryAddressesEditor({
       <div className="flex items-center justify-between mb-1 gap-2">
         <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
           <MapPin className="w-4 h-4" />
-          Direcciones de entrega{direcciones.length > 0 ? ` (${direcciones.length})` : ''}
+          Sedes y direcciones de entrega{direcciones.length > 0 ? ` (${direcciones.length})` : ''}
         </h4>
         <div className="flex items-center gap-3 shrink-0">
           {puedeImportar && (
@@ -253,13 +264,14 @@ export default function DeliveryAddressesEditor({
       </div>
 
       <p className="text-xs text-gray-500 mb-3">
-        Adónde se le despacha la mercadería, cuando no es su domicilio fiscal. Se
-        usan al armar una guía de remisión. Opcional.
+        Las tiendas, almacenes u obras del cliente. Al vender, el punto de venta
+        pregunta a cuál (sale como nombre comercial con su dirección); al armar
+        una guía de remisión, es el punto de llegada. Opcional.
       </p>
 
       {direcciones.length === 0 ? (
         <p className="text-xs text-gray-400 italic">
-          Sin direcciones de entrega. Se usará el domicilio fiscal.
+          Sin sedes. Al vender se usa el nombre de la ficha y su domicilio fiscal.
         </p>
       ) : (
         <div className="space-y-3">
@@ -284,10 +296,10 @@ export default function DeliveryAddressesEditor({
                 </button>
 
                 <div className="space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                     <Input
                       label="Nombre"
-                      placeholder="Ej: Almacén Central"
+                      placeholder="Ej: Bambú Picota"
                       value={dir.label || ''}
                       onChange={(e) => actualizar(index, { label: e.target.value })}
                     />
@@ -299,6 +311,12 @@ export default function DeliveryAddressesEditor({
                         onChange={(e) => actualizar(index, { address: e.target.value })}
                       />
                     </div>
+                    <Input
+                      label="Teléfono"
+                      placeholder="999 111 222"
+                      value={dir.phone || ''}
+                      onChange={(e) => actualizar(index, { phone: e.target.value })}
+                    />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

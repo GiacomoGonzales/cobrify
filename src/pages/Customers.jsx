@@ -34,8 +34,7 @@ import FichaPacienteModal from '@/components/clinic/FichaPacienteModal'
 import { getInvoicesDeCliente } from '@/services/customerInvoiceService'
 import { normalizePets, createEmptyPet } from '@/utils/petUtils'
 import DeliveryAddressesEditor, { limpiarDireccionesParaGuardar } from '@/components/customer/DeliveryAddressesEditor'
-import NombresComercialesEditor from '@/components/customer/NombresComercialesEditor'
-import { limpiarNombresComercialesParaGuardar } from '@/utils/nombresComerciales'
+import { sedesDeCliente } from '@/utils/nombresComerciales'
 import LoyaltyManager from '@/components/loyalty/LoyaltyManager'
 import GuideLink from '@/components/guide/GuideLink'
 import { CAMPOS_EN_MAYUSCULA, enMayuscula } from '@/utils/posCustomerData'
@@ -775,9 +774,6 @@ export default function Customers() {
   // Direcciones de entrega del cliente (aparte del domicilio fiscal). Van fuera
   // de react-hook-form, igual que las mascotas, porque son una lista editable.
   const [deliveryAddresses, setDeliveryAddresses] = useState([])
-  // Nombres comerciales adicionales (tiendas/marcas del mismo RUC). Misma
-  // mecánica que las direcciones: lista aparte, se guarda en `tradeNames`.
-  const [nombresComerciales, setNombresComerciales] = useState([])
 
   const {
     register,
@@ -901,7 +897,6 @@ export default function Customers() {
       setPets([createEmptyPet()])
     }
     setDeliveryAddresses([])
-    setNombresComerciales([])
     setIsModalOpen(true)
   }
 
@@ -944,10 +939,9 @@ export default function Customers() {
     setAttentions(normalizarAtenciones(customer))
     // Cargar mascotas normalizadas
     setPets(normalizePets(customer))
-    setDeliveryAddresses(
-      Array.isArray(customer.deliveryAddresses) ? customer.deliveryAddresses : []
-    )
-    setNombresComerciales(Array.isArray(customer.tradeNames) ? customer.tradeNames : [])
+    // Sedes: la lista de siempre, más lo que alguien haya cargado en el bloque
+    // "nombres comerciales" que existió unas horas el 8-set (se funde acá).
+    setDeliveryAddresses(sedesDeCliente(customer))
     setIsModalOpen(true)
   }
 
@@ -956,7 +950,6 @@ export default function Customers() {
     setEditingCustomer(null)
     setPets([])
     setDeliveryAddresses([])
-    setNombresComerciales([])
     reset()
   }
 
@@ -1067,8 +1060,9 @@ export default function Customers() {
       // borrar la última quede registrado). limpiarDireccionesParaGuardar quita
       // los tramos temporales del selector de ubigeo y las filas sin dirección.
       data.deliveryAddresses = limpiarDireccionesParaGuardar(deliveryAddresses)
-      // Nombres comerciales: también siempre, para que quitar el último quede.
-      data.tradeNames = limpiarNombresComercialesParaGuardar(nombresComerciales)
+      // Campo de la primera versión de los nombres comerciales (8-set-2026),
+      // ya fundido en las sedes de arriba: se vacía para no leerlo dos veces.
+      data.tradeNames = []
 
       // Historial de atenciones: filas vacías fuera y la más reciente primero,
       // como se lee una historia clínica. Los cuatro campos de la ficha vieja
@@ -2160,12 +2154,6 @@ export default function Customers() {
             {...register('name')}
           />
 
-          {/* Otras tiendas o marcas del mismo RUC: al vender, el POS pregunta a
-              cuál. El "Nombre" de arriba sigue siendo el principal. */}
-          {documentType === ID_TYPES.RUC && (
-            <NombresComercialesEditor value={nombresComerciales} onChange={setNombresComerciales} />
-          )}
-
           <Input
             label="Código (opcional)"
             placeholder="Ej: CLI-001"
@@ -2198,8 +2186,8 @@ export default function Customers() {
             {...register('address')}
           />
 
-          {/* Direcciones de entrega: adónde va la mercadería cuando no es el
-              domicilio fiscal de arriba. Se usan en las guías de remisión. */}
+          {/* Sedes del cliente: sus tiendas, almacenes u obras. Al vender, el POS
+              pregunta a cuál (nombre comercial); en las guías, punto de llegada. */}
           <DeliveryAddressesEditor
             value={deliveryAddresses}
             onChange={setDeliveryAddresses}

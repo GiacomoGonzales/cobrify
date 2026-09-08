@@ -1,37 +1,63 @@
 /**
- * VARIOS NOMBRES COMERCIALES POR CLIENTE.
+ * NOMBRES COMERCIALES DE UN CLIENTE = SUS SEDES.
  *
  * Una empresa (un RUC, una razón social) atiende con varias tiendas o marcas:
  * "Bambú Picota", "Bambú Tarapoto". Al vender hay que decir A CUÁL se le
  * vende: ese nombre sale en el comprobante como "Nombre comercial" (y su
  * dirección, si la tiene); a SUNAT sigue yendo la razón social y el RUC.
  *
- * En la ficha, el "Nombre" del cliente con RUC ya era su nombre comercial
- * principal; acá se agregan los demás en `tradeNames[]`:
- *   { id, name, address, phone }
- * Se gestionan SOLO desde la ficha (pedido de Giacomo, 8-set-2026).
+ * Las sedes viven en la lista de siempre de la ficha, `deliveryAddresses[]`
+ * ({ id, label, address, phone, ubigeo, ... }): la misma que usan las guías
+ * de remisión como punto de llegada. Una sede CON nombre (`label`) es una
+ * opción para vender; una dirección sin nombre es solo un punto de entrega.
+ * El "Nombre" de la ficha es el principal. Todo se gestiona desde la ficha
+ * (pedido de Giacomo, 8-set-2026); el POS solo elige.
+ *
+ * La primera versión, de unas horas ese mismo día, guardaba una lista aparte
+ * en `tradeNames[]` ({ id, name, address, phone }): se sigue leyendo y la ficha
+ * la funde en las sedes al abrir el cliente (sedesDeCliente).
  */
-
-const nuevoId = () => `nc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 
 /** Id de la opción que representa el nombre de la ficha. */
 export const PRINCIPAL = 'principal'
 
-export const crearNombreComercialVacio = () => ({ id: nuevoId(), name: '', address: '', phone: '' })
-
 const limpio = (v) => String(v ?? '').trim()
 
-/** Lista lista para guardar: sin filas sin nombre, con id, solo los 4 campos. */
-export function limpiarNombresComercialesParaGuardar(lista = []) {
-  return (lista || [])
-    .filter((t) => t && limpio(t.name))
-    .map((t) => ({ id: t.id || nuevoId(), name: limpio(t.name), address: limpio(t.address), phone: limpio(t.phone) }))
+// Sin tildes, como el buscador del sistema: 'bambu' tiene que dar con 'Bambú'.
+const normal = (v) => limpio(v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ')
+
+const sedesConNombre = (cliente) =>
+  (Array.isArray(cliente?.deliveryAddresses) ? cliente.deliveryAddresses : []).filter((d) => d && limpio(d.label))
+
+const nombresViejos = (cliente) =>
+  (Array.isArray(cliente?.tradeNames) ? cliente.tradeNames : []).filter((t) => t && limpio(t.name))
+
+/**
+ * Las sedes que edita la ficha: la lista de siempre, más lo que alguien haya
+ * cargado en el bloque "nombres comerciales" de la primera versión, fundido
+ * como sede manual sin repetir un nombre que ya esté.
+ */
+export function sedesDeCliente(cliente) {
+  const base = Array.isArray(cliente?.deliveryAddresses) ? cliente.deliveryAddresses : []
+  const nombres = new Set(base.map((d) => normal(d?.label)).filter(Boolean))
+  const fundidos = nombresViejos(cliente)
+    .filter((t) => !nombres.has(normal(t.name)))
+    .map((t) => ({
+      id: t.id || `nc_${normal(t.name)}`,
+      label: limpio(t.name),
+      address: limpio(t.address),
+      phone: limpio(t.phone),
+      ubigeo: '',
+      source: 'manual',
+      establishmentCode: '',
+    }))
+  return [...base, ...fundidos]
 }
 
 /**
- * Las opciones para el desplegable: primero la de la ficha (principal), luego
- * las adicionales. La principal lleva el domicilio fiscal y el teléfono de la
- * ficha, que es lo que el POS ya cargaba.
+ * Las opciones para el desplegable: primero la de la ficha (principal, con el
+ * domicilio fiscal y el teléfono de siempre), luego las sedes con nombre. Un
+ * mismo nombre no aparece dos veces.
  */
 export function opcionesDeNombreComercial(cliente) {
   if (!cliente) return []
@@ -42,25 +68,32 @@ export function opcionesDeNombreComercial(cliente) {
     phone: limpio(cliente.phone),
     principal: true,
   }
-  const extras = (Array.isArray(cliente.tradeNames) ? cliente.tradeNames : [])
-    .filter((t) => t && limpio(t.name))
-    .map((t) => ({ id: t.id || limpio(t.name), name: limpio(t.name), address: limpio(t.address), phone: limpio(t.phone), principal: false }))
+  const vistos = new Set()
+  const extras = []
+  const agregar = (id, name, address, phone) => {
+    const k = normal(name)
+    if (!k || vistos.has(k)) return
+    vistos.add(k)
+    extras.push({ id: id || k, name: limpio(name), address: limpio(address), phone: limpio(phone), principal: false })
+  }
+  for (const d of sedesConNombre(cliente)) agregar(d.id, d.label, d.address, d.phone)
+  for (const t of nombresViejos(cliente)) agregar(t.id, t.name, t.address, t.phone)
   return [principal, ...extras]
 }
 
 export const tieneVariosNombres = (cliente) => opcionesDeNombreComercial(cliente).length > 1
 
-/** Los nombres adicionales, para que "Buscar cliente" los encuentre. */
+/** Los nombres de las sedes, para que "Buscar cliente" los encuentre. */
 export function nombresParaBuscar(cliente) {
-  return (Array.isArray(cliente?.tradeNames) ? cliente.tradeNames : []).map((t) => limpio(t?.name)).filter(Boolean)
+  return [
+    ...sedesConNombre(cliente).map((d) => limpio(d.label)),
+    ...nombresViejos(cliente).map((t) => limpio(t.name)),
+  ]
 }
 
-// Sin tildes, como el buscador del sistema: 'bambu' tiene que dar con 'Bambú'.
-const normal = (v) => limpio(v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ')
-
 /**
- * Si el cliente se encontró escribiendo uno de sus nombres comerciales, ese
- * queda elegido; si no (se buscó por RUC, razón social, celular), la principal.
+ * Si el cliente se encontró escribiendo el nombre de una sede, esa queda
+ * elegida; si no (se buscó por RUC, razón social, celular), la principal.
  * Coincide cuando todas las palabras buscadas están en el nombre.
  */
 export function opcionQueCoincide(cliente, termino) {

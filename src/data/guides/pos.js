@@ -331,7 +331,7 @@ export default {
         },
         {
           type: 'texto',
-          text: 'Si el cliente tiene **varios nombres comerciales** en su ficha (varias tiendas del mismo RUC), al seleccionarlo aparece un desplegable para elegir a cuál le vendes. Ese nombre sale en el comprobante con su dirección; a SUNAT van el RUC y la razón social. Los nombres se agregan desde la página Clientes.',
+          text: 'Si el cliente tiene **sedes con nombre** en su ficha (varias tiendas del mismo RUC), al seleccionarlo aparece un desplegable para elegir a cuál le vendes. Ese nombre sale en el comprobante como nombre comercial, con su dirección; a SUNAT van el RUC y la razón social. Las sedes se agregan en la página Clientes, en el bloque Sedes y direcciones de entrega, y sirven también para buscar al cliente.',
         },
         {
           type: 'consejo',

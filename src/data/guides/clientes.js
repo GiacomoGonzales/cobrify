@@ -34,23 +34,23 @@ export default {
 
     {
       id: 'direcciones-entrega',
-      title: 'Direcciones de entrega',
+      title: 'Sedes y direcciones de entrega',
       blocks: [
         {
           type: 'texto',
-          text: 'La **Dirección** de la ficha es el domicilio fiscal: el que SUNAT tiene registrado y el que sale en sus comprobantes. Pero la mercadería muchas veces va a otro lado — su almacén, su tienda, una obra. Para eso está el bloque **Direcciones de entrega**.',
+          text: 'La **Dirección** de la ficha es el domicilio fiscal: el que SUNAT tiene registrado y el que sale en sus comprobantes cuando vendes al nombre principal. Pero una empresa suele tener más lugares: sus tiendas, su almacén, una obra. Para eso está el bloque **Sedes y direcciones de entrega**: cada sede con su nombre, dirección, distrito y teléfono.',
         },
         {
           type: 'pasos',
           items: [
-            'Si el cliente tiene RUC, presiona **Traer de SUNAT**: se agregan sus locales anexos con dirección y distrito ya cargados.',
-            'Si el punto de entrega no está registrado en SUNAT, usa **Agregar** y escríbelo a mano.',
-            'Ponle un nombre corto a cada una (Almacén Central, Tienda Surco) para reconocerlas después.',
+            'Si el cliente tiene RUC, presiona **Traer de SUNAT**: se agregan sus locales anexos con dirección y distrito ya cargados. Ponles el nombre con el que los conoces (Bambú Picota, Almacén Central).',
+            'Si la sede no está registrada en SUNAT, usa **Agregar** y escríbela a mano. Una sede puede tener solo nombre, si es una marca sin dirección propia.',
+            'Guarda. Desde ese momento el cliente se encuentra también por el nombre de cualquiera de sus sedes.',
           ],
         },
         {
           type: 'texto',
-          text: 'Al armar una guía de remisión para ese cliente aparecerá un desplegable con estas direcciones, y el punto de llegada se completa solo.',
+          text: 'Sirven para dos cosas. **Al vender**, si el cliente tiene sedes con nombre, el punto de venta muestra un desplegable para elegir a cuál le vendes: ese nombre sale en el comprobante como **Nombre comercial**, con su dirección; a SUNAT siguen yendo el RUC y la razón social. **Al armar una guía de remisión**, el punto de llegada se completa solo con la sede que elijas.',
         },
         {
           type: 'consejo',
@@ -59,33 +59,6 @@ export default {
         {
           type: 'texto',
           text: 'Traerlas de SUNAT una vez también te evita repetir esa consulta —que se paga— en cada guía, y hace que funcione sin internet.',
-        },
-      ],
-    },
-
-    {
-      id: 'nombres-comerciales',
-      title: 'Varios nombres comerciales en un mismo RUC',
-      blocks: [
-        {
-          type: 'texto',
-          text: 'Una empresa puede atender con varias tiendas o marcas: Bambú Picota, Bambú Tarapoto. El **Nombre** de la ficha es el nombre comercial principal; en el bloque **Nombres comerciales adicionales** (solo en clientes con RUC) agregas los demás, cada uno con su dirección y teléfono si los tiene.',
-        },
-        {
-          type: 'pasos',
-          items: [
-            'Abre la ficha del cliente y presiona **Agregar** en Nombres comerciales adicionales.',
-            'Escribe el nombre y, si corresponde, la dirección y el teléfono de esa tienda. Guarda.',
-            'En el punto de venta, busca al cliente por su RUC, su razón social o **cualquiera** de sus nombres comerciales: aparecerá un desplegable para elegir a cuál le vendes.',
-          ],
-        },
-        {
-          type: 'texto',
-          text: 'El nombre elegido sale en el comprobante como **Nombre comercial**, con su dirección. A SUNAT siguen yendo el RUC y la razón social, que no cambian.',
-        },
-        {
-          type: 'consejo',
-          text: 'Si lo encontraste escribiendo uno de los nombres comerciales, ese queda elegido de una. Si lo buscaste por RUC, queda el principal y lo cambias en el desplegable.',
         },
       ],
     },
