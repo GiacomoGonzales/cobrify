@@ -32,7 +32,7 @@ export function clienteDelComprobante(comprobante) {
   const d = comprobante || {}
   return {
     documentType: c.documentType || d.customerDocumentType || '',
-    documentNumber: limpio(c.documentNumber || d.customerDocument || d.customerRuc || d.customerDni),
+    documentNumber: limpio(c.documentNumber || d.customerDocument || d.customerDocumentNumber || d.customerRuc || d.customerDni),
     name: limpio(c.name || d.customerName),
     businessName: limpio(c.businessName || d.customerBusinessName),
     address: limpio(c.address || d.customerAddress),

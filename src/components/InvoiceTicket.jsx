@@ -11,6 +11,7 @@ import { getTicketFooterParts } from '@/utils/ticketFooter'
 import { vinculoDe } from '@/utils/documentLinks'
 import { getUnitShortLabel } from '@/utils/units'
 import { lineasDelComprobante } from '@/utils/comprobantePorConsumo'
+import { clienteDelComprobante, lineasDelCliente } from '@/utils/datosDelClienteEnComprobante'
 
 /**
  * Componente de Ticket Imprimible según formato SUNAT
@@ -286,8 +287,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
 
           .info-row span:last-child {
             text-align: right;
-            flex-shrink: 0;
-            max-width: 65%;
+            flex: 1 1 auto;
+            min-width: 0;
             overflow-wrap: break-word;
             word-wrap: break-word;
             word-break: break-word;
@@ -443,6 +444,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
 
         .info-row span:last-child {
           text-align: right;
+          flex: 1 1 auto;
+          min-width: 0;
           overflow-wrap: break-word;
           word-wrap: break-word;
           word-break: break-word;
@@ -815,61 +818,17 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
             </div>
           )}
 
-          {(invoice.documentType === 'boleta' || invoice.documentType === 'nota_venta') && (
-            <>
-              <div className="info-row">
-                <span className="info-label">DNI:</span>
-                <span>{customerData.documentNumber}</span>
-              </div>
-              <div className="info-row">
-                <span className="info-label">Nombre:</span>
-                <span>{customerData.name}</span>
-              </div>
-              {customerData.address && (
-                <div className="info-row">
-                  <span className="info-label">Dirección:</span>
-                  <span>{customerData.address}</span>
-                </div>
-              )}
-              {customerData.phone && (
-                <div className="info-row">
-                  <span className="info-label">Teléfono:</span>
-                  <span>{customerData.phone}</span>
-                </div>
-              )}
-            </>
-          )}
-
-          {invoice.documentType === 'factura' && (
-            <>
-              <div className="info-row">
-                <span className="info-label">RUC:</span>
-                <span>{customerData.documentNumber}</span>
-              </div>
-              <div className="info-row">
-                <span className="info-label">Razón Social:</span>
-                <span>{customerData.businessName}</span>
-              </div>
-              {customerData.name && customerData.name !== 'VARIOS' && (
-                <div className="info-row">
-                  <span className="info-label">Nombre Comercial:</span>
-                  <span>{customerData.name}</span>
-                </div>
-              )}
-              {customerData.address && (
-                <div className="info-row">
-                  <span className="info-label">Dirección:</span>
-                  <span>{customerData.address}</span>
-                </div>
-              )}
-              {customerData.phone && (
-                <div className="info-row">
-                  <span className="info-label">Teléfono:</span>
-                  <span>{customerData.phone}</span>
-                </div>
-              )}
-            </>
-          )}
+          {/* Una sola regla para todos los formatos (utils/datosDelClienteEnComprobante):
+              decide por el documento del cliente, no por el comprobante. Con RUC:
+              RUC, razón social y el nombre comercial solo si existe y es distinto;
+              con DNI/CE/pasaporte, su etiqueta y el nombre. Vale para factura,
+              boleta y nota de venta. */}
+          {!isQuotation && lineasDelCliente(clienteDelComprobante(invoice)).map((l) => (
+            <div className="info-row" key={l.etiqueta}>
+              <span className="info-label">{l.etiqueta}:</span>
+              <span>{l.valor}</span>
+            </div>
+          ))}
 
           {/* Vendedor (si existe) */}
           {invoice.sellerName && (
