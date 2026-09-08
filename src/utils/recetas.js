@@ -72,3 +72,40 @@ export function viaDeDevolucion(item, businessMode) {
   if (item?.controlaStock === false) return 'nada'
   return businessMode === 'restaurant' ? 'nada' : 'producto'
 }
+
+/**
+ * Lo que DE VERDAD salió, cruzando lo pedido con lo que `deductIngredients`
+ * aplicó.
+ *
+ * `deductions` trae un registro por insumo tocado: `quantity` es la cantidad
+ * aplicada (menor que la pedida si no alcanzaba y no se permite negativo) y
+ * `warehouseId` el almacén elegido. Un insumo pedido que no figura ahí no se
+ * descontó — un plato sin stock propio puesto como "insumo" de un combo, un
+ * insumo que ya no existe. Anotar lo pedido como si hubiera salido hace que
+ * la anulación devuelva stock que nunca se movió.
+ *
+ * @returns {{ aplicados: Array, faltantes: Array<{nombre, pedido, aplicado}> }}
+ */
+export function resultadoDeDescuento(insumosPedidos = [], deductions = []) {
+  const porId = new Map((deductions || []).map((d) => [d.ingredientId, d]))
+  const aplicados = []
+  const faltantes = []
+  for (const i of insumosPedidos || []) {
+    const d = porId.get(i.ingredientId)
+    const pedido = Number(i.quantity) || 0
+    // Un `deductions` viejo sin `quantity` significa que se aplicó completo.
+    const aplicado = d ? (Number(d.quantity ?? pedido) || 0) : 0
+    if (aplicado > 0) {
+      aplicados.push({
+        ingredientId: i.ingredientId,
+        ingredientType: d.ingredientType || (i.ingredientType === 'product' ? 'product' : 'ingredient'),
+        ingredientName: i.ingredientName || i.name || '',
+        unit: i.unit || null,
+        quantity: aplicado,
+        warehouseId: d.warehouseId ?? null,
+      })
+    }
+    if (aplicado < pedido) faltantes.push({ nombre: i.ingredientName || i.name || i.ingredientId, pedido, aplicado })
+  }
+  return { aplicados, faltantes }
+}

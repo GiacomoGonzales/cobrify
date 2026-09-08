@@ -621,6 +621,16 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
           newStock = allowNegative ? next : Math.max(0, next)
         }
 
+        // Lo que de verdad salió: con negativo permitido es lo pedido; si no,
+        // lo que había. El movimiento y el registro llevan ESTE número — anotar
+        // -6 cuando salieron 3 hacía que "Recalcular desde movimientos" bajara
+        // el stock a un valor que nunca existió, y que una anulación devolviera
+        // 6 por 3 que salieron.
+        const antes = (effectiveWarehouseId && warehouseStocks.length > 0)
+          ? warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+          : currentStock
+        const aplicado = Math.max(0, antes - newStock)
+
         const updateData = {
           stock: newStock,
           updatedAt: Timestamp.now()
@@ -656,7 +666,7 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
           productName: ingredient.ingredientName,
           ingredientType: 'product',
           type: movementType,
-          quantity: -quantityToDeduct,
+          quantity: -aplicado,
           unit: productData.unit || 'unidades',
           warehouseId: effectiveWarehouseId || null,
           reason: movementType === 'production_consumption' ? `Producción: ${productName}` : movementType === 'internal_use' ? productName : `Venta: ${productName}`,
@@ -667,7 +677,7 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
           createdAt: Timestamp.now()
         })
 
-        deductions.push({ ingredientId: ingredient.ingredientId, ingredientType: 'product', warehouseId: effectiveWarehouseId || null })
+        deductions.push({ ingredientId: ingredient.ingredientId, ingredientType: 'product', warehouseId: effectiveWarehouseId || null, quantity: aplicado })
         continue
       }
 
@@ -735,6 +745,16 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
         newStock = allowNegative ? next : Math.max(0, next)
       }
 
+      // Lo que de verdad salió: con negativo permitido es lo pedido; si no,
+      // lo que había. El movimiento y el registro llevan ESTE número — anotar
+      // -6 cuando salieron 3 hacía que "Recalcular desde movimientos" bajara
+      // el stock a un valor que nunca existió, y que una anulación devolviera
+      // 6 por 3 que salieron.
+      const antes = (effectiveWarehouseId && warehouseStocks.length > 0)
+        ? warehouseStocks.reduce((sum, ws) => sum + (ws.stock || 0), 0)
+        : currentStock
+      const aplicado = Math.max(0, antes - newStock)
+
       // Preparar datos de actualización
       const updateData = {
         currentStock: newStock,
@@ -756,7 +776,7 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
         ingredientId: ingredient.ingredientId,
         ingredientName: ingredient.ingredientName,
         type: movementType,
-        quantity: -quantityToDeduct,
+        quantity: -aplicado,
         unit: currentData.purchaseUnit,
         warehouseId: effectiveWarehouseId || null,
         reason: movementType === 'production_consumption' ? `Producción: ${productName}` : movementType === 'internal_use' ? productName : `Venta: ${productName}`,
@@ -766,7 +786,7 @@ export const deductIngredients = async (businessId, ingredients, relatedSaleId, 
         createdAt: Timestamp.now()
       })
 
-      deductions.push({ ingredientId: ingredient.ingredientId, ingredientType: 'ingredient', warehouseId: effectiveWarehouseId || null })
+      deductions.push({ ingredientId: ingredient.ingredientId, ingredientType: 'ingredient', warehouseId: effectiveWarehouseId || null, quantity: aplicado })
     }
 
     await batch.commit()
@@ -796,7 +816,10 @@ export const restoreIngredients = async (businessId, ingredients, warehouseId = 
       }
 
       const data = docSnap.data()
-      if (!isProduct && data.trackStock === false) continue
+      // Lo que no controla stock tampoco lo recibe de vuelta: un plato puesto
+      // como "insumo" de un combo no se descontó al salir (deductIngredients lo
+      // salta) y devolverle stock le inventaría existencias que no tiene.
+      if (data.trackStock === false) continue
 
       const stockField = isProduct ? 'stock' : 'currentStock'
       const currentStock = data[stockField] ?? data.currentStock ?? data.stock ?? 0

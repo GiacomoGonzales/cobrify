@@ -15,7 +15,7 @@ import { db } from '@/lib/firebase'
 import { updateProductStockTransaction } from './firestoreService'
 import { createStockMovement } from './warehouseService'
 import { getRecipeByProductId } from './recipeService'
-import { recetaParaDescontar, insumosDeReceta, viaDeDevolucion } from '@/utils/recetas'
+import { recetaParaDescontar, insumosDeReceta, viaDeDevolucion, resultadoDeDescuento } from '@/utils/recetas'
 import { deductIngredients, restoreIngredients } from './ingredientService'
 
 /**
@@ -147,17 +147,18 @@ export const createInternalConsumption = async (businessId, datos) => {
             datos.warehouseId || null, 'internal_use', !!datos.permitirNegativo,
           )
           if (r && r.success === false) throw new Error(r.error || 'No se pudieron descontar los insumos')
-          // deductIngredients elige almacén por insumo; se guarda para devolver al mismo.
-          const almacenDe = new Map((r?.deductions || []).map((d) => [d.ingredientId, d.warehouseId || null]))
-          vias[idx] = 'insumos'
-          insumosPorLinea[idx] = insumos.map((i) => ({
-            ingredientId: i.ingredientId,
-            ingredientType: i.ingredientType === 'product' ? 'product' : 'ingredient',
-            ingredientName: i.ingredientName || i.name || '',
-            unit: i.unit || null,
-            quantity: i.quantity,
-            warehouseId: almacenDe.get(i.ingredientId) ?? datos.warehouseId ?? null,
-          }))
+          // Se anota lo que deductIngredients APLICÓ (cantidad y almacén), no lo
+          // pedido: un plato sin stock propio puesto como insumo de un combo no
+          // sale, y si solo había 3 de 6 salieron 3. Es lo que la anulación
+          // devuelve. Lo que faltó se avisa, no se calla.
+          const { aplicados, faltantes } = resultadoDeDescuento(insumos, r?.deductions || [])
+          vias[idx] = aplicados.length > 0 ? 'insumos' : 'nada'
+          if (aplicados.length > 0) insumosPorLinea[idx] = aplicados
+          if (faltantes.length > 0) {
+            errores.push(`${item.nombre}: ${faltantes.map((f) => f.aplicado > 0
+              ? `solo había ${f.aplicado} de ${f.pedido} de ${f.nombre}`
+              : `no se descontó ${f.nombre}`).join(', ')}`)
+          }
           continue
         }
 
