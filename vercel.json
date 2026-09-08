@@ -38,6 +38,32 @@
       "destination": "/api/domain-meta"
     },
     {
+      "source": "/:codigo([a-hj-km-np-z2-9]{10})",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|Googlebot|bingbot|Applebot|Google-InspectionTool|DuckDuckBot|YandexBot|Slurp).*"
+        },
+        {
+          "type": "host",
+          "value": "registro.cobrifyperu.com"
+        }
+      ],
+      "destination": "/api/registro-meta"
+    },
+    {
+      "source": "/activar/:codigo",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|Googlebot|bingbot|Applebot|Google-InspectionTool|DuckDuckBot|YandexBot|Slurp).*"
+        }
+      ],
+      "destination": "/api/registro-meta"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
