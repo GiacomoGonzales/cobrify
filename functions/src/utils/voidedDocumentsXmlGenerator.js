@@ -151,6 +151,29 @@ export function canVoidDocument(document) {
     }
   }
 
+  // El "aceptado" ENVENENADO: figura aceptado, pero la respuesta que guardó
+  // SUNAT fue 1033 "registrado previamente CON OTROS DATOS". Eso significa que
+  // ese número ya estaba tomado allá por un documento distinto —pasa cuando el
+  // negocio viene de otro facturador y repite una serie que ya usó—, así que
+  // el comprobante nuestro NUNCA llegó a existir en SUNAT.
+  //
+  // Anularlo es imposible por definición, y SUNAT lo rechaza con un 2375 ("la
+  // fecha de emisión no coincide"), que no le dice nada a nadie. El 08-set-2026
+  // un cliente lo intentó ONCE veces seguidas en once minutos, porque nada le
+  // decía que parara.
+  //
+  // Es raro —cinco casos en treinta días sobre ~700 clientes— pero cuando pasa
+  // no se arregla solo: hay que cambiarle la serie. Por eso el mensaje manda a
+  // escribirle a soporte en vez de sugerir un reintento.
+  const respuestaSunat = String(document.sunatResponseDescription || '').toLowerCase()
+  if (respuestaSunat.includes('con otros datos')) {
+    return {
+      canVoid: false,
+      reason: 'SUNAT tiene ese número registrado con otros datos, así que este comprobante ' +
+              'no llegó a existir en SUNAT y no se puede anular. Escríbenos a soporte y lo revisamos contigo.'
+    }
+  }
+
   // No debe haber sido entregado al cliente
   if (document.delivered === true) {
     return {

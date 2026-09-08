@@ -5539,7 +5539,9 @@ export const voidInvoice = onRequest(
         sunatStatus: invoiceData.sunatStatus,
         delivered: invoiceData.delivered || false,
         issueDate: invoiceData.emissionDate || invoiceData.issueDate,
-        documentType: invoiceData.documentType
+        documentType: invoiceData.documentType,
+        // Para detectar el "aceptado" que en realidad fue un 1033 con otros datos.
+        sunatResponseDescription: invoiceData.sunatResponse?.description
       })
 
       if (!validationResult.canVoid) {
@@ -7369,7 +7371,8 @@ export const voidInvoiceQPse = onRequest(
         sunatStatus: invoiceData.sunatStatus,
         delivered: invoiceData.delivered || false,
         issueDate: invoiceData.emissionDate || invoiceData.issueDate,
-        documentType: invoiceData.documentType || 'factura'
+        documentType: invoiceData.documentType || 'factura',
+        sunatResponseDescription: invoiceData.sunatResponse?.description
       })
 
       if (!validationResult.canVoid) {
