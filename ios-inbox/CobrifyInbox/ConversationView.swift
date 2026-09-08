@@ -1224,6 +1224,17 @@ private struct BurbujaMensaje: View {
             } label: {
                 Label("Responder", systemImage: "arrowshape.turn.up.left")
             }
+            // Copiar el texto. Solo aparece si hay texto que copiar: en una foto
+            // sin pie o en una nota de voz, un "Copiar" que no copia nada es
+            // peor que no ofrecerlo. En una foto CON pie sí sale, y copia el
+            // pie, que es lo único copiable que tiene.
+            if !mensaje.texto.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Button {
+                    UIPasteboard.general.string = mensaje.texto
+                } label: {
+                    Label("Copiar", systemImage: "doc.on.doc")
+                }
+            }
             if mensaje.tipo == "image" {
                 Button {
                     if let u = mensaje.media?.url ?? mensaje.media?.thumbUrl {
