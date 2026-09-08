@@ -1,6 +1,7 @@
 import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
 import { nombreParaMostrar, razonSocialSiAporta } from '@/utils/nombreDelNegocio';
 import { lineasDeFechaYHora, mostrarTitulosDeSeccion, lineasDeItem, usarFuentePequena, anchoDeLinea, tamanoDeQr, mostrarSeparadores } from '@/utils/ticketCompacto';
+import { clienteDelComprobante, lineasDelCliente } from '@/utils/datosDelClienteEnComprobante';
 import { getRealPayments } from '@/utils/receivables'
 import { getNotaVentaLegend, wrapLegend } from '@/utils/documentLegends'
 import { documentLabel } from '@/utils/documentType'
@@ -1316,51 +1317,12 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
         printer = printer.text(convertSpanishText(`Cod. Cliente: ${invoice.customer.code}\n`));
       }
 
-      if (invoice.documentType === 'boleta' || invoice.documentType === 'nota_venta') {
-        // Para boletas y notas de venta - DNI, Nombre, Dirección y Teléfono (si existe)
-        const customerAddress = invoice.customer?.address || invoice.customerAddress || '';
-        const customerPhone = invoice.customer?.phone || invoice.customerPhone || '';
-
-        printer = printer
-          .text(convertSpanishText(`DNI: ${invoice.customer?.documentNumber || invoice.customerDocument || invoice.customerDni || '-'}\n`))
-          .text(convertSpanishText(`Nombre: ${invoice.customer?.name || invoice.customerName || 'Cliente'}\n`));
-
-        // Dirección (si existe)
-        if (customerAddress) {
-          printer = printer.text(convertSpanishText(`Direccion: ${customerAddress}\n`));
-        }
-
-        // Teléfono del cliente (si existe)
-        if (customerPhone) {
-          printer = printer.text(convertSpanishText(`Telefono: ${customerPhone}\n`));
-        }
-      }
-
-      if (isInvoice) {
-        // Para facturas - RUC, Razón Social, Nombre Comercial (opcional), Dirección y Teléfono (opcional)
-        const customerName = invoice.customer?.name || invoice.customerName || '';
-        const customerBusinessName = invoice.customer?.businessName || invoice.customerBusinessName || '-';
-        const customerAddress = invoice.customer?.address || invoice.customerAddress || '';
-        const customerPhone = invoice.customer?.phone || invoice.customerPhone || '';
-
-        printer = printer
-          .text(convertSpanishText(`RUC: ${invoice.customer?.documentNumber || invoice.customerDocument || invoice.customerRuc || '-'}\n`))
-          .text(convertSpanishText(`Razon Social: ${customerBusinessName}\n`));
-
-        // Nombre Comercial (si existe y es diferente de VARIOS)
-        if (customerName && customerName !== 'VARIOS') {
-          printer = printer.text(convertSpanishText(`Nombre Comercial: ${customerName}\n`));
-        }
-
-        // Dirección (si existe)
-        if (customerAddress) {
-          printer = printer.text(convertSpanishText(`Direccion: ${customerAddress}\n`));
-        }
-
-        // Teléfono del cliente (si existe)
-        if (customerPhone) {
-          printer = printer.text(convertSpanishText(`Telefono: ${customerPhone}\n`));
-        }
+      // Una sola regla para los seis formatos (utils/datosDelClienteEnComprobante):
+      // decide por el documento del cliente, no por el tipo de comprobante. Con
+      // RUC van RUC y razón social, y el nombre comercial solo si existe y es
+      // distinto; con DNI/CE/pasaporte, su etiqueta y el nombre.
+      for (const l of lineasDelCliente(clienteDelComprobante(invoice))) {
+        printer = printer.text(convertSpanishText(`${l.etiqueta}: ${l.valor}\n`));
       }
 
       // Vendedor (si existe)
@@ -2836,24 +2798,10 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
       builder.text(`Cod. Cliente: ${invoice.customer.code}`).newLine();
     }
 
-    if (isInvoice) {
-      builder.text(`RUC: ${invoice.customer?.documentNumber || '-'}`).newLine()
-        .text(`Razon Social: ${invoice.customer?.businessName || '-'}`).newLine();
-      if (invoice.customer?.address) {
-        builder.text(`Direccion: ${invoice.customer.address}`).newLine();
-      }
-      if (invoice.customer?.phone) {
-        builder.text(`Telefono: ${invoice.customer.phone}`).newLine();
-      }
-    } else {
-      builder.text(`DNI: ${invoice.customer?.documentNumber || '-'}`).newLine()
-        .text(`Nombre: ${invoice.customer?.name || 'Cliente'}`).newLine();
-      if (invoice.customer?.address || invoice.customerAddress) {
-        builder.text(`Direccion: ${invoice.customer?.address || invoice.customerAddress}`).newLine();
-      }
-      if (invoice.customer?.phone || invoice.customerPhone) {
-        builder.text(`Telefono: ${invoice.customer?.phone || invoice.customerPhone}`).newLine();
-      }
+    // Una sola regla (utils/datosDelClienteEnComprobante); las tildes se
+    // transliteran porque este builder no lo hace solo.
+    for (const l of lineasDelCliente(clienteDelComprobante(invoice))) {
+      builder.text(convertSpanishText(`${l.etiqueta}: ${l.valor}`)).newLine();
     }
 
     // Vendedor (si existe)

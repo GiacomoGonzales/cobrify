@@ -6987,9 +6987,9 @@ ${textoDeErrores(revision.errores)}`, 9000)
                 documentType: documentType === 'factura' ? ID_TYPES.RUC : inferDocumentType(customerData.documentType, customerData.documentNumber),
                 documentNumber: customerData.documentNumber || '00000000',
                 tradeNameId: customerData.tradeNameId || null,
-                name: documentType === 'factura'
-                  ? (customerData.businessName || customerData.name || 'Cliente')
-                  : (customerData.name || customerData.businessName || 'Cliente'),
+                // Siempre el nombre comercial en `name` y la razón social en
+                // `businessName`; qué se imprime lo decide el módulo del cliente.
+                name: customerData.name || customerData.businessName || 'Cliente',
                 businessName: customerData.businessName || '',
                 email: customerData.email || '',
                 phone: customerData.phone || '',
@@ -7299,9 +7299,9 @@ ${textoDeErrores(revision.errores)}`, 9000)
               documentType: documentType === 'factura' ? ID_TYPES.RUC : inferDocumentType(customerData.documentType, customerData.documentNumber),
               documentNumber: customerData.documentNumber || '00000000',
                 tradeNameId: customerData.tradeNameId || null,
-              name: documentType === 'factura'
-                ? (customerData.businessName || customerData.name || 'Cliente')
-                : (customerData.name || customerData.businessName || 'Cliente'),
+              // Siempre el nombre comercial en `name` y la razón social en
+              // `businessName`; qué se imprime lo decide el módulo del cliente.
+              name: customerData.name || customerData.businessName || 'Cliente',
               businessName: customerData.businessName || '',
               code: selectedCustomer?.code || '',
               email: customerData.email || '',

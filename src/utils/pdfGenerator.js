@@ -1,3 +1,4 @@
+import { clienteDelComprobante, lineasDelCliente, esEmpresa, nombrePrincipal, nombreComercialAparte } from '@/utils/datosDelClienteEnComprobante'
 import jsPDF from 'jspdf'
 import { contrastTextColor } from '@/utils/pdfColors'
 import { getNotaVentaLegend } from '@/utils/documentLegends'
@@ -883,7 +884,12 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   doc.text(nameLabel, colLeftX, leftY)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
-  const customerName = invoice.customer?.name || 'CLIENTE GENERAL'
+  // Razón social para empresas; para personas el nombre. El nombre comercial
+  // (una sede elegida al vender) NO reemplaza a la razón social: va aparte, abajo.
+  const datosCliente = clienteDelComprobante(invoice)
+  const customerName = esEmpresa(datosCliente)
+    ? nombrePrincipal(datosCliente)
+    : (datosCliente.name || datosCliente.businessName || 'CLIENTE GENERAL')
   // Ancho máximo: desde donde termina la etiqueta hasta donde empieza la columna derecha
   const customerNameMaxWidth = colRightX - leftValueX - 15
   const customerNameLines = doc.splitTextToSize(customerName, customerNameMaxWidth)
@@ -900,6 +906,20 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
       doc.text(linea, leftValueX, leftY)
       leftY += (i === lineasNombre.length - 1) ? dataLineHeight - 2 : 10
     })
+  }
+
+  // Nombre comercial aparte, solo si existe y es distinto de la razón social.
+  // La etiqueta es más ancha que la columna: el valor va justo a su derecha,
+  // igual que se hace abajo con "CARNET DE EXTRANJERIA:".
+  const nombreComercial = nombreComercialAparte(datosCliente)
+  if (nombreComercial) {
+    doc.setFont('helvetica', 'bold')
+    const etiquetaNc = 'NOMBRE COMERCIAL:'
+    doc.text(etiquetaNc, colLeftX, leftY)
+    const anchoNc = doc.getTextWidth(etiquetaNc)
+    doc.setFont('helvetica', 'normal')
+    doc.text(nombreComercial, anchoNc + 5 > maxLeftLabel + 5 ? colLeftX + anchoNc + 3 : leftValueX, leftY)
+    leftY += dataLineHeight
   }
 
   // Tipo y numero de documento.

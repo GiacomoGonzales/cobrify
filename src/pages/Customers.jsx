@@ -998,7 +998,9 @@ export default function Customers() {
 
         if (result.success) {
           setValue('businessName', result.data.razonSocial || '')
-          setValue('name', result.data.nombreComercial || result.data.razonSocial || '')
+          // Solo el nombre comercial que SUNAT tenga; copiar la razón social acá
+          // hacía que saliera dos veces en el comprobante.
+          setValue('name', result.data.nombreComercial || '')
           setValue('address', result.data.direccion || '')
           setValue('documentType', ID_TYPES.RUC)
           toast.success(`Datos encontrados: ${result.data.razonSocial}`)
@@ -1268,7 +1270,8 @@ export default function Customers() {
           return ultimaAtencion(b).localeCompare(ultimaAtencion(a))
         case 'name':
         default:
-          return (a.name || '').localeCompare(b.name || '')
+          // Una empresa sin nombre comercial se ordena por su razón social.
+          return (a.name || a.businessName || '').localeCompare(b.name || b.businessName || '')
       }
     }), [customers, deferredSearchTerm, customerSearchIndex, subscriptionFilter, birthMonthFilter, sortBy])
 
@@ -1620,7 +1623,7 @@ export default function Customers() {
                   {/* Fila 1: Nombre + acciones */}
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{customer.name}</p>
+                      <p className="text-sm font-medium truncate">{customer.name || customer.businessName}</p>
                       {customer.businessName && customer.businessName !== customer.name && (
                         <p className="text-xs text-gray-500 truncate">{customer.businessName}</p>
                       )}
@@ -1844,7 +1847,7 @@ export default function Customers() {
                   <TableRow key={customer.id}>
                     {visibleColumns.name && (
                       <TableCell className="py-1.5">
-                        <p className="text-xs font-medium truncate max-w-[180px]">{customer.name}</p>
+                        <p className="text-xs font-medium truncate max-w-[180px]">{customer.name || customer.businessName}</p>
                         {customer.businessName && customer.businessName !== customer.name && (
                           <p className="text-[10px] text-gray-500 truncate max-w-[180px]">{customer.businessName}</p>
                         )}
@@ -2140,16 +2143,20 @@ export default function Customers() {
           {documentType === ID_TYPES.RUC && (
             <Input
               label="Razón Social"
+              required
               placeholder="MI EMPRESA SAC"
               error={errors.businessName?.message}
               {...register('businessName')}
             />
           )}
 
+          {/* Empresa (RUC): el nombre comercial es opcional y distinto de la razón
+              social; la mayoría no lo usa y en el comprobante no sale nada de más.
+              Persona: el nombre es lo obligatorio. */}
           <Input
-            label={businessMode === 'veterinary' ? 'Nombre del Dueño' : 'Nombre'}
-            required
-            placeholder={documentType === ID_TYPES.RUC ? 'Nombre Comercial' : businessMode === 'veterinary' ? 'Nombre del propietario de la mascota' : 'Nombre Completo'}
+            label={documentType === ID_TYPES.RUC ? 'Nombre comercial (opcional)' : businessMode === 'veterinary' ? 'Nombre del Dueño' : 'Nombre'}
+            required={documentType !== ID_TYPES.RUC}
+            placeholder={documentType === ID_TYPES.RUC ? 'Solo si es distinto de la razón social' : businessMode === 'veterinary' ? 'Nombre del propietario de la mascota' : 'Nombre Completo'}
             error={errors.name?.message}
             {...register('name')}
           />
@@ -2194,12 +2201,15 @@ export default function Customers() {
             documentNumber={watch('documentNumber')}
           />
 
-          <Input
-            label="Cumpleaños"
-            type="date"
-            error={errors.birthDate?.message}
-            {...register('birthDate')}
-          />
+          {/* Una empresa no cumple años. */}
+          {documentType !== ID_TYPES.RUC && (
+            <Input
+              label="Cumpleaños"
+              type="date"
+              error={errors.birthDate?.message}
+              {...register('birthDate')}
+            />
+          )}
 
           {/* FICHA DE ATENCIÓN — para consultorios, clínicas, salones y todo el
               que atienda a la misma persona cada tanto.

@@ -36,7 +36,9 @@ export const customerSchema = z.object({
   }).optional(),
   documentNumber: z.string().optional().or(z.literal('')),
   businessName: z.string().optional().or(z.literal('')),
-  name: z.string().min(1, 'Nombre es requerido'),
+  // Obligatorio para personas; para empresas (RUC) es el nombre comercial,
+  // opcional. La regla está en el superRefine de abajo.
+  name: z.string().optional().or(z.literal('')),
   code: z.string().optional().or(z.literal('')),
   email: z.string().email('Correo electrónico inválido').optional().or(z.literal('')),
   phone: z.string().optional().or(z.literal('')),
@@ -102,6 +104,15 @@ export const customerSchema = z.object({
   // Cumpleaños del cliente
   birthDate: z.string().optional().or(z.literal('')),
 }).superRefine((data, ctx) => {
+  // Empresa (RUC): la razón social es lo obligatorio y el nombre comercial es
+  // opcional (la mayoría no lo usa). Persona: el nombre.
+  if (data.documentType === ID_TYPES.RUC) {
+    if (!String(data.businessName || '').trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Razón social es requerida', path: ['businessName'] })
+    }
+  } else if (!String(data.name || '').trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Nombre es requerido', path: ['name'] })
+  }
   // Solo validar si hay número de documento
   if (data.documentNumber && data.documentNumber.trim() !== '') {
     // Validar número de documento según el tipo

@@ -1,3 +1,4 @@
+import { clienteDelComprobante, lineasDelCliente, esEmpresa, nombrePrincipal, nombreComercialAparte } from '@/utils/datosDelClienteEnComprobante'
 import jsPDF from 'jspdf'
 import { getComprobanteBreakdown } from './peruUtils'
 import { formatQuantity } from '@/lib/utils'
@@ -640,7 +641,12 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
   doc.setFont('helvetica', 'bold')
   doc.text(docType === 'RUC' ? 'RAZÓN SOCIAL:' : 'NOMBRE:', colLeftX, leftY)
   doc.setFont('helvetica', 'normal')
-  const customerName = quotation.customer?.name || 'CLIENTE GENERAL'
+  // Igual que el comprobante: razón social para empresas, nombre para personas,
+  // y el nombre comercial aparte solo si existe y es distinto.
+  const datosCliente = clienteDelComprobante(quotation)
+  const customerName = esEmpresa(datosCliente)
+    ? nombrePrincipal(datosCliente)
+    : (datosCliente.name || datosCliente.businessName || 'CLIENTE GENERAL')
   const customerNameMaxWidth = colWidth - maxLeftLabel - 10
   const customerNameLines = doc.splitTextToSize(customerName, customerNameMaxWidth)
 
@@ -658,6 +664,17 @@ export const generateQuotationPDF = async (quotation, companySettings, download 
       doc.text(linea, leftValueX, leftY)
       leftY += (i === lineasNombre.length - 1) ? dataLineHeight - 2 : 10
     })
+  }
+
+  const nombreComercial = nombreComercialAparte(datosCliente)
+  if (nombreComercial) {
+    doc.setFont('helvetica', 'bold')
+    const etiquetaNc = 'NOMBRE COMERCIAL:'
+    doc.text(etiquetaNc, colLeftX, leftY)
+    const anchoNc = doc.getTextWidth(etiquetaNc)
+    doc.setFont('helvetica', 'normal')
+    doc.text(nombreComercial, anchoNc + 5 > maxLeftLabel + 5 ? colLeftX + anchoNc + 3 : leftValueX, leftY)
+    leftY += dataLineHeight
   }
 
   doc.setFont('helvetica', 'bold')

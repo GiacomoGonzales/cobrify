@@ -1,3 +1,4 @@
+import { clienteDelComprobante, lineasDelCliente } from '@/utils/datosDelClienteEnComprobante';
 /**
  * Servicio alternativo de impresión Bluetooth usando @capacitor-community/bluetooth-le
  * Este servicio se usa como fallback en iOS cuando el plugin capacitor-thermal-printer falla
@@ -884,29 +885,17 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
     const custBusinessName = customer?.businessName || customerBusinessName || '';
     const custPhone = customer?.phone || receiptData.customerPhone || '';
 
-    if (isInvoice) {
-      // Factura: RUC, Razón Social, Nombre Comercial (opcional), Dirección, Teléfono
-      commands.push(ESCPOSCommands.text('RUC: ' + custDoc + '\n'));
-      commands.push(ESCPOSCommands.text(convertSpanishText('Razon Social: ' + (custBusinessName || '-')) + '\n'));
-      if (custName && custName !== 'VARIOS') {
-        commands.push(ESCPOSCommands.text(convertSpanishText('Nombre Comercial: ' + custName) + '\n'));
-      }
-      if (custAddress) {
-        commands.push(ESCPOSCommands.text(convertSpanishText('Direccion: ' + custAddress) + '\n'));
-      }
-      if (custPhone) {
-        commands.push(ESCPOSCommands.text(convertSpanishText('Telefono: ' + custPhone) + '\n'));
-      }
-    } else {
-      // Boleta/Nota de venta: DNI, Nombre, Dirección, Teléfono
-      commands.push(ESCPOSCommands.text('DNI: ' + custDoc + '\n'));
-      commands.push(ESCPOSCommands.text(convertSpanishText('Nombre: ' + custName) + '\n'));
-      if (custAddress) {
-        commands.push(ESCPOSCommands.text(convertSpanishText('Direccion: ' + custAddress) + '\n'));
-      }
-      if (custPhone) {
-        commands.push(ESCPOSCommands.text(convertSpanishText('Telefono: ' + custPhone) + '\n'));
-      }
+    // Una sola regla para los seis formatos (utils/datosDelClienteEnComprobante).
+    const lineasCliente = lineasDelCliente({
+      documentType: customer?.documentType,
+      documentNumber: custDoc === '-' ? '' : custDoc,
+      name: custName === 'Cliente' ? '' : custName,
+      businessName: custBusinessName,
+      address: custAddress,
+      phone: custPhone,
+    });
+    for (const l of lineasCliente) {
+      commands.push(ESCPOSCommands.text(convertSpanishText(l.etiqueta + ': ' + l.valor) + '\n'));
     }
 
     // Vendedor (si existe)

@@ -24,6 +24,10 @@ export default {
             'Guarda. Desde ese momento aparece en el buscador de clientes del POS.',
           ],
         },
+        {
+          type: 'texto',
+          text: 'La ficha cambia según el documento. **Persona** (DNI, carnet de extranjería, pasaporte): Nombre y, si quieres, Cumpleaños. **Empresa** (RUC): **Razón Social**, que es la que va a SUNAT, y un **Nombre comercial opcional** — solo si la empresa usa uno distinto de su razón social; la mayoría no. En el comprobante salen el RUC y la razón social, y el nombre comercial debajo solo cuando existe.',
+        },
         { type: 'ui', kind: 'boton', label: 'Nuevo Cliente' },
         {
           type: 'consejo',
