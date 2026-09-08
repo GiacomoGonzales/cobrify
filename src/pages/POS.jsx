@@ -11,7 +11,6 @@ import {
   Trash2,
   CreditCard,
   DollarSign,
-  Printer,
   User,
   Loader2,
   CheckCircle,
@@ -19,7 +18,6 @@ import {
   ShoppingCart,
   Folder,
   Tag,
-  Share2,
   Edit2,
   X,
   Check,
@@ -27,8 +25,6 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
-  Settings2,
-  Eye,
   ScanBarcode,
   Store,
   Warehouse,
@@ -49,9 +45,8 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useBranding } from '@/contexts/BrandingContext'
 import { useToast } from '@/contexts/ToastContext'
-import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
-import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import PostSaleModal from '@/components/pos/PostSaleModal'
@@ -59,7 +54,7 @@ import DespachoCombustibleModal from '@/components/pos/DespachoCombustibleModal'
 import { estacionActiva, combustiblesDe, factorDeAjuste } from '@/utils/serviceStation'
 import { WALLET_EN_APROBACION, programaVigente, vigenciaLegible } from '@/services/loyaltyService'
 import { promoParaProducto, CANAL_POS } from '@/services/scheduledDiscountService'
-import { formatCurrency, formatUnitPrice, formatLineAmount, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt, cleanText } from '@/lib/utils'
+import { formatCurrency, formatUnitPrice, formatLineAmount, applyMarginToCost, buildSearchHaystack, matchesPrebuilt, cleanText } from '@/lib/utils'
 import { buildProductHaystack } from '@/utils/productSearch'
 import {
   isMultiCurrencyEnabled,
@@ -80,7 +75,7 @@ import { filtrarVendibles, esSoloUsoInterno } from '@/utils/productSale'
 import { lineaDeEnvio, yaHayEnvioEnElCarrito } from '@/utils/deliveryFee'
 import { idDeFidelizacion } from '@/utils/businessGroup'
 import { getAvailableDocumentTypes, resolveDocumentType } from '@/utils/documentTypes'
-import { calculateInvoiceAmounts, calculateMixedInvoiceAmounts, calculateRecargoConsumo, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT, calcularDetraccion } from '@/utils/peruUtils'
+import { calculateMixedInvoiceAmounts, calculateRecargoConsumo, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT, calcularDetraccion } from '@/utils/peruUtils'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
 // El import de Capacitor tiene que ser EXPLÍCITO: este archivo lo usa en 6
 // lugares (escáner, comanda automática, impresión térmica) pero funcionaba
@@ -89,11 +84,9 @@ import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo }
 // bundler tiene permiso de eliminarla si nadie importa Capacitor de verdad
 // (detectado por ESLint no-undef, auditoría 17-ago-2026).
 import { Capacitor } from '@capacitor/core'
-import { Share } from '@capacitor/share'
-import { Filesystem, Directory } from '@capacitor/filesystem'
 import { scanBarcode, scannerDisponible } from '@/utils/scanBarcode'
 import { analizarRafaga, MS_ABANDONO } from '@/utils/scannerDetect'
-import { getDoc, doc, Timestamp, collection, query, where, getDocs, limit as fsLimit, updateDoc } from 'firebase/firestore'
+import { doc, Timestamp, collection, query, where, getDocs, limit as fsLimit, updateDoc } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '@/lib/firebase'
 import { getRooms as getHotelRooms, getActiveReservations, addCharge as addFolioCharge, markChargesAsInvoiced } from '@/services/hotelService'
@@ -101,13 +94,10 @@ import { getCachedProducts, setCachedProducts } from '@/utils/productCache'
 import {
   subscribeToProducts,
   getCustomers,
-  createInvoice,
   createInvoiceWithNumber,
   createProduct,
   getCompanySettings,
-  updateProduct,
   updateProductStockTransaction,
-  getNextDocumentNumber,
   getProductCategories,
   getProductBrands,
   sendInvoiceToSunat,
@@ -121,10 +111,10 @@ import VariantSelectorModal from '@/components/product/VariantSelectorModal'
 import { consultarDNI, consultarRUC, consultarEstablecimientos } from '@/services/documentLookupService'
 import { deductIngredients } from '@/services/ingredientService'
 import { consumoDeModificadoresDeVarias } from '@/utils/modificadorInsumo'
-import { getRecipeByProductId, checkRecipeStock, shouldDeductIngredients, getRecipes } from '@/services/recipeService'
+import { checkRecipeStock, shouldDeductIngredients, getRecipes } from '@/services/recipeService'
 import { computeRecipeStockAlerts, hasAnyRecipe } from '@/utils/recipeAvailability'
-import { getWarehouses, getDefaultWarehouse, updateWarehouseStock, getStockInWarehouse, getTotalAvailableStock, getOrphanStock, createStockMovement, sinControlDeStock } from '@/services/warehouseService'
-import { getActiveBranches, getDefaultBranch } from '@/services/branchService'
+import { getWarehouses, getStockInWarehouse, getTotalAvailableStock, sinControlDeStock } from '@/services/warehouseService'
+import { getActiveBranches } from '@/services/branchService'
 import { shortenUrl } from '@/services/urlShortenerService'
 import { releaseTable, updateTableAmount } from '@/services/tableService'
 import { clampEmissionDate, getEmissionDateLimits, validateEmissionDate } from '@/utils/emissionDate'
@@ -151,20 +141,6 @@ import { revisarAntesDeEmitir, textoDeErrores } from '@/utils/sunatPreflight'
 import { lineasPorConsumo, TEXTO_POR_CONSUMO } from '@/utils/comprobantePorConsumo'
 import { sePuedeGuardar, productoDesdePersonalizado } from '@/utils/productoRapido'
 import AutoGrowTextarea from '@/components/ui/AutoGrowTextarea'
-
-const PAYMENT_METHODS = {
-  CASH: 'Efectivo',
-  CARD: 'Tarjeta',
-  TRANSFER: 'Transferencia',
-  YAPE: 'Yape',
-  PLIN: 'Plin',
-  RAPPI: 'Rappi',
-  PEDIDOSYA: 'PedidosYa',
-  DIDIFOOD: 'DiDiFood',
-  ROOM: 'Cargo a Habitación',
-  CREDIT_NOTE: 'Saldo a favor',
-  GIFT_CERT: 'Certificado de regalo',
-}
 
 // Mapeo de IDs de restricción (lowercase) a keys del POS (uppercase)
 const PAYMENT_METHOD_ID_TO_KEY = {
@@ -289,10 +265,6 @@ const getSubcategories = (categories, parentId) => {
   return categories.filter(cat => cat.parentId === parentId).sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
 }
 
-const getCategoryById = (categories, id) => {
-  return categories.find(cat => cat.id === id)
-}
-
 // Obtener todas las subcategorías de una categoría (incluyendo subcategorías de subcategorías)
 const getAllSubcategoryIds = (categories, parentId) => {
   const directSubcats = getSubcategories(categories, parentId)
@@ -348,14 +320,14 @@ const inferDocumentType = (docType, docNumber) => {
 
 export default function POS() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasFeature } = useAppContext()
-  const { filterWarehousesByAccess, allowedWarehouses, filterBranchesByAccess, allowedBranches, activeBranchId, setActiveBranch, allowedDocumentTypes, allowedPaymentMethods, assignedSellerId, independentCashRegister, hideStockInPOS, hideDiscountInPOS, userPermissions, subscription, isAdmin } = useAuth()
+  const { filterWarehousesByAccess, filterBranchesByAccess, allowedBranches, activeBranchId, setActiveBranch, allowedDocumentTypes, allowedPaymentMethods, assignedSellerId, independentCashRegister, hideStockInPOS, hideDiscountInPOS, userPermissions, subscription, isAdmin } = useAuth()
   const { branding } = useBranding()
   const toast = useToast()
   const location = useLocation()
   const navigate = useNavigate()
   const appNavigate = useAppNavigate()
   const ticketRef = useRef(null)
-  const { isOnline, isOffline } = useOnlineStatus()
+  const { isOffline } = useOnlineStatus()
 
   // Si solo hay un método de pago permitido, pre-seleccionarlo
   const getDefaultPaymentMethod = () => {
@@ -586,7 +558,7 @@ export default function POS() {
     }
   })
   useEffect(() => {
-    try { localStorage.setItem('pos:productViewMode', productViewMode) } catch (_) {}
+    try { localStorage.setItem('pos:productViewMode', productViewMode) } catch (_) { /* sin localStorage (modo privado, cuota llena): la vista funciona igual, solo no se recuerda */ }
   }, [productViewMode])
   // Ref del botón "Procesar Venta". Cuando el usuario selecciona un método de pago,
   // movemos el focus aquí para que pueda apretar Enter y procesar sin usar el mouse.
@@ -698,7 +670,7 @@ export default function POS() {
 
   // Estado para datos de mesa
   const [tableData, setTableData] = useState(null)
-  const [lastInvoiceNumber, setLastInvoiceNumber] = useState('')
+  const [, setLastInvoiceNumber] = useState('')
   const [lastInvoiceData, setLastInvoiceData] = useState(null)
   const [saleCompleted, setSaleCompleted] = useState(false) // Bloquea el carrito después de una venta exitosa
 
@@ -1119,9 +1091,6 @@ export default function POS() {
   // Venta por monto (granel): ingresa S/ y calcula el peso
   const [amountModeItemId, setAmountModeItemId] = useState(null)
   const [amountModeValue, setAmountModeValue] = useState('')
-
-  // Panel de cliente/documento colapsable
-  const [showCustomerPanel, setShowCustomerPanel] = useState(false)
 
   // Datos del cliente para captura inline
   // Tarjeta de fidelidad del cliente en pantalla (Configuración > Ventas).
@@ -6074,7 +6043,6 @@ export default function POS() {
     const discountRatio = baseAmounts.total > 0 ? totalAfterDiscount / baseAmounts.total : 1
 
     // Recalcular montos con descuento aplicado proporcionalmente
-    const gravadoAfterDiscount = baseAmounts.gravado.total * discountRatio
     const exoneradoAfterDiscount = baseAmounts.exonerado.total * discountRatio
     const inafectoAfterDiscount = baseAmounts.inafecto.total * discountRatio
 
@@ -6391,7 +6359,7 @@ export default function POS() {
     setTimeout(() => {
       if (method === 'CASH' && newPayments.length === 1 && cashAmountInputRef.current) {
         cashAmountInputRef.current.focus()
-        try { cashAmountInputRef.current.select() } catch (_) {}
+        try { cashAmountInputRef.current.select() } catch (_) { /* select() no existe en todos los inputs; el foco ya quedó puesto y con eso alcanza */ }
       } else {
         checkoutButtonRef.current?.focus()
       }
@@ -7701,7 +7669,6 @@ ${textoDeErrores(revision.errores)}`, 9000)
         }
       }
 
-      let invoiceId
       // isEditMode ya está definido arriba
 
       if (isEditMode) {
@@ -7759,7 +7726,6 @@ ${textoDeErrores(revision.errores)}`, 9000)
         }
 
         await updateDoc(invoiceRef, updateData)
-        invoiceId = editingInvoiceId
 
         // Aplicar los deltas DESPUÉS de que el documento se guardó: si el update
         // falla, el stock no se toca. Cada producto va en su propia transacción
@@ -8117,8 +8083,6 @@ ${textoDeErrores(revision.errores)}`, 9000)
         const bgSelectedSeller = selectedSeller ? { ...selectedSeller } : null
         const bgNumberResult = { ...numberResult }
         const bgUserUid = user.uid
-        const bgUserEmail = user.email
-        const bgUserDisplayName = user.displayName
         const bgInvoiceId = invoiceId
         const bgOrderType = orderType
         const bgSendToKitchen = sendToKitchen
@@ -9282,97 +9246,6 @@ Gracias por tu preferencia.`
       console.error('Error al enviar por WhatsApp:', error)
       toast.error('Error al generar el comprobante. Intenta de nuevo.')
       setSendingWhatsApp(false)
-    }
-  }
-
-  // Función legacy para compartir en nativo (mantener por compatibilidad)
-  const handleShareNative = async () => {
-    if (!lastInvoiceData) {
-      toast.error('No hay datos de factura disponibles')
-      return
-    }
-
-    try {
-      const isNative = Capacitor.isNativePlatform()
-
-      if (!isNative) {
-        // Si no es nativo, usar la función de WhatsApp con link
-        await handleSendWhatsApp()
-        return
-      }
-
-      // En móvil nativo - Generar PDF y compartir directamente
-      const phone = lastInvoiceData.customer?.phone || customerData.phone
-      const customerName = lastInvoiceData.customer?.name || 'Cliente'
-      const docTypeName = lastInvoiceData.documentType === 'factura' ? 'Factura' :
-                         lastInvoiceData.documentType === 'boleta' ? 'Boleta' : 'Nota de Venta'
-
-      toast.info('Generando PDF...')
-
-      // Generar el PDF como blob
-      const pdfBlob = await getInvoicePDFBlob(lastInvoiceData, companySettings, branding, branches)
-
-      // Convertir Blob a base64
-      const reader = new FileReader()
-      reader.readAsDataURL(pdfBlob)
-
-      await new Promise((resolve, reject) => {
-        reader.onloadend = async () => {
-          try {
-            const base64Data = reader.result.split(',')[1]
-
-            // Crear nombre de archivo
-            const docTypeFileName = lastInvoiceData.documentType === 'factura' ? 'Factura' :
-                               lastInvoiceData.documentType === 'boleta' ? 'Boleta' : 'NotaVenta'
-            const fileName = `${docTypeFileName}_${lastInvoiceData.number.replace(/\//g, '-')}.pdf`
-
-            // Guardar archivo en Cache (temporal) para poder compartirlo
-            const savedFile = await Filesystem.writeFile({
-              path: fileName,
-              data: base64Data,
-              directory: Directory.Cache,
-            })
-
-            console.log('PDF guardado en:', savedFile.uri)
-
-            // Crear mensaje
-            const total = formatCurrency(lastInvoiceData.total, lastInvoiceData.currency)
-            const message = `Hola ${customerName},
-
-Gracias por tu compra.
-
-${docTypeName}: ${lastInvoiceData.number}
-Total: ${total}
-
-${companySettings?.businessName || 'Tu Empresa'}`
-
-            // Usar Share para compartir el PDF
-            // Esto abre el selector de iOS donde el usuario elige WhatsApp
-            // El PDF se adjunta automáticamente
-            await Share.share({
-              title: `${docTypeName} ${lastInvoiceData.number}`,
-              text: message,
-              url: savedFile.uri,
-              dialogTitle: 'Enviar comprobante',
-            })
-
-            toast.success('Comprobante compartido', 3000)
-            resolve()
-          } catch (error) {
-            console.error('Error al compartir:', error)
-            // Si cancela el share, no mostrar error
-            if (!error.message?.includes('cancel') && !error.message?.includes('abort')) {
-              toast.error('Error al compartir el PDF')
-            }
-            resolve()
-          }
-        }
-        reader.onerror = reject
-      })
-
-    } catch (error) {
-      console.error('Error al compartir por WhatsApp:', error)
-      toast.error(`Error: ${error.message || 'No se pudo compartir el PDF'}`)
     }
   }
 

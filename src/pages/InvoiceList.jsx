@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react'
 import { createPortal } from 'react-dom'
-import { useNavigate } from 'react-router-dom'
 import { useAppNavigate, useAppPath } from '@/hooks/useAppNavigate'
 import { convieneOtraPestana } from '@/utils/appPath'
 import { esDeSucursal } from '@/utils/branchScope'
@@ -35,7 +34,6 @@ import {
   FileCheck,
   Archive,
   ArchiveRestore,
-  Store,
   User,
   ShoppingCart,
   Copy,
@@ -50,7 +48,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useDataPermissions } from '@/hooks/useDataPermissions'
 import { useBranding } from '@/contexts/BrandingContext'
 import { useToast } from '@/contexts/ToastContext'
-import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
@@ -67,9 +65,8 @@ import { getInvoicesPage, getInvoicesEnAnulacion, deleteInvoice, updateInvoice, 
 import { getCashRegisterSession, addCashMovement } from '@/services/firestoreService'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, generateExitNotePDF, preloadLogo } from '@/utils/pdfGenerator'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { doc, updateDoc } from 'firebase/firestore'
-import { storage, db } from '@/lib/firebase'
-import { prepareInvoiceXML, downloadCompressedXML, isSunatConfigured, voidDocument, canVoidDocument, checkVoidStatus } from '@/services/sunatService'
+import { storage } from '@/lib/firebase'
+import { prepareInvoiceXML, downloadCompressedXML, voidDocument, canVoidDocument, checkVoidStatus } from '@/services/sunatService'
 import { referenciaDeBaja } from '@/utils/bajaSunat'
 import { plazoDeAnulacion } from '@/utils/plazoDeAnulacion'
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
@@ -78,7 +75,6 @@ import { aplicarTamanoDeHoja } from '@/utils/printPageSize'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { Capacitor } from '@capacitor/core'
 import { downloadFromUrl, downloadBlob } from '@/utils/nativeDownload'
-import { Share } from '@capacitor/share'
 import { printInvoiceTicket, connectPrinter, getPrinterConfig } from '@/services/thermalPrinterService'
 import { shortenUrl } from '@/services/urlShortenerService'
 import { getActiveBranches } from '@/services/branchService'
@@ -112,7 +108,6 @@ export default function InvoiceList() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode, filterBranchesByAccess, hasMainBranchAccess, isBusinessOwner, isAdmin, allowedBranches, allowedWarehouses, assignedSellerId , branchScope } = useAppContext()
   const permisos = useDataPermissions()
   const { branding } = useBranding()
-  const navigate = useNavigate()
   const appNavigate = useAppNavigate()
   const appPath = useAppPath()
   const toast = useToast()
@@ -938,6 +933,9 @@ Gracias por tu preferencia.`
       let startAfterDoc = null
       let firstBatch = true
 
+      // Paginación abierta: sale con break/return cuando la página llega corta
+      // o llegó una carga más nueva.
+      // eslint-disable-next-line no-constant-condition
       while (true) {
         const result = await getInvoicesPage(businessId, {
           pageSize: INVOICES_FETCH_BATCH,
@@ -1062,8 +1060,8 @@ Gracias por tu preferencia.`
         // Devolver el stock de los productos
         if (voidingInvoice.items && voidingInvoice.items.length > 0) {
           // Importar funciones de manejo de stock
-          const { updateWarehouseStock, createStockMovement, getStockMovementsByReference } = await import('@/services/warehouseService')
-          const { getProducts, updateProduct } = await import('@/services/firestoreService')
+          const { createStockMovement, getStockMovementsByReference } = await import('@/services/warehouseService')
+          const { getProducts } = await import('@/services/firestoreService')
 
           // Obtener productos actuales
           const productsResult = await getProducts(businessId)
@@ -1329,7 +1327,8 @@ Gracias por tu preferencia.`
         setInvoices(prev => prev.map(inv => {
           if (inv.id === voidingInvoice.id) return { ...inv, ...voidData }
           if (revertedNotaIds.includes(inv.id)) {
-            const { convertedTo, ...rest } = inv
+            const rest = { ...inv }
+            delete rest.convertedTo
             return rest
           }
           return inv
@@ -2711,18 +2710,21 @@ Gracias por tu preferencia.`
     switch (dateFilter) {
       case 'today':
         return { start: startOfDay, end: endOfDay }
-      case '3days':
+      case '3days': {
         const threeDaysAgo = new Date(startOfDay)
         threeDaysAgo.setDate(threeDaysAgo.getDate() - 2)
         return { start: threeDaysAgo, end: endOfDay }
-      case '7days':
+      }
+      case '7days': {
         const sevenDaysAgo = new Date(startOfDay)
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6)
         return { start: sevenDaysAgo, end: endOfDay }
-      case '30days':
+      }
+      case '30days': {
         const thirtyDaysAgo = new Date(startOfDay)
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29)
         return { start: thirtyDaysAgo, end: endOfDay }
+      }
       case 'custom':
         if (filterStartDate && filterEndDate) {
           const [sYear, sMonth, sDay] = filterStartDate.split('-').map(Number)
