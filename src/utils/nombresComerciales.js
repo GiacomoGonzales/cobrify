@@ -56,7 +56,7 @@ export function nombresParaBuscar(cliente) {
 }
 
 // Sin tildes, como el buscador del sistema: 'bambu' tiene que dar con 'Bambú'.
-const normal = (v) => limpio(v).normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/s+/g, ' ')
+const normal = (v) => limpio(v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ')
 
 /**
  * Si el cliente se encontró escribiendo uno de sus nombres comerciales, ese
