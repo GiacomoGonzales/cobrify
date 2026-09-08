@@ -2944,6 +2944,21 @@ export function generateDispatchGuideXML(guideData, businessData) {
   //   - Público: solo si el indicador anterior está activo
   const includeVehicleAndDriver = guideData.transportMode === '02' || registerVehiclesAndDrivers
 
+  // Con el indicador M1/L, el CONDUCTOR no va. No es que sea opcional: SUNAT
+  // rechaza la guía con el error 3455, "No debe ingresar informacion del
+  // conductor principal". Comprobado con las cuatro guías de SOYLUZ LEDS S.A.C.
+  // del 08-set-2026, todas privadas y con M1/L: las dos que llevaban conductor
+  // fueron rechazadas y las dos que lo dejaron vacío, aceptadas.
+  //
+  // El formulario ya no deja escribirlo, pero esto se queda igual: una guía
+  // clonada de otra vieja, o un cliente con la web sin recargar, traen el
+  // conductor guardado y volverían a chocar contra lo mismo.
+  //
+  // La PLACA no se toca: en los cuatro casos iba vacía, así que no hay con qué
+  // afirmar que SUNAT también la rechaza, y quitarla a ciegas sería romperle el
+  // envío a quien hoy la manda sin problema.
+  const includeDriver = includeVehicleAndDriver && guideData.isM1LVehicle !== true
+
   // === DATOS DE TRANSPORTE (ShipmentStage debe ir ANTES de Delivery según UBL 2.1) ===
   const shipmentStage = shipment.ele('cac:ShipmentStage')
   // Nota: No incluir cbc:ID en ShipmentStage según ejemplos EFACT
@@ -3027,7 +3042,7 @@ export function generateDispatchGuideXML(guideData, businessData) {
   }
 
   // === DATOS DE CONDUCTOR (DriverPerson) — después de LoadingTransportEvent (orden UBL 2.1) ===
-  if (includeVehicleAndDriver) {
+  if (includeDriver) {
     const hasDriverData = guideData.transport?.driver?.documentNumber?.trim()
 
     // Datos del conductor principal (DriverPerson después de TransportMeans)
@@ -3209,10 +3224,15 @@ export function generateDispatchGuideXML(guideData, businessData) {
       const despatchLine = root.ele('cac:DespatchLine')
       despatchLine.ele('cbc:ID').txt(String(index + 1))
 
-      // Cantidad despachada
+      // Cantidad despachada. Va por `formatSunatQuantity` y NO por `String()`:
+      // una cantidad que salió de una suma de decimales llega como
+      // 70.39999999999999, y SUNAT la rechaza con el error 2780 ("el valor
+      // ingresado en cantidad de items no cumple con el estandar"). El helper
+      // ya existía para las facturas —absorbe el ruido con toFixed(10) y
+      // recorta los ceros—, solo que a las guías nunca se les aplicó.
       despatchLine.ele('cbc:DeliveredQuantity', {
         'unitCode': mapUnitToSunatCode(item.unit)
-      }).txt(String(item.quantity || 0))
+      }).txt(formatSunatQuantity(item.quantity || 0))
 
       // Información del item
       const orderLineRef = despatchLine.ele('cac:OrderLineReference')
@@ -3769,7 +3789,10 @@ export function generateCarrierDispatchGuideXML(guideData, businessData) {
 
       const line = root.ele('cac:DespatchLine')
       line.ele('cbc:ID').txt(String(lineNum))
-      line.ele('cbc:DeliveredQuantity', { unitCode: unit }).txt(String(qty))
+      // Mismo motivo que en la guía del remitente: `String(70.39999999999999)`
+      // es lo que rechazó SUNAT en la V010-160 de JMC GERENCIA Y CONSTRUCCION
+      // (02-set-2026, error 2780). `formatSunatQuantity` lo deja en "70.4".
+      line.ele('cbc:DeliveredQuantity', { unitCode: unit }).txt(formatSunatQuantity(qty))
       line.ele('cac:OrderLineReference').ele('cbc:LineID').txt(String(lineNum))
       const itemEle = line.ele('cac:Item')
       itemEle.ele('cbc:Description').dat(desc)

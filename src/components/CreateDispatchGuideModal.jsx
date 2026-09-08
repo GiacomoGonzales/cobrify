@@ -2513,7 +2513,16 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
               <input
                 type="checkbox"
                 checked={isM1LVehicle}
-                onChange={(e) => setIsM1LVehicle(e.target.checked)}
+                onChange={(e) => {
+                  setIsM1LVehicle(e.target.checked)
+                  if (e.target.checked) {
+                    setDriverDocNumber('')
+                    setDriverName('')
+                    setDriverLastName('')
+                    setDriverLicense('')
+                    setAdditionalDrivers([])
+                  }
+                }}
                 className="w-4 h-4 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
               />
               <div>
@@ -2527,8 +2536,9 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
             </label>
 
             {isM1LVehicle && (
-              <p className="text-xs text-gray-500 italic">
-                Para vehículos M1 o L, los datos del conductor y placa son opcionales según normativa SUNAT.
+              <p className="text-xs text-gray-600">
+                SUNAT <strong>no acepta</strong> los datos del conductor en este tipo de traslado: por eso
+                esos campos desaparecen. La placa sigue siendo opcional.
               </p>
             )}
           </div>
@@ -2763,14 +2773,18 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
             </div>
           )}
 
-          {/* Datos del conductor (privado o público con indicador activo) */}
-          {(transportMode === '02' || (transportMode === '01' && registerVehiclesAndDrivers)) && (
+          {/* Datos del conductor (privado o público con indicador activo).
+              Con el indicador M1/L NO se muestra: SUNAT rechaza la guía con el
+              error 3455 "No debe ingresar informacion del conductor principal".
+              Comprobado con las cuatro guías de SOYLUZ LEDS S.A.C. del 08-set-2026:
+              las dos que llevaban conductor fueron rechazadas y las dos que lo
+              dejaron vacío, aceptadas. Antes acá decía que era "opcional". */}
+          {!isM1LVehicle && (transportMode === '02' || (transportMode === '01' && registerVehiclesAndDrivers)) && (
             <div className="space-y-3">
               <div className="flex items-center gap-2 pb-1.5 border-b border-gray-200">
                 <User className="w-4 h-4 text-gray-400" />
                 <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
                   Datos del conductor principal
-                  {isM1LVehicle && <span className="text-sm font-normal text-green-600 ml-2">(Opcional)</span>}
                 </h3>
               </div>
 
