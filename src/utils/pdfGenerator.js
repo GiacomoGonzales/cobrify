@@ -1,5 +1,6 @@
 import { clienteDelComprobante, esEmpresa, nombrePrincipal, nombreComercialAparte } from '@/utils/datosDelClienteEnComprobante'
 import { rucDeEmpresa } from '@/utils/rucDeEmpresa'
+import { infoDeCredito } from '../../functions/src/utils/creditoDelComprobante.js'
 import jsPDF from 'jspdf'
 import { contrastTextColor } from '@/utils/pdfColors'
 import { getNotaVentaLegend } from '@/utils/documentLegends'
@@ -1245,11 +1246,20 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
   // Altura de la sección de información de detracción (leyenda SPOT + datos)
   const DETRACTION_INFO_HEIGHT = HAS_DETRACTION ? 70 : 0 // 22 (SPOT) + 4 filas * 12
   const RETENCION_INFO_HEIGHT = HAS_RETENCION ? 58 : 0 // header + 3 filas (base/porcentaje/monto)
+  // Información del crédito, como la imprime el SEE de SUNAT: saldo a pagar,
+  // total de cuotas y una fila por cuota. El área contable del comprador la
+  // cruza contra su orden de pago, y sin ella observan la factura (IGP a
+  // SUPER LINK, 8-set-2026). La nota de venta tiene su propio recuadro abajo.
+  const INFO_CREDITO = (invoice.documentType === 'factura' || invoice.documentType === 'boleta')
+    ? infoDeCredito(invoice, invoice.total)
+    : null
+  // header + saldo + total de cuotas + cabecera de la tabla + una fila por cuota
+  const CREDITO_INFO_HEIGHT = INFO_CREDITO ? (16 + 12 * (3 + INFO_CREDITO.cuotas.length)) : 0
   // Bloque Yape/Plin (debajo de bancos). Filas más altas si hay QR para que la imagen entre.
   const WALLET_HAS_QR = digitalWalletsArray.some(w => w.qrData)
   const WALLET_ROW_H = WALLET_HAS_QR ? 30 : 16
   const WALLET_SECTION_HEIGHT = digitalWalletsArray.length > 0 ? (5 + 14 + digitalWalletsArray.length * WALLET_ROW_H) : 0
-  const BANK_TABLE_HEIGHT = (bankAccountsArray.length > 0 ? (14 + BANK_ROWS * 13) : 0) + WALLET_SECTION_HEIGHT + DETRACTION_INFO_HEIGHT + RETENCION_INFO_HEIGHT
+  const BANK_TABLE_HEIGHT = (bankAccountsArray.length > 0 ? (14 + BANK_ROWS * 13) : 0) + WALLET_SECTION_HEIGHT + DETRACTION_INFO_HEIGHT + CREDITO_INFO_HEIGHT + RETENCION_INFO_HEIGHT
   // Altura base 55, +15 si hay descuento, +15 si hay recargo consumo, +36 si hay detracción (2 filas: detracción + neto a pagar)
   const TOTALS_SECTION_HEIGHT = (55 + (HAS_DISCOUNT ? 15 : 0) + (HAS_RECARGO_CONSUMO ? 15 : 0) + (HAS_DETRACTION ? 36 : 0) + (showExoRow ? 15 : 0) + (showInaRow ? 15 : 0)) * S
   const SON_SECTION_HEIGHT = (spacious ? 28 : 22) * S
@@ -2424,13 +2434,80 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     detractionSectionEndY = detractionInfoY + detractionTotalHeight + 5
   }
 
+  // --- SECCIÓN INFORMACIÓN DEL CRÉDITO (si aplica) - estilo SUNAT ---
+  // Va ANTES de la retención, en el mismo orden que la representación de SUNAT.
+  if (INFO_CREDITO) {
+    const credX = MARGIN_LEFT
+    const credWidth = bankSectionWidth
+    const hayAlgoArriba = bankAccountsArray.length > 0 || digitalWalletsArray.length > 0 || HAS_DETRACTION
+    const credY = hayAlgoArriba ? detractionSectionEndY + 5 : totalsStartY
+
+    const credHeaderHeight = 16
+    const credRowHeight = 12
+    const credTotalHeight = credHeaderHeight + credRowHeight * (3 + INFO_CREDITO.cuotas.length)
+
+    doc.setDrawColor(...BLACK)
+    doc.setLineWidth(0.5)
+    doc.rect(credX, credY, credWidth, credTotalHeight)
+
+    doc.setFillColor(235, 235, 235)
+    doc.rect(credX, credY, credWidth, credHeaderHeight, 'F')
+    doc.setFontSize(7.5)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...BLACK)
+    doc.text('Información del crédito', credX + 5, credY + 11)
+    doc.setDrawColor(180, 180, 180)
+    doc.line(credX, credY + credHeaderHeight, credX + credWidth, credY + credHeaderHeight)
+
+    const credValX = credX + credWidth - 5
+    let credDataY = credY + credHeaderHeight + 9
+    doc.setFontSize(7)
+
+    doc.setFont('helvetica', 'normal')
+    doc.text('Monto neto pendiente de pago:', credX + 5, credDataY)
+    doc.setFont('helvetica', 'bold')
+    doc.text(`${CCY} ${INFO_CREDITO.neto.toLocaleString('es-PE', { minimumFractionDigits: 2 })}`, credValX, credDataY, { align: 'right' })
+    credDataY += credRowHeight
+
+    doc.setFont('helvetica', 'normal')
+    doc.text('Total de cuotas:', credX + 5, credDataY)
+    doc.setFont('helvetica', 'bold')
+    doc.text(String(INFO_CREDITO.totalCuotas), credValX, credDataY, { align: 'right' })
+    credDataY += credRowHeight
+
+    // Cabecera de la tabla de cuotas: N°, vencimiento y monto.
+    const colVence = credX + 60
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...DARK_GRAY)
+    doc.text('N° Cuota', credX + 5, credDataY)
+    doc.text('Fec. Venc.', colVence, credDataY)
+    doc.text('Monto', credValX, credDataY, { align: 'right' })
+    doc.setTextColor(...BLACK)
+    credDataY += credRowHeight
+
+    doc.setFont('helvetica', 'normal')
+    for (const cuota of INFO_CREDITO.cuotas) {
+      let vence = '-'
+      if (cuota.vencimiento) {
+        const [anio, mes, dia] = String(cuota.vencimiento).split('-')
+        vence = `${dia}/${mes}/${anio}`
+      }
+      doc.text(String(cuota.numero), credX + 5, credDataY)
+      doc.text(vence, colVence, credDataY)
+      doc.text(`${CCY} ${cuota.monto.toLocaleString('es-PE', { minimumFractionDigits: 2 })}`, credValX, credDataY, { align: 'right' })
+      credDataY += credRowHeight
+    }
+
+    detractionSectionEndY = credY + credTotalHeight + 5
+  }
+
   // --- SECCIÓN INFORMACIÓN DE LA RETENCIÓN (si aplica) - estilo SUNAT ---
   // Cuadro aparte (no fila en totales): Base imponible / Porcentaje / Monto. El total
   // queda completo; la retención es informativa.
   if (HAS_RETENCION) {
     const retInfoX = MARGIN_LEFT
     const retInfoWidth = bankSectionWidth
-    let retInfoY = bankAccountsArray.length > 0 ? detractionSectionEndY + 5 : totalsStartY
+    let retInfoY = (bankAccountsArray.length > 0 || INFO_CREDITO) ? detractionSectionEndY + 5 : totalsStartY
 
     const retHeaderHeight = 16
     const retRowHeight = 12
@@ -2685,20 +2762,16 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     footerY = _termsY + 4
   }
 
-  // Verificar si hay cuotas para mostrar (factura y boleta comparten el recuadro
-  // del QR; la nota de venta dibuja su propio recuadro más abajo)
-  const hasCuotas = (invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
-                    invoice.paymentType === 'credito' &&
-                    invoice.paymentInstallments &&
-                    invoice.paymentInstallments.length > 0
+  // Las cuotas ya salen en el bloque 'Información del crédito', con el monto
+  // descontadas detracción y retención. Antes se repetían acá dentro del
+  // recuadro del QR leyendo el importe crudo: dos cifras distintas para lo mismo.
 
   if (invoice.documentType !== 'nota_venta') {
     // Recuadro para QR y texto de validación
     const qrBoxY = footerY
     const qrSize = 55
     const qrBoxWidth = CONTENT_WIDTH
-    // Aumentar altura si hay cuotas
-    const qrBoxHeight = hasCuotas ? Math.max(QR_BOX_HEIGHT, 20 + invoice.paymentInstallments.length * 11) : QR_BOX_HEIGHT
+    const qrBoxHeight = QR_BOX_HEIGHT
 
     doc.setDrawColor(...BLACK)
     doc.setLineWidth(0.5)
@@ -2741,37 +2814,6 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     doc.text('ELECTRÓNICA.', textX, textY)
     textY += 9
     doc.text('Consultar validez en: sunat.gob.pe', textX, textY)
-
-    // CUOTAS en el lado derecho del recuadro
-    if (hasCuotas) {
-      const cuotasX = MARGIN_LEFT + CONTENT_WIDTH - 150 // Posición X para cuotas (derecha)
-      let cuotasY = qrBoxY + 12
-
-      // Título
-      doc.setFontSize(7)
-      doc.setFont('helvetica', 'bold')
-      doc.setTextColor(...BLACK)
-      doc.text('FORMA DE PAGO:', cuotasX, cuotasY)
-      cuotasY += 10
-
-      // Cada cuota
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(6)
-      invoice.paymentInstallments.forEach((cuota, index) => {
-        const cuotaNum = cuota.number || index + 1
-        const cuotaAmount = parseFloat(cuota.amount || 0).toFixed(2)
-        let cuotaDueDate = '-'
-        if (cuota.dueDate) {
-          const [year, month, day] = cuota.dueDate.split('-')
-          cuotaDueDate = `${day}/${month}/${year}`
-        }
-
-        doc.text(`Cuota ${cuotaNum}:`, cuotasX, cuotasY)
-        doc.text(`${CCY} ${cuotaAmount}`, cuotasX + 35, cuotasY)
-        doc.text(`Vence: ${cuotaDueDate}`, cuotasX + 75, cuotasY)
-        cuotasY += 10
-      })
-    }
 
     footerY = qrBoxY + qrBoxHeight + 5
   } else {

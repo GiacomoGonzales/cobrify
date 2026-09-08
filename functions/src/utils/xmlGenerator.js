@@ -1,4 +1,5 @@
 import { create } from 'xmlbuilder2'
+import { montoNetoPendiente, cuotasDeCredito } from './creditoDelComprobante.js'
 
 /**
  * Sanitiza texto libre del usuario para campos SUNAT de UNA SOLA LÍNEA.
@@ -831,16 +832,16 @@ export function generateInvoiceXML(invoiceData, businessData) {
 
   const paymentType = invoiceData.paymentType || 'contado' // 'contado' o 'credito'
   console.log(`📋 Forma de pago en XML: paymentType=${paymentType}, invoiceData.paymentType=${invoiceData.paymentType}`)
-  const paymentDueDate = invoiceData.paymentDueDate || null
-  const paymentInstallments = invoiceData.paymentInstallments || []
 
   // Monto total para PaymentTerms
   const paymentTotalAmount = parseFloat(invoiceData.total) || 0
 
-  // Calcular monto neto (descontando detracción) para crédito/cuotas
+  // El SALDO a pagar descuenta detracción Y retención: las dos son plata que
+  // el comprador no le entrega al proveedor. Criterio compartido con el XML
+  // que se descarga, el PDF y el ticket (utils/creditoDelComprobante.js).
   const hasDetractionForPayment = invoiceData.hasDetraction && invoiceData.detractionType && invoiceData.detractionAmount > 0
   const detractionAmount = hasDetractionForPayment ? parseFloat(invoiceData.detractionAmount) : 0
-  const netPayableAmount = paymentTotalAmount - detractionAmount
+  const netPayableAmount = montoNetoPendiente(invoiceData, paymentTotalAmount)
 
   // === DETRACCIÓN - PaymentTerms (DEBE ir ANTES de FormaPago según SUNAT) ===
   if (hasDetractionForPayment) {
@@ -874,40 +875,24 @@ export function generateInvoiceXML(invoiceData, businessData) {
   }
 
   if (paymentType === 'credito') {
-    // Pago al Crédito - Monto pendiente descontando detracción
-    const creditAmount = hasDetractionForPayment ? netPayableAmount : paymentTotalAmount
-
     const paymentTermsCredito = root.ele('cac:PaymentTerms')
     paymentTermsCredito.ele('cbc:ID').txt('FormaPago')
     paymentTermsCredito.ele('cbc:PaymentMeansID').txt('Credito')
     paymentTermsCredito.ele('cbc:Amount', { 'currencyID': invoiceData.currency || 'PEN' })
-      .txt(creditAmount.toFixed(2))
+      .txt(netPayableAmount.toFixed(2))
 
-    // Si hay cuotas definidas, agregar cada una (ajustando montos si hay detracción)
-    if (paymentInstallments.length > 0) {
-      // Calcular factor de ajuste para distribuir la detracción proporcionalmente en las cuotas
-      const adjustFactor = hasDetractionForPayment && paymentTotalAmount > 0
-        ? netPayableAmount / paymentTotalAmount : 1
-
-      paymentInstallments.forEach((cuota, index) => {
-        const cuotaTerms = root.ele('cac:PaymentTerms')
-        cuotaTerms.ele('cbc:ID').txt('FormaPago')
-        cuotaTerms.ele('cbc:PaymentMeansID').txt(`Cuota${String(index + 1).padStart(3, '0')}`)
-        const cuotaAmount = parseFloat(cuota.amount || 0) * adjustFactor
-        cuotaTerms.ele('cbc:Amount', { 'currencyID': invoiceData.currency || 'PEN' })
-          .txt(cuotaAmount.toFixed(2))
-        if (cuota.dueDate) {
-          cuotaTerms.ele('cbc:PaymentDueDate').txt(cuota.dueDate)
-        }
-      })
-    } else if (paymentDueDate) {
-      // Si no hay cuotas pero sí fecha de vencimiento, crear una sola cuota con el monto neto
+    // Las cuotas salen escaladas al saldo y sumando exactamente ese saldo, que
+    // es lo que SUNAT valida. Un crédito sin cronograma es una sola Cuota001
+    // con la fecha pactada.
+    for (const cuota of cuotasDeCredito(invoiceData, paymentTotalAmount)) {
       const cuotaTerms = root.ele('cac:PaymentTerms')
       cuotaTerms.ele('cbc:ID').txt('FormaPago')
-      cuotaTerms.ele('cbc:PaymentMeansID').txt('Cuota001')
+      cuotaTerms.ele('cbc:PaymentMeansID').txt(`Cuota${String(cuota.numero).padStart(3, '0')}`)
       cuotaTerms.ele('cbc:Amount', { 'currencyID': invoiceData.currency || 'PEN' })
-        .txt(creditAmount.toFixed(2))
-      cuotaTerms.ele('cbc:PaymentDueDate').txt(paymentDueDate)
+        .txt(cuota.monto.toFixed(2))
+      if (cuota.vencimiento) {
+        cuotaTerms.ele('cbc:PaymentDueDate').txt(cuota.vencimiento)
+      }
     }
   } else {
     // Pago al Contado (por defecto)

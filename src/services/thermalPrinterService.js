@@ -1,5 +1,6 @@
 import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
 import { rucDeEmpresa, lineaRuc } from '@/utils/rucDeEmpresa';
+import { infoDeCredito } from '../../functions/src/utils/creditoDelComprobante.js';
 import { nombreParaMostrar, razonSocialSiAporta } from '@/utils/nombreDelNegocio';
 import { lineasDeFechaYHora, mostrarTitulosDeSeccion, lineasDeItem, usarFuentePequena, anchoDeLinea, tamanoDeQr, mostrarSeparadores } from '@/utils/ticketCompacto';
 import { clienteDelComprobante, lineasDelCliente } from '@/utils/datosDelClienteEnComprobante';
@@ -1532,28 +1533,25 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
 
       printer = printer.text(convertSpanishText('Forma de Pago: CREDITO\n'));
 
-      // Si hay fecha de vencimiento y no hay cuotas
-      if (invoice.paymentDueDate && (!invoice.paymentInstallments || invoice.paymentInstallments.length === 0)) {
-        const dueDate = new Date(invoice.paymentDueDate + 'T00:00:00');
-        const dueDateStr = dueDate.toLocaleDateString('es-PE');
-        printer = printer.text(convertSpanishText(`Fecha Vencimiento: ${dueDateStr}\n`));
-      }
-
-      // Si hay cuotas
-      if (invoice.paymentInstallments && invoice.paymentInstallments.length > 0) {
-        printer = printer
-          .bold()
-          .text('CUOTAS:\n')
-          .clearFormatting();
-
-        invoice.paymentInstallments.forEach((cuota, index) => {
-          const cuotaNum = cuota.number || index + 1;
-          const cuotaAmount = parseFloat(cuota.amount || 0).toFixed(2);
-          const cuotaDueDate = cuota.dueDate
-            ? new Date(cuota.dueDate + 'T00:00:00').toLocaleDateString('es-PE')
-            : '-';
-          printer = printer.text(convertSpanishText(`  Cuota ${cuotaNum}: ${currencySymbol} ${cuotaAmount} - Vence: ${cuotaDueDate}\n`));
-        });
+      // El saldo y las cuotas salen del mismo criterio que el XML y el PDF:
+      // total menos detracción menos retención.
+      const credito = infoDeCredito(invoice, invoice.total);
+      if (credito) {
+        printer = printer.text(convertSpanishText(`Saldo a pagar: ${currencySymbol} ${credito.neto.toFixed(2)}\n`));
+        const fechaCuota = (c) => c.vencimiento
+          ? new Date(c.vencimiento + 'T00:00:00').toLocaleDateString('es-PE')
+          : '-';
+        if (credito.cuotas.length === 1) {
+          printer = printer.text(convertSpanishText(`Fecha Vencimiento: ${fechaCuota(credito.cuotas[0])}\n`));
+        } else {
+          printer = printer
+            .bold()
+            .text('CUOTAS:\n')
+            .clearFormatting();
+          for (const c of credito.cuotas) {
+            printer = printer.text(convertSpanishText(`  Cuota ${c.numero}: ${currencySymbol} ${c.monto.toFixed(2)} - Vence: ${fechaCuota(c)}\n`));
+          }
+        }
       }
     }
 

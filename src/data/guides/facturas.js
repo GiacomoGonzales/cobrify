@@ -101,6 +101,14 @@ export default {
         },
         {
           type: 'texto',
+          text: 'En el PDF de una factura o boleta al crédito sale el bloque **Información del crédito**, igual que en la representación de SUNAT: el **monto neto pendiente de pago**, el total de cuotas y una fila por cuota con su vencimiento y su monto. Aparece aunque hayas pactado un solo vencimiento sin cronograma; en ese caso esa es la cuota 1.',
+        },
+        {
+          type: 'ojo',
+          text: 'Si el comprobante está afecto a **detracción** o a la **retención del 3%**, ese monto neto no es el total: se descuenta lo que tu cliente no te entrega a ti, sino que deposita en el Banco de la Nación o le paga a SUNAT. Es el número que su área contable cruza contra la orden de pago, y sale igual en el PDF, en el ticket y en el XML.',
+        },
+        {
+          type: 'texto',
           text: 'Para la cobranza del día a día, el botón **Pagos Pendientes** de la cabecera abre las cuentas por cobrar **agrupadas por cliente**: quién te debe, cuánto en total y qué ya venció. Es la vista para salir a cobrar, en lugar de revisar factura por factura.',
         },
         { type: 'ui', kind: 'botonSecundario', label: 'Pagos Pendientes' },

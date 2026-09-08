@@ -8,6 +8,7 @@
  */
 
 import dayjs from 'dayjs'
+import { montoNetoPendiente, cuotasDeCredito } from '../../functions/src/utils/creditoDelComprobante.js'
 
 /**
  * Códigos de tipo de documento según SUNAT
@@ -386,14 +387,14 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
 
   // === PaymentTerms (forma de pago) ===
   const paymentType = invoiceData.paymentType || 'contado'
-  const paymentDueDate = invoiceData.paymentDueDate || null
-  const paymentInstallments = invoiceData.paymentInstallments || []
   // Usar calcPayable (calculado desde items) en vez de total del POS para consistencia con XML
   const paymentTotalAmount = calcPayable
 
-  // Calcular monto neto (descontando detracción) para crédito/cuotas
+  // El SALDO a pagar descuenta detracción Y retención. Mismo criterio que el
+  // XML que se envía a SUNAT, el PDF y el ticket: si cada uno lo calculara por
+  // su cuenta, el papel y el XML dirían cifras distintas.
   const detractionAmt = hasDetraction ? parseFloat(invoiceData.detractionAmount) : 0
-  const netPayableAmount = paymentTotalAmount - detractionAmt
+  const netPayableAmount = montoNetoPendiente(invoiceData, paymentTotalAmount)
 
   // SUNAT exige el monto de la detracción SIEMPRE en PEN (regla 3208), aunque
   // el comprobante sea en dólares. Este generador arma el XML que el usuario
@@ -420,35 +421,21 @@ export const generateInvoiceXML = (invoiceData, companySettings, taxConfig = nul
   }
 
   if (paymentType === 'credito') {
-    const creditAmount = hasDetraction ? netPayableAmount : paymentTotalAmount
-
     paymentTermsXml += `
   <cac:PaymentTerms>
     <cbc:ID>FormaPago</cbc:ID>
     <cbc:PaymentMeansID>Credito</cbc:PaymentMeansID>
-    <cbc:Amount currencyID="${currency}">${creditAmount.toFixed(2)}</cbc:Amount>
+    <cbc:Amount currencyID="${currency}">${netPayableAmount.toFixed(2)}</cbc:Amount>
   </cac:PaymentTerms>`
 
-    if (paymentInstallments.length > 0) {
-      // Las cuotas se usan tal cual las ingresó el usuario (ya descontada la detracción)
-      // No se aplica ningún factor de ajuste
-      paymentInstallments.forEach((cuota, index) => {
-        const cuotaAmount = parseFloat(cuota.amount || 0)
-        paymentTermsXml += `
-  <cac:PaymentTerms>
-    <cbc:ID>FormaPago</cbc:ID>
-    <cbc:PaymentMeansID>Cuota${String(index + 1).padStart(3, '0')}</cbc:PaymentMeansID>
-    <cbc:Amount currencyID="${currency}">${cuotaAmount.toFixed(2)}</cbc:Amount>${cuota.dueDate ? `
-    <cbc:PaymentDueDate>${cuota.dueDate}</cbc:PaymentDueDate>` : ''}
-  </cac:PaymentTerms>`
-      })
-    } else if (paymentDueDate) {
+    // Cuotas escaladas al saldo y sumándolo exacto, igual que el XML enviado.
+    for (const cuota of cuotasDeCredito(invoiceData, paymentTotalAmount)) {
       paymentTermsXml += `
   <cac:PaymentTerms>
     <cbc:ID>FormaPago</cbc:ID>
-    <cbc:PaymentMeansID>Cuota001</cbc:PaymentMeansID>
-    <cbc:Amount currencyID="${currency}">${creditAmount.toFixed(2)}</cbc:Amount>
-    <cbc:PaymentDueDate>${paymentDueDate}</cbc:PaymentDueDate>
+    <cbc:PaymentMeansID>Cuota${String(cuota.numero).padStart(3, '0')}</cbc:PaymentMeansID>
+    <cbc:Amount currencyID="${currency}">${cuota.monto.toFixed(2)}</cbc:Amount>${cuota.vencimiento ? `
+    <cbc:PaymentDueDate>${cuota.vencimiento}</cbc:PaymentDueDate>` : ''}
   </cac:PaymentTerms>`
     }
   } else {
