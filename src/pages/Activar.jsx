@@ -224,8 +224,13 @@ export default function Activar() {
     : paso === 1 ? !!f.rubro
     : f.displayName.trim() && f.email.trim().includes('@') && f.password.length >= 8
 
+  // El nombre viene del alta que se creó desde el chat, así que casi siempre
+  // está. Solo el de pila: "Bienvenido, Rosa Quispe Huamán" suena a carta del
+  // banco, "Bienvenido, Rosa" suena a persona.
+  const primerNombre = (alta?.nombre || '').trim().split(' ')[0]
+
   return (
-    <Marco>
+    <Marco bajada={`Bienvenido${primerNombre ? `, ${primerNombre}` : ''}. Vamos a crear tu cuenta.`}>
       <Pasos actual={paso} />
 
       {paso === 0 && (
@@ -460,11 +465,22 @@ function CampoLogo({ previa, onElegir }) {
   )
 }
 
-function Marco({ children }) {
+/**
+ * El marco de las cuatro pantallas del alta.
+ *
+ * `bajada` solo la manda el formulario. Encima de "Este enlace no sirve" o de
+ * "Tu cuenta está lista" no pinta nada un "vamos a crear tu cuenta": ahí la
+ * pantalla ya dice lo suyo y una línea de más solo estorba.
+ */
+function Marco({ children, bajada }) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4 py-10">
       <div className="w-full max-w-md">
-        <p className="mb-4 text-center text-[15px] font-semibold tracking-tight text-gray-900">Cobrify</p>
+        <p className="text-center text-[15px] font-semibold tracking-tight text-gray-900">Cobrify</p>
+        {bajada && (
+          <p className="mt-1.5 text-center text-[13.5px] leading-snug text-gray-500">{bajada}</p>
+        )}
+        <div className="mb-4" />
         <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">{children}</div>
         <p className="mt-4 text-center text-[11.5px] text-gray-400">
           Sistema de facturación electrónica · cobrifyperu.com
