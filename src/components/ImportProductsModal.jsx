@@ -15,6 +15,7 @@ import { Share } from '@capacitor/share'
 import { getWarehouses } from '@/services/warehouseService'
 import { getProducts } from '@/services/firestoreService'
 import { summarizeImport } from '@/utils/productImportMatch'
+import { subcategoriaImportada } from '@/utils/categoriaImportada'
 
 export default function ImportProductsModal({ isOpen, onClose, onImport, brands = [], businessModeOverride = null, skipWarehouseSelector = false }) {
   const ctx = useAppContext()
@@ -406,6 +407,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
       })()
       const useAutoPriceByQty = priceMinQtys !== null
 
+      const categoria = String(row.categoria || row.Categoria || row.CATEGORIA || row.category || row.Category || row.CATEGORY || '').trim()
       const product = {
         sku: sku,
         code: code,
@@ -446,8 +448,9 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
         stock: stockValue,
         minStock: minStockValue,
         unit: String(row.unidad || row.Unidad || row.UNIDAD || row.unit || row.Unit || row.UNIT || 'UNIDAD').trim().toUpperCase(),
-        category: String(row.categoria || row.Categoria || row.CATEGORIA || row.category || row.Category || row.CATEGORY || '').trim(),
-        subcategory: String(row.subcategoria || row.Subcategoria || row.SUBCATEGORIA || row.subcategory || row.Subcategory || row.SUBCATEGORY || '').trim(),
+        category: categoria,
+        // Si repite el nombre de la categoría es la columna copiada, no una subcategoría.
+        subcategory: subcategoriaImportada(categoria, String(row.subcategoria || row.Subcategoria || row.SUBCATEGORIA || row.subcategory || row.Subcategory || row.SUBCATEGORY || '').trim()),
         trackStock: trackStock,
         // Campos de inventario avanzado
         allowDecimalQuantity,

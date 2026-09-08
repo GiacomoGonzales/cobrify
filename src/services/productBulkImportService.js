@@ -46,6 +46,7 @@ import {
 } from '@/services/warehouseService'
 import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { subcategoriaImportada } from '@/utils/categoriaImportada'
 
 /**
  * Importa una lista de productos parseados a un negocio nuevo.
@@ -140,6 +141,9 @@ export async function importParsedProducts(
     const newSubcategoriesNeeded = new Map() // Map<`${padre}|||${sub}`, padre>
 
     for (const product of productsToImport) {
+      // Una subcategoría que repite el nombre de su categoría es la columna
+      // copiada: se ignora antes de crear nada (ver utils/categoriaImportada).
+      product.subcategory = subcategoriaImportada(product.category, product.subcategory)
       if (product.category && product.category.trim() !== '') {
         const categoryName = product.category.trim()
         const categoryExists = updatedCategories.some(
