@@ -482,44 +482,25 @@
 .enlace-chat { color: #0B6B3A; }
 :is(.admin, .chat-cobrify).oscuro .enlace-chat { color: #7BE3B4; }
 
-/* ---------- Vidrio de la conversacion ---------- */
-/* La cabecera y el compositor del chat: el fondo pasa por detras, como en
-   WhatsApp Web. Va como clase propia y no como `bg-white/70` porque la regla
-   de arriba pisa `.bg-white` en oscuro y dejaria las dos opacas otra vez. */
-/* OJO: el desenfoque va en una capa DETRAS, no en la barra misma. Un elemento
-   con `backdrop-filter` pasa a ser el punto de referencia de sus hijos con
-   `position: fixed`, y el menu de los tres puntos de la cabecera es uno de
-   ellos: puesto en la barra, el menu aparecia corrido cientos de pixeles.
-   `isolation: isolate` mantiene el `z-index: -1` dentro de la barra para que
-   la capa no se escape por detras del fondo del chat. */
+/* ---------- Cabecera y compositor de la conversacion ---------- */
+/* Color solido, no vidrio. Se probo el fondo pasando por detras como en
+   WhatsApp Web y no convencio: con foto de fondo el texto de la cabecera y el
+   del cuadro de escribir quedaban sucios.
+
+   Sigue siendo una clase propia y no `bg-white` porque la regla de mas abajo
+   retine `.bg-white` en modo oscuro, y aca hace falta decidir el tono a mano.
+
+   El `z-index` se queda aunque ya no haya capa de vidrio: sin el, las burbujas
+   de imagen —que vienen despues en el documento— le pasaban por encima al menu
+   de los tres puntos de la cabecera. El velo de arrastre (z-40) y los visores a
+   pantalla completa (z-50 y mas) siguen ganando, que es lo que se busca. */
 .chat-vidrio {
   position: relative;
-  /* Por encima del hilo. Hace falta porque la capa de vidrio obliga a que la
-     barra tenga su propio contexto de apilado, y dentro de el se queda su
-     menu: sin este z-index las burbujas de imagen —que vienen despues en el
-     documento— le pasaban por encima al menu de la cabecera. El velo de
-     arrastre (z-40) y los visores a pantalla completa (z-50 y mas) siguen
-     ganando, que es lo que se busca. */
   z-index: 20;
-  background-color: transparent;
+  background-color: #ffffff;
 }
-.chat-vidrio::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background-color: rgb(255 255 255 / 0.72);
-  backdrop-filter: blur(16px) saturate(1.4);
-  -webkit-backdrop-filter: blur(16px) saturate(1.4);
-}
-:is(.admin, .chat-cobrify).oscuro .chat-vidrio::before {
-  background-color: rgb(22 27 34 / 0.66);
-}
-/* Sin desenfoque —Firefox con la opcion apagada— el fondo se veria crudo por
-   detras del texto. Ahi vale mas casi opaco que ilegible. */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .chat-vidrio::before { background-color: rgb(255 255 255 / 0.95); }
-  :is(.admin, .chat-cobrify).oscuro .chat-vidrio::before { background-color: rgb(22 27 34 / 0.95); }
+:is(.admin, .chat-cobrify).oscuro .chat-vidrio {
+  background-color: var(--ad-superficie);
 }
 
 /* ---------- Texto ---------- */
