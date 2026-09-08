@@ -339,6 +339,14 @@ export async function obtenerVistaPreviaDeEnlace(url) {
       redirect: 'follow',
       headers: {
         // Algunos hosting devuelven 403 sin User-Agent (nos paso con SiteGround).
+        //
+        // OJO: el nombre "CobrifyChat" esta en la lista de robots sociales de
+        // `vercel.json`. Nuestras propias paginas sirven una portada distinta a
+        // los robots (la del catalogo de cada cliente, la del enlace de alta), y
+        // sin estar en esa lista este lector recibia el index generico: el
+        // enlace de alta salia con la imagen de la landing, "Planes desde
+        // S/ 19.90", justo a quien acababa de pagar. Si se cambia este texto,
+        // hay que cambiarlo alli tambien.
         'User-Agent': 'Mozilla/5.0 (compatible; CobrifyChat/1.0; +https://cobrifyperu.com)',
         Accept: 'text/html',
       },

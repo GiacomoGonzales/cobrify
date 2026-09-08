@@ -10,7 +10,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|Googlebot|bingbot|Applebot|Google-InspectionTool|DuckDuckBot|YandexBot|Slurp).*"
+          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|Googlebot|bingbot|Applebot|Google-InspectionTool|DuckDuckBot|YandexBot|Slurp|CobrifyChat).*"
         }
       ],
       "destination": "/api/catalog-meta?slug=:slug"
@@ -21,7 +21,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|Googlebot|bingbot|Applebot|Google-InspectionTool|DuckDuckBot|YandexBot|Slurp).*"
+          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|Googlebot|bingbot|Applebot|Google-InspectionTool|DuckDuckBot|YandexBot|Slurp|CobrifyChat).*"
         }
       ],
       "destination": "/api/menu-meta?slug=:slug"
@@ -32,7 +32,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|Googlebot|bingbot|Applebot|Google-InspectionTool|DuckDuckBot|YandexBot|Slurp).*"
+          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|Googlebot|bingbot|Applebot|Google-InspectionTool|DuckDuckBot|YandexBot|Slurp|CobrifyChat).*"
         }
       ],
       "destination": "/api/domain-meta"
@@ -43,7 +43,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|Googlebot|bingbot|Applebot|Google-InspectionTool|DuckDuckBot|YandexBot|Slurp).*"
+          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|Googlebot|bingbot|Applebot|Google-InspectionTool|DuckDuckBot|YandexBot|Slurp|CobrifyChat).*"
         },
         {
           "type": "host",
@@ -58,7 +58,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|Googlebot|bingbot|Applebot|Google-InspectionTool|DuckDuckBot|YandexBot|Slurp).*"
+          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|Googlebot|bingbot|Applebot|Google-InspectionTool|DuckDuckBot|YandexBot|Slurp|CobrifyChat).*"
         }
       ],
       "destination": "/api/registro-meta"
