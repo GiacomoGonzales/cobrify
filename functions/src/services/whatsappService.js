@@ -44,6 +44,36 @@ export function verifyWhatsappSignature(rawBody, signatureHeader, appSecret) {
  *
  * @returns {{mensajes: Array, estados: Array}}
  */
+/**
+ * De dónde vino el lead, cuando vino de un anuncio.
+ *
+ * Meta cuelga un bloque `referral` del PRIMER mensaje de una conversación que
+ * nació en un anuncio de "enviar mensaje por WhatsApp" (o en un botón de una
+ * publicación). Trae el id del anuncio, su titular y su texto.
+ *
+ * Sin esto, ese lead entraba a la bandeja indistinguible de cualquier otro: se
+ * sabía que llegó gente, no QUÉ anuncio la trajo. Y esa es justamente la
+ * pregunta que decide dónde poner el presupuesto.
+ *
+ * Se guarda solo lo que sirve para reconocer el anuncio y volver a él. El
+ * `ctwa_clid` es el identificador del clic, el que Meta pide de vuelta al
+ * reportar conversiones: se guarda aunque hoy no lo usemos, porque es un dato
+ * que NO se puede recuperar después.
+ */
+function extraerOrigen(m) {
+  const r = m?.referral
+  if (!r) return null
+  return {
+    tipo: r.source_type || null,            // "ad" o "post"
+    anuncioId: r.source_id || null,
+    titular: r.headline || null,
+    texto: r.body || null,
+    enlace: r.source_url || null,
+    imagen: r.image_url || r.thumbnail_url || null,
+    clicId: r.ctwa_clid || null,
+  }
+}
+
 export function parseWhatsappWebhook(body) {
   const mensajes = []
   const estados = []
@@ -80,6 +110,8 @@ export function parseWhatsappWebhook(body) {
           // de acceso y se hace aparte, no dentro del webhook.
           media: extraerMedia(m),
           respondeA: m.context?.id || null,
+          // De qué anuncio viene, si viene de uno.
+          origen: extraerOrigen(m),
           crudo: m,
         })
       }

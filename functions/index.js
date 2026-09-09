@@ -13954,6 +13954,9 @@ async function guardarMensajeEntrante(m) {
     texto: m.texto || '',
     media: m.media || null,
     respondeA: m.respondeA || null,
+    // El anuncio del que vino, si vino de uno. Meta lo cuelga del PRIMER
+    // mensaje, así que queda en ese y no se repite en los siguientes.
+    ...(m.origen ? { origen: m.origen } : {}),
     timestamp: Timestamp.fromMillis(m.timestamp),
     createdAt: FieldValue.serverTimestamp(),
   })
@@ -13984,6 +13987,17 @@ async function guardarMensajeEntrante(m) {
     // Baja voluntaria: "no enviar mas", "baja", "stop"... queda marcado y las
     // campañas lo saltan para siempre. Reversible a mano desde la ficha.
     ...(pareceBajaVoluntaria(m.texto) ? { optOut: true, optOutAt: FieldValue.serverTimestamp() } : {}),
+    // DE QUÉ ANUNCIO VINO. Se guarda en la CONVERSACIÓN, no solo en el mensaje:
+    // Meta solo lo manda en el primero, y la pregunta que importa —"¿este
+    // cliente vino de un anuncio?"— se hace meses después, mirando la ficha, no
+    // rebuscando el mensaje inicial.
+    //
+    // Solo se escribe la PRIMERA vez (`origenAnuncio` no se pisa). Si el mismo
+    // número vuelve a escribir por otro anuncio, el que trajo el lead sigue
+    // siendo el primero; sobrescribirlo daría el crédito al equivocado.
+    ...(m.origen && !convPrevia.data()?.origenAnuncio
+      ? { origenAnuncio: { ...m.origen, recibidoAt: Timestamp.fromMillis(m.timestamp) } }
+      : {}),
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true })
 

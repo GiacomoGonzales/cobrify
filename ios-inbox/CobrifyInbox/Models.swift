@@ -23,6 +23,8 @@ struct Conversacion: Identifiable, Equatable {
     var ventanaVenceAt: Date?
     var etiquetas: [String]
     var nota: String?
+    /// El titular del anuncio de Meta por el que llegó, si llegó por uno.
+    var anuncioDeOrigen: String?
 
     init(id: String, data: [String: Any]) {
         self.id = id
@@ -46,6 +48,12 @@ struct Conversacion: Identifiable, Equatable {
         nota = data["nota"] as? String
         optOut = data["optOut"] as? Bool ?? false
         ventanaVenceAt = (data["ventanaVenceAt"] as? Timestamp)?.dateValue()
+        // De qué anuncio vino. El titular es lo que la persona leyó antes de
+        // escribir; si el anuncio no lo trae, al menos se dice que vino de uno.
+        if let origen = data["origenAnuncio"] as? [String: Any] {
+            let titular = (origen["titular"] as? String)?.trimmingCharacters(in: .whitespaces)
+            anuncioDeOrigen = (titular?.isEmpty == false ? titular : "un anuncio")
+        }
     }
 
     var titulo: String {

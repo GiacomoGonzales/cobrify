@@ -1301,6 +1301,19 @@ export default function Chat() {
                     <span className="text-primary-700"> · {activa.linkedBusinessName}</span>
                   )}
                 </p>
+                {/* De qué anuncio vino. Va en la cabecera y no escondido en la
+                    ficha porque cambia CÓMO se le responde: alguien que acaba de
+                    tocar un anuncio ya sabe qué le ofreciste, y arrancar
+                    preguntándole qué necesita es hacerle repetir lo que ya
+                    hizo. El titular es lo que él leyó, literalmente. */}
+                {activa.origenAnuncio && (
+                  <p
+                    className="mt-0.5 truncate text-[11px] text-primary-700"
+                    title={[activa.origenAnuncio.titular, activa.origenAnuncio.texto].filter(Boolean).join(' — ')}
+                  >
+                    Vino del anuncio{activa.origenAnuncio.titular ? `: ${activa.origenAnuncio.titular}` : ''}
+                  </p>
+                )}
               </div>
               {ventanaAbierta && (
                 <span

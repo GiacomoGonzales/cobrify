@@ -220,6 +220,17 @@ struct ConversationView: View {
                         }
                         .font(.caption2)
                         .foregroundStyle(colorEstado ?? .secondary)
+                        // De qué anuncio vino. Va en la cabecera y no en la
+                        // ficha porque cambia CÓMO se le responde: quien acaba
+                        // de tocar un anuncio ya sabe lo que le ofreciste, y
+                        // arrancar preguntándole qué necesita es hacerle
+                        // repetir lo que ya hizo.
+                        if let anuncio = conv.anuncioDeOrigen {
+                            Text("Vino de \(anuncio)")
+                                .font(.caption2)
+                                .foregroundStyle(.tint)
+                                .lineLimit(1)
+                        }
                     }
                 }
             }
