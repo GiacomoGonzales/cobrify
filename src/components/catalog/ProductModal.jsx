@@ -6,6 +6,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { optimizeImageUrl } from '@/utils/cloudinary'
 import { almacenesDelCatalogo } from '@/utils/stockDeCatalogo'
 import { getCatalogMinQty, formatCurrency } from '@/lib/utils'
+import { nivelesParaMostrar, faltanParaElSiguiente } from '@/utils/nivelesDeCatalogo'
 import { convertFromBase } from '@/utils/currency'
 import { CatalogDetailImage } from '@/components/catalog/CatalogImages'
 import { getCatalogAccent } from '@/themes/catalogThemes'
@@ -315,6 +316,20 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
     : getProductPrices(product, business)
   const hasMultiplePrices = availablePrices.length > 1
 
+  // Qué nivel aplica de verdad. Con "precio automático según cantidad" lo
+  // decide la CANTIDAD y la lista es solo referencia; sin él, lo elige el
+  // comprador como siempre (utils/nivelesDeCatalogo). Se calcula en el render
+  // y no en un efecto: `availablePrices` vive debajo del early return.
+  const { automatico: precioAuto, niveles: nivelesCatalogo, claveAplicando: nivelEfectivo } = nivelesParaMostrar({
+    producto: product,
+    business,
+    precios: availablePrices,
+    cantidad: quantity,
+    nivelElegido: selectedPriceLevel,
+  })
+  const minDe = (key) => nivelesCatalogo.find(n => n.key === key)?.min ?? getCatalogMinQty(business, key, product)
+  const siguienteNivel = precioAuto ? faltanParaElSiguiente({ niveles: nivelesCatalogo, cantidad: quantity }) : null
+
   // Dada una cantidad, devuelve el priceKey del nivel MÁS BARATO cuyo umbral
   // de cantidad mínima ya se cumpla. Si ninguno aplica, devuelve 'price1'.
   // Usado por los botones +/− del modal para auto-ajustar el precio según
@@ -335,8 +350,8 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
   const calculateTotalPrice = () => {
     let total
     if (hasVariants) {
-      if (hasMultiplePrices && selectedPriceLevel && selectedVariant) {
-        total = getVariantPriceForLevel(selectedVariant, product, selectedPriceLevel)
+      if (hasMultiplePrices && nivelEfectivo && selectedVariant) {
+        total = getVariantPriceForLevel(selectedVariant, product, nivelEfectivo)
       } else {
         total = selectedVariant?.price || product.basePrice || 0
       }
@@ -344,8 +359,8 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
       // El precio de la presentación lo pone el vendedor y no se deriva del
       // precio suelto: una caja de 12 no cuesta 12 veces la unidad.
       total = selectedPresentation.price || 0
-    } else if (hasMultiplePrices && selectedPriceLevel) {
-      const selected = availablePrices.find(p => p.key === selectedPriceLevel)
+    } else if (hasMultiplePrices && nivelEfectivo) {
+      const selected = availablePrices.find(p => p.key === nivelEfectivo)
       total = selected?.value || product.price || 0
     } else {
       total = product.price || 0
@@ -442,7 +457,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
 
     const totalPrice = calculateTotalPrice()
     const priceLevelLabel = hasMultiplePrices
-      ? availablePrices.find(p => p.key === selectedPriceLevel)?.label || null
+      ? availablePrices.find(p => p.key === nivelEfectivo)?.label || null
       : null
     // Si tiene variante, pasar producto con datos de variante
     if (selectedPresentation) {
@@ -595,7 +610,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                   const showAllPrices = business?.catalogShowAllPrices !== false
                   // Si hay múltiples precios con selección activa (botones radio abajo), solo mostrar el precio seleccionado
                   if (showAllPrices && hasMultiplePrices && !hasVariants) {
-                    const selected = availablePrices.find(p => p.key === selectedPriceLevel) || availablePrices[0]
+                    const selected = availablePrices.find(p => p.key === nivelEfectivo) || availablePrices[0]
                     return (
                       <div className="flex items-baseline gap-2">
                         <span className={detailPriceClass}>{fmtCatalog(selected.value)}</span>
@@ -652,11 +667,13 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
             <div className="mb-6">
               <div className={`border overflow-hidden divide-y ${esOscuro ? 'border-white/10 divide-white/10' : 'border-gray-200 divide-gray-200'}`} style={{ borderRadius: tokens.radius.lg }}>
                 {availablePrices.map((priceItem) => {
-                  const isSelected = selectedPriceLevel === priceItem.key
+                  const isSelected = nivelEfectivo === priceItem.key
                   return (
                     <button
                       key={priceItem.key}
+                      disabled={precioAuto}
                       onClick={() => {
+                        if (precioAuto) return
                         setSelectedPriceLevel(priceItem.key)
                         const min = getCatalogMinQty(business, priceItem.key, product)
                         if (priceItem.key !== 'price1' && min > 1 && quantity < min) {
@@ -681,8 +698,8 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                         </div>
                         <span className="font-medium" style={isSelected ? { color: getCatalogAccent(business) } : { color: tokens.colors.text }}>
                           {priceItem.label}
-                          {priceItem.key !== 'price1' && getCatalogMinQty(business, priceItem.key, product) > 1 && (
-                            <span className="text-xs text-gray-400 ml-1.5">(desde {getCatalogMinQty(business, priceItem.key, product)} un.)</span>
+                          {priceItem.key !== 'price1' && minDe(priceItem.key) > 1 && (
+                            <span className="text-xs text-gray-400 ml-1.5">(desde {minDe(priceItem.key)} un.)</span>
                           )}
                         </span>
                       </div>
@@ -693,12 +710,17 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                   )
                 })}
               </div>
-              {selectedPriceLevel && selectedPriceLevel !== 'price1' && getCatalogMinQty(business, selectedPriceLevel, product) > 1 && (
+              {precioAuto ? (siguienteNivel && (
                 <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg mt-2 flex items-center gap-1.5">
                   <Info className="w-3.5 h-3.5 flex-shrink-0" />
-                  Precio aplica desde {getCatalogMinQty(business, selectedPriceLevel, product)} unidades
+                  Lleva {siguienteNivel.faltan} más y pagas {fmtCatalog(siguienteNivel.nivel.value)} cada una ({siguienteNivel.nivel.label})
                 </p>
-              )}
+              )) : (nivelEfectivo && nivelEfectivo !== 'price1' && minDe(nivelEfectivo) > 1 && (
+                <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg mt-2 flex items-center gap-1.5">
+                  <Info className="w-3.5 h-3.5 flex-shrink-0" />
+                  Precio aplica desde {minDe(nivelEfectivo)} unidades
+                </p>
+              ))}
             </div>
           )}
 
@@ -919,11 +941,13 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
               <h3 className="font-semibold mb-3" style={{ color: tokens.colors.text }}>Precios disponibles</h3>
               <div className={`border overflow-hidden divide-y ${esOscuro ? 'border-white/10 divide-white/10' : 'border-gray-200 divide-gray-200'}`} style={{ borderRadius: tokens.radius.lg }}>
                 {availablePrices.map((priceItem) => {
-                  const isSelected = selectedPriceLevel === priceItem.key
+                  const isSelected = nivelEfectivo === priceItem.key
                   return (
                     <button
                       key={priceItem.key}
+                      disabled={precioAuto}
                       onClick={() => {
+                        if (precioAuto) return
                         setSelectedPriceLevel(priceItem.key)
                         const min = getCatalogMinQty(business, priceItem.key, product)
                         if (priceItem.key !== 'price1' && min > 1 && quantity < min) {
@@ -948,8 +972,8 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                         </div>
                         <span className="font-medium" style={isSelected ? { color: getCatalogAccent(business) } : { color: tokens.colors.text }}>
                           {priceItem.label}
-                          {priceItem.key !== 'price1' && getCatalogMinQty(business, priceItem.key, product) > 1 && (
-                            <span className="text-xs text-gray-400 ml-1.5">(desde {getCatalogMinQty(business, priceItem.key, product)} un.)</span>
+                          {priceItem.key !== 'price1' && minDe(priceItem.key) > 1 && (
+                            <span className="text-xs text-gray-400 ml-1.5">(desde {minDe(priceItem.key)} un.)</span>
                           )}
                         </span>
                       </div>
@@ -960,12 +984,17 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
                   )
                 })}
               </div>
-              {selectedPriceLevel && selectedPriceLevel !== 'price1' && getCatalogMinQty(business, selectedPriceLevel, product) > 1 && (
+              {precioAuto ? (siguienteNivel && (
                 <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg mt-2 flex items-center gap-1.5">
                   <Info className="w-3.5 h-3.5 flex-shrink-0" />
-                  Precio aplica desde {getCatalogMinQty(business, selectedPriceLevel, product)} unidades
+                  Lleva {siguienteNivel.faltan} más y pagas {fmtCatalog(siguienteNivel.nivel.value)} cada una ({siguienteNivel.nivel.label})
                 </p>
-              )}
+              )) : (nivelEfectivo && nivelEfectivo !== 'price1' && minDe(nivelEfectivo) > 1 && (
+                <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg mt-2 flex items-center gap-1.5">
+                  <Info className="w-3.5 h-3.5 flex-shrink-0" />
+                  Precio aplica desde {minDe(nivelEfectivo)} unidades
+                </p>
+              ))}
             </div>
           )}
 

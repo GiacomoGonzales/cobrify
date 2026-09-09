@@ -28,6 +28,7 @@ import {
   getProductPrices,
   getProductPriceRange,
 } from '@/components/catalog/catalogHelpers'
+import { getCatalogMinQty } from '@/lib/utils'
 
 // Porcentaje de descuento cuando hay precio de comparación (tachado) mayor
 // al precio real. null si no aplica (sin comparación, variantes, o <5% que
@@ -114,12 +115,19 @@ function CardPrice({ product, ctx, compact = false }) {
   if (!compact && showAllPrices && prices.length > 1) {
     return (
       <div className="flex flex-col">
-        {prices.map(p => (
-          <span key={p.key} className="text-sm leading-tight">
-            <span className={`font-bold ${th.text}`}>{fmtCatalog(p.value)}</span>
-            <span className={`text-xs ml-1 ${th.textMuted}`}>{p.label}</span>
-          </span>
-        ))}
+        {prices.map(p => {
+          // Sin el mínimo, la tarjeta prometía S/0.15 y al entrar el precio era otro.
+          const min = getCatalogMinQty(business, p.key, product)
+          return (
+            <span key={p.key} className="text-sm leading-tight">
+              <span className={`font-bold ${th.text}`}>{fmtCatalog(p.value)}</span>
+              <span className={`text-xs ml-1 ${th.textMuted}`}>{p.label}</span>
+              {p.key !== 'price1' && min > 1 && (
+                <span className={`text-xs ml-1 ${th.textMuted}`}>(desde {min})</span>
+              )}
+            </span>
+          )
+        })}
       </div>
     )
   }
@@ -414,12 +422,18 @@ export function ListCard({ product, ctx }) {
                 if (showAllPrices && prices.length > 1) {
                   return (
                     <div className="flex flex-col">
-                      {prices.map(p => (
-                        <span key={p.key} className="text-sm leading-tight">
-                          <span className={`font-bold ${th.text}`}>{fmtCatalog(p.value)}</span>
-                          <span className={`text-xs ml-1 ${th.textMuted}`}>{p.label}</span>
-                        </span>
-                      ))}
+                      {prices.map(p => {
+                        const min = getCatalogMinQty(business, p.key, product)
+                        return (
+                          <span key={p.key} className="text-sm leading-tight">
+                            <span className={`font-bold ${th.text}`}>{fmtCatalog(p.value)}</span>
+                            <span className={`text-xs ml-1 ${th.textMuted}`}>{p.label}</span>
+                            {p.key !== 'price1' && min > 1 && (
+                              <span className={`text-xs ml-1 ${th.textMuted}`}>(desde {min})</span>
+                            )}
+                          </span>
+                        )
+                      })}
                     </div>
                   )
                 }
