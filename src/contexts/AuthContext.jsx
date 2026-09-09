@@ -105,6 +105,9 @@ export const AuthProvider = ({ children }) => {
   // null = no tiene propios y hereda la opción del negocio (ver
   // src/utils/dataPermissions.js).
   const [dataPermissions, setDataPermissions] = useState(null)
+  // Qué puede hacer con comprobantes YA EMITIDOS: { editar, anular }.
+  // null = sin restricciones (lo normal). Ver src/utils/permisosDeComprobantes.js.
+  const [invoicePermissions, setInvoicePermissions] = useState(null)
   const [hideDiscountInPOS, setHideDiscountInPOS] = useState(false) // Ocultar descuentos en POS
   const [businessMode, setBusinessMode] = useState(null) // Modo de negocio: 'retail' | 'restaurant' | 'pharmacy' (null mientras carga)
   const [businessSettings, setBusinessSettings] = useState(null) // Configuración completa del negocio
@@ -267,6 +270,7 @@ export const AuthProvider = ({ children }) => {
                 setHideStockInPOS(userData.hideStockInPOS || false)
                 setHideDiscountInPOS(userData.hideDiscountInPOS || false)
                 setDataPermissions(userData.dataPermissions || null)
+                setInvoicePermissions(userData.invoicePermissions || null)
                 console.log('✅ Permisos cargados:', userData.allowedPages)
                 console.log('🏪 Almacenes permitidos:', userData.allowedWarehouses || 'Todos')
                 console.log('🏢 Sucursales permitidas:', userData.allowedBranches || 'Todas')
@@ -682,6 +686,7 @@ export const AuthProvider = ({ children }) => {
       setHideStockInPOS(userData.hideStockInPOS || false)
       setHideDiscountInPOS(userData.hideDiscountInPOS || false)
       setDataPermissions(userData.dataPermissions || null)
+      setInvoicePermissions(userData.invoicePermissions || null)
     }, (error) => {
       console.warn('Error en listener de permisos (se mantienen los cargados):', error)
     })
@@ -1006,6 +1011,7 @@ export const AuthProvider = ({ children }) => {
     hideStockInPOS, // Ocultar stock en tarjetas del POS
     hideDiscountInPOS, // Ocultar descuentos en POS
     dataPermissions, // Permisos de datos del sub-usuario (null = hereda del negocio)
+    invoicePermissions, // Editar/anular comprobantes emitidos (null = sin restricciones)
     hasPageAccess,
     hasWarehouseAccess, // Función para verificar acceso a un almacén
     filterWarehousesByAccess, // Función para filtrar almacenes según permisos

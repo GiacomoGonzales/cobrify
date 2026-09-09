@@ -1,6 +1,7 @@
 import {
   Mail, Calendar, ShieldCheck, Warehouse, Store, UserCheck, Bike, Wallet,
-  Eye, EyeOff, Key, Edit2, Archive, ArchiveRestore, Trash2, FileText, CreditCard, KeyRound } from 'lucide-react'
+  Eye, EyeOff, Key, Edit2, Archive, ArchiveRestore, Trash2, FileText, CreditCard, KeyRound, Ban } from 'lucide-react'
+import { resolverPermisosDeComprobantes, tieneAlgunaRestriccion } from '@/utils/permisosDeComprobantes'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 
@@ -69,6 +70,10 @@ export default function DetalleUsuarioModal({
   const todosLosAlmacenes = nombresDeAlmacenes.length === 0
 
   const permisos = usuario.dataPermissions
+  // Solo se muestra si el dueño le apagó algo: lo normal es poder todo y no
+  // tiene sentido llenar la ficha de líneas que dicen "sí puede".
+  const acciones = resolverPermisosDeComprobantes({ esSecundario: true, invoicePermissions: usuario.invoicePermissions })
+  const hayRestriccion = tieneAlgunaRestriccion(usuario.invoicePermissions)
   const creado = usuario.createdAt
     ? formatearFecha(usuario.createdAt.toDate ? usuario.createdAt.toDate() : usuario.createdAt)
     : null
@@ -160,6 +165,17 @@ export default function DetalleUsuarioModal({
                 `${permisos.verCostos === false ? 'No ve' : 'Ve'} los costos`,
                 `${permisos.exportar === false ? 'No puede' : 'Puede'} exportar`,
               ].join(' · ')}
+            </Dato>
+          )}
+
+          {hayRestriccion && (
+            <Dato icono={Ban} etiqueta="Restricciones en Ventas">
+              {[
+                acciones.editar ? null : 'No puede editar comprobantes emitidos',
+                acciones.anular ? null : 'No puede anular ni eliminar comprobantes',
+              ].filter(Boolean).map((t) => (
+                <span key={t} className="block">{t}</span>
+              ))}
             </Dato>
           )}
 

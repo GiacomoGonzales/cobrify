@@ -42,6 +42,7 @@ import {
   Fuel,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useInvoicePermissions } from '@/hooks/useInvoicePermissions'
 import { useAuth } from '@/contexts/AuthContext'
 import { useBranding } from '@/contexts/BrandingContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -324,6 +325,8 @@ export default function POS() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasFeature } = useAppContext()
   const { filterWarehousesByAccess, filterBranchesByAccess, allowedBranches, activeBranchId, setActiveBranch, allowedDocumentTypes, allowedPaymentMethods, assignedSellerId, independentCashRegister, hideStockInPOS, hideDiscountInPOS, userPermissions, subscription, isAdmin } = useAuth()
   const { branding } = useBranding()
+  // Editar un comprobante ya emitido puede estar apagado para este usuario.
+  const permisosComprobante = useInvoicePermissions()
   const toast = useToast()
   const location = useLocation()
   const navigate = useNavigate()
@@ -2573,6 +2576,15 @@ export default function POS() {
     const editId = searchParams.get('editInvoiceId')
     const duplicateId = searchParams.get('duplicateInvoiceId')
 
+    // Al sub-usuario sin permiso de editar no le aparece la opción en Ventas,
+    // pero la URL se puede escribir a mano o quedar en el historial. Duplicar
+    // no se toca: eso emite un comprobante NUEVO, que es su trabajo.
+    if (editId && !permisosComprobante.editar) {
+      toast.error('No tienes permiso para editar comprobantes')
+      appNavigate('facturas')
+      return
+    }
+
     if (editId && !editInvoiceLoadedRef.current && user?.uid) {
       editInvoiceLoadedRef.current = true
       loadInvoiceForEdit(editId)
@@ -2580,7 +2592,7 @@ export default function POS() {
       editInvoiceLoadedRef.current = true
       loadInvoiceForDuplicate(duplicateId)
     }
-  }, [location.search, user])
+  }, [location.search, user, permisosComprobante.editar])
 
   // Función para cargar documento a editar
   const loadInvoiceForEdit = async (invoiceId) => {

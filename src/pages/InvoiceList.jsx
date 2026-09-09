@@ -46,6 +46,7 @@ import {
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useDataPermissions } from '@/hooks/useDataPermissions'
+import { useInvoicePermissions } from '@/hooks/useInvoicePermissions'
 import { useBranding } from '@/contexts/BrandingContext'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent } from '@/components/ui/Card'
@@ -107,6 +108,9 @@ const TIPOS_EXPORTABLES = ['factura', 'boleta', 'nota_venta', 'nota_credito', 'n
 export default function InvoiceList() {
   const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode, filterBranchesByAccess, hasMainBranchAccess, isBusinessOwner, isAdmin, allowedBranches, allowedWarehouses, assignedSellerId , branchScope } = useAppContext()
   const permisos = useDataPermissions()
+  // Editar y anular comprobantes ya emitidos. El dueño puede apagárselo a un
+  // sub-usuario en su ficha; para él y para el admin siempre viene en true.
+  const permisosComprobante = useInvoicePermissions()
   const { branding } = useBranding()
   const appNavigate = useAppNavigate()
   const appPath = useAppPath()
@@ -3945,7 +3949,8 @@ Gracias por tu preferencia.`
                       porque al editar no se ajusta el stock.
                       Se excluyen las convertidas a comprobante (editarlas dejaría la
                       nota y su factura diciendo cosas distintas) y las anuladas. */}
-                  {((invoice.documentType === 'factura' || invoice.documentType === 'boleta')
+                  {permisosComprobante.editar &&
+                   ((invoice.documentType === 'factura' || invoice.documentType === 'boleta')
                       ? invoice.sunatStatus !== 'accepted'
                       : invoice.documentType === 'nota_venta' &&
                         businessSettings?.allowEditNotaVenta === true &&
@@ -4062,7 +4067,8 @@ Gracias por tu preferencia.`
 
                   {/* Editar fecha de emisión (NC pendiente o rechazada).
                       Útil cuando SUNAT rechaza por fecha vieja. */}
-                  {invoice.documentType === 'nota_credito' &&
+                  {permisosComprobante.editar &&
+                   invoice.documentType === 'nota_credito' &&
                    invoice.status !== 'cancelled' && invoice.status !== 'voided' &&
                    (invoice.sunatStatus === 'pending' || invoice.sunatStatus === 'rejected' ||
                     invoice.sunatStatus === 'signed' || invoice.sunatStatus === 'SIGNED' ||
@@ -4081,7 +4087,7 @@ Gracias por tu preferencia.`
 
                   {/* Editar y reemitir NC RECHAZADA (mismo número). Una NC
                       rechazada no existe para SUNAT: se corrige y reenvía. */}
-                  {invoice.documentType === 'nota_credito' && invoice.sunatStatus === 'rejected' && (
+                  {permisosComprobante.editar && invoice.documentType === 'nota_credito' && invoice.sunatStatus === 'rejected' && (
                     <button
                       onClick={() => {
                         setOpenMenuId(null)
@@ -4377,7 +4383,8 @@ Gracias por tu preferencia.`
                       por SUNAT. Un documento rechazado nunca existió para SUNAT —no
                       hay baja que comunicar— pero antes no tenía NINGUNA opción de
                       anulación y seguía sumando en caja y ventas para siempre. */}
-                  {(invoice.documentType === 'nota_venta' ||
+                  {permisosComprobante.anular &&
+                   (invoice.documentType === 'nota_venta' ||
                     ((invoice.documentType === 'factura' || invoice.documentType === 'boleta') && invoice.sunatStatus === 'rejected')) &&
                    invoice.status !== 'cancelled' && (
                     <>
@@ -4398,7 +4405,8 @@ Gracias por tu preferencia.`
                   )}
 
                   {/* Anular en SUNAT - Para facturas, boletas y notas de crédito/débito aceptadas dentro del plazo */}
-                  {(invoice.documentType === 'factura' || invoice.documentType === 'boleta' || invoice.documentType === 'nota_credito' || invoice.documentType === 'nota_debito') &&
+                  {permisosComprobante.anular &&
+                   (invoice.documentType === 'factura' || invoice.documentType === 'boleta' || invoice.documentType === 'nota_credito' || invoice.documentType === 'nota_debito') &&
                    invoice.sunatStatus === 'accepted' &&
                    invoice.status !== 'cancelled' &&
                    invoice.status !== 'voided' &&
@@ -4443,7 +4451,7 @@ Gracias por tu preferencia.`
                   {/* Eliminar - Solo si está habilitado en Configuración Y NO fue enviado/aceptado por SUNAT */}
                   {/* Los comprobantes aceptados por SUNAT tienen validez fiscal y no se pueden eliminar */}
                   {/* Facturas/Boletas aceptadas solo se pueden anular mediante Nota de Crédito */}
-                  {businessSettings?.allowDeleteInvoices && (
+                  {permisosComprobante.anular && businessSettings?.allowDeleteInvoices && (
                     // Notas de venta (sin validez fiscal) se pueden eliminar si está habilitado
                     invoice.documentType === 'nota_venta' ||
                     // Facturas/Boletas/Notas de Crédito/Notas de Débito: solo si NO fueron aceptadas por SUNAT

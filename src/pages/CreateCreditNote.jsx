@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { ArrowLeft, Loader2, FileText, AlertCircle, AlertTriangle, Plus, Trash2, Search, Wallet, Banknote } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useInvoicePermissions } from '@/hooks/useInvoicePermissions'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { estadoInicialSunat } from '@/utils/estadoInicialSunat'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -98,8 +99,15 @@ export default function CreateCreditNote() {
   // cantidades van bloqueadas: para otras cantidades, emitir una NC nueva).
   const editNCParam = searchParams.get('editNC')
   const [editingNC, setEditingNC] = useState(null)
+  // Mismo permiso que esconde "Editar y reemitir" en Ventas: la URL
+  // ?editNC= no puede ser la puerta de atrás.
+  const permisosComprobante = useInvoicePermissions()
 
   useEffect(() => {
+    if (editNCParam && !permisosComprobante.editar) {
+      setMessage({ type: 'error', text: 'No tienes permiso para editar comprobantes' })
+      return
+    }
     if (!editNCParam || !user?.uid) return
     ;(async () => {
       try {
@@ -122,7 +130,7 @@ export default function CreateCreditNote() {
       }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editNCParam, user?.uid])
+  }, [editNCParam, user?.uid, permisosComprobante.editar])
 
   // Con la NC cargada y la lista de facturas lista: fijar la factura referenciada
   // y heredar motivo (la precarga de items corre en el efecto de referencedInvoiceId).

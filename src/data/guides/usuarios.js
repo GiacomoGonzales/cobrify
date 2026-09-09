@@ -6,7 +6,7 @@
  */
 export default {
   id: 'usuarios',
-  actualizado: '06/09/2026',
+  actualizado: '09/09/2026',
   intro:
     'Acá creas las cuentas de tu equipo y decides qué puede ver y hacer cada uno. Es la pantalla que evita que un cajero vea tus márgenes o cambie tus precios.',
 
@@ -85,6 +85,41 @@ export default {
         {
           type: 'texto',
           text: 'También puedes limitar los **Tipos de comprobante** que emite y darle una **Caja independiente**, para que su cierre no se mezcle con el de los demás.',
+        },
+      ],
+    },
+
+    {
+      id: 'editar-anular',
+      title: 'Quién puede editar y anular ventas',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Vender vende cualquiera que tenga el POS. Lo que casi siempre quieres reservarte es lo que viene **después**: que alguien abra una venta de ayer y la cambie, o que anule una factura ya aceptada por SUNAT.',
+        },
+        {
+          type: 'texto',
+          text: 'En la ficha del usuario, el bloque **Qué puede hacer en Ventas** tiene dos casillas: **Editar comprobantes emitidos** y **Anular comprobantes emitidos**. Al desmarcar una, esa opción simplemente **deja de aparecerle** en el menú de la página Ventas.',
+        },
+        {
+          type: 'tabla',
+          encabezados: ['Si desmarcas', 'Deja de verle en Ventas'],
+          filas: [
+            ['Editar comprobantes emitidos', 'Editar documento · Editar fecha y reenviar a SUNAT · Editar y reemitir'],
+            ['Anular comprobantes emitidos', 'Anular Nota de Venta · Anular en SUNAT · Eliminar'],
+          ],
+        },
+        {
+          type: 'consejo',
+          text: 'Son dos casillas separadas a propósito. Hay negocios donde el encargado corrige notas de venta todo el día pero anular anula solo el dueño.',
+        },
+        {
+          type: 'ojo',
+          text: 'Vienen **marcadas**: es una restricción que enciendes tú, no un permiso que tengas que repartir. Los usuarios que ya tenías siguen trabajando igual que siempre hasta que entres a su ficha y desmarques algo.',
+        },
+        {
+          type: 'texto',
+          text: 'Sigue pudiendo vender, cobrar, imprimir y consultar el comprobante. Solo pierde las opciones que tocan una venta ya hecha.',
         },
       ],
     },
@@ -176,6 +211,10 @@ export default {
     {
       q: '¿El sub-usuario ve mi suscripción o mis datos de facturación?',
       a: 'No. Esas pantallas son del dueño de la cuenta.',
+    },
+    {
+      q: 'Mi cajero anuló una venta y no quiero que vuelva a pasar.',
+      a: 'Abre su ficha y desmarca **Anular comprobantes emitidos** en el bloque **Qué puede hacer en Ventas**. Deja de aparecerle la opción; el resto de su trabajo no cambia.',
     },
   ],
 }

@@ -381,6 +381,9 @@ export const createManagedUser = async (ownerId, userData) => {
       // queda null y el usuario hereda la opción del negocio — es lo que hace
       // que los sub-usuarios de siempre no cambien de comportamiento.
       dataPermissions: userData.dataPermissions || null,
+      // Qué puede hacer con comprobantes YA EMITIDOS: { editar, anular }.
+      // null = sin restricciones, que es como trabajó siempre todo el mundo.
+      invoicePermissions: userData.invoicePermissions || null,
       // Datos de RR.HH. (Capa 1 del módulo Personal). Todos opcionales — los
       // sub-usuarios viejos siguen funcionando porque el sub-objeto puede no
       // existir y la UI lo lee con `?.`.
