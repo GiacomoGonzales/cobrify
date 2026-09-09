@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { captureAttribution } from '@/utils/attribution'
+import { captureAttribution, getStoredAttribution } from '@/utils/attribution'
 import {
   MessageCircle, ArrowRight, Check, FileText, ShoppingCart, Package,
   Users, BarChart3, ClipboardList, Handshake, ShieldCheck,
@@ -14,7 +14,34 @@ import {
 // bordes finos, mucho aire y reveals discretos. Seriedad para empresas.
 
 const WA_BASE = 'https://wa.me/51900434988'
-const waLink = (text) => `${WA_BASE}?text=${encodeURIComponent(text)}`
+
+/**
+ * El código del cliente que recomendó esta visita, si lo hay (`?ref=1000042`).
+ *
+ * Manda la URL de AHORA sobre lo guardado: si alguien vuelve con el enlace de
+ * otro conocido, el mérito es de ese enlace y no del primero que abrió hace un
+ * mes. Lo guardado es el respaldo para cuando la persona vuelve escribiendo la
+ * dirección a mano, que es lo normal cuando lo piensa un par de días.
+ */
+const codigoQueRecomienda = () => {
+  const enLaUrl = (new URLSearchParams(window.location.search).get('ref') || '').trim()
+  if (/^\d{6,10}$/.test(enLaUrl)) return enLaUrl
+  const guardado = getStoredAttribution()
+  return guardado?.medium === 'referido-cliente' ? guardado.campaign : ''
+}
+
+/**
+ * Todos los botones de WhatsApp de la landing pasan por acá, y por eso el
+ * código del referido viaja SOLO: la persona no tiene que acordarse de nada ni
+ * escribirlo, y el mensaje llega a la bandeja con el dato adentro. Ese mensaje
+ * es hoy el único camino real del programa de referidos, porque en la web
+ * nadie se registra por su cuenta.
+ */
+const waLink = (text) => {
+  const codigo = codigoQueRecomienda()
+  const cuerpo = codigo ? `${text}. Me recomendó el cliente ${codigo}` : text
+  return `${WA_BASE}?text=${encodeURIComponent(cuerpo)}`
+}
 
 const RUBROS = [
   'Bodegas', 'Restaurantes', 'Farmacias', 'Ferreterías', 'Boutiques', 'Minimarkets',

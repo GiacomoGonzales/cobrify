@@ -18,6 +18,7 @@ import {
 } from '@/services/subscriptionService';
 import { getVendedorByLinkedUser, getVendedorClients } from '@/services/vendedorService';
 import { puedeVerHistorialDePagos } from '@/utils/subscriptionOwnership';
+import { MESES_DE_REGALO, MESES_PARA_QUIEN_REFIERE, mesesDeRegalo } from '@/data/referidos';
 import { useSubscriptionPaymentInfo } from '@/hooks/useSubscriptionPaymentInfo';
 import {
   CreditCard,
@@ -34,14 +35,57 @@ import {
   Store,
   Phone,
   X,
-  ShieldCheck
+  ShieldCheck,
+  Gift,
+  Copy,
+  Check
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import yapeLogo from '@/assets/wallets/yape.png';
 
+/**
+ * Copiar al portapapeles con aviso en el propio botón.
+ *
+ * El `execCommand` de respaldo no es de adorno: `navigator.clipboard` no existe
+ * en http, y el sistema se abre en red local más veces de las que uno cree.
+ */
+function BotonCopiar({ texto, etiqueta = 'Copiar', className = '' }) {
+  const [copiado, setCopiado] = useState(false);
+
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(texto);
+    } catch {
+      const caja = document.createElement('textarea');
+      caja.value = texto;
+      document.body.appendChild(caja);
+      caja.select();
+      document.execCommand('copy');
+      document.body.removeChild(caja);
+    }
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 2000);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={copiar}
+      className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
+        copiado
+          ? 'border-green-200 bg-green-50 text-green-700'
+          : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+      } ${className}`}
+    >
+      {copiado ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+      {copiado ? 'Copiado' : etiqueta}
+    </button>
+  );
+}
+
 export default function MySubscription() {
-  const { subscription, user, getBusinessId } = useAuth();
+  const { subscription, user, getBusinessId, businessSettings } = useAuth();
   const { branding } = useBranding();
   const toast = useToast();
   // Qué botón está iniciando el pago (id del plan de esa tarjeta, o 'legacy').
@@ -283,6 +327,29 @@ export default function MySubscription() {
   const renewAmount = subscription.renewalPrice != null ? subscription.renewalPrice : planInfo.totalPrice;
   // Dónde está parado hoy dentro de la grilla nivel × ciclo (null si es legacy).
   const { tier: currentTier, cycle: currentCycle } = resolvePlanTier(subscription.plan);
+
+  // ---- Programa de referidos ----------------------------------------------
+  // El código NO se genera acá ni en ningún lado: es el número de cliente que
+  // el negocio ya tiene desde que nació (correlativo desde 1000001). Por eso
+  // los clientes de siempre ya lo tienen sin que haya que hacerles nada.
+  const codigoDeReferido = businessSettings?.codigoCliente || null;
+  // Lo que gana quien llega, armado desde la tabla de `data/referidos.js` para
+  // que subir un mes allá lo cambie también en esta pantalla. Los ilimitados no
+  // están en la tabla, así que no aparecen: no hay que acordarse de excluirlos.
+  const planesConRegalo = Object.keys(MESES_DE_REGALO).map((id) => ({
+    id,
+    nombre: (PLANS[id]?.name || id).split(' - ')[0].replace(/^Plan /, ''),
+    meses: mesesDeRegalo(id),
+  }));
+  // El enlace corto y decente es el que la persona va a pegar en un WhatsApp.
+  // Al abrirlo, la landing mete el código en el mensaje de contacto sola, así
+  // que llega a la bandeja sin que nadie tenga que acordarse de mencionarlo.
+  const enlaceDeReferido = `https://cobrifyperu.com/?ref=${codigoDeReferido}`;
+  const mensajeParaCompartir =
+    `Yo uso Cobrify para emitir mis boletas y facturas electrónicas.\n` +
+    `Si te sirve, entra de mi parte y te regalan un mes al contratar:\n` +
+    enlaceDeReferido;
+
 
   return (
     <div className="space-y-6">
@@ -831,6 +898,81 @@ export default function MySubscription() {
           </div>
         </div>
       </div>
+
+      {/* Invita y gana un mes. Solo para clientes DIRECTOS de Cobrify: la
+          cuenta de un reseller o de un vendedor no es nuestra para premiarla
+          —el que le cobra es su proveedor—, igual que el historial de pagos. */}
+      {isDirectClient && codigoDeReferido && (
+        <div className="bg-white p-6 rounded-2xl border border-gray-200">
+          <div className="flex items-start gap-3 mb-5">
+            <Gift className="w-6 h-6 text-purple-600 shrink-0 mt-0.5" />
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Invita y gana un mes</h3>
+              <p className="text-sm text-gray-500">
+                Por cada negocio que traigas y contrate un plan, te regalamos{' '}
+                {MESES_PARA_QUIEN_REFIERE === 1 ? '1 mes' : `${MESES_PARA_QUIEN_REFIERE} meses`}. Sin límite.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <p className="text-sm text-gray-500 mb-1.5">Tu código</p>
+              <div className="flex items-center gap-3">
+                <p className="text-3xl font-bold text-gray-900 tabular-nums tracking-wide">
+                  {codigoDeReferido}
+                </p>
+                <BotonCopiar texto={String(codigoDeReferido)} />
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                El mes se te suma a tu vencimiento cuando el negocio que trajiste paga.
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-gray-500 mb-2">Lo que gana quien traigas</p>
+              <ul className="space-y-1">
+                {planesConRegalo.map((plan) => (
+                  <li key={plan.id} className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="text-gray-700">{plan.nombre}</span>
+                    <span className="font-semibold text-gray-900 whitespace-nowrap">
+                      {plan.meses === 1 ? '1 mes' : `${plan.meses} meses`} de regalo
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-gray-500 mt-2">En los planes Ilimitado no aplica.</p>
+            </div>
+          </div>
+
+          <div className="mt-5 pt-5 border-t border-gray-100">
+            <p className="text-sm text-gray-500 mb-2">Mensaje listo para reenviar</p>
+            <p className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-xl p-3 whitespace-pre-line break-words">
+              {mensajeParaCompartir}
+            </p>
+            <div className="flex flex-wrap items-center gap-2 mt-3">
+              <BotonCopiar texto={mensajeParaCompartir} etiqueta="Copiar mensaje" />
+              {/* wa.me sin número abre la lista de contactos: elige a quién se
+                  lo manda desde su propio WhatsApp, sin salir a ningún lado. */}
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(mensajeParaCompartir)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg text-white bg-green-600 hover:bg-green-700 transition-colors"
+              >
+                <Phone className="w-4 h-4" />
+                Compartir por WhatsApp
+              </a>
+            </div>
+            <p className="text-xs text-gray-500 mt-3">
+              Quien abra tu enlace llega a nuestro WhatsApp con tu código adentro del
+              mensaje, así que no tiene que acordarse de mencionarlo. Si prefiere
+              escribirnos por su cuenta, basta con que diga que lo recomendó el
+              cliente {codigoDeReferido}.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Historial de pagos */}
       {verHistorialDePagos && subscription.paymentHistory && subscription.paymentHistory.length > 0 && (
