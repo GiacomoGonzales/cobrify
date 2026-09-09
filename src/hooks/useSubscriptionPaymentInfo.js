@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { getVendedor } from '@/services/vendedorService'
 import { getResellerPaymentInfo } from '@/services/brandingService'
+import { WHATSAPP_COBRIFY } from '@/data/contacto'
 
-const DEFAULT_WHATSAPP = '51900434988'
+const DEFAULT_WHATSAPP = WHATSAPP_COBRIFY
 
 // Datos de cobro de Cobrify (solo para clientes DIRECTOS, sin reseller ni vendedor).
 const DEFAULT_PAYMENT_INFO = {

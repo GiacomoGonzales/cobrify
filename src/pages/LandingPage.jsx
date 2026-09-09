@@ -7,7 +7,7 @@ export default function LandingPage() {
     <div className="min-h-screen bg-white relative overflow-hidden">
       {/* WhatsApp Floating Button */}
       <a
-        href="https://wa.me/51900434988?text=Hola%2C%20quiero%20información%20sobre%20Cobrify"
+        href="https://wa.me/51955778215?text=Hola%2C%20quiero%20información%20sobre%20Cobrify"
         target="_blank"
         rel="noopener noreferrer"
         className="fixed bottom-6 right-6 z-50 group"
@@ -70,7 +70,7 @@ export default function LandingPage() {
                 </Button>
               </Link>
               <a
-                href="https://wa.me/51900434988?text=Hola%2C%20quiero%20información%20sobre%20Cobrify"
+                href="https://wa.me/51955778215?text=Hola%2C%20quiero%20información%20sobre%20Cobrify"
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -511,7 +511,7 @@ export default function LandingPage() {
                   <span>Catálogo digital</span>
                 </li>
               </ul>
-              <a href="https://wa.me/51900434988?text=Hola%2C%20quiero%20contratar%20el%20plan%20Básico%20Mensual%20de%20Cobrify" target="_blank" rel="noopener noreferrer">
+              <a href="https://wa.me/51955778215?text=Hola%2C%20quiero%20contratar%20el%20plan%20Básico%20Mensual%20de%20Cobrify" target="_blank" rel="noopener noreferrer">
                 <Button variant="outline" className="w-full border-2 border-primary-600 text-primary-700 hover:bg-primary-50 font-semibold">
                   Contratar Plan
                 </Button>
@@ -574,7 +574,7 @@ export default function LandingPage() {
                   <span>Catálogo digital</span>
                 </li>
               </ul>
-              <a href="https://wa.me/51900434988?text=Hola%2C%20quiero%20contratar%20el%20plan%20Mensual%20de%20Cobrify" target="_blank" rel="noopener noreferrer">
+              <a href="https://wa.me/51955778215?text=Hola%2C%20quiero%20contratar%20el%20plan%20Mensual%20de%20Cobrify" target="_blank" rel="noopener noreferrer">
                 <Button variant="outline" className="w-full border-2 border-primary-600 text-primary-700 hover:bg-primary-50 font-semibold">
                   Contratar Plan
                 </Button>
@@ -640,7 +640,7 @@ export default function LandingPage() {
                   <span>Catálogo digital</span>
                 </li>
               </ul>
-              <a href="https://wa.me/51900434988?text=Hola%2C%20quiero%20contratar%20el%20plan%20Semestral%20de%20Cobrify" target="_blank" rel="noopener noreferrer">
+              <a href="https://wa.me/51955778215?text=Hola%2C%20quiero%20contratar%20el%20plan%20Semestral%20de%20Cobrify" target="_blank" rel="noopener noreferrer">
                 <Button className="w-full bg-white text-primary-700 hover:bg-primary-50 font-semibold shadow-lg">
                   Contratar Plan
                 </Button>
@@ -706,7 +706,7 @@ export default function LandingPage() {
                   <span>Catálogo digital</span>
                 </li>
               </ul>
-              <a href="https://wa.me/51900434988?text=Hola%2C%20quiero%20contratar%20el%20plan%20Anual%20de%20Cobrify" target="_blank" rel="noopener noreferrer">
+              <a href="https://wa.me/51955778215?text=Hola%2C%20quiero%20contratar%20el%20plan%20Anual%20de%20Cobrify" target="_blank" rel="noopener noreferrer">
                 <Button className="w-full bg-gradient-to-r from-primary-600 to-primary-700 text-white hover:from-primary-700 hover:to-primary-800 font-semibold shadow-lg">
                   Contratar Plan
                 </Button>
@@ -840,7 +840,7 @@ export default function LandingPage() {
               </div>
 
               <a
-                href="https://wa.me/51900434988?text=Hola%2C%20quiero%20información%20sobre%20el%20programa%20de%20resellers%20de%20Cobrify"
+                href="https://wa.me/51955778215?text=Hola%2C%20quiero%20información%20sobre%20el%20programa%20de%20resellers%20de%20Cobrify"
                 target="_blank"
                 rel="noopener noreferrer"
               >

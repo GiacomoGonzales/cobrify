@@ -1,5 +1,6 @@
 import { Check, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { WHATSAPP_COBRIFY } from '@/data/contacto';
 
 // ============================================================================
 // PLANES — EDITA AQUÍ para actualizar precios y beneficios de /pricing.
@@ -9,7 +10,7 @@ import { Link } from 'react-router-dom';
 //   annual:      oferta anual destacada dentro de la tarjeta { price, savings }
 //                (null = solo mensual, sin oferta)
 // ============================================================================
-const WHATSAPP = '51900434988';
+const WHATSAPP = WHATSAPP_COBRIFY;
 const waLink = (planName) =>
   `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(`Hola, quiero contratar el plan ${planName} de Cobrify`)}`;
 

@@ -1,3 +1,4 @@
+import { enlaceWhatsapp } from '@/data/contacto'
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { collection, query, where, getDocs, orderBy, addDoc, Timestamp } from 'firebase/firestore'
@@ -338,7 +339,7 @@ export default function ResellerBalance() {
 
               {/* WhatsApp Button */}
               <a
-                href="https://wa.me/51900434988?text=Hola,%20quiero%20recargar%20mi%20saldo%20de%20reseller"
+                href={enlaceWhatsapp('Hola, quiero recargar mi saldo de reseller')}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700"

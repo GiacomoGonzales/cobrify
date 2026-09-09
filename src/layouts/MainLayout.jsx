@@ -34,6 +34,7 @@ import { useToast } from '@/contexts/ToastContext'
 // páginas nuevas AHÍ, no en mapas locales.
 import { routeToPageId, getFirstAllowedRoute } from '@/utils/pageRoutes'
 import { getSubscriptionWarning, ESTILO_AVISO } from '@/utils/subscriptionWarning'
+import { WHATSAPP_COBRIFY } from '@/data/contacto'
 
 export default function MainLayout() {
   const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription, isBusinessOwner, isReseller, userPermissions, rolesResolved, hasPageAccess, allowedPages, getBusinessId, businessMode, businessSettings } = useAuth()
@@ -458,7 +459,7 @@ export default function MainLayout() {
   }
   const contactoWhatsApp = conCodigoPais(branding?.whatsapp)
     || conCodigoPais(vendedorWhatsApp)
-    || '51900434988'
+    || WHATSAPP_COBRIFY
 
   // Cargar WhatsApp del vendedor si tiene uno asignado (para banners de gracia / límite)
   useEffect(() => {

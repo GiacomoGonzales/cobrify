@@ -1,3 +1,4 @@
+import { WHATSAPP_COBRIFY } from '@/data/contacto'
 import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { captureAttribution, getStoredAttribution } from '@/utils/attribution'
@@ -13,7 +14,7 @@ import {
 // degradado animado sutil en el hero, captura real del producto en marco de navegador,
 // bordes finos, mucho aire y reveals discretos. Seriedad para empresas.
 
-const WA_BASE = 'https://wa.me/51900434988'
+const WA_BASE = `https://wa.me/${WHATSAPP_COBRIFY}`
 
 /**
  * El código del cliente que recomendó esta visita, si lo hay (`?ref=1000042`).

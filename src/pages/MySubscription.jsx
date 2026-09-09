@@ -43,6 +43,7 @@ import {
 import { format, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import yapeLogo from '@/assets/wallets/yape.png';
+import { WHATSAPP_COBRIFY_LEGIBLE, EMAIL_SOPORTE } from '@/data/contacto';
 
 /**
  * Copiar al portapapeles con aviso en el propio botón.
@@ -256,10 +257,10 @@ export default function MySubscription() {
     : (assignedVendedor?.name || 'Cobrify')
   const supportWhatsapp = (isResellerAccount
     ? (branding.whatsapp || '')
-    : (assignedVendedor?.phone || '+51 900 434 988')).trim()
+    : (assignedVendedor?.phone || WHATSAPP_COBRIFY_LEGIBLE)).trim()
   // El vendedor no tiene correo en su ficha; el de Cobrify se mantiene porque
   // estas cuentas siguen siendo clientes de Cobrify (el vendedor es su asesor).
-  const supportEmail = (isResellerAccount ? (branding.supportEmail || '') : 'soporte@cobrifyperu.com').trim()
+  const supportEmail = (isResellerAccount ? (branding.supportEmail || '') : EMAIL_SOPORTE).trim()
   // wa.me necesita solo dígitos; si es un celular peruano de 9 dígitos, anteponer 51.
   const supportWaDigits = (() => {
     const d = supportWhatsapp.replace(/\D/g, '')

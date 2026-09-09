@@ -1,4 +1,5 @@
 import { Wrench } from 'lucide-react'
+import { enlaceWhatsapp } from '@/data/contacto'
 
 /**
  * Lo que ve un cliente mientras el sistema está en mantenimiento.
@@ -27,7 +28,7 @@ export default function Mantenimiento({ mensaje }) {
         </p>
 
         <a
-          href="https://wa.me/51900434988"
+          href={enlaceWhatsapp()}
           target="_blank"
           rel="noopener noreferrer"
           className="mt-8 inline-block text-[13px] text-gray-500 underline underline-offset-4 hover:text-gray-900"
