@@ -21,6 +21,13 @@ import {
  *   - `businesses.origen`: el canal con el que nació cada cuenta.
  *   - `subscriptions.paymentHistory`: lo que pagó, que es la misma fuente que
  *     usa Admin > Pagos. No se recalcula nada acá.
+ *
+ *     OJO con lo que significa el periodo: filtra CUÁNDO ENTRÓ la cuenta, y lo
+ *     cobrado es TODO lo que esa cuenta pagó desde entonces, no solo lo que
+ *     pagó dentro de la ventana. Para atribución es lo correcto —lo que se
+ *     quiere saber es cuánto vale un cliente que trajo ese canal— pero por eso
+ *     este total NUNCA va a coincidir con el de Admin > Pagos, que suma pagos
+ *     por fecha de pago. Son dos preguntas distintas.
  *   - `whatsappConversations.origenAnuncio`: los leads que llegaron por un
  *     anuncio y TODAVÍA no son cuenta. Es la mitad que faltaba: sin ellos, un
  *     anuncio que trae mucha gente que no compra parece que no trae nada.
@@ -145,7 +152,7 @@ export default function AdminOrigen() {
         <Cifra etiqueta="Cuentas nuevas" valor={totales.cuentas} />
         <Cifra etiqueta="Con origen conocido" valor={totales.medidas} />
         <Cifra etiqueta="Leads sin cuenta" valor={totales.leads} />
-        <Cifra etiqueta="Cobrado" valor={moneda(totales.cobrado)} />
+        <Cifra etiqueta="Cobrado" valor={moneda(totales.cobrado)} nota="Todo lo que pagaron esas cuentas" />
       </Cifras>
 
       {/* El aviso solo mientras la medición esté arrancando. Sin él, una tabla
@@ -159,7 +166,10 @@ export default function AdminOrigen() {
         </Aviso>
       )}
 
-      <Seccion titulo="Por canal" descripcion="Ordenado por lo cobrado, que es lo que decide dónde poner el presupuesto.">
+      <Seccion
+        titulo="Por canal"
+        descripcion="Ordenado por lo cobrado, que es lo que decide dónde poner el presupuesto. El periodo filtra CUÁNDO ENTRÓ la cuenta; lo cobrado es todo lo que pagó desde entonces, no solo lo del periodo."
+      >
         <Tabla>
           <thead>
             <tr>
