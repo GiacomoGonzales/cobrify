@@ -128,6 +128,15 @@ export default {
           text: 'Y el dinero: **Resumen por Método de Pago** y su **Distribución**, que te dicen cuánto de tu venta es efectivo y cuánto digital. Cierra con **Últimas Ventas**, el detalle de las más recientes.',
         },
         {
+          type: 'texto',
+          text: 'Cada fila de **Últimas Ventas** tiene un botón **Ver detalle** que abre la venta por dentro: cada producto con su cantidad, cuánto entró, cuánto costó, cuánto dejó y con qué margen. Sirve para entender POR QUÉ una venta dejó poco: casi siempre es un producto puntual el que baja el promedio.',
+        },
+        { type: 'ui', kind: 'boton', label: 'Ver detalle' },
+        {
+          type: 'ojo',
+          text: 'Si un producto sale con **sin costo**, es que no tiene costo cargado en el catálogo: su utilidad aparece igual al ingreso y te infla el margen de esa venta. Los **productos personalizados** (los que se escriben a mano en el momento) salen con un guión, porque nunca tuvieron costo. Y si la venta llevó un descuento sobre el total, el pie te lo dice: ese monto no pertenece a ningún producto en particular.',
+        },
+        {
           type: 'consejo',
           text: 'Si el efectivo es una porción grande, el arqueo de caja deja de ser un trámite y pasa a ser tu control principal. Ahí conviene el cierre a ciegas.',
         },

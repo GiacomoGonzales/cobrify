@@ -36,6 +36,8 @@ import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { documentLabel, esRuc } from '@/utils/documentType'
 import { getDocumentTotalInBase, convertToBase, getReportsCurrency, resolveReportsRate, convertBaseToDisplay } from '@/utils/currency'
+import Modal from '@/components/ui/Modal'
+import { detalleDeUtilidad } from '@/utils/detalleDeUtilidad'
 import { getInvoices, getRecentInvoices, getCustomersWithStats, getProducts, getProductCategories, getProductBrands, getPurchases, getFinancialMovements, getAllCashMovements } from '@/services/firestoreService'
 import { getRecipes } from '@/services/recipeService'
 import { getActiveBranches } from '@/services/branchService'
@@ -565,6 +567,11 @@ function ReportsGeneral() {
     return convertToBase(subtotal, invoice?.currency, invoice?.exchangeRate)
   }, [])
 
+  // Venta abierta en el desglose por producto (botón "Ver detalle" de Últimas
+  // Ventas). Guarda el comprobante entero, no su id: la lista ya lo tiene
+  // calculado con su costo y utilidad, y así el modal no vuelve a buscarlo.
+  const [ventaDetallada, setVentaDetallada] = useState(null)
+
   // Detecta si un item se agregó como "producto personalizado" en el POS
   // (no existe en el catálogo). Convención del POS: `id: custom-{ts}` para
   // productos libres y `id: appointment-...` para citas veterinarias.
@@ -573,6 +580,19 @@ function ReportsGeneral() {
     const id = item.productId || item.id
     return typeof id === 'string' && (id.startsWith('custom-') || id.startsWith('appointment-'))
   }, [])
+
+  // Desglose por producto de la venta abierta. Usa EXACTAMENTE los mismos
+  // criterios que la fila de la tabla —el costo por ítem, el ingreso en moneda
+  // base y el total del documento—, así el pie del modal cuadra con la fila.
+  const desgloseDeVenta = useMemo(() => {
+    if (!ventaDetallada) return null
+    return detalleDeUtilidad(ventaDetallada, {
+      costoDeItem: calculateItemCost,
+      ingresoDeItem: itemRevenueInBase,
+      esPersonalizado: isCustomItem,
+      ingresoDelComprobante: getDocumentTotalInBase,
+    })
+  }, [ventaDetallada, calculateItemCost, itemRevenueInBase, isCustomItem])
 
   /**
    * Los límites del período elegido, en un solo lugar.
@@ -3755,6 +3775,13 @@ function ReportsGeneral() {
                           {getInvoiceDate(invoice) ? formatDate(getInvoiceDate(invoice)) : '-'}
                         </span>
                         <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setVentaDetallada(invoice)}
+                            className="text-primary-600 font-medium hover:underline"
+                          >
+                            Ver detalle
+                          </button>
                           {invoice.allItemsCustom ? (
                             <span className="text-gray-400" title="Venta con productos personalizados (sin costo registrado en el catálogo).">s/c</span>
                           ) : invoice.marginUnreliable ? (
@@ -3798,6 +3825,7 @@ function ReportsGeneral() {
                       <TableHead className="text-right">Costo</TableHead>
                       <TableHead className="text-right">Utilidad</TableHead>
                       <TableHead className="text-right">Margen</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Detalle</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -3894,6 +3922,15 @@ function ReportsGeneral() {
                                 {(invoice.profitMargin || 0).toFixed(1)}%
                               </span>
                             )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <button
+                              type="button"
+                              onClick={() => setVentaDetallada(invoice)}
+                              className="text-primary-600 text-[13px] font-medium hover:underline whitespace-nowrap"
+                            >
+                              Ver detalle
+                            </button>
                           </TableCell>
                         </TableRow>
                       )
@@ -7021,6 +7058,102 @@ function ReportsGeneral() {
           </>
         )
       })()}
+
+      {/* Desglose por producto de una venta: qué dejó cada línea. */}
+      <Modal
+        isOpen={!!ventaDetallada}
+        onClose={() => setVentaDetallada(null)}
+        title={ventaDetallada ? `Detalle de ${ventaDetallada.number || 'la venta'}` : ''}
+        size="xl"
+      >
+        {desgloseDeVenta && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-600">
+              <span>{ventaDetallada.customer?.name || 'Cliente General'}</span>
+              <span>{getInvoiceDate(ventaDetallada) ? formatDate(getInvoiceDate(ventaDetallada)) : '-'}</span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <Table className={COMPACT_TABLE}>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Producto</TableHead>
+                    <TableHead className="text-right">Cant.</TableHead>
+                    <TableHead className="text-right">Ingreso</TableHead>
+                    <TableHead className="text-right">Costo</TableHead>
+                    <TableHead className="text-right">Utilidad</TableHead>
+                    <TableHead className="text-right">Margen</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {desgloseDeVenta.lineas.map((l) => (
+                    <TableRow key={l.clave}>
+                      <TableCell>
+                        <span className="block font-medium text-gray-900">{l.nombre}</span>
+                        {(l.sku || l.unidad) && (
+                          <span className="block text-xs text-gray-500">
+                            {[l.sku, l.unidad].filter(Boolean).join(' · ')}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">{l.cantidad}</TableCell>
+                      <TableCell className="text-right font-semibold">{formatMoney(l.ingreso)}</TableCell>
+                      <TableCell className="text-right text-red-600">
+                        {l.personalizado ? (
+                          <span className="text-gray-400" title="Producto personalizado: no tiene costo registrado en el catálogo.">—</span>
+                        ) : l.costoFaltante ? (
+                          <span className="text-gray-400" title="Este producto no tiene costo cargado en el catálogo, así que la utilidad de esta línea sale igual al ingreso.">sin costo</span>
+                        ) : formatMoney(l.costo)}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold text-green-600">
+                        {l.personalizado ? <span className="text-gray-400">—</span> : formatMoney(l.utilidad)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {l.personalizado ? (
+                          <span className="text-gray-400">s/c</span>
+                        ) : (
+                          <span className={`font-medium ${
+                            l.margen >= 30 ? 'text-green-600' : l.margen >= 15 ? 'text-yellow-600' : 'text-red-600'
+                          }`}>
+                            {l.margen.toFixed(1)}%
+                          </span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {desgloseDeVenta.descuadre > 0 && (
+              <p className="text-xs text-gray-500">
+                La suma de los productos da {formatMoney(desgloseDeVenta.totales.ingreso + desgloseDeVenta.descuadre)}.
+                La diferencia de {formatMoney(desgloseDeVenta.descuadre)} es el descuento aplicado al total de la venta,
+                que no pertenece a ningún producto en particular.
+              </p>
+            )}
+
+            <div className="border-t pt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+              <div>
+                <span className="block text-gray-500">Venta</span>
+                <span className="font-semibold text-gray-900">{formatMoney(desgloseDeVenta.totales.ingreso)}</span>
+              </div>
+              <div>
+                <span className="block text-gray-500">Costo</span>
+                <span className="font-semibold text-red-600">{formatMoney(desgloseDeVenta.totales.costo)}</span>
+              </div>
+              <div>
+                <span className="block text-gray-500">Utilidad</span>
+                <span className="font-semibold text-green-600">{formatMoney(desgloseDeVenta.totales.utilidad)}</span>
+              </div>
+              <div>
+                <span className="block text-gray-500">Margen</span>
+                <span className="font-semibold text-gray-900">{desgloseDeVenta.totales.margen.toFixed(1)}%</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }
