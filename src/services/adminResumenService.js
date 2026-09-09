@@ -269,7 +269,10 @@ function calcularAdquisicion(landingSnap, bizSnap, days = 30) {
     const created = data.createdAt?.toDate?.()
     if (!created || created < since) return
     signupsInRange++
-    const src = data.acquisition?.source
+    // El canal, de la forma única de `data/origen.js`. Antes se leía
+    // `acquisition.source`, que además de ser otra forma nunca tuvo un solo
+    // dato: el campo no llegaba a escribirse.
+    const src = data.origen?.canal
     if (src) {
       signupsBySource[src] = (signupsBySource[src] || 0) + 1
       attributedSignups++

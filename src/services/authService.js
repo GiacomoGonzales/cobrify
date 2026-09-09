@@ -15,6 +15,7 @@ import { auth, secondaryAuth, db } from '@/lib/firebase'
 import { createSubscription, PLANS } from './subscriptionService'
 import { setAsBusinessOwner } from './adminService'
 import { getStoredAttribution } from '@/utils/attribution'
+import { origenDesdeLanding } from '@/data/origen'
 
 /**
  * La semilla de cuenta nueva vive en el servidor: es la MISMA para el alta del
@@ -162,7 +163,10 @@ export const registerUser = async (email, password, displayName, businessData = 
           // De dónde vino este cliente (Google, publicidad, referido...). Se
           // capturó en su primera visita a la landing y se conserva acá para
           // poder medir qué canal trae clientes que pagan, no solo visitas.
-          ...(getStoredAttribution() ? { acquisition: getStoredAttribution() } : {}),
+          // `origen`, en la forma única de `src/data/origen.js`. Esta función
+          // hoy no la llama nadie, pero si alguien la revive tiene que escribir
+          // el mismo campo que los otros caminos, no una forma paralela.
+          ...(origenDesdeLanding(getStoredAttribution()) ? { origen: origenDesdeLanding(getStoredAttribution()) } : {}),
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         }, { merge: true })

@@ -745,7 +745,8 @@ export async function recalculateInvestorReport() {
  *
  * Las visitas salen de `landingStats/{YYYY-MM-DD}` (contadores diarios que
  * escribe la Cloud Function trackLandingVisit). El registro se atribuye con el
- * campo `acquisition` que se guarda en el negocio al crear la cuenta.
+ * campo `origen` que se guarda en el negocio al crear la cuenta (ver
+ * `src/data/origen.js`: canal, detalle, id y fecha).
  *
  * OJO: solo hay datos desde que se activó la medición; los negocios anteriores
  * no tienen origen y se muestran aparte como "Sin medir".
@@ -792,7 +793,10 @@ export async function getAcquisitionData(days = 30) {
       const created = data.createdAt?.toDate?.()
       if (!created || created < since) return
       signupsInRange++
-      const src = data.acquisition?.source
+      // El canal, de la forma única de `data/origen.js`. Antes se leía
+    // `acquisition.source`, que además de ser otra forma nunca tuvo un solo
+    // dato: el campo no llegaba a escribirse.
+    const src = data.origen?.canal
       if (src) {
         signupsBySource[src] = (signupsBySource[src] || 0) + 1
         attributedSignups++

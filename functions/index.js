@@ -51,6 +51,7 @@ import {
 import { resolveAudience } from './src/services/audienceService.js'
 import { siguienteCodigoCliente, sugerirRubro } from './src/services/clientesService.js'
 import { sembrarCuenta } from './src/services/semillaService.js'
+import { origenDesdeLanding, origenDesdeAnuncio } from './src/data/origen.js'
 import { nuevoCodigoDeAlta, ESTADOS_ALTA, altaParaElFormulario, mensajeDeAlta } from './src/services/altasService.js'
 import { crearSuscripcion, deshacerCuenta } from './src/services/suscripcionesService.js'
 
@@ -14003,6 +14004,16 @@ async function guardarMensajeEntrante(m) {
 
   await asegurarCuentaWa(m.cuenta)
 
+  // Si esta conversación nació de un anuncio y el número resultó ser el de un
+  // cliente que TODAVÍA no tenía origen, se le pega.
+  //
+  // Con dos condiciones, porque es fácil atribuir mal: solo si la cuenta no
+  // tiene origen ya, y solo si nació DESPUÉS del clic en el anuncio. Sin lo
+  // segundo, un cliente de hace un año que hoy escribe desde un anuncio le
+  // daría el crédito a ese anuncio, y ese anuncio no lo trajo: ya estaba.
+  pegarOrigenDeAnuncioAlNegocio(m, vinculo?.linkedBusinessId).catch((e) =>
+    console.error('[WhatsApp] No se pudo pegar el origen al negocio:', e.message))
+
   // Respuestas automaticas (bienvenida al primer mensaje, ausencia fuera de
   // horario). Despues de guardar el entrante y sin bloquear nada: un fallo
   // aca jamas debe costar el mensaje del cliente.
@@ -14552,6 +14563,31 @@ export const rebuildWhatsappPhoneIndex = onSchedule(
  * Intenta vincular una conversacion con un negocio de Cobrify.
  * Devuelve los campos a guardar (o solo la marca de intento si no hubo cruce).
  */
+/**
+ * Le pone a un negocio el anuncio que lo trajo, cuando se puede afirmar.
+ *
+ * Se llama al vincular la conversación con una cuenta. No escribe si la cuenta
+ * ya tiene origen (el primero manda) ni si la cuenta es más vieja que el clic
+ * en el anuncio (entonces el anuncio no la trajo).
+ */
+async function pegarOrigenDeAnuncioAlNegocio(m, businessId) {
+  if (!businessId || !m.origen) return
+  const nuevo = origenDesdeAnuncio(m.origen)
+  if (!nuevo) return
+
+  const ref = db.collection('businesses').doc(businessId)
+  const snap = await ref.get()
+  if (!snap.exists) return
+  const datos = snap.data() || {}
+  if (datos.origen) return
+
+  const nacio = datos.createdAt?.toDate?.()
+  if (!nacio || nacio.getTime() < m.timestamp) return
+
+  await ref.set({ origen: { ...nuevo, fecha: new Date(m.timestamp).toISOString() } }, { merge: true })
+  console.log(`[WhatsApp] Negocio ${businessId}: origen puesto desde el anuncio ${nuevo.id || nuevo.detalle}`)
+}
+
 async function camposDeVinculo(waId) {
   const cel = celularDeWaId(waId)
   if (!cel) return { linkAttempted: true }
@@ -15532,16 +15568,6 @@ export const crearCuentaCompleta = onRequest(
  * momento de la venta, y no se vuelven a consultar de ningún catálogo: lo que
  * se cobró es lo que se cobró.
  */
-/** Lo que el navegador diga sobre su origen, recortado a la forma conocida. */
-function limpiarOrigenDeAlta(v) {
-  if (!v || typeof v !== 'object') return null
-  const corto = (x, n) => (typeof x === 'string' ? x.trim().slice(0, n) : '')
-  const fuente = corto(v.source, 40)
-  return fuente
-    ? { source: fuente, medium: corto(v.medium, 40), campaign: corto(v.campaign, 60), referrer: corto(v.referrer, 300), landedAt: corto(v.landedAt, 40) }
-    : null
-}
-
 export const crearAltaPendiente = onRequest(
   { region: 'us-central1', timeoutSeconds: 30, memory: '256MiB', invoker: 'public', cors: true },
   async (req, res) => {
@@ -15698,20 +15724,11 @@ export const completarAlta = onRequest(
       // conversación se mandó el alta, y esa conversación ya guarda de qué
       // anuncio de Meta llegó el lead. Ese es el origen de verdad: el anuncio
       // que trajo a la persona que terminó pagando.
-      let origenDelAlta = limpiarOrigenDeAlta(datos.acquisition)
+      let origenDelAlta = origenDesdeLanding(datos.acquisition)
       if (!origenDelAlta && alta.conversationId) {
         try {
           const conv = await db.collection('whatsappConversations').doc(alta.conversationId).get()
-          const anuncio = conv.data()?.origenAnuncio
-          if (anuncio?.anuncioId || anuncio?.titular) {
-            origenDelAlta = {
-              source: anuncio.tipo === 'post' ? 'facebook' : 'meta-ads',
-              medium: 'publicidad',
-              campaign: String(anuncio.titular || anuncio.anuncioId || '').slice(0, 60),
-              referrer: String(anuncio.enlace || '').slice(0, 300),
-              landedAt: '',
-            }
-          }
+          origenDelAlta = origenDesdeAnuncio(conv.data()?.origenAnuncio)
         } catch (e) {
           // Un fallo leyendo la conversación jamás debe costar el alta.
           console.error('[Alta] No se pudo leer el origen de la conversación:', e.message)
@@ -15741,7 +15758,7 @@ export const completarAlta = onRequest(
       const uid = usuario.uid
       await sembrarCuenta(db, {
         uid, email: usuario.email,
-        datos: { ...datos, acquisition: origenDelAlta },
+        datos: { ...datos, origen: origenDelAlta },
         FieldValue,
       })
 

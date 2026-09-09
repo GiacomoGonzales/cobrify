@@ -16,6 +16,7 @@
 import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 const { rubros } = require('../data/rubros.json')
+import { origenDesdeLanding, limpiarOrigen } from '../data/origen.js'
 
 import {
   OPCIONES_SEMILLA, VALORES_SEMILLA, SERIES_NEGOCIO, SUNAT_SEMILLA,
@@ -26,28 +27,6 @@ import {
 export const VERSION_SEMILLA = 1
 
 const texto = (v) => (typeof v === 'string' ? v.trim() : '')
-
-/**
- * El origen del cliente, recortado a lo que conocemos.
- *
- * Cinco campos, todos texto y con tope de largo; lo que no esté en esta lista
- * se descarta. Quien llama al endpoint es el navegador, y un campo abierto
- * dentro del documento del negocio es una puerta abierta.
- */
-function limpiarOrigen(v) {
-  if (!v || typeof v !== 'object') return null
-  const corto = (x, n) => (typeof x === 'string' ? x.trim().slice(0, n) : '')
-  const origen = {
-    source: corto(v.source, 40),
-    medium: corto(v.medium, 40),
-    campaign: corto(v.campaign, 60),
-    referrer: corto(v.referrer, 300),
-    landedAt: corto(v.landedAt, 40),
-  }
-  // Sin fuente no hay nada que medir: mejor no escribir el campo que dejarlo
-  // vacío y que después parezca que sí se midió.
-  return origen.source ? origen : null
-}
 
 /**
  * Deja una cuenta recién creada lista para usar.
@@ -84,9 +63,17 @@ export async function sembrarCuenta(db, { uid, email, datos = {}, FieldValue }) 
   // (nombre comercial) son los buenos. `name` y `razonSocial` van con el mismo
   // valor SOLO para que no se rompa lo que todavía los lee; cuando esos
   // lectores se unifiquen, se borran de aquí y de ningún sitio más.
-  // Viene del navegador y nadie lo valida, así que se recorta a la forma
-  // conocida antes de escribirlo.
-  const origen = limpiarOrigen(datos.acquisition)
+  // De dónde vino el cliente, en la forma ÚNICA de `data/origen.js`.
+  //
+  // Puede llegar de dos maneras: ya traducido (lo hace `completarAlta` con el
+  // anuncio de la conversación) o tal como lo capturó la landing, que es lo que
+  // manda el navegador. Se acepta cualquiera de las dos y se guarda una sola.
+  //
+  // Lo que llega del navegador NO es de fiar: `limpiarOrigen` es la última
+  // puerta y descarta todo lo que no sea el canal, el detalle, el id y la
+  // fecha. Sin esto, quien llame al endpoint escribe lo que quiera dentro del
+  // documento del negocio.
+  const origen = limpiarOrigen(datos.origen) || origenDesdeLanding(datos.acquisition)
 
   const razonSocial = texto(datos.businessName)
   const nombreComercial = texto(datos.tradeName) || razonSocial
@@ -135,12 +122,17 @@ export async function sembrarCuenta(db, { uid, email, datos = {}, FieldValue }) 
     // (`src/utils/attribution.js`: gclid, fbclid, UTM o el sitio de
     // procedencia) y lo guarda en el navegador hasta que se crea la cuenta.
     //
-    // Hasta hoy ese viaje se cortaba: el único sitio que escribía `acquisition`
-    // era `registerUser`, que no lo llama nadie. Resultado, de 752 negocios el
-    // campo estaba en CERO — la landing llevaba meses midiendo para nada.
-    // Ahora entra por acá, que es por donde pasan los DOS caminos que crean
-    // cuentas: `crearCuentaCompleta` y `completarAlta`.
-    ...(origen ? { acquisition: origen } : {}),
+    // Hasta hoy ese viaje se cortaba: el único sitio que escribía el origen era
+    // `registerUser`, que no lo llama nadie. Resultado, de 752 negocios el campo
+    // estaba en CERO — la landing llevaba meses midiendo para nada. Ahora entra
+    // por acá, que es por donde pasan los DOS caminos que crean cuentas:
+    // `crearCuentaCompleta` y `completarAlta`.
+    //
+    // El campo se llama `origen` y no `acquisition` porque ahora hay una sola
+    // forma para todos los canales (ver `data/origen.js`). El nombre viejo no
+    // se conserva como alias: se comprobó que no lo tenía NI UNA de las 752
+    // cuentas, así que no hay nada que respetar.
+    ...(origen ? { origen } : {}),
 
     ...VALORES_SEMILLA,
     ...opciones,
