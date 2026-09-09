@@ -11,7 +11,7 @@
  * del paquete). Por eso el CONTENIDO (PaquetesPaciente) va aparte del modal.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { Package, Loader2, Trash2, Plus, Undo2, Check } from 'lucide-react'
+import { Package, Loader2, Trash2, Plus, Undo2, Check, Pencil } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import Modal from '@/components/ui/Modal'
@@ -20,6 +20,7 @@ import { getProducts } from '@/services/firestoreService'
 import { esVendible } from '@/utils/productSale'
 import {
   getPackages, addPackage, usarSesion, deshacerUltimoUso, deletePackage, sesionesDisponibles, estaActivo,
+  cambiarTotalDeSesiones,
 } from '@/services/packageService'
 import { fechaCorta } from '@/utils/fichaAtencion'
 
@@ -80,7 +81,9 @@ export function PaquetesPaciente({ customer, onChanged, activo = true }) {
       ...f,
       productId: id,
       productName: p ? p.name : f.productName,
-      sessionsTotal: p && Number(p.sessions) > 1 ? String(p.sessions) : f.sessionsTotal,
+      // Solo prellena si el campo está vacío. Antes pisaba lo escrito: Adara
+      // tipeaba 5, elegía el tratamiento (3 sesiones) y quedaba 3 sin aviso.
+      sessionsTotal: f.sessionsTotal || (p && Number(p.sessions) > 1 ? String(p.sessions) : ''),
     }))
   }
 
@@ -130,6 +133,24 @@ export function PaquetesPaciente({ customer, onChanged, activo = true }) {
       await refrescar()
     } catch (e) {
       toast.error(e?.message || 'No se pudo deshacer')
+    } finally {
+      setOcupado(null)
+    }
+  }
+
+  // Corregir el total de un paquete ya creado (no se podía: solo agregar,
+  // usar, deshacer o borrar). El mínimo son las sesiones ya usadas.
+  const [editandoTotal, setEditandoTotal] = useState(null)
+  const [nuevoTotal, setNuevoTotal] = useState('')
+  const guardarTotal = async (p) => {
+    setOcupado(p.id)
+    try {
+      const r = await cambiarTotalDeSesiones(getBusinessId(), customerId, p.id, nuevoTotal)
+      toast.success(`Ahora incluye ${r.sessionsTotal} sesiones`)
+      setEditandoTotal(null)
+      await refrescar()
+    } catch (e) {
+      toast.error(e?.message || 'No se pudo corregir el paquete')
     } finally {
       setOcupado(null)
     }
@@ -196,6 +217,15 @@ export function PaquetesPaciente({ customer, onChanged, activo = true }) {
           )}
           <button
             type="button"
+            onClick={() => { setEditandoTotal(p.id); setNuevoTotal(String(total)) }}
+            disabled={enCurso}
+            className="p-1.5 text-gray-400 hover:text-gray-800 hover:bg-gray-100 rounded"
+            title="Corregir cuántas sesiones incluye"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
             onClick={() => borrar(p)}
             disabled={enCurso}
             className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
@@ -204,6 +234,22 @@ export function PaquetesPaciente({ customer, onChanged, activo = true }) {
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
+        {editandoTotal === p.id && (
+          <div className="flex items-center gap-2 mt-2">
+            <span className="text-xs text-gray-600">Sesiones que incluye:</span>
+            <input
+              type="number"
+              min={Math.max(1, usadas)}
+              value={nuevoTotal}
+              onChange={e => setNuevoTotal(e.target.value)}
+              className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+              autoFocus
+            />
+            <Button size="sm" onClick={() => guardarTotal(p)} disabled={enCurso}>Guardar</Button>
+            <Button size="sm" variant="outline" onClick={() => setEditandoTotal(null)} disabled={enCurso}>Cancelar</Button>
+            {usadas > 0 && <span className="text-xs text-gray-400">mínimo {usadas}, ya usadas</span>}
+          </div>
+        )}
         {usosAbiertos === p.id && (
           <ul className="mt-2 text-xs text-gray-600 space-y-0.5">
             {p.uses.map((u, i) => (

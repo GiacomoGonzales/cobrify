@@ -140,6 +140,7 @@ export default {
             'Cóbralo en el Punto de Venta con el paciente **elegido**: el paquete queda en su ficha.',
             'En cada cita, desde **En atención**, presiona **Usar sesión del paquete**: la cita se completa sin volver a cobrar.',
             'En la ficha del paciente, la pestaña **Paquetes** muestra cuántas sesiones le quedan; ahí también se descuenta a mano (**Usar sesión**) o se carga con **Agregar paquete** uno que venía de antes.',
+            'Si un paquete quedó con menos sesiones de las que incluye (por ejemplo 3 cuando era de 5), corrígelo con el **lápiz** del paquete: el mínimo son las ya usadas. Al agregar uno a mano, elegir el tratamiento ya no pisa el número que escribiste; solo lo sugiere si el campo está vacío.',
           ],
         },
         {

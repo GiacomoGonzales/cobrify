@@ -13,6 +13,7 @@
  * (`packagesSummary`) para que la lista de Pacientes muestre las sesiones
  * que le quedan sin leer la subcolección de cada uno.
  */
+import { corregirTotal, estadoDePaquete } from '@/utils/paquetes'
 import {
   collection, doc, addDoc, updateDoc, deleteDoc, getDoc, getDocs, query, orderBy,
   serverTimestamp, Timestamp,
@@ -82,7 +83,7 @@ export const addPackage = async (businessId, customerId, datos) => {
     invoiceNumber: String(datos.invoiceNumber || ''),
     price: datos.price != null && Number.isFinite(Number(datos.price)) ? Number(datos.price) : null,
     notes: String(datos.notes || '').trim(),
-    status: usadas >= total ? 'finished' : 'active',
+    status: estadoDePaquete(null, usadas, total),
     createdBy: datos.createdBy || null,
     createdAt: serverTimestamp(),
   }
@@ -107,7 +108,7 @@ export const usarSesion = async (businessId, customerId, packageId, { appointmen
 
   const sessionsUsed = (Number(p.sessionsUsed) || 0) + 1
   const uses = [...(p.uses || []), { date, appointmentId, note: String(note || '').trim(), at: Timestamp.now() }]
-  const status = sessionsUsed >= (Number(p.sessionsTotal) || 0) ? 'finished' : 'active'
+  const status = estadoDePaquete(p, sessionsUsed, p.sessionsTotal)
   await updateDoc(ref, { sessionsUsed, uses, status, updatedAt: serverTimestamp() })
   await guardarResumen(businessId, customerId)
   return { id: packageId, ...p, sessionsUsed, uses, status }
@@ -126,6 +127,21 @@ export const deshacerUltimoUso = async (businessId, customerId, packageId) => {
   await updateDoc(ref, { sessionsUsed, uses, status: 'active', updatedAt: serverTimestamp() })
   await guardarResumen(businessId, customerId)
   return { id: packageId, ...p, sessionsUsed, uses, status: 'active' }
+}
+
+/**
+ * Corrige cuántas sesiones incluye un paquete ya creado (la regla, con su
+ * mínimo en las ya usadas, está en utils/paquetes).
+ */
+export const cambiarTotalDeSesiones = async (businessId, customerId, packageId, nuevoTotal) => {
+  const ref = doc(paquetesDe(businessId, customerId), packageId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) throw new Error('El paquete ya no existe')
+  const p = snap.data()
+  const cambios = corregirTotal(p, nuevoTotal)
+  await updateDoc(ref, { ...cambios, updatedAt: serverTimestamp() })
+  await guardarResumen(businessId, customerId)
+  return { id: packageId, ...p, ...cambios }
 }
 
 export const deletePackage = async (businessId, customerId, packageId) => {
