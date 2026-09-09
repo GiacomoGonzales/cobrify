@@ -10,10 +10,13 @@
  * "Agendar cita" manda a la Agenda con ?agendar=<id>: se abre "Agendar cita"
  * con la persona ya elegida.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useToast } from '@/contexts/ToastContext'
+import { setPatientPhoto, removePatientPhoto } from '@/services/patientPhotoService'
+import AvatarPaciente from './AvatarPaciente'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
-  Calendar, MessageCircle, Edit, Trash2, Loader2, Package, ClipboardList, Receipt, Plus, ChevronRight,
+  Calendar, MessageCircle, Edit, Trash2, Loader2, Package, ClipboardList, Receipt, Plus, ChevronRight, Camera,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import Modal from '@/components/ui/Modal'
@@ -45,8 +48,6 @@ const PESTANAS = [
 ]
 const ACTIVAS = ['scheduled', 'confirmed', 'in_progress']
 
-const iniciales = (nombre) =>
-  String(nombre || '').trim().split(/\s+/).slice(0, 2).map(p => (p[0] || '').toUpperCase()).join('') || '?'
 
 const msDe = (appt) => appt?.scheduledDate?.toMillis?.()
   || (appt?.scheduledDate ? new Date(appt.scheduledDate).getTime() : 0)
@@ -82,6 +83,45 @@ const Campo = ({ etiqueta, children }) => (
 )
 
 export default function FichaPacienteModal({ isOpen, onClose, customer, onEdit, onDelete, onChanged }) {
+  // Foto de perfil: se sube desde el círculo de la cabecera. `fotoLocal` la
+  // muestra al instante, antes de que el padre recargue al paciente.
+  const fotoRef = useRef(null)
+  const [subiendoFoto, setSubiendoFoto] = useState(false)
+  const [fotoLocal, setFotoLocal] = useState(undefined)
+  useEffect(() => { setFotoLocal(undefined) }, [customer?.id])
+  const toastFoto = useToast()
+  const { getBusinessId: negocioDeFoto } = useAppContext()
+  const cambiarFoto = async (e) => {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f || !customer?.id) return
+    setSubiendoFoto(true)
+    try {
+      const url = await setPatientPhoto(negocioDeFoto(), customer.id, f)
+      setFotoLocal(url)
+      onChanged?.()
+      toastFoto.success('Foto guardada')
+    } catch (err) {
+      console.error('Error al guardar la foto del paciente:', err)
+      toastFoto.error(err?.message || 'No se pudo guardar la foto')
+    } finally {
+      setSubiendoFoto(false)
+    }
+  }
+  const quitarFoto = async () => {
+    if (!customer?.id || !confirm('¿Quitar la foto del paciente?')) return
+    setSubiendoFoto(true)
+    try {
+      await removePatientPhoto(negocioDeFoto(), customer.id)
+      setFotoLocal(null)
+      onChanged?.()
+      toastFoto.success('Foto quitada')
+    } catch (err) {
+      toastFoto.error(err?.message || 'No se pudo quitar la foto')
+    } finally {
+      setSubiendoFoto(false)
+    }
+  }
   const { getBusinessId, isDemoMode, businessSettings } = useAppContext()
   const location = useLocation()
   const navigate = useNavigate()
@@ -159,8 +199,24 @@ export default function FichaPacienteModal({ isOpen, onClose, customer, onEdit, 
       <div className="space-y-5">
         {/* Cabecera */}
         <div className="flex items-start gap-4">
-          <div className="w-14 h-14 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-lg font-bold flex-shrink-0">
-            {iniciales(customer.name)}
+          <div className="relative flex-shrink-0">
+            <AvatarPaciente customer={fotoLocal === undefined ? customer : { ...customer, photoUrl: fotoLocal }} tamano="lg" />
+            {/* capture="user": en el celular abre la cámara frontal, que es la de un retrato. */}
+            <input ref={fotoRef} type="file" accept="image/*" capture="user" className="hidden" onChange={cambiarFoto} />
+            <button
+              type="button"
+              onClick={() => fotoRef.current?.click()}
+              disabled={subiendoFoto}
+              title={(fotoLocal ?? customer.photoUrl) ? 'Cambiar la foto' : 'Tomar una foto'}
+              className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-white border border-gray-300 shadow-sm flex items-center justify-center text-gray-600 hover:text-gray-900"
+            >
+              {subiendoFoto ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
+            </button>
+            {(fotoLocal ?? customer.photoUrl) && !subiendoFoto && (
+              <button type="button" onClick={quitarFoto} className="block mx-auto mt-1 text-[11px] text-gray-400 hover:text-red-600">
+                Quitar foto
+              </button>
+            )}
           </div>
           <div className="min-w-0 flex-1">
             <h2 className="text-xl font-bold text-gray-900 truncate">{customer.name}</h2>

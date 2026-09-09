@@ -9,6 +9,7 @@
  * Va aparte de la lista de Clientes de siempre a propósito: General y
  * veterinaria conservan sus columnas y sus botones por fila.
  */
+import AvatarPaciente from './AvatarPaciente'
 import { ChevronRight } from 'lucide-react'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { edadDesde, fechaCorta, ultimaAtencion } from '@/utils/fichaAtencion'
@@ -53,6 +54,7 @@ export default function ListaPacientes({ customers, onOpen }) {
               className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-center gap-3">
+                <AvatarPaciente customer={c} tamano="sm" />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-gray-900 truncate">{c.name}</p>
                   <p className="text-xs text-gray-500 truncate">
@@ -92,8 +94,13 @@ export default function ListaPacientes({ customers, onOpen }) {
                   className="cursor-pointer hover:bg-gray-50"
                 >
                   <TableCell className="py-2">
-                    <p className="text-sm font-medium text-gray-900 truncate max-w-[260px]">{c.name}</p>
-                    <Chips c={c} />
+                    <div className="flex items-center gap-3">
+                      <AvatarPaciente customer={c} tamano="sm" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate max-w-[260px]">{c.name}</p>
+                        <Chips c={c} />
+                      </div>
+                    </div>
                   </TableCell>
                   <TableCell className="py-2">
                     <span className="text-xs text-gray-600">

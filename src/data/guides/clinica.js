@@ -100,7 +100,11 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'En **Pacientes**, toca la fila de la persona: se abre su ficha con lo importante arriba —alergia en rojo, **próxima cita**, **última atención**, **sesiones disponibles** y **deuda pendiente**— y debajo las pestañas **Resumen**, **Atenciones**, **Paquetes**, **Galería** y **Compras**.',
+          text: 'En **Pacientes**, toca la fila de la persona: se abre su ficha con lo importante arriba —alergia en rojo, **próxima cita**, **última atención**, **sesiones disponibles** y **deuda pendiente**— y debajo las pestañas **Resumen**, **Anamnesis**, **Atenciones**, **Paquetes**, **Galería**, **Consentimientos**, **Recetas** y **Compras**.',
+        },
+        {
+          type: 'texto',
+          text: 'El círculo con la inicial del paciente puede ser su **foto**: toca la camarita que tiene encima y, desde el celular, se abre la cámara frontal para tomársela en el momento; desde la computadora eliges un archivo. La foto sale también en la lista de Pacientes, así en recepción se reconoce a la persona sin abrir nada. Con **Quitar foto** vuelve la inicial.',
         },
         {
           type: 'pasos',

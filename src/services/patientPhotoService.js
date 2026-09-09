@@ -11,6 +11,7 @@
  * Borrar quita el documento; el archivo queda en el almacenamiento, igual
  * que pasa con las imágenes de producto.
  */
+import { updateCustomer } from './firestoreService'
 import { collection, addDoc, deleteDoc, doc, getDocs, orderBy, query, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { cleanText } from '@/lib/utils'
@@ -68,6 +69,28 @@ export const addPatientPhoto = async (businessId, customerId, file, meta = {}) =
   }
   const ref = await addDoc(fotosDe(businessId, customerId), datos)
   return { id: ref.id, ...datos, createdAt: new Date() }
+}
+
+/**
+ * La FOTO DE PERFIL del paciente: la que sale en el círculo de la ficha y de
+ * la lista en vez de la inicial (pedido de Adara, 9-set-2026). Sube por el
+ * mismo camino que la galería y queda en la ficha como `photoUrl`.
+ * @returns {Promise<string>} la url guardada
+ */
+export const setPatientPhoto = async (businessId, customerId, file) => {
+  if (!esImagen(file)) throw new Error('Elige una imagen (JPG, PNG o WebP)')
+  if (file.size > 12 * 1024 * 1024) throw new Error('La foto pesa demasiado (máximo 12 MB)')
+  const comprimida = await compressForProduct(file)
+  const url = await uploadImage(comprimida, { folder: 'cobrify/patients', businessId })
+  const r = await updateCustomer(businessId, customerId, { photoUrl: url })
+  if (r && r.success === false) throw new Error(r.error || 'No se pudo guardar la foto')
+  return url
+}
+
+/** Quita la foto de perfil; vuelve a verse la inicial. El archivo queda en el almacenamiento. */
+export const removePatientPhoto = async (businessId, customerId) => {
+  const r = await updateCustomer(businessId, customerId, { photoUrl: null })
+  if (r && r.success === false) throw new Error(r.error || 'No se pudo quitar la foto')
 }
 
 export const deletePatientPhoto = async (businessId, customerId, photoId) => {
