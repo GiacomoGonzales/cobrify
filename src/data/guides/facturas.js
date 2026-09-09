@@ -232,6 +232,10 @@ export default {
         },
         {
           type: 'texto',
+          text: 'El **tamaño de letra del ticket** (Configuración, Impresión) alcanza a TODO el texto: el nombre del producto, el sub-detalle de cantidad por precio, las observaciones, las leyendas, el historial de pagos, las cuotas y el mensaje del pie. Si en tu ticketera las líneas finas no se leen, sube ese ajuste a Mediana o Grande.',
+        },
+        {
+          type: 'texto',
           text: '**Duplicar comprobante** es para el cliente que "quiere lo mismo de la semana pasada": abre el POS con los mismos productos cargados para emitir una venta nueva, sin tocar la original.',
         },
         {

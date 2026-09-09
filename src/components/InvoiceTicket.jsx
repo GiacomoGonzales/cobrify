@@ -484,13 +484,18 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           white-space: normal;
         }
 
+        /* El sub-detalle (cantidad x precio) es lo que el cliente revisa
+           para cuadrar la cuenta. Iba un escalón por debajo del nombre del
+           producto y sin negrita: en una ticketera térmica salía finito y no
+           se leía (reseller EDIN SOLANO, 8-set-2026). Ahora pesa lo mismo
+           que el nombre. */
         .item-details {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
           gap: ${is58mm ? '2px' : '4px'};
-          font-size: ${webPrintLegible ? (is58mm ? '9.5pt' : '10.5pt') : (is58mm ? '6.5pt' : '7.5pt')};
-          font-weight: ${webPrintLegible ? '600' : '400'};
+          font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};
+          font-weight: ${webPrintLegible ? '700' : '600'};
           line-height: 1.2;
         }
 
@@ -514,6 +519,32 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           color: #000;
           font-weight: ${webPrintLegible ? '600' : '500'};
           margin-top: 1px;
+        }
+
+        /* Texto secundario del ticket: observaciones, leyendas, historial de
+           pagos, cuotas y el mensaje del pie. Cada uno traía su tamaño fijo en
+           px, así que el ajuste "Letra del ticket" no los tocaba y quedaban
+           finitos en la ticketera. Ahora siguen la misma escala que el resto. */
+        .ticket-nota {
+          font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};
+          font-weight: ${webPrintLegible ? '700' : '600'};
+          white-space: pre-wrap;
+          overflow-wrap: break-word;
+          word-break: break-word;
+        }
+
+        .ticket-subtitulo {
+          font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};
+          font-weight: 700;
+          margin-bottom: 4px;
+        }
+
+        .ticket-sub {
+          font-size: ${webPrintLegible ? (is58mm ? '9.5pt' : '10.5pt') : (is58mm ? '6.5pt' : '7.5pt')};
+          font-weight: ${webPrintLegible ? '600' : '500'};
+          line-height: 1.3;
+          overflow-wrap: break-word;
+          word-break: break-word;
         }
 
         .totals-section {
@@ -671,6 +702,13 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
         .item-code {
           font-size: ${is58mm ? '5pt' : '5.5pt'} !important;
           margin-top: 0 !important;
+        }
+        .ticket-nota, .ticket-subtitulo {
+          font-size: ${is58mm ? '5.5pt' : '6.5pt'} !important;
+        }
+        .ticket-sub {
+          font-size: ${is58mm ? '5pt' : '6pt'} !important;
+          line-height: 1.1 !important;
         }
         .totals-section {
           margin-top: 1px !important;
@@ -1110,7 +1148,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
 
       {/* Leyenda de Amazonía (Ley 27037) */}
       {showAmazonLegend && (
-        <div className="ticket-section" style={{ borderTop: '1px dashed #000', paddingTop: '6px', marginTop: '6px', fontWeight: 'bold', fontSize: '9px', textAlign: 'center' }}>
+        <div className="ticket-section ticket-nota" style={{ borderTop: '1px dashed #000', paddingTop: '6px', marginTop: '6px', textAlign: 'center' }}>
           LEYENDA: BIENES TRANSFERIDOS EN LA AMAZONÍA REGIÓN SELVA PARA SER CONSUMIDOS EN LA MISMA
         </div>
       )}
@@ -1134,9 +1172,9 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
             </>
           )}
           <div style={{ marginTop: '8px' }}>
-            <div style={{ fontSize: '9px', fontWeight: 'bold', marginBottom: '4px' }}>HISTORIAL DE PAGOS:</div>
+            <div className="ticket-subtitulo">HISTORIAL DE PAGOS:</div>
             {invoice.paymentHistory.map((payment, index) => (
-              <div key={index} style={{ fontSize: '8px', marginBottom: '2px', paddingLeft: '4px' }}>
+              <div key={index} className="ticket-sub" style={{ marginBottom: '2px', paddingLeft: '4px' }}>
                 • {new Date(payment.date?.toDate ? payment.date.toDate() : payment.date).toLocaleDateString('es-PE')} - {formatCurrency(payment.amount)} ({payment.method})
               </div>
             ))}
@@ -1233,9 +1271,9 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           )}
           {invoice.paymentInstallments && invoice.paymentInstallments.length > 0 && (
             <div style={{ marginTop: '8px' }}>
-              <div style={{ fontSize: '9px', fontWeight: 'bold', marginBottom: '4px' }}>CUOTAS:</div>
+              <div className="ticket-subtitulo">CUOTAS:</div>
               {invoice.paymentInstallments.map((cuota, index) => (
-                <div key={index} style={{ fontSize: '8px', marginBottom: '2px', paddingLeft: '4px' }}>
+                <div key={index} className="ticket-sub" style={{ marginBottom: '2px', paddingLeft: '4px' }}>
                   • Cuota {cuota.number || index + 1}: {formatCurrency(cuota.amount || 0)} - Vence: {cuota.dueDate ? new Date(cuota.dueDate + 'T00:00:00').toLocaleDateString('es-PE') : '-'}
                 </div>
               ))}
@@ -1248,7 +1286,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
       {invoice.notes && (
         <div className="ticket-section">
           <div className="section-title">OBSERVACIONES</div>
-          <div style={{ fontSize: '9px', whiteSpace: 'pre-wrap' }}>
+          <div className="ticket-nota">
             {invoice.notes}
           </div>
         </div>
@@ -1316,11 +1354,10 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
             <>
               {mensaje && (
                 <div
-                  className="footer-text"
+                  className="footer-text ticket-sub"
                   style={{
                     marginTop: '8px',
                     fontStyle: 'italic',
-                    fontSize: '9px',
                     lineHeight: '1.3',
                     whiteSpace: 'pre-wrap',
                     padding: '0 4px',
@@ -1331,10 +1368,9 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
               )}
               {terminos && (
                 <div
-                  className="footer-text"
+                  className="footer-text ticket-sub"
                   style={{
                     marginTop: '8px',
-                    fontSize: '9px',
                     lineHeight: '1.3',
                     whiteSpace: 'pre-wrap',
                     padding: '0 2px',
