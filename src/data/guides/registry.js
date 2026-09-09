@@ -419,6 +419,16 @@ export const GUIDES = [
     load: () => import('./recetas.js'),
   },
   {
+    id: 'asistencia',
+    route: '/app/asistencia',
+    title: 'Personal y control de asistencia',
+    category: 'Operación',
+    description: 'Marcar entrada y salida con el QR de cada sucursal, la zona permitida por GPS, tardanzas, horarios y vacaciones.',
+    keywords: 'asistencia marcar entrada salida qr sucursal gps zona permitida geofence radio metros ubicacion permiso pendiente aprobacion fuera de zona sin ubicacion tardanza tolerancia break refrigerio horarios turnos vacaciones permisos personal empleados marcacion manual auto-cerrado fichaje reloj control',
+    modos: null,
+    load: () => import('./asistencia.js'),
+  },
+  {
     id: 'vendedores',
     route: '/app/vendedores',
     title: 'Vendedores',

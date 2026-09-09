@@ -1493,7 +1493,7 @@ function BranchAttendanceCard({ branch, onToggle, onRegenerate, onSaveGeofence, 
                 <Button size="sm" variant="outline" onClick={clearGeo}>Quitar zona</Button>
               )}
             </div>
-            <p className="text-xs text-gray-500 mt-2">Sin zona configurada, todas las marcaciones se aprueban automáticamente. Con zona, las que estén fuera quedan pendientes de aprobación.</p>
+            <p className="text-xs text-gray-500 mt-2">Sin zona configurada, todas las marcaciones se aprueban automáticamente. Con zona, quedan pendientes de aprobación las que estén fuera Y también aquellas en las que el celular no entregó su ubicación: revisa que la app tenga el permiso de ubicación en los teléfonos de tu equipo.</p>
           </div>
 
           {/* Tolerancia de tardanza (F6) */}
