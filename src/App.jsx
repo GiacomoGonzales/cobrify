@@ -55,6 +55,7 @@ const AdminResumen = lazy(() => import('./pages/admin/AdminResumen'))
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
 const AdminCuenta = lazy(() => import('./pages/admin/AdminCuenta'))
 const AdminAltas = lazy(() => import('./pages/admin/AdminAltas'))
+const AdminOrigen = lazy(() => import('./pages/admin/AdminOrigen'))
 const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'))
 const AdminCpe = lazy(() => import('./pages/admin/AdminCpe'))
 const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'))
@@ -699,6 +700,7 @@ function App() {
               <Route path="users" element={<AdminUsers />} />
               <Route path="users/:id" element={<AdminCuenta />} />
               <Route path="altas" element={<AdminAltas />} />
+              <Route path="origen" element={<AdminOrigen />} />
               <Route path="resellers" element={<AdminResellers />} />
               <Route path="payments" element={<AdminPayments />} />
               <Route path="cpe" element={<AdminCpe />} />
