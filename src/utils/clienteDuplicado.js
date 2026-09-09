@@ -10,7 +10,7 @@
  *
  * Hay documentos que NO identifican a nadie y pueden repetirse cuantas veces
  * haga falta: el vacío, que es la ficha de contacto sin documento que abre una
- * cita o una atención, y el 00000000 del consumidor final de una boleta.
+ * cita o una atención, y los comodines de un solo dígito.
  *
  * El criterio se usa en los dos lados: el formulario avisa al instante contra
  * la lista que ya tiene cargada, y `createCustomer` es la guarda de verdad,
@@ -25,10 +25,22 @@ export function documentoDeCliente(cliente) {
   return String(crudo || '').replace(/[\s.-]/g, '').trim()
 }
 
-/** Falso para el vacío y para los que son todo ceros. */
+/**
+ * Falso para el vacío y para los comodines de un solo dígito repetido.
+ *
+ * El barrido del 8-set-2026 sobre las 52.490 fichas encontró negocios que
+ * reusan a propósito un documento inventado para el público que pasa: "1" ocho
+ * veces, "55555555" siete veces. Esos no identifican a nadie y no tiene
+ * sentido bloquearlos; el 00000000 del consumidor final cae en la misma regla.
+ */
 export function identificaAUnCliente(documento) {
   const d = documentoDeCliente(documento)
-  return d.length > 0 && !/^0+$/.test(d)
+  if (d.length === 0) return false
+  // Se compara cada carácter contra el primero en vez de usar una
+  // retrorreferencia: el criterio queda a salvo de cualquier herramienta que
+  // maltrate las barras invertidas al editar este archivo.
+  const unSoloDigito = /^[0-9]+$/.test(d) && d.split('').every((c) => c === d[0])
+  return !unSoloDigito
 }
 
 /**
