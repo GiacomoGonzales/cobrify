@@ -346,12 +346,15 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
     return candidates.length > 0 ? candidates[0].key : 'price1'
   }
 
-  // Calcular precio total con modificadores, variante y nivel de precio
-  const calculateTotalPrice = () => {
+  // Calcular precio total con modificadores, variante y nivel de precio.
+  // Recibe el nivel para poder pedirle también el precio de LISTA ('price1'):
+  // el carrito necesita los dos, el que se cobra hoy y a cuál volver si el
+  // comprador después baja la cantidad.
+  const calculateTotalPrice = (nivel = nivelEfectivo) => {
     let total
     if (hasVariants) {
-      if (hasMultiplePrices && nivelEfectivo && selectedVariant) {
-        total = getVariantPriceForLevel(selectedVariant, product, nivelEfectivo)
+      if (hasMultiplePrices && nivel && selectedVariant) {
+        total = getVariantPriceForLevel(selectedVariant, product, nivel)
       } else {
         total = selectedVariant?.price || product.basePrice || 0
       }
@@ -359,8 +362,8 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
       // El precio de la presentación lo pone el vendedor y no se deriva del
       // precio suelto: una caja de 12 no cuesta 12 veces la unidad.
       total = selectedPresentation.price || 0
-    } else if (hasMultiplePrices && nivelEfectivo) {
-      const selected = availablePrices.find(p => p.key === nivelEfectivo)
+    } else if (hasMultiplePrices && nivel) {
+      const selected = availablePrices.find(p => p.key === nivel)
       total = selected?.value || product.price || 0
     } else {
       total = product.price || 0
@@ -456,6 +459,10 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
     }
 
     const totalPrice = calculateTotalPrice()
+    // Precio de lista de ESTA línea (nivel 1 + los modificadores elegidos).
+    // Es la base a la que hay que volver si más tarde la cantidad deja de
+    // alcanzar el mínimo del mayorista.
+    const basePrice = calculateTotalPrice('price1')
     const priceLevelLabel = hasMultiplePrices
       ? availablePrices.find(p => p.key === nivelEfectivo)?.label || null
       : null
@@ -471,7 +478,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
         presentationFactor: selectedPresentation.factor,
         unit: selectedPresentation.unit,
       }
-      onAddToCart(presentationProduct, quantity, modifiersData, totalPrice, null)
+      onAddToCart(presentationProduct, quantity, modifiersData, totalPrice, null, basePrice)
       onClose()
       return
     }
@@ -489,7 +496,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
           imageUrls: [selectedVariant.imageUrl],
         }),
       }
-      onAddToCart(variantProduct, quantity, modifiersData, totalPrice, priceLevelLabel)
+      onAddToCart(variantProduct, quantity, modifiersData, totalPrice, priceLevelLabel, basePrice)
       // La ventana NO se cierra cuando el producto tiene variantes: quien compra
       // ropa suele llevar varias tallas del mismo modelo, y cerrarla lo obligaba
       // a buscar el producto otra vez para cada una (reporte de CITEX). Se avisa
@@ -499,7 +506,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
       )
       return
     }
-    onAddToCart(product, quantity, modifiersData, totalPrice, priceLevelLabel)
+    onAddToCart(product, quantity, modifiersData, totalPrice, priceLevelLabel, basePrice)
     onClose()
   }
 

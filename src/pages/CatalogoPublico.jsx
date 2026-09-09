@@ -1076,7 +1076,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const thFontWrapper = themeClasses.fontWrapper || 'font-sans'
 
   // Funciones del carrito
-  const addToCart = (product, quantity = 1, selectedModifiers = [], unitPrice = null, priceLevelLabel = null) => {
+  const addToCart = (product, quantity = 1, selectedModifiers = [], unitPrice = null, priceLevelLabel = null, basePrice = null) => {
     // No permitir agregar productos agotados
     if (isProductOutOfStock(product, ignoreStock, almacenesDelCatalogo(business))) return
 
@@ -1158,7 +1158,12 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         quantity,
         selectedModifiers,
         unitPrice: finalUnitPrice,
-        originalUnitPrice: unitPrice || product.price,
+        // La BASE de la línea, no lo que se cobra hoy. `unitPrice` puede
+        // traer ya aplicado un nivel de mayorista, y guardarlo como base
+        // dejaba el precio por docena puesto para una sola unidad cuando el
+        // comprador bajaba la cantidad en el carrito (Medias de Abejita,
+        // 9-set-2026). El modal manda el precio de lista aparte.
+        originalUnitPrice: basePrice ?? (unitPrice || product.price),
         priceLevelLabel: finalPriceLabel,
         ...(hasFixedUSD && { fixedPriceUSD: fixedUSD }),
       }])
@@ -1198,7 +1203,13 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
     return repreciado.map(({ linea, precio, nivel }) => {
       if (precio == null) return linea
-      const base = linea.originalUnitPrice || linea.price
+      // Si ningún nivel alcanza, manda el precio de LISTA que devuelve el
+      // criterio: sale de la ficha del producto (o de la variante) y no
+      // puede venir contaminado. `originalUnitPrice` solo se respeta cuando
+      // la línea lleva modificadores, que suman sobre el precio y no salen
+      // de la ficha. Así los carritos guardados de antes también se sanean.
+      const conModificadores = Array.isArray(linea.selectedModifiers) && linea.selectedModifiers.length > 0
+      const base = (conModificadores && linea.originalUnitPrice) || precio
       return {
         ...linea,
         unitPrice: nivel ? precio : base,
@@ -1206,6 +1217,21 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       }
     })
   }
+
+  /**
+   * El carrito guardado se reprecia al abrir la tienda.
+   *
+   * Lo que quedó en el navegador puede venir de otra visita —con otros
+   * precios, o de antes de un arreglo— y quien no toca nada va derecho a
+   * "Continuar con el pedido" con esos importes. La ficha de cada producto
+   * viaja dentro de la propia línea, así que recalcular no cuesta una
+   * lectura más.
+   */
+  useEffect(() => {
+    if (!business) return
+    setCart(prev => (prev.length === 0 ? prev : repreciarCarrito(prev)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [business])
 
   const updateCartQuantity = (cartItemId, quantity) => {
     if (quantity <= 0) {
