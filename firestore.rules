@@ -550,6 +550,13 @@ service cloud.firestore {
           allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
           allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
         }
+
+        // Subcollection: Prescriptions (recetas del paciente, modo Clínica).
+        // Ver src/services/prescriptionService.js.
+        match /prescriptions/{prescriptionId} {
+          allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
+          allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        }
       }
 
       // Subcollection: Products (Productos)

@@ -66,5 +66,8 @@ const slug = (texto) => String(texto || '')
   .normalize('NFD').replace(/[̀-ͯ]/g, '')
   .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase().slice(0, 40)
 
+/** Para nombrar archivos: sin tildes, sin espacios, en minúscula. Lo usa también la receta. */
+export const slugDeArchivo = slug
+
 export const nombreDeArchivoConsentimiento = (consent) =>
   `consentimiento-${slug(consent?.customerName) || 'paciente'}-${consent?.signedDate || 'sin-fecha'}.pdf`

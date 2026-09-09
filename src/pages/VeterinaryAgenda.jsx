@@ -3,6 +3,7 @@
  * Vista de citas del día con acciones para completar y generar comprobantes
  */
 
+import FirmaDeSesionModal from '@/components/clinic/FirmaDeSesionModal'
 import { useState, useEffect, useRef } from 'react'
 import { esVendible } from '@/utils/productSale'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -101,6 +102,8 @@ export default function VeterinaryAgenda() {
   // así la cita se completa sin volver a cobrar lo que ya se pagó.
   const [paquetesPorCliente, setPaquetesPorCliente] = useState({})
   const [usoDe, setUsoDe] = useState(null) // cita que va a consumir una sesión
+  // El paquete elegido cuya sesión se está firmando (ver FirmaDeSesionModal).
+  const [firmandoPaquete, setFirmandoPaquete] = useState(null)
   const [usandoSesion, setUsandoSesion] = useState(null)
 
   const [selectedDate, setSelectedDate] = useState(new Date())
@@ -434,17 +437,18 @@ export default function VeterinaryAgenda() {
   }
 
   // Descontar una sesión y dar la cita por completada, sin comprobante.
-  const confirmarUsoDeSesion = async (paquete) => {
+  const confirmarUsoDeSesion = async (paquete, firma = null) => {
     if (!usoDe) return
     setUsandoSesion(paquete.id)
     try {
       const businessId = getBusinessId()
-      const r = await usarSesion(businessId, usoDe.customerId, paquete.id, { appointmentId: usoDe.id })
+      const r = await usarSesion(businessId, usoDe.customerId, paquete.id, { appointmentId: usoDe.id, signatureDataUrl: firma })
       await completeAppointment(businessId, usoDe.id, null)
       await updateAppointment(businessId, usoDe.id, { packageId: paquete.id, packageName: paquete.productName, paidWithPackage: true })
       toast.success(r.yaUsada
         ? 'Esta cita ya había descontado su sesión. Cita completada.'
         : `Sesión descontada: quedan ${sesionesDisponibles(r)} de ${r.sessionsTotal}. Cita completada.`)
+      setFirmandoPaquete(null)
       setUsoDe(null)
       loadInProgress()
     } catch (e) {
@@ -1272,7 +1276,7 @@ export default function VeterinaryAgenda() {
                   <p className="text-sm font-semibold text-gray-900 truncate">{p.productName}</p>
                   <p className="text-xs text-gray-500">{sesionesDisponibles(p)} de {p.sessionsTotal} disponibles</p>
                 </div>
-                <Button size="sm" onClick={() => confirmarUsoDeSesion(p)} disabled={!!usandoSesion} className="gap-1 flex-shrink-0">
+                <Button size="sm" onClick={() => setFirmandoPaquete(p)} disabled={!!usandoSesion} className="gap-1 flex-shrink-0">
                   {usandoSesion === p.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Package className="w-4 h-4" />} Usar 1 sesión
                 </Button>
               </div>
@@ -1283,6 +1287,15 @@ export default function VeterinaryAgenda() {
           </div>
         )}
       </Modal>
+
+      {/* La firma del paciente antes de descontar la sesión (misma pantalla que en la ficha) */}
+      <FirmaDeSesionModal
+        isOpen={!!firmandoPaquete}
+        paquete={firmandoPaquete}
+        ocupado={!!usandoSesion}
+        onClose={() => setFirmandoPaquete(null)}
+        onConfirmar={(firma) => confirmarUsoDeSesion(firmandoPaquete, firma)}
+      />
 
       {/* Modal de cancelación */}
       <Modal

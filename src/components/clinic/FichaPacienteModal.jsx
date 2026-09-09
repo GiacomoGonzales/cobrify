@@ -30,6 +30,7 @@ import { PaquetesPaciente } from './PaquetesPacienteModal'
 import { GaleriaPaciente } from './GaleriaPacienteModal'
 import AnamnesisPaciente from './AnamnesisPaciente'
 import ConsentimientosPaciente from './ConsentimientosPaciente'
+import RecetasPaciente from './RecetasPaciente'
 import { normalizarAnamnesis, resumenDeAnamnesis, alertasDeAnamnesis, anamnesisTieneDatos, normalizarPreguntas } from '@/utils/anamnesis'
 
 const PESTANAS = [
@@ -39,6 +40,7 @@ const PESTANAS = [
   { id: 'paquetes', label: 'Paquetes' },
   { id: 'galeria', label: 'Galería' },
   { id: 'consentimientos', label: 'Consentimientos' },
+  { id: 'recetas', label: 'Recetas' },
   { id: 'compras', label: 'Compras' },
 ]
 const ACTIVAS = ['scheduled', 'confirmed', 'in_progress']
@@ -351,6 +353,10 @@ export default function FichaPacienteModal({ isOpen, onClose, customer, onEdit, 
 
         {pestana === 'consentimientos' && (
           <ConsentimientosPaciente customer={customer} />
+        )}
+
+        {pestana === 'recetas' && (
+          <RecetasPaciente customer={customer} />
         )}
 
         {pestana === 'compras' && (

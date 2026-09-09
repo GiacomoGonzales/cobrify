@@ -6,6 +6,7 @@
  * el PDF de hoy y el de dentro de dos años son el mismo. Se importa bajo
  * demanda: jsPDF pesa y solo hace falta al descargar.
  */
+import { rucDeEmpresa } from '@/utils/rucDeEmpresa'
 import jsPDF from 'jspdf'
 import { fechaCorta } from '@/utils/fichaAtencion'
 
@@ -33,7 +34,7 @@ export function generarPdfConsentimiento(consent, negocio = {}) {
   doc.setFontSize(9)
   doc.setTextColor(90)
   const datosNegocio = [
-    negocio.ruc ? `RUC ${negocio.ruc}` : '',
+    rucDeEmpresa(negocio) ? `RUC ${rucDeEmpresa(negocio)}` : '',
     negocio.address || '',
     negocio.phone ? `Tel. ${negocio.phone}` : '',
   ].filter(Boolean).join(' · ')

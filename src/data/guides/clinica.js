@@ -138,7 +138,7 @@ export default {
           items: [
             'En el tratamiento, pon **Sesiones incluidas** (por ejemplo 6) y guarda.',
             'Cóbralo en el Punto de Venta con el paciente **elegido**: el paquete queda en su ficha.',
-            'En cada cita, desde **En atención**, presiona **Usar sesión del paquete**: la cita se completa sin volver a cobrar.',
+            'En cada cita, desde **En atención**, presiona **Usar sesión del paquete**: antes de descontarla aparece la pantalla **Sesión 2 de 5: firma del paciente**, el paciente firma con el dedo y recién ahí la cita se completa, sin volver a cobrar. La firma queda guardada en ese uso, como evidencia de que se atendió esa sesión.',
             'En la ficha del paciente, la pestaña **Paquetes** muestra cuántas sesiones le quedan; ahí también se descuenta a mano (**Usar sesión**) o se carga con **Agregar paquete** uno que venía de antes.',
             'Si un paquete quedó con menos sesiones de las que incluye (por ejemplo 3 cuando era de 5), corrígelo con el **lápiz** del paquete: el mínimo son las ya usadas. Al agregar uno a mano, elegir el tratamiento ya no pisa el número que escribiste; solo lo sugiere si el campo está vacío.',
           ],
@@ -146,6 +146,30 @@ export default {
         {
           type: 'consejo',
           text: 'La lista de Pacientes muestra las sesiones disponibles junto al nombre, así en recepción se sabe sin abrir nada.',
+        },
+      ],
+    },
+
+    {
+      id: 'recetas',
+      title: 'Recetas para el paciente',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'En la ficha del paciente, la pestaña **Recetas** guarda lo que le indicas llevar a casa: cremas, productos, cuidados. No hay campo de profesional ni de medicamentos; cada línea es una **Indicación** con el producto, cómo usarlo, cada cuánto y por cuánto tiempo, y debajo van las **Indicaciones generales** en texto libre.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Presiona **Nueva receta**. La fecha sale hoy; cámbiala si hace falta.',
+            'En **Indicación 1** escribe el producto (por ejemplo "Crema regeneradora"), cómo aplicarlo, cada cuánto y por cuántos días. Con **Agregar indicación** sumas más líneas.',
+            'Escribe las **Indicaciones generales** (evitar el sol, usar protector, no frotar) y presiona **Guardar receta**.',
+            'En la lista, el icono de **compartir** arma el PDF y, desde el celular, abre la hoja del sistema para mandarlo por **WhatsApp** o por **correo** con el archivo adjunto. Desde la computadora lo descarga. El icono del ojo lo muestra en pantalla.',
+          ],
+        },
+        {
+          type: 'consejo',
+          text: 'El PDF sale con la cabecera de tu negocio, el paciente, la fecha y una línea para firmar y sellar a mano. Si lo mandas desde el celular, elige WhatsApp en la hoja de compartir y el chat del paciente: llega como archivo, listo para abrir.',
         },
       ],
     },

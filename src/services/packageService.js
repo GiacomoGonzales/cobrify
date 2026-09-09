@@ -13,6 +13,7 @@
  * (`packagesSummary`) para que la lista de Pacientes muestre las sesiones
  * que le quedan sin leer la subcolección de cada uno.
  */
+import { firmaValida } from '@/utils/consentimiento'
 import { corregirTotal, estadoDePaquete } from '@/utils/paquetes'
 import {
   collection, doc, addDoc, updateDoc, deleteDoc, getDoc, getDocs, query, orderBy,
@@ -96,7 +97,10 @@ export const addPackage = async (businessId, customerId, datos) => {
  * Descuenta UNA sesión. Una misma cita descuenta una sola vez: si la cita ya
  * figura en los usos, no se vuelve a restar (vuelve con `yaUsada: true`).
  */
-export const usarSesion = async (businessId, customerId, packageId, { appointmentId = null, note = '', date = hoyYMD() } = {}) => {
+export const usarSesion = async (businessId, customerId, packageId, { appointmentId = null, note = '', date = hoyYMD(), signatureDataUrl = null } = {}) => {
+  // La firma del paciente para ESTA sesión (utils/firmaDeSesion): opcional
+  // para el servicio, pero las dos pantallas que usan sesiones la exigen.
+  if (signatureDataUrl && !firmaValida(signatureDataUrl)) throw new Error('La firma no es válida')
   const ref = doc(paquetesDe(businessId, customerId), packageId)
   const snap = await getDoc(ref)
   if (!snap.exists()) throw new Error('El paquete ya no existe')
@@ -107,7 +111,7 @@ export const usarSesion = async (businessId, customerId, packageId, { appointmen
   if (!estaActivo(p)) throw new Error('Este paquete no tiene sesiones disponibles')
 
   const sessionsUsed = (Number(p.sessionsUsed) || 0) + 1
-  const uses = [...(p.uses || []), { date, appointmentId, note: String(note || '').trim(), at: Timestamp.now() }]
+  const uses = [...(p.uses || []), { date, appointmentId, note: String(note || '').trim(), at: Timestamp.now(), firma: signatureDataUrl || null }]
   const status = estadoDePaquete(p, sessionsUsed, p.sessionsTotal)
   await updateDoc(ref, { sessionsUsed, uses, status, updatedAt: serverTimestamp() })
   await guardarResumen(businessId, customerId)

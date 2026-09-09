@@ -10,6 +10,8 @@
  * en General con la ficha de atención, como modal desde la lista (el botón
  * del paquete). Por eso el CONTENIDO (PaquetesPaciente) va aparte del modal.
  */
+import { usoFirmado } from '@/utils/firmaDeSesion'
+import FirmaDeSesionModal from './FirmaDeSesionModal'
 import { useEffect, useMemo, useState } from 'react'
 import { Package, Loader2, Trash2, Plus, Undo2, Check, Pencil } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -112,10 +114,17 @@ export function PaquetesPaciente({ customer, onChanged, activo = true }) {
     }
   }
 
-  const usar = async (p) => {
+  // "Usar sesión" abre primero la firma del paciente; recién con ella se
+  // descuenta. Pedido de Adara: que quede evidencia de cada sesión atendida.
+  const [firmando, setFirmando] = useState(null)
+  const usar = (p) => setFirmando(p)
+  const registrarUso = async (firma) => {
+    const p = firmando
+    if (!p) return
     setOcupado(p.id)
     try {
-      const r = await usarSesion(getBusinessId(), customerId, p.id)
+      const r = await usarSesion(getBusinessId(), customerId, p.id, { signatureDataUrl: firma })
+      setFirmando(null)
       toast.success(`Sesión descontada: quedan ${sesionesDisponibles(r)} de ${r.sessionsTotal}`)
       await refrescar()
     } catch (e) {
@@ -257,6 +266,9 @@ export function PaquetesPaciente({ customer, onChanged, activo = true }) {
                 Sesión {i + 1}: {fechaCorta(u.date) || '-'}
                 {u.appointmentId ? ' (desde la Agenda)' : ' (a mano)'}
                 {u.note && ` · ${u.note}`}
+                {usoFirmado(u) && (
+                  <img src={u.firma} alt="Firma del paciente" title="Firmada por el paciente" className="inline-block h-5 ml-2 align-middle bg-white border border-gray-100 rounded" />
+                )}
               </li>
             ))}
           </ul>
@@ -267,6 +279,13 @@ export function PaquetesPaciente({ customer, onChanged, activo = true }) {
 
   return (
       <div className="space-y-4">
+        <FirmaDeSesionModal
+          isOpen={!!firmando}
+          paquete={firmando}
+          ocupado={!!firmando && ocupado === firmando.id}
+          onClose={() => setFirmando(null)}
+          onConfirmar={registrarUso}
+        />
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm text-gray-600">
             Paquetes de <strong>{customer?.name || 'la paciente'}</strong>
