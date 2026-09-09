@@ -10,7 +10,7 @@
  */
 export default {
   id: 'asistencia',
-  actualizado: '08/09/2026',
+  actualizado: '09/09/2026',
   intro:
     'Personal es donde tu equipo marca entrada y salida, y donde tú ves quién llegó, a qué hora y desde dónde. La marcación se hace escaneando un QR pegado en el local, desde la app del celular.',
 
@@ -120,6 +120,28 @@ export default {
         {
           type: 'texto',
           text: 'Los **breaks** son opcionales y se activan para todo el negocio. Con ellos encendidos, tu equipo puede marcar inicio y fin de su refrigerio, y el tiempo de break se descuenta de la jornada.',
+        },
+        {
+          type: 'texto',
+          text: 'El sistema **no adivina** si vas a break o te vas a casa: el botón grande de **Marcar** dice de antemano qué va a registrar el próximo escaneo, y el break tiene su propio botón aparte.',
+        },
+        {
+          type: 'tabla',
+          encabezados: ['Si el botón dice', 'El QR registra'],
+          filas: [
+            ['Marcar entrada', 'Tu entrada del día'],
+            ['Marcar salida', 'Tu salida (y cierra la jornada)'],
+            ['Iniciar break (botón aparte, color ámbar)', 'El inicio de tu refrigerio'],
+            ['Terminar break', 'El fin del refrigerio; vuelves a trabajar'],
+          ],
+        },
+        {
+          type: 'ojo',
+          text: 'Estando en break, **cualquier** marcación lo termina: no se puede cerrar la jornada con el refrigerio abierto, porque quedaría un tiempo que nadie puede medir. Primero vuelves del break y después marcas tu salida.',
+        },
+        {
+          type: 'consejo',
+          text: 'El botón de **Iniciar break** solo aparece mientras estás trabajando y si el negocio tiene los breaks encendidos. Si no lo ves, o no están activados en Configuración, o todavía no marcaste tu entrada.',
         },
       ],
     },

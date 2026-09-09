@@ -43,7 +43,7 @@ import {
 import SchedulePlanner, { ALL_BRANCHES } from '@/components/personnel/SchedulePlanner'
 import VacationManager from '@/components/personnel/VacationManager'
 import {
-  resumenDelDia, etiquetaDeMarca, estadoDelDia, esMarcaDeBreak,
+  resumenDelDia, etiquetaDeMarca, estadoDelDia, esMarcaDeBreak, etiquetaDeProximaMarca,
   MARCA_ENTRADA, MARCA_SALIDA, MARCA_BREAK_INICIO, MARCA_BREAK_FIN,
 } from '@/utils/attendanceMarks'
 
@@ -158,6 +158,14 @@ export default function Attendance() {
   const [lastMark, setLastMark] = useState(null)
   // Marcaciones del usuario actual de los últimos 7 días (para vista de jornada)
   const [myWeekRecords, setMyWeekRecords] = useState([])
+  // En qué anda HOY el propio usuario: 'idle' | 'in' | 'break' | 'done'.
+  // Es el mismo cálculo que usa la vista del trabajador, y desde acá lo lee
+  // también la tarjeta del dueño para poder decir qué registrará el próximo
+  // escaneo y para ofrecerle el botón de break.
+  const miEstadoHoy = useMemo(() => {
+    const grupo = groupRecordsByDay(myWeekRecords || [])[dayKey(new Date())]
+    return estadoDelDia(summaryForDay(grupo).marks)
+  }, [myWeekRecords])
 
   // Filtros en tab Marcaciones.
   // Rango por defecto: lunes a domingo de la semana en curso, para que al
@@ -778,10 +786,36 @@ export default function Attendance() {
                         <p className="text-sm text-gray-500 mb-4">Todavía no registraste ninguna marcación.</p>
                       )}
 
-                      <Button onClick={handleMark} disabled={marking} className="w-full py-6 text-lg">
-                        {marking ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Scan className="w-5 h-5 mr-2" />}
-                        {marking ? 'Registrando...' : 'Escanear QR y marcar'}
+                      {/* `() => handleMark(false)` y no `handleMark`: pasarlo
+                          pelado mandaba el evento del click como "quiero
+                          break", así que el dueño encadenaba breaks y no
+                          podía marcar su salida nunca. */}
+                      <Button
+                        onClick={() => handleMark(false)}
+                        disabled={marking || miEstadoHoy === 'done'}
+                        className={`w-full py-6 text-lg ${miEstadoHoy === 'done' ? 'bg-gray-300 text-gray-500 hover:bg-gray-300' : ''}`}
+                      >
+                        {marking
+                          ? <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                          : (miEstadoHoy !== 'done' && <Scan className="w-5 h-5 mr-2" />)}
+                        {etiquetaDeProximaMarca(miEstadoHoy, marking)}
                       </Button>
+
+                      {/* Solo mientras trabaja: en break el botón de arriba ya
+                          dice "Terminar break", y sin fichar no hay break que
+                          empezar. Es el mismo par de botones que ve el
+                          trabajador. */}
+                      {businessSettings?.attendanceBreaksEnabled === true && miEstadoHoy === 'in' && (
+                        <Button
+                          variant="outline"
+                          onClick={() => handleMark(true)}
+                          disabled={marking}
+                          className="w-full py-4 text-base mt-2 border-amber-400 text-amber-700 hover:bg-amber-50"
+                        >
+                          <Coffee className="w-5 h-5 mr-2" />
+                          Iniciar break
+                        </Button>
+                      )}
 
                       {!isNative && (
                         <p className="text-xs text-gray-500 mt-3">
@@ -1551,17 +1585,9 @@ function SubUserAttendanceView({ weekRecords, onMark, marking, isNative, breaksA
   // 'idle' (no fichó), 'in' (trabajando), 'break' (almorzando), 'done'
   const state = estadoDelDia(todaySummary.marks)
 
-  const buttonLabel = marking
-    ? 'Registrando…'
-    : state === 'idle'
-      ? 'Marcar entrada'
-      : state === 'break'
-        // En break el botón principal lo TERMINA. Irse a la casa sin volver
-        // del almuerzo dejaría un break abierto que nadie puede medir.
-        ? 'Terminar break'
-        : state === 'in'
-          ? 'Marcar salida'
-          : '✓ Jornada completa'
+  // El texto lo decide utils/attendanceMarks, para que el botón del dueño y
+  // el del trabajador digan siempre lo mismo.
+  const buttonLabel = etiquetaDeProximaMarca(state, marking)
 
   // Días anteriores ordenados: descendente, excluyendo hoy
   const previousDays = Object.entries(grouped)

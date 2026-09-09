@@ -43,13 +43,40 @@ export const esMarcaDeBreak = (type) => type === MARCA_BREAK_INICIO || type === 
  * @returns {string} el tipo a registrar
  */
 export const siguienteMarca = (ultimaHoy, quiereBreak = false) => {
+  // `=== true`, no "algo que parezca sí". La pantalla del dueño pasaba el
+  // evento del click como este argumento y un objeto es truthy: el dueño
+  // marcaba break una y otra vez y NUNCA podía marcar su salida (reporte de
+  // Mandil Taquería, 9-set-2026). El botón se arregló, pero el criterio no
+  // tiene por qué confiar en cómo lo llamen.
+  const alBreak = quiereBreak === true
   // En break, cualquier marca lo termina. No se puede irse a la casa sin
   // volver del almuerzo: dejaría un break abierto que nadie puede medir.
   if (ultimaHoy === MARCA_BREAK_INICIO) return MARCA_BREAK_FIN
   // Sin fichar o ya salió: lo único posible es entrar.
   if (!ultimaHoy || ultimaHoy === MARCA_SALIDA) return MARCA_ENTRADA
   // Trabajando (entró, o volvió del break): sale, o se va de break.
-  return quiereBreak ? MARCA_BREAK_INICIO : MARCA_SALIDA
+  return alBreak ? MARCA_BREAK_INICIO : MARCA_SALIDA
+}
+
+/**
+ * Qué dice el botón principal: lo que va a registrar el PRÓXIMO escaneo.
+ *
+ * "¿Cómo sabe el sistema si estoy entrando a break o marcando salida?"
+ * (Mandil Taquería, 9-set-2026). La respuesta es que no lo adivina: el botón
+ * lo dice antes de escanear. Lo usan la pantalla del trabajador y la del
+ * dueño, que hasta hoy decía solo "Escanear QR y marcar".
+ *
+ * @param {string} estado      lo que devuelve `estadoDelDia`
+ * @param {boolean} registrando
+ */
+export const etiquetaDeProximaMarca = (estado, registrando = false) => {
+  if (registrando) return 'Registrando…'
+  if (estado === 'idle') return 'Marcar entrada'
+  // En break el botón principal lo TERMINA: irse a la casa sin volver del
+  // almuerzo dejaría un break abierto que nadie puede medir.
+  if (estado === 'break') return 'Terminar break'
+  if (estado === 'in') return 'Marcar salida'
+  return '✓ Jornada completa'
 }
 
 /** En qué anda el trabajador ahora mismo. */
