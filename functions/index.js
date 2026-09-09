@@ -51,9 +51,9 @@ import {
 import { resolveAudience } from './src/services/audienceService.js'
 import { siguienteCodigoCliente, sugerirRubro } from './src/services/clientesService.js'
 import { sembrarCuenta } from './src/services/semillaService.js'
-import { origenDesdeLanding, origenDesdeAnuncio } from './src/data/origen.js'
+import { origenDesdeLanding, origenDesdeAnuncio, origenDesdeReferido } from './src/data/origen.js'
 import { nuevoCodigoDeAlta, ESTADOS_ALTA, altaParaElFormulario, mensajeDeAlta } from './src/services/altasService.js'
-import { crearSuscripcion, deshacerCuenta } from './src/services/suscripcionesService.js'
+import { crearSuscripcion, premiarAQuienRefiere, deshacerCuenta } from './src/services/suscripcionesService.js'
 
 // Initialize Firebase Admin
 initializeApp()
@@ -15523,6 +15523,12 @@ export const crearCuentaCompleta = onRequest(
       //    deshace TODO: mejor pedirle que lo intente de nuevo que dejarle un
       //    acceso que no sirve para nada.
       await sembrarCuenta(db, { uid, email, datos, FieldValue })
+
+      // Si llegó por el enlace de un cliente (`?ref=1000042`), el código viene
+      // en el origen que capturó la landing.
+      const origenWeb = origenDesdeLanding(datos.acquisition)
+      const codigoQuienRefiere = origenWeb?.canal === 'referido' ? origenWeb.id : null
+
       await crearSuscripcion(db, {
         uid,
         email,
@@ -15532,9 +15538,16 @@ export const crearCuentaCompleta = onRequest(
         precio: plan.precio != null ? Number(plan.precio) : null,
         limites: plan.limites || null,
         metodo: plan.metodo || 'manual',
+        referidoPor: codigoQuienRefiere,
         FieldValue,
         Timestamp,
       })
+
+      // El mes de quien lo trajo, sin bloquear la respuesta ni poder tumbarla.
+      if (codigoQuienRefiere) {
+        premiarAQuienRefiere(db, { codigo: codigoQuienRefiere, referidoUid: uid, FieldValue, Timestamp })
+          .catch((e) => console.error('[Referidos] No se pudo premiar:', e.message))
+      }
 
       console.log(`✅ Cuenta completa creada por ${quien.email}: ${email} (${uid})`)
       res.status(200).json({ success: true, uid })
@@ -15591,6 +15604,25 @@ export const crearAltaPendiente = onRequest(
         res.status(400).json({ success: false, error: 'Falta el plan que le vendiste' }); return
       }
 
+      // ¿Lo trajo un cliente? El código se comprueba ACÁ y no al activar: si
+      // está mal escrito, quien lo puede arreglar es el que está mandando el
+      // alta, ahora mismo. Dejarlo pasar significa que el cliente que refirió
+      // nunca cobra su mes y nadie se entera.
+      let referidoPor = null
+      let referidoPorNombre = null
+      if (b.referidoPor) {
+        const cod = Number(String(b.referidoPor).replace(/\D/g, ''))
+        const hits = await db.collection('businesses').where('codigoCliente', '==', cod).limit(2).get()
+        if (hits.empty) {
+          res.status(400).json({ success: false, error: `No existe el cliente ${b.referidoPor}. Revisa el código de quien lo refirió.` }); return
+        }
+        if (hits.size > 1) {
+          res.status(400).json({ success: false, error: `El código ${b.referidoPor} está en dos cuentas. Avísale a soporte antes de seguir.` }); return
+        }
+        referidoPor = cod
+        referidoPorNombre = hits.docs[0].data().businessName || null
+      }
+
       // Un código libre. Chocar es casi imposible, pero comprobarlo cuesta una
       // lectura y evita pisar un alta de otro cliente.
       let codigo = null
@@ -15613,6 +15645,10 @@ export const crearAltaPendiente = onRequest(
         // ve el metodo de verdad (Yape, transferencia...) y no un generico.
         metodo: b.metodo || 'manual',
         limites: b.limites || null,
+        // Quién lo trajo, ya comprobado. Al activar, de acá salen los meses de
+        // regalo de esta cuenta y el mes de quien la refirió.
+        referidoPor,
+        referidoPorNombre,
         adminUid: admin.uid,
         adminEmail: admin.email || null,
         estado: ESTADOS_ALTA.ENVIADA,
@@ -15724,7 +15760,11 @@ export const completarAlta = onRequest(
       // conversación se mandó el alta, y esa conversación ya guarda de qué
       // anuncio de Meta llegó el lead. Ese es el origen de verdad: el anuncio
       // que trajo a la persona que terminó pagando.
-      let origenDelAlta = origenDesdeLanding(datos.acquisition)
+      // Prioridad: el referido primero. Si al mandar el alta se escribió que lo
+      // trajo un cliente, eso es lo que se sabe A CIENCIA CIERTA; el anuncio y
+      // la landing son deducciones. Además es lo único que dispara un premio.
+      let origenDelAlta = origenDesdeReferido(alta.referidoPor, alta.referidoPorNombre)
+        || origenDesdeLanding(datos.acquisition)
       if (!origenDelAlta && alta.conversationId) {
         try {
           const conv = await db.collection('whatsappConversations').doc(alta.conversationId).get()
@@ -15764,7 +15804,11 @@ export const completarAlta = onRequest(
 
       // La suscripción con lo que se vendió, congelado en el alta. Misma
       // función que usa el alta del admin: una sola forma de nacer.
-      const { hasta } = await crearSuscripcion(db, {
+      // Si vino referido, el código viaja en el origen y de ahí sale todo: los
+      // meses de regalo de esta cuenta y, más abajo, el mes de quien la trajo.
+      const codigoQuienRefiere = origenDelAlta?.canal === 'referido' ? origenDelAlta.id : null
+
+      const { hasta, mesesDeRegalo: regalo } = await crearSuscripcion(db, {
         uid,
         email: usuario.email,
         businessName: datos.businessName,
@@ -15773,12 +15817,22 @@ export const completarAlta = onRequest(
         precio: alta.precio != null ? Number(alta.precio) : null,
         limites: alta.limites,
         metodo: alta.metodo || 'manual',
+        referidoPor: codigoQuienRefiere,
         FieldValue,
         Timestamp,
       })
 
       await ref.update({ uid }).catch(() => {})
       console.log(`🌱 Alta ${codigo} completada: ${usuario.email} (${uid})`)
+
+      // El mes de quien lo trajo. Va DESPUÉS de que la cuenta ya está creada y
+      // cobrada, y no bloquea la respuesta: un problema con el premio jamás debe
+      // costar el alta, que es lo que sí se pagó. La propia función se traga sus
+      // errores y los anota.
+      if (codigoQuienRefiere) {
+        premiarAQuienRefiere(db, { codigo: codigoQuienRefiere, referidoUid: uid, FieldValue, Timestamp })
+          .catch((e) => console.error('[Referidos] No se pudo premiar:', e.message))
+      }
 
       // Un pase para entrar de una, sin volver a escribir la contraseña. Si
       // Google no nos deja firmarlo, NO se tira todo por la borda: la cuenta

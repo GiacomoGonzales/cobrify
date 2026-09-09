@@ -3,10 +3,19 @@ import { auth } from '@/lib/firebase'
 import { PLANS, SELLABLE_PLAN_IDS } from '@/services/subscriptionService'
 import { useToast } from '@/contexts/ToastContext'
 import { Modal, Campo, Entrada, Selector, Boton, Aviso } from '@/components/admin/ui'
+import { mesesDeRegalo, mesesTotales } from '@/data/referidos'
 
 const URL_ALTA = 'https://us-central1-cobrify-395fe.cloudfunctions.net/crearAltaPendiente'
 
 const PLANES = SELLABLE_PLAN_IDS.filter((id) => !PLANS[id]?.isAddon)
+
+/** Lo que se lleva el referido en cada plan, para poder decírselo sin calcular. */
+const REGALO = Object.fromEntries(
+  PLANES.filter((id) => mesesDeRegalo(id)).map((id) => {
+    const paga = PLANS[id]?.months || 1
+    return [id, { paga, total: mesesTotales(id, paga) }]
+  }),
+)
 
 /** Los mismos que usa Admin > Pagos, para que el listado no mezcle etiquetas. */
 const METODOS = { yape: 'Yape', plin: 'Plin', transferencia: 'Transferencia', efectivo: 'Efectivo', tarjeta: 'Tarjeta', otro: 'Otro' }
@@ -29,6 +38,7 @@ export default function EnviarAltaModal({ conversacion, onClose, onPonerEnElComp
   const [monto, setMonto] = useState('')
   const [montoTocado, setMontoTocado] = useState(false)
   const [metodo, setMetodo] = useState('yape')
+  const [referidoPor, setReferidoPor] = useState('')
   const [nombre, setNombre] = useState(conversacion?.nombre || '')
   const [creando, setCreando] = useState(false)
   const [hecho, setHecho] = useState(null)
@@ -55,6 +65,7 @@ export default function EnviarAltaModal({ conversacion, onClose, onPonerEnElComp
           meses: PLANS[plan]?.months || 1,
           precio: monto ? Number(monto) : null,
           metodo,
+          referidoPor: referidoPor.trim() || null,
           limites: PLANS[plan]?.limits || null,
         }),
       })
@@ -128,6 +139,25 @@ export default function EnviarAltaModal({ conversacion, onClose, onPonerEnElComp
           <p className="-mt-1 text-[11.5px] text-gray-500">
             El monto queda congelado como su precio de renovación, y el pago aparece en Pagos.
           </p>
+          {/* Quién lo trajo. El código se comprueba al crear el enlace: si está
+              mal escrito, el error sale ahora, que es cuando se puede arreglar.
+              Dejarlo pasar sería que el cliente que refirió nunca cobre su mes
+              y nadie se entere. */}
+          <Campo
+            etiqueta="¿Lo refirió un cliente? (opcional)"
+            ayuda={REGALO[plan]
+              ? `Con este plan, el referido usa ${REGALO[plan].total} meses pagando ${REGALO[plan].paga}, y quien lo trajo gana 1 mes.`
+              : plan
+                ? 'Este plan no entra al programa de referidos.'
+                : 'El código de cliente de quien lo refirió (el que sale en Usuarios).'}
+          >
+            <Entrada
+              value={referidoPor}
+              onChange={(e) => setReferidoPor(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              inputMode="numeric"
+              placeholder="1000042"
+            />
+          </Campo>
         </div>
       ) : (
         <div className="space-y-3">

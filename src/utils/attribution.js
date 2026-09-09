@@ -36,6 +36,15 @@ export function detectSource() {
   const params = new URLSearchParams(window.location.search)
   const referrer = document.referrer || ''
 
+  // 0. El enlace de un cliente que refiere (`?ref=1000042`). Va PRIMERO porque
+  //    lo pone una persona a mano y es lo más específico que puede traer una
+  //    visita: si además hay un utm o un fbclid, el que trajo al cliente fue el
+  //    conocido que le pasó el enlace, no la plataforma por la que se abrió.
+  const ref = (params.get('ref') || '').trim()
+  if (/^\d{6,10}$/.test(ref)) {
+    return { source: 'referido', medium: 'referido-cliente', campaign: ref, referrer }
+  }
+
   // 1. Identificadores de clic de anuncios: la señal más confiable de que la
   //    visita vino de publicidad PAGA (los pone la plataforma automáticamente).
   if (params.get('gclid')) {
