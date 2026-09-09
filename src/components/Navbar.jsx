@@ -236,32 +236,41 @@ function Navbar() {
       <div className="flex items-center space-x-2 sm:space-x-4">
         {/* Instalar la app: en celular va a la tienda (app nativa), en
             escritorio instala la PWA. */}
-        {(tiendaApp || isInstallable) && (
-          // Yendo a la tienda, el botón va en blanco: la marca de Google Play
-          // son cuatro colores —uno de ellos azul— y sobre el azul del sistema
-          // se pierde justo la cara que la hace reconocible. Los distintivos de
-          // tienda se muestran sobre fondo claro por eso mismo. La instalación
-          // de la PWA no tiene marca que respetar y se queda como estaba.
+        {/* Ir a la tienda: SOLO la marca, sin caja.
+
+            Estuvo un rato metida en un botón con borde y fondo propio, y ahí
+            el logo quedaba diminuto adentro de un recuadro que competía con
+            él. En una cabecera donde la campanita y el resto son íconos
+            sueltos, una cajita blanca desentona y encima achica lo único que
+            se tiene que reconocer. Ahora el logo va grande y al aire, con el
+            mismo fondo al pasar el dedo que usan los demás.
+
+            Instalar la PWA es otra cosa: no tiene marca que mostrar, solo una
+            flecha que sin texto no dice nada, así que conserva su botón. */}
+        {tiendaApp && (
           <button
-            onClick={() => {
-              if (tiendaApp) window.open(tiendaApp.url, '_blank', 'noopener,noreferrer')
-              else promptInstall()
-            }}
-            className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-              tiendaApp
-                ? 'bg-white border border-gray-200 text-gray-800 hover:bg-gray-50 hover:border-gray-300'
-                : 'bg-primary-600 hover:bg-primary-700 text-white'
-            }`}
-            title={tiendaApp ? `Descargar Cobrify en ${NOMBRE_DE_TIENDA[tiendaApp.cual]}` : 'Instalar aplicación'}
+            onClick={() => window.open(tiendaApp.url, '_blank', 'noopener,noreferrer')}
+            className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+            title={`Descargar Cobrify en ${NOMBRE_DE_TIENDA[tiendaApp.cual]}`}
+            aria-label={`Descargar Cobrify en ${NOMBRE_DE_TIENDA[tiendaApp.cual]}`}
           >
-            {/* El mismo ícono que ve al darse de alta desde el chat: ahí
+            {/* El mismo dibujo que ve al darse de alta desde el chat: ahí
                 reconoció la tienda por su marca, no por una flecha. */}
-            {tiendaApp
-              ? (tiendaApp.cual === 'ios'
-                  ? <LogoAppStore className="w-4 h-4 flex-none" />
-                  : <LogoPlayStore className="w-4 h-4 flex-none" />)
-              : <Download className="w-4 h-4" />}
-            <span className="hidden sm:inline">{tiendaApp ? 'Descargar App' : 'Instalar App'}</span>
+            {tiendaApp.cual === 'ios'
+              ? <LogoAppStore className="w-7 h-7 text-gray-900" />
+              : <LogoPlayStore className="w-7 h-7" />}
+          </button>
+        )}
+
+        {/* Instalar la PWA: solo en escritorio, donde no hay tienda. */}
+        {!tiendaApp && isInstallable && (
+          <button
+            onClick={promptInstall}
+            className="flex items-center gap-2 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors"
+            title="Instalar aplicación"
+          >
+            <Download className="w-4 h-4" />
+            <span className="hidden sm:inline">Instalar App</span>
           </button>
         )}
 
