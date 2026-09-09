@@ -237,7 +237,10 @@ export const registerBusinessAsAdmin = async (email, password, displayName, busi
       body: JSON.stringify({
         email,
         password,
-        datos: { ...(businessData || {}), email, displayName },
+        // De dónde vino el cliente, capturado por la landing en su primera
+        // visita. Viajaba hasta el navegador y ahí moría: el único sitio que lo
+        // guardaba era `registerUser`, que no lo llama nadie.
+        datos: { ...(businessData || {}), email, displayName, acquisition: getStoredAttribution() },
         plan: {
           id: subscriptionOptions?.plan || 'trial',
           meses: plan?.months || 1,

@@ -15532,6 +15532,16 @@ export const crearCuentaCompleta = onRequest(
  * momento de la venta, y no se vuelven a consultar de ningún catálogo: lo que
  * se cobró es lo que se cobró.
  */
+/** Lo que el navegador diga sobre su origen, recortado a la forma conocida. */
+function limpiarOrigenDeAlta(v) {
+  if (!v || typeof v !== 'object') return null
+  const corto = (x, n) => (typeof x === 'string' ? x.trim().slice(0, n) : '')
+  const fuente = corto(v.source, 40)
+  return fuente
+    ? { source: fuente, medium: corto(v.medium, 40), campaign: corto(v.campaign, 60), referrer: corto(v.referrer, 300), landedAt: corto(v.landedAt, 40) }
+    : null
+}
+
 export const crearAltaPendiente = onRequest(
   { region: 'us-central1', timeoutSeconds: 30, memory: '256MiB', invoker: 'public', cors: true },
   async (req, res) => {
@@ -15680,6 +15690,34 @@ export const completarAlta = onRequest(
         return d
       })
 
+      // DE DÓNDE VINO ESTE CLIENTE, en el camino del alta.
+      //
+      // Acá no sirve lo que capturó la landing: el enlace vive en
+      // `registro.cobrifyperu.com`, otro subdominio, y el navegador NO comparte
+      // el almacenamiento entre dominios. Lo que sí sabemos es por qué
+      // conversación se mandó el alta, y esa conversación ya guarda de qué
+      // anuncio de Meta llegó el lead. Ese es el origen de verdad: el anuncio
+      // que trajo a la persona que terminó pagando.
+      let origenDelAlta = limpiarOrigenDeAlta(datos.acquisition)
+      if (!origenDelAlta && alta.conversationId) {
+        try {
+          const conv = await db.collection('whatsappConversations').doc(alta.conversationId).get()
+          const anuncio = conv.data()?.origenAnuncio
+          if (anuncio?.anuncioId || anuncio?.titular) {
+            origenDelAlta = {
+              source: anuncio.tipo === 'post' ? 'facebook' : 'meta-ads',
+              medium: 'publicidad',
+              campaign: String(anuncio.titular || anuncio.anuncioId || '').slice(0, 60),
+              referrer: String(anuncio.enlace || '').slice(0, 300),
+              landedAt: '',
+            }
+          }
+        } catch (e) {
+          // Un fallo leyendo la conversación jamás debe costar el alta.
+          console.error('[Alta] No se pudo leer el origen de la conversación:', e.message)
+        }
+      }
+
       let usuario
       try {
         usuario = await auth.createUser({
@@ -15701,7 +15739,11 @@ export const completarAlta = onRequest(
       }
 
       const uid = usuario.uid
-      await sembrarCuenta(db, { uid, email: usuario.email, datos, FieldValue })
+      await sembrarCuenta(db, {
+        uid, email: usuario.email,
+        datos: { ...datos, acquisition: origenDelAlta },
+        FieldValue,
+      })
 
       // La suscripción con lo que se vendió, congelado en el alta. Misma
       // función que usa el alta del admin: una sola forma de nacer.
