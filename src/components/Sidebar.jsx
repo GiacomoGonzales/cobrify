@@ -89,6 +89,7 @@ import { esDominioReseller } from '@/utils/resellerDomain'
 import { prefijoDeRuta } from '@/utils/demoRoutes'
 import { atiendeConCita } from '@/utils/businessModes'
 import VersionApp from '@/components/VersionApp'
+import AvisoDeActualizacion from '@/components/AvisoDeActualizacion'
 
 function Sidebar() {
   const { mobileMenuOpen, setMobileMenuOpen, sidebarCollapsed, toggleSidebar, orderAlertCount } = useStore()
@@ -2797,10 +2798,18 @@ function Sidebar() {
           })}
         </div>
 
+        {/* Hay una versión nueva. Va pegado al número de versión a propósito:
+            es donde uno mira para saber qué copia tiene corriendo, así que es
+            donde espera enterarse de que hay otra. Antes era una franja debajo
+            del Navbar que, con varios deploys por día, aparecía todo el rato y
+            empujaba el contenido. */}
+        <AvisoDeActualizacion className={`mx-3 mt-3 ${sidebarCollapsed ? 'md:hidden' : ''}`} />
+        <AvisoDeActualizacion soloIcono className={sidebarCollapsed ? 'hidden md:flex mt-3' : 'hidden'} />
+
         {/* Versión de la copia que está corriendo. Sirve para soporte: si un
             cliente reporta algo raro, lo primero es saber si su navegador se
             quedó con una compilación vieja en caché. */}
-        <VersionApp compacta className={`px-4 pt-3 ${sidebarCollapsed ? 'md:hidden' : ''}`} />
+        <VersionApp compacta className={`px-4 pt-2 ${sidebarCollapsed ? 'md:hidden' : ''}`} />
 
         {/* Espaciador inferior para iOS - permite que el scroll muestre la última opción */}
         <div style={{ height: '34px', flexShrink: 0 }} />

@@ -16,6 +16,7 @@ import { cupoDeComprobantes } from '@/utils/cupoDeComprobantes'
 import Sidebar from '@/components/Sidebar'
 import Navbar from '@/components/Navbar'
 import UpdateBanner from '@/components/UpdateBanner'
+import { ActualizacionProvider } from '@/contexts/ActualizacionContext'
 import OfflineIndicator from '@/components/OfflineIndicator'
 import ReviewPrompt from '@/components/ReviewPrompt'
 import KitchenTicket from '@/components/KitchenTicket'
@@ -640,6 +641,10 @@ export default function MainLayout() {
   }
 
   return (
+    // El estado de "hay versión nueva" lo comparten el pie del menú (aviso
+    // pasivo) y el botón de menú en móvil (un punto). Antes vivía dentro de
+    // la franja azul, que era la única que lo sabía.
+    <ActualizacionProvider>
     <div className="flex flex-col h-screen bg-gray-50 overflow-hidden" style={{ height: '100dvh' }}>
       {/* Status Bar spacer - Fondo azul detrás del status bar nativo (iOS y Android) */}
       {Capacitor.isNativePlatform() && (
@@ -729,7 +734,9 @@ export default function MainLayout() {
           {/* Aviso si la sesion abierta es la cuenta demo (compartida) */}
           <DemoAccountBanner />
 
-          {/* Banner de actualización integrado (web/PWA: reiniciar; app: tienda) */}
+          {/* Solo la app: "actualiza desde la tienda". La versión web se avisa
+              en el pie del menú, sin interrumpir — se despliega varias veces
+              al día y una franja por deploy era puro ruido. */}
           <UpdateBanner />
 
           {/* Aviso de pedidos del catálogo digital.
@@ -872,5 +879,6 @@ export default function MainLayout() {
         </div>
       )}
     </div>
+    </ActualizacionProvider>
   )
 }

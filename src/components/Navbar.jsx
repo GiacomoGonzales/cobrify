@@ -6,6 +6,7 @@ import { useBranding } from '@/contexts/BrandingContext'
 import { Capacitor } from '@capacitor/core'
 import { esDominioReseller } from '@/utils/resellerDomain'
 import { useStore } from '@/stores/useStore'
+import { useActualizacion } from '@/contexts/ActualizacionContext'
 import { usePWAInstall } from '@/hooks/usePWAInstall'
 import { getUnreadNotifications, checkAndCreateSubscriptionNotifications } from '@/services/notificationService'
 import NotificationPanel from './NotificationPanel'
@@ -30,6 +31,9 @@ function Navbar() {
   const { user, logout, subscription, isDemoMode, isBusinessOwner, businessMode, businessSettings, branches, filterBranchesByAccess, hasMainBranchAccess, branchScope, setBranchScope, baseBusinessMode } = useAppContext()
   const { branding } = useBranding()
   const { toggleMobileMenu } = useStore()
+  // En móvil el menú lateral es un cajón cerrado: el aviso de versión nueva
+  // vive adentro, así que el botón lleva un punto para que se note.
+  const { hay: hayActualizacion } = useActualizacion()
   const { isInstallable, promptInstall } = usePWAInstall()
   // En un celular, "Instalar App" debe llevar a la tienda: la app NATIVA
   // tiene impresion termica, escaner y notificaciones que la version web no
@@ -150,9 +154,13 @@ function Navbar() {
       <div className="flex items-center space-x-3 flex-1 min-w-0">
         <button
           onClick={toggleMobileMenu}
-          className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+          className="md:hidden relative p-2 rounded-lg hover:bg-gray-100 transition-colors"
+          title={hayActualizacion ? 'Hay una versión nueva en el menú' : undefined}
         >
           <Menu className="w-6 h-6 text-gray-600" />
+          {hayActualizacion && (
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary-600 ring-2 ring-white" />
+          )}
         </button>
 
         {/* Badge de modo demo - sutil, dentro del header */}
