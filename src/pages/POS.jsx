@@ -592,6 +592,12 @@ export default function POS() {
   // Cupo del mes: al agotarse, boleta y factura salen del selector y queda la
   // Nota de Venta. Se corta antes de crear el documento para no consumir un
   // numero que despues no puede llegar a SUNAT.
+  // Nota(s) de venta que se están convirtiendo: marca cuáles cerrar al terminar,
+  // salta el descuento de stock (ya descontó la nota) y saca la Nota de Venta del
+  // selector de comprobante. Se declara ACÁ, antes de `docTypeOpts`, que la lee.
+  // Puede ser un string (una nota) o un array (varias).
+  const [pendingNotaVentaIds, setPendingNotaVentaIds] = useState(null)
+
   const cupo = useMemo(
     () => cupoDeComprobantes(subscription, { esAdmin: isAdmin || isDemoMode }),
     [subscription, isAdmin, isDemoMode]
@@ -604,7 +610,10 @@ export default function POS() {
     allowedForUser: allowedDocumentTypes || null,
     canEmitFiscal,
     cupoAgotado: cupo.agotado,
-  }), [companySettings?.enabledDocumentTypes, allowedDocumentTypes, canEmitFiscal, cupo.agotado])
+    // Al convertir una nota, la Nota de Venta sale del selector: se convierte
+    // en un comprobante, no en otra nota.
+    convirtiendoNota: !!(pendingNotaVentaIds && pendingNotaVentaIds.length > 0),
+  }), [companySettings?.enabledDocumentTypes, allowedDocumentTypes, canEmitFiscal, cupo.agotado, pendingNotaVentaIds])
 
   const availableDocTypes = useMemo(() => getAvailableDocumentTypes(docTypeOpts), [docTypeOpts])
 
@@ -812,9 +821,6 @@ export default function POS() {
   // toast y se perdía, y es el dato que el cliente quiere ver en la factura.
   const [pendingQuotation, setPendingQuotation] = useState(null)
 
-  // Estado para nota(s) de venta (para marcar como convertida(s) y skip stock al completar)
-  // Puede ser un string (una nota) o un array (múltiples notas)
-  const [pendingNotaVentaIds, setPendingNotaVentaIds] = useState(null)
 
   // Estado para guía de remisión origen (skip stock si la guía ya descontó al crearse).
   // Shape: { id, number, stockAlreadyDeducted } | null
@@ -8900,7 +8906,7 @@ ${textoDeErrores(revision.errores)}`, 9000)
               })
             }
 
-            // 6.3. Marcar nota(s) de venta como convertida(s) y verificar movimientos de stock
+            // 6.3. Marcar la(s) nota(s) de venta como convertida(s).
             if (_pendingNotaVentaIds && _pendingNotaVentaIds.length > 0) {
               await cerrarVinculoDeOrigen({
                 businessId,
@@ -8910,57 +8916,27 @@ ${textoDeErrores(revision.errores)}`, 9000)
                 invoiceNumber: bgNumberResult.number,
               })
 
-              // Verificar que las notas originales tengan movimientos de stock
-              try {
-                const { getStockMovements, createStockMovement } = await import('@/services/warehouseService')
-                const movementsResult = await getStockMovements(businessId)
-                const allMovements = movementsResult.success ? movementsResult.data : []
-
-                for (const notaId of _pendingNotaVentaIds) {
-                  // Buscar movimientos de la nota original
-                  const notaMovements = allMovements.filter(m => m.referenceId === notaId && m.type === 'sale')
-
-                  if (notaMovements.length === 0) {
-                    // La nota no tiene movimientos - crearlos ahora
-                    console.log('⚠️ Nota', notaId, 'sin movimientos de stock. Creando...')
-                    const { doc: docRef, getDoc: getDocFn } = await import('firebase/firestore')
-                    const { db: fireDb } = await import('@/lib/firebase')
-                    const notaRef = docRef(fireDb, 'businesses', businessId, 'invoices', notaId)
-                    const notaSnap = await getDocFn(notaRef)
-
-                    if (notaSnap.exists()) {
-                      const notaData = notaSnap.data()
-                      const notaItems = notaData.items || []
-                      const notaWarehouseId = notaData.warehouseId || bgSelectedWarehouse?.id || ''
-
-                      for (const item of notaItems) {
-                        const productId = item.productId || item.id
-                        if (!productId || item.isCustom) continue
-                        const productData = bgProducts.find(p => p.id === productId)
-                        if (!productData || productData.trackStock === false) continue
-
-                        const qty = (item.quantity || 0) * (item.presentationFactor || 1)
-                        await createStockMovement(businessId, {
-                          productId,
-                          productName: item.name || item.description || '',
-                          warehouseId: notaWarehouseId,
-                          type: 'sale',
-                          quantity: -qty,
-                          reason: 'Venta',
-                          referenceType: 'invoice',
-                          referenceId: notaId,
-                          referenceNumber: notaData.number || '',
-                          userId: bgUserUid,
-                          notes: `Venta ${item.name || item.description} - Nota de Venta ${notaData.number || ''} (auto-sync conversión)`
-                        })
-                      }
-                      console.log('✅ Movimientos de stock creados para nota', notaId)
-                    }
-                  }
-                }
-              } catch (syncError) {
-                console.error('⚠️ Error al verificar/crear movimientos de stock de notas:', syncError)
-              }
+              // NO se recrean movimientos de stock acá. Este bloque revisaba si la
+              // nota original tenía movimientos y, si no los veía, los volvía a crear.
+              // Fallaba de dos maneras y las dos dejaban movimientos fantasma:
+              //
+              //   1. Preguntaba con `getStockMovements(businessId)` sin filtros, que
+              //      devuelve solo los ÚLTIMOS 200 movimientos. Una nota de hace unos
+              //      días queda fuera de esa ventana en un negocio activo, así que
+              //      concluía "nunca descontó" y descontaba de nuevo.
+              //   2. En la cadena nota -> nota -> comprobante, la nota del medio no
+              //      tiene movimientos A PROPÓSITO (el descuento lo hizo la primera).
+              //      Los "reponía" duplicando los de la primera.
+              //
+              // Es el MISMO error del botón "Sincronizar movimientos de stock" que se
+              // quitó de Ventas: decidía por "existe el movimiento" en vez de "el stock
+              // ya se descontó". Reporte de IMPORTACIONES MEDIAS DE ABEJITA, 8-set-2026:
+              // 9 movimientos fantasma. El stock real nunca se tocó, porque
+              // `createStockMovement` solo escribe el historial.
+              //
+              // Si alguna vez hace falta recrear un movimiento perdido, hay que
+              // compararlo contra el STOCK REAL, y leer por referencia con
+              // `getStockMovementsByReference`, que no tiene la ventana de 200.
             }
 
             // 6.4. Marcar cita veterinaria como completada

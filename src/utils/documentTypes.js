@@ -10,6 +10,11 @@
 //   2. USUARIO  (`allowedDocumentTypes` del sub-usuario): permiso individual.
 //   3. SUNAT    (`canEmitFiscal`): sin conexión solo queda la Nota de Venta,
 //      que no es un comprobante electrónico.
+//   5. CONVERSIÓN (`convirtiendoNota`): una nota de venta se convierte en un
+//      comprobante, no en otra nota. La cadena nota -> nota -> comprobante deja
+//      a la nota del medio sin movimientos de stock (el descuento lo hizo la
+//      primera) y confundía a quien mirara el historial. Reporte de
+//      IMPORTACIONES MEDIAS DE ABEJITA, 8-set-2026.
 //   4. CUPO     (`cupoAgotado`): se acabaron los comprobantes del mes. Igual
 //      que arriba, queda la Nota de Venta para seguir vendiendo. Se corta ACÁ
 //      y no en el servidor a propósito: hasta junio de 2026 el servidor
@@ -37,6 +42,7 @@ export const getAvailableDocumentTypes = ({
   allowedForUser = null,
   canEmitFiscal = true,
   cupoAgotado = false,
+  convirtiendoNota = false,
 } = {}) => {
   let tipos = [...DOCUMENT_TYPES]
 
@@ -53,6 +59,10 @@ export const getAvailableDocumentTypes = ({
   // Sin comprobantes del mes tampoco: son ventas nuevas y consumen cupo.
   if (cupoAgotado) {
     tipos = tipos.filter(t => !consumeCupo(t))
+  }
+  // Convertir una nota de venta en otra nota de venta no es convertir nada.
+  if (convirtiendoNota) {
+    tipos = tipos.filter(t => t !== 'nota_venta')
   }
 
   return tipos
