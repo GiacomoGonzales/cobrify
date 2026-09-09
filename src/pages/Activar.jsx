@@ -8,6 +8,7 @@ import { consultarRUC, consultarDNI } from '@/services/documentLookupService'
 import { RUBROS, RUBROS_ALFABETICOS, sugerirRubroDeCuenta } from '@/data/rubros'
 import { Boton, Campo, Entrada, Aviso } from '@/components/admin/ui'
 import { LogoAppStore, LogoPlayStore, LogoNavegador } from '@/components/LogosTienda'
+import { URL_APP_STORE, URL_PLAY_STORE, NOMBRE_DE_TIENDA, aparato } from '@/utils/tiendaDeLaApp'
 
 const FN = 'https://us-central1-cobrify-395fe.cloudfunctions.net'
 
@@ -15,14 +16,14 @@ const FN = 'https://us-central1-cobrify-395fe.cloudfunctions.net'
 const TIENDAS = {
   ios: {
     etiqueta: 'Descargar para iPhone',
-    pie: 'App Store',
-    url: 'https://apps.apple.com/pe/app/cobrify-peru/id6756195760',
+    pie: NOMBRE_DE_TIENDA.ios,
+    url: URL_APP_STORE,
     Logo: LogoAppStore,
   },
   android: {
     etiqueta: 'Descargar para Android',
-    pie: 'Google Play',
-    url: 'https://play.google.com/store/apps/details?id=com.factuya.cobrify',
+    pie: NOMBRE_DE_TIENDA.android,
+    url: URL_PLAY_STORE,
     Logo: LogoPlayStore,
   },
   web: {
@@ -35,13 +36,6 @@ const TIENDAS = {
   },
 }
 
-/** Desde qué aparato entró, para enseñarle solo lo que le sirve. */
-function aparato() {
-  const ua = navigator.userAgent || ''
-  if (/android/i.test(ua)) return 'android'
-  if (/iPad|iPhone|iPod/.test(ua) && !window.MSStream) return 'ios'
-  return 'web'
-}
 
 const PASOS = ['Tu negocio', 'Tu rubro', 'Tus datos']
 

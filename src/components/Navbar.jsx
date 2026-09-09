@@ -5,6 +5,8 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
 import { Capacitor } from '@capacitor/core'
 import { esDominioReseller } from '@/utils/resellerDomain'
+import { LogoAppStore, LogoPlayStore } from '@/components/LogosTienda'
+import { aparato, urlDeTienda, NOMBRE_DE_TIENDA } from '@/utils/tiendaDeLaApp'
 import { useStore } from '@/stores/useStore'
 import { useActualizacion } from '@/contexts/ActualizacionContext'
 import { usePWAInstall } from '@/hooks/usePWAInstall'
@@ -48,10 +50,11 @@ function Navbar() {
     // En el dominio de un reseller tampoco: la ficha de la tienda es de
     // Cobrify, y mandar ahi al cliente de otro es regalarle la marca.
     if (esDominioReseller()) return null
-    const ua = navigator.userAgent || ''
-    if (/android/i.test(ua)) return 'https://play.google.com/store/apps/details?id=com.factuya.cobrify'
-    if (/iPad|iPhone|iPod/.test(ua) && !window.MSStream) return 'https://apps.apple.com/pe/app/cobrify-peru/id6756195760'
-    return null
+    // Las direcciones y la deteccion salen de utils/tiendaDeLaApp, el mismo
+    // criterio que usa el formulario de alta.
+    const cual = aparato()
+    const url = urlDeTienda(cual)
+    return url ? { cual, url } : null
   })()
   const navigate = useNavigate()
 
@@ -234,15 +237,30 @@ function Navbar() {
         {/* Instalar la app: en celular va a la tienda (app nativa), en
             escritorio instala la PWA. */}
         {(tiendaApp || isInstallable) && (
+          // Yendo a la tienda, el botón va en blanco: la marca de Google Play
+          // son cuatro colores —uno de ellos azul— y sobre el azul del sistema
+          // se pierde justo la cara que la hace reconocible. Los distintivos de
+          // tienda se muestran sobre fondo claro por eso mismo. La instalación
+          // de la PWA no tiene marca que respetar y se queda como estaba.
           <button
             onClick={() => {
-              if (tiendaApp) window.open(tiendaApp, '_blank', 'noopener,noreferrer')
+              if (tiendaApp) window.open(tiendaApp.url, '_blank', 'noopener,noreferrer')
               else promptInstall()
             }}
-            className="flex items-center gap-2 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors"
-            title={tiendaApp ? 'Descargar la app' : 'Instalar aplicación'}
+            className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+              tiendaApp
+                ? 'bg-white border border-gray-200 text-gray-800 hover:bg-gray-50 hover:border-gray-300'
+                : 'bg-primary-600 hover:bg-primary-700 text-white'
+            }`}
+            title={tiendaApp ? `Descargar Cobrify en ${NOMBRE_DE_TIENDA[tiendaApp.cual]}` : 'Instalar aplicación'}
           >
-            <Download className="w-4 h-4" />
+            {/* El mismo ícono que ve al darse de alta desde el chat: ahí
+                reconoció la tienda por su marca, no por una flecha. */}
+            {tiendaApp
+              ? (tiendaApp.cual === 'ios'
+                  ? <LogoAppStore className="w-4 h-4 flex-none" />
+                  : <LogoPlayStore className="w-4 h-4 flex-none" />)
+              : <Download className="w-4 h-4" />}
             <span className="hidden sm:inline">{tiendaApp ? 'Descargar App' : 'Instalar App'}</span>
           </button>
         )}
