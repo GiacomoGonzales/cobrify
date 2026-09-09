@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store, Clock, Printer, Loader2, User, FileText, AlertTriangle } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store, Clock, Printer, Loader2, User, FileText, AlertTriangle, ChevronDown } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useDataPermissions } from '@/hooks/useDataPermissions'
 import { useToast } from '@/contexts/ToastContext'
@@ -38,6 +38,8 @@ import CashClosureTicket from '@/components/CashClosureTicket'
 import { aplicarTamanoDeHoja } from '@/utils/printPageSize'
 import { getSessionMoneyTotals } from '@/utils/cashTotals'
 import { resumirProductosVendidos } from '@/utils/cashClosureProducts'
+import { ticketProductosHtml } from '@/utils/reporteProductos'
+import { printHtmlIframe } from '@/utils/printHtmlIframe'
 import { Capacitor } from '@capacitor/core'
 import { getPaymentBucketLabel, getCustomMethodByLabel, isCashLikePayment } from '@/utils/paymentMethods'
 import GuideLink from '@/components/guide/GuideLink'
@@ -1304,6 +1306,97 @@ export default function CashRegister() {
       console.error('Error al generar PDF:', error)
       toast.error('Error al generar el reporte PDF')
     }
+  }
+
+  /** "Turno del 09/09/2026 08:00", para la cabecera del papel. */
+  const etiquetaDelTurno = (sesion) => {
+    const abierto = sesion?.openedAt?.toDate ? sesion.openedAt.toDate() : (sesion?.openedAt ? new Date(sesion.openedAt) : null)
+    return abierto ? `Turno del ${formatDateTime(abierto)}` : 'Turno actual'
+  }
+
+  /**
+   * El botón "Ticket" del cierre abre dos opciones: el resumen de siempre y
+   * la relación de productos vendidos del turno. Son dos papeles distintos y
+   * el dueño a veces quiere solo el segundo (pedido de un usuario, 9-set-2026).
+   * Se cierra al elegir, al tocar fuera o con Escape.
+   */
+  const MenuDeTicket = ({ onResumen, onProductos, className = '' }) => {
+    const [abierto, setAbierto] = useState(false)
+    const caja = useRef(null)
+    useEffect(() => {
+      if (!abierto) return
+      const fuera = (e) => { if (caja.current && !caja.current.contains(e.target)) setAbierto(false) }
+      const esc = (e) => { if (e.key === 'Escape') setAbierto(false) }
+      document.addEventListener('mousedown', fuera)
+      document.addEventListener('keydown', esc)
+      return () => { document.removeEventListener('mousedown', fuera); document.removeEventListener('keydown', esc) }
+    }, [abierto])
+    const elegir = (fn) => { setAbierto(false); fn() }
+    return (
+      <div ref={caja} className={`relative ${className}`}>
+        <Button variant="outline" size="sm" className="w-full" onClick={() => setAbierto(a => !a)}>
+          <Printer className="w-4 h-4 mr-1" />
+          Ticket
+          <ChevronDown className="w-3.5 h-3.5 ml-1" />
+        </Button>
+        {abierto && (
+          <div className="absolute right-0 z-30 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => elegir(onResumen)}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+            >
+              <span className="block font-medium text-gray-900">Resumen del cierre</span>
+              <span className="block text-xs text-gray-500">Totales, métodos de pago y movimientos</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => elegir(onProductos)}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-t border-gray-100"
+            >
+              <span className="block font-medium text-gray-900">Productos vendidos</span>
+              <span className="block text-xs text-gray-500">Qué salió en este turno, con cantidades</span>
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  /**
+   * Imprime SOLO la relación de productos. Web por iframe (el mismo camino y el
+   * mismo molde que el reporte de Productos) y app por la térmica, porque en el
+   * WebView `window.print()` no hace nada.
+   */
+  const imprimirProductosDe = async (invoices, periodo) => {
+    const resumen = resumirProductosVendidos(invoices || [])
+    if (resumen.lineas.length === 0) {
+      toast.error('No hay productos vendidos en este turno')
+      return
+    }
+    const branchName = selectedBranch ? branches.find(b => b.id === selectedBranch)?.name : null
+    const anchoMm = printerConfig?.paperWidth || 80
+    if (isNative) {
+      if (!isPrinterConnected) {
+        toast.error('No hay impresora conectada. Configúrala en Ajustes.')
+        return
+      }
+      const { printProductsTicket } = await import('@/services/thermalPrinterService')
+      const r = await printProductsTicket(resumen, companySettings, anchoMm, { branchName, periodo })
+      if (r?.success) toast.success('Productos enviados a la impresora')
+      else toast.error(r?.error || 'No se pudo imprimir')
+      return
+    }
+    printHtmlIframe(
+      ticketProductosHtml(resumen, {
+        negocio: companySettings || {},
+        periodo,
+        sucursal: branchName || '',
+        anchoMm,
+      }),
+      'productos-cierre-iframe',
+      anchoMm,
+    )
   }
 
   const handlePrintTicket = () => {
@@ -4145,15 +4238,11 @@ export default function CashRegister() {
                   Excel
                 </Button>
               )}
-              <Button
-                variant="outline"
-                onClick={handlePrintHistoryTicket}
+              <MenuDeTicket
                 className="flex-1 min-w-[80px]"
-                size="sm"
-              >
-                <Printer className="w-4 h-4 mr-1" />
-                Ticket
-              </Button>
+                onResumen={handlePrintHistoryTicket}
+                onProductos={() => imprimirProductosDe(historyInvoices, etiquetaDelTurno(selectedHistorySession))}
+              />
               {/* Botón de impresión térmica (solo en app móvil) */}
               {isNative && isPrinterConnected && (
                 <Button
@@ -4815,15 +4904,10 @@ export default function CashRegister() {
                   <Download className="w-4 h-4 mr-1" />
                   PDF
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={handlePrintTicket}
-                  className="w-full"
-                  size="sm"
-                >
-                  <Printer className="w-4 h-4 mr-1" />
-                  Ticket
-                </Button>
+                <MenuDeTicket
+                  onResumen={handlePrintTicket}
+                  onProductos={() => imprimirProductosDe(todayInvoices, etiquetaDelTurno(closedSessionData))}
+                />
                 {/* Botón de impresión térmica (solo en app móvil) */}
                 {isNative && isPrinterConnected && (
                   <Button

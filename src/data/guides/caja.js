@@ -195,6 +195,14 @@ export default {
         },
         {
           type: 'texto',
+          text: 'Y si solo quieres la lista, sin el resumen: el botón **Ticket** del cierre abre dos opciones. **Resumen del cierre** imprime lo de siempre (totales, métodos de pago y movimientos) y **Productos vendidos** imprime únicamente qué salió en el turno, con cantidades e importes. Están tanto en el cierre que acabas de hacer como al abrir un turno del Historial.',
+        },
+        {
+          type: 'consejo',
+          text: 'Ese segundo papel no depende del ajuste de arriba: aunque el ticket del cierre salga sin productos, siempre puedes pedir la lista suelta desde ahí. Es el papel que se le deja al que repone mercadería.',
+        },
+        {
+          type: 'texto',
           text: 'Sobre las **notas de crédito**: se descuentan de la lista solo cuando la mercadería volvió de verdad — motivo *Anulación de la operación*, *Devolución total* o *Devolución por ítem*— y sobre una venta del mismo turno. Una nota por *descuento global* o por *error en el RUC* no toca la lista: ahí el producto se vendió igual, solo cambió el monto o los datos.',
         },
         {

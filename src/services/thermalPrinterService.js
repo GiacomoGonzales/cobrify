@@ -4474,6 +4474,88 @@ export const printCashMovementTicket = async (movement, business, paperWidth = 5
   }
 };
 
+/**
+ * SOLO la relación de productos vendidos, en ticket térmico.
+ *
+ * El cierre de caja ya puede llevar esta lista al pie (opción "Mostrar
+ * productos vendidos"), pero el dueño necesita pedirla suelta: el resumen del
+ * turno y la lista de qué salió son dos papeles distintos y a veces quiere solo
+ * el segundo. Las líneas las arma `lineasDeProductosParaTicket`, el MISMO
+ * formateador del cierre y del reporte de Productos, así que los tres papeles
+ * se leen igual.
+ */
+export const printProductsTicket = async (resumen, business, paperWidth = 58, { branchName = null, periodo = '' } = {}) => {
+  const isNative = Capacitor.isNativePlatform();
+  if (!isNative || !isPrinterConnected) {
+    return { success: false, error: 'Impresora no conectada' };
+  }
+  const format = getFormat(paperWidth);
+  const cuerpo = lineasDeProductosParaTicket(resumen, format.charsPerLine);
+  if (cuerpo.length === 0) return { success: false, error: 'No hay productos que imprimir' };
+  const printedAt = new Date().toLocaleString('es-PE', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+  const nombreNegocio = convertSpanishText(business?.tradeName || business?.name || 'MI EMPRESA');
+
+  // ---------- WiFi / interna ----------
+  if (connectionType === 'wifi' || connectionType === 'internal') {
+    try {
+      const builder = new EscPosBuilder();
+      builder.alignCenter().bold(true).text(nombreNegocio).newLine().bold(false)
+        .text(lineaRuc(business, '\n'));
+      if (branchName) builder.text('Sucursal: ' + convertSpanishText(branchName)).newLine();
+      if (periodo) builder.text(convertSpanishText(periodo)).newLine();
+      builder.newLine().alignLeft();
+      for (const linea of cuerpo) builder.text(convertSpanishText(linea)).newLine();
+      builder.alignCenter().newLine().text(printedAt).newLine()
+        .feed(getCutFeedLines()).cut();
+      const result = await sendEscPosData(builder.toBase64());
+      return (result && result.success) ? { success: true } : { success: false, error: 'Error al imprimir por WiFi' };
+    } catch (error) {
+      console.error('Error printing WiFi products ticket:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ---------- iOS BLE ----------
+  if (useAlternativeBLE) {
+    try {
+      let t = nombreNegocio + '\n';
+      t += lineaRuc(business, '\n');
+      if (branchName) t += 'Sucursal: ' + convertSpanishText(branchName) + '\n';
+      if (periodo) t += convertSpanishText(periodo) + '\n';
+      t += '\n';
+      for (const linea of cuerpo) t += convertSpanishText(linea) + '\n';
+      t += '\n' + printedAt + '\n\n\n';
+      return await BLEPrinter.printBLEText(t);
+    } catch (error) {
+      console.error('Error printing BLE products ticket:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ---------- Android Bluetooth ----------
+  try {
+    let printer = CapacitorThermalPrinter.begin();
+    if (paperWidth === 80) printer = printer.lineSpacing(2);
+    printer = printer.align('center')
+      .bold(true).text(nombreNegocio + '\n').bold(false)
+      .text(lineaRuc(business, '\n'));
+    if (branchName) printer = printer.text('Sucursal: ' + convertSpanishText(branchName) + '\n');
+    if (periodo) printer = printer.text(convertSpanishText(periodo) + '\n');
+    printer = printer.text('\n').align('left');
+    for (const linea of cuerpo) printer = printer.text(convertSpanishText(linea) + '\n');
+    printer = printer.align('center').text('\n').text(printedAt + '\n');
+    const cutFeed = getCutFeedLines();
+    for (let i = 0; i < cutFeed; i++) printer = printer.text('\n');
+    await printer.cutPaper().write();
+    return { success: true };
+  } catch (error) {
+    console.error('Error printing products ticket:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 // ============================================
 // IMPRESIÓN DE GUÍA DE REMISIÓN (TICKET TÉRMICO)
 // ============================================
