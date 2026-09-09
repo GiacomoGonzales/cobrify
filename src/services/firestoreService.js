@@ -1,3 +1,4 @@
+import { cambiosDesdeVenta } from '@/utils/clienteDesdeVenta'
 import { identificaAUnCliente, avisoDeDuplicado } from '@/utils/clienteDuplicado'
 import {
   collection,
@@ -765,25 +766,42 @@ export const getCustomerByDocumentNumber = async (userId, documentNumber) => {
   }
 }
 
-/**
- * Crear o actualizar cliente automáticamente desde una venta
- * Si el cliente ya existe (por documentNumber), actualiza sus datos
- * Si no existe, lo crea
- */
-export const upsertCustomerFromSale = async (userId, customerData) => {
+/** Un cliente por su id. `data` null si no existe. */
+export const getCustomerById = async (userId, customerId) => {
   try {
-    // No guardar clientes genéricos (sin documento real)
-    if (!customerData.documentNumber ||
-        customerData.documentNumber === '00000000' ||
-        customerData.documentNumber.trim() === '') {
-      return { success: true, skipped: true, reason: 'Cliente genérico sin documento' }
-    }
+    if (!customerId) return { success: true, data: null }
+    const snap = await getDoc(doc(db, 'businesses', userId, 'customers', customerId))
+    return { success: true, data: snap.exists() ? { id: snap.id, ...snap.data() } : null }
+  } catch (error) {
+    console.error('Error al leer el cliente:', error)
+    return { success: false, error: error.message }
+  }
+}
 
-    // Buscar si el cliente ya existe
-    const existingResult = await getCustomerByDocumentNumber(userId, customerData.documentNumber)
-
-    if (!existingResult.success) {
-      return existingResult
+/**
+ * Crear o actualizar cliente automáticamente desde una venta.
+ *
+ * Con `customerId` (el cliente se eligió de la lista o llegó desde una cita) se
+ * actualiza ESA ficha y nunca se crea otra, aunque el documento tipeado al
+ * cobrar no coincida con el que tenía: es el caso de Clínica, donde la cita
+ * se agendaba con un DNI inventado y el real se escribía al cobrar, y cada
+ * cobro dejaba una paciente repetida. Sin id se busca por documento, como
+ * siempre, y un cliente genérico sin documento no se guarda.
+ */
+export const upsertCustomerFromSale = async (userId, customerData, { customerId = null } = {}) => {
+  try {
+    let existingResult
+    if (customerId) {
+      existingResult = await getCustomerById(userId, customerId)
+      if (!existingResult.success) return existingResult
+    } else {
+      if (!customerData.documentNumber ||
+          customerData.documentNumber === '00000000' ||
+          customerData.documentNumber.trim() === '') {
+        return { success: true, skipped: true, reason: 'Cliente genérico sin documento' }
+      }
+      existingResult = await getCustomerByDocumentNumber(userId, customerData.documentNumber)
+      if (!existingResult.success) return existingResult
     }
 
     // Helper: agrega una mascota al array de pets si su nombre aún no está presente.
@@ -800,14 +818,9 @@ export const upsertCustomerFromSale = async (userId, customerData) => {
     if (existingResult.data) {
       // Cliente existe - actualizar solo si hay datos nuevos más completos
       const existing = existingResult.data
-      const updates = {}
-
-      // Actualizar campos solo si el nuevo dato tiene valor y el existente no
-      if (customerData.name && !existing.name) updates.name = customerData.name
-      if (customerData.businessName && !existing.businessName) updates.businessName = customerData.businessName
-      if (customerData.email && !existing.email) updates.email = customerData.email
-      if (customerData.phone && !existing.phone) updates.phone = customerData.phone
-      if (customerData.address && !existing.address) updates.address = customerData.address
+      // Rellena vacíos y completa el documento si el de la ficha no identifica
+      // a nadie (utils/clienteDesdeVenta). Nunca pisa lo que ya está.
+      const updates = cambiosDesdeVenta(existing, customerData)
 
       // Mascota: si la venta trae petName y aún no existe en pets[], agregarla.
       // Normalizamos primero para migrar campo legacy petName del cliente al array pets.
@@ -830,7 +843,16 @@ export const upsertCustomerFromSale = async (userId, customerData) => {
 
       // Solo actualizar si hay cambios
       if (Object.keys(updates).length > 0) {
-        await updateCustomer(userId, existing.id, updates)
+        const r = await updateCustomer(userId, existing.id, updates)
+        // El documento que trajo la venta ya es de OTRA ficha: no se mueve. Se
+        // guarda el resto y la venta sigue apuntando a esta.
+        if (r?.duplicado && updates.documentNumber) {
+          const resto = { ...updates }
+          delete resto.documentNumber
+          delete resto.documentType
+          if (Object.keys(resto).length > 0) await updateCustomer(userId, existing.id, resto)
+          return { success: true, updated: Object.keys(resto).length > 0, id: existing.id, documentoAjeno: updates.documentNumber }
+        }
         return { success: true, updated: true, id: existing.id }
       }
 
@@ -838,6 +860,12 @@ export const upsertCustomerFromSale = async (userId, customerData) => {
     } else {
       // Cliente no existe - crearlo
       // Auto-detectar tipo de documento si no viene especificado
+      // Acá solo se llega sin id (o con un id que ya no existe). Sin un
+      // documento real no se crea una ficha vacía.
+      const docDeVenta = String(customerData.documentNumber || '').trim()
+      if (!docDeVenta || docDeVenta === '00000000') {
+        return { success: true, skipped: true, reason: 'Cliente genérico sin documento' }
+      }
       const autoDocType = customerData.documentNumber?.length === 11 ? 'RUC' : 'DNI'
       const newCustomerData = {
         documentType: customerData.documentType || autoDocType,

@@ -110,6 +110,7 @@ export default {
             'Cada visita, **Agregar atención** (en la pestaña Atenciones o al terminar la cita en la Agenda). La más reciente queda primero.',
             'Las fotos del antes y el después van en la pestaña **Galería**: **Agregar foto** con su etiqueta; apenas hay una de cada lado, se ven juntas arriba.',
             '**Agendar cita** abre la Agenda con el paciente ya elegido; **WhatsApp** abre el chat.',
+            'Si al agendar no tienes el DNI a mano, déjalo vacío. Al cobrar la cita, el POS trae al paciente completo y el DNI que escribas se guarda en su misma ficha: no se crea otra.',
           ],
         },
         {

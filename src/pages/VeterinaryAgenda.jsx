@@ -673,7 +673,9 @@ export default function VeterinaryAgenda() {
 
     // Validación según modo
     if (walkInMode === 'new') {
-      if (!newClient.documentNumber.trim() || !newClient.name.trim()) { toast.error('Completa documento y nombre del cliente'); return }
+      // El documento es opcional. Obligarlo hacía que se inventara ("1") y el
+      // real, escrito recién al cobrar, creaba otra ficha. Vacío se completa después.
+      if (!newClient.name.trim()) { toast.error('Indica el nombre del cliente'); return }
       if (esVeterinaria && !newPet.name.trim()) { toast.error('Indica el nombre de la mascota'); return }
     } else {
       if (!walkInCustomer) { toast.error('Selecciona un cliente'); return }
@@ -1573,7 +1575,7 @@ export default function VeterinaryAgenda() {
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Número de documento</label>
                   <div className="flex gap-2">
-                    <input type="text" value={newClient.documentNumber} onChange={(e) => setNewClient(c => ({ ...c, documentNumber: e.target.value }))} placeholder="N° documento" className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                    <input type="text" value={newClient.documentNumber} onChange={(e) => setNewClient(c => ({ ...c, documentNumber: e.target.value }))} placeholder="N° documento (opcional)" className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" />
                     <Button type="button" variant="outline" size="sm" onClick={handleLookupNewDoc} disabled={lookingUpDoc} title="Buscar datos por DNI/RUC">
                       {lookingUpDoc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                     </Button>

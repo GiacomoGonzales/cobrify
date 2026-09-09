@@ -51,7 +51,7 @@ export default {
           items: [
             'Haz clic en el día en el calendario: sus horas aparecen en el panel del costado, con las citas ya tomadas puestas en su horario. (En Clínica también puedes llegar desde la ficha del paciente con **Agendar cita**: se abre el formulario con la persona ya elegida.)',
             'Toca una hora libre (las casillas punteadas). Se abre el formulario con la fecha y la hora ya puestas — puedes cambiarlas ahí mismo si hace falta.',
-            'Busca al cliente por nombre, documento o teléfono (en veterinaria, también por el nombre de su mascota). Si es nuevo, usa la pestaña "Cliente nuevo": con el DNI o RUC la lupa completa el nombre sola.',
+            'Busca al cliente por nombre, documento o teléfono (en veterinaria, también por el nombre de su mascota). Si es nuevo, usa la pestaña "Cliente nuevo": con el DNI o RUC la lupa completa el nombre sola. El documento es opcional: si no lo tienes a mano, déjalo vacío y complétalo al cobrar; se guarda en la misma ficha, no se crea otra.',
             'Elige los servicios con su precio. En veterinaria, antes eliges la mascota (o la agregas si no está registrada).',
             'Si tienes personal cargado en Vendedores, elige el **Especialista** que va a atender. Puedes dejarlo sin asignar.',
             'Presiona "Agendar cita". La cita queda como Programada, en su hora, en el panel del día.',

@@ -102,6 +102,7 @@ import {
   getProductBrands,
   sendInvoiceToSunat,
   upsertCustomerFromSale,
+  getCustomerById,
   getCashRegisterSession,
   getCustomerStoreCredit,
   redeemStoreCredit,
@@ -3250,13 +3251,27 @@ export default function POS() {
           console.log('🐾 POS: Cargando datos de cita veterinaria:', appointmentData)
           setPendingAppointmentData(appointmentData)
 
-          // Pre-llenar datos del cliente
-          setCustomerData(prev => ({
-            ...prev,
-            name: appointmentData.customerName || '',
-            phone: appointmentData.phone || '',
-            petName: appointmentData.petName || '',
-          }))
+          // El paciente de la cita, COMPLETO y con su id. Antes se copiaban solo
+          // el nombre y el teléfono: la venta no sabía quién era y, si se escribía
+          // el DNI al cobrar, creaba otra ficha (Clínica Adara, 9-set-2026).
+          const precargarPaciente = async () => {
+            const cust = appointmentData.customerId
+              ? (await getCustomerById(getBusinessId(), appointmentData.customerId)).data
+              : null
+            if (cust) {
+              const datos = datosDeCliente(cust)
+              setSelectedCustomer(cust)
+              setCustomerData(prev => ({ ...prev, ...datos, petName: appointmentData.petName || datos.petName || '' }))
+            } else {
+              setCustomerData(prev => ({
+                ...prev,
+                name: appointmentData.customerName || '',
+                phone: appointmentData.phone || '',
+                petName: appointmentData.petName || '',
+              }))
+            }
+          }
+          precargarPaciente().catch(e => console.error('No se pudo cargar el paciente de la cita:', e))
 
           // Agregar servicios al carrito (cada servicio como ítem separado)
           const petSuffix = appointmentData.petName ? ` - ${appointmentData.petName}` : ''
@@ -8330,7 +8345,9 @@ ${textoDeErrores(revision.errores)}`, 9000)
 
             // 3.2. Guardar cliente automáticamente
             try {
-              await upsertCustomerFromSale(businessId, bgCustomerData)
+              // Con el id del cliente elegido, se actualiza SU ficha: el DNI que se
+              // escribió al cobrar se le completa, y no nace una repetida.
+              await upsertCustomerFromSale(businessId, bgCustomerData, { customerId: bgCustomerIdVet })
             } catch (customerError) {
               console.error('⚠️ Error al guardar cliente (no crítico):', customerError)
             }
