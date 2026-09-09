@@ -65,13 +65,29 @@ export function validarUbicacion(attendance, gps) {
  * Cómo se llama esto en pantalla y en el Excel. Un solo texto para los tres
  * lugares donde aparece: el aviso al marcar, la etiqueta del historial y la
  * columna exportada.
+ *
+ * Las marcaciones ANTERIORES al 8-set-2026 no tienen `gpsMotivo`, y las que el
+ * bug aprobó traen `gpsValid: true` con `gps` vacío. De esas no se puede decir
+ * "Dentro de zona": nadie sabe dónde estaba esa persona. Se leen por lo que sí
+ * hay guardado, así el historial viejo deja de afirmar algo que no consta. Es a
+ * propósito que esto se resuelva al MOSTRAR y no reescribiendo los registros:
+ * son la asistencia de gente real, y su aprobación ya la tomó el negocio.
  */
+const TEXTO_POR_MOTIVO = {
+  sin_ubicacion: 'Sin ubicación',
+  sin_geofence: 'Sin zona configurada',
+  fuera: 'Fuera de zona',
+  dentro: 'Dentro de zona',
+}
+
 export function etiquetaDeUbicacion(registro) {
   const r = registro || {}
-  if (r.gpsMotivo === 'sin_ubicacion') return 'Sin ubicación'
-  if (r.gpsMotivo === 'sin_geofence') return 'Sin zona configurada'
-  if (r.gpsValid === false) return 'Fuera de zona'
-  return 'Dentro de zona'
+  // Las marcaciones nuevas traen el motivo ya resuelto al momento de marcar:
+  // ese manda, porque se calculó con los datos que había en ese instante.
+  if (TEXTO_POR_MOTIVO[r.gpsMotivo]) return TEXTO_POR_MOTIVO[r.gpsMotivo]
+  // Las viejas no lo tienen y hay que leerlas por lo que quedó guardado.
+  if (!hayUbicacion(r.gps)) return 'Sin ubicación'
+  return r.gpsValid === false ? 'Fuera de zona' : 'Dentro de zona'
 }
 
 /** El aviso que se le muestra a quien acaba de marcar. */

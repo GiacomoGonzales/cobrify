@@ -1605,7 +1605,9 @@ function SubUserAttendanceView({ weekRecords, onMark, marking, isNative, breaksA
                     </p>
                   </div>
                 </div>
-                {todaySummary.inMark?.gpsValid === false && (
+                {/* Se mira el ESTADO, no el GPS: una marcación manual tiene gpsValid
+                    false y no está pendiente de nada. */}
+                {todaySummary.inMark?.approvalStatus === 'pending' && (
                   <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700" title={etiquetaDeUbicacion(todaySummary.inMark)}>
                     Pendiente · {etiquetaDeUbicacion(todaySummary.inMark)}
                   </span>
@@ -1626,7 +1628,9 @@ function SubUserAttendanceView({ weekRecords, onMark, marking, isNative, breaksA
                     </p>
                   </div>
                 </div>
-                {todaySummary.outMark?.gpsValid === false && (
+                {/* Se mira el ESTADO, no el GPS: una marcación manual tiene gpsValid
+                    false y no está pendiente de nada. */}
+                {todaySummary.outMark?.approvalStatus === 'pending' && (
                   <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700" title={etiquetaDeUbicacion(todaySummary.outMark)}>
                     Pendiente · {etiquetaDeUbicacion(todaySummary.outMark)}
                   </span>
