@@ -1,3 +1,4 @@
+import { validarUbicacion } from '@/utils/geofenceAsistencia'
 import {
   collection,
   doc,
@@ -236,15 +237,6 @@ export const updateBranchGracePeriod = async (businessId, branchId, minutes) => 
   }
 }
 
-// Fórmula Haversine para distancia en metros entre dos coordenadas
-const distanceMeters = (lat1, lng1, lat2, lng2) => {
-  const toRad = (v) => (v * Math.PI) / 180
-  const R = 6371000
-  const dLat = toRad(lat2 - lat1)
-  const dLng = toRad(lng2 - lng1)
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
-  return 2 * R * Math.asin(Math.sqrt(a))
-}
 
 /**
  * Obtiene la última marcación del usuario (más reciente por timestamp).
@@ -306,12 +298,12 @@ export const markAttendanceFromQR = async (businessId, { scannedToken, user, gps
       return { success: false, error: 'Este QR ya no es válido. Pida uno actualizado.' }
     }
 
-    // Validación GPS si hay geofence
-    let gpsValid = true
-    if (att.gpsLat != null && att.gpsLng != null && att.gpsRadius != null && gps?.lat != null && gps?.lng != null) {
-      const d = distanceMeters(att.gpsLat, att.gpsLng, gps.lat, gps.lng)
-      gpsValid = d <= att.gpsRadius
-    }
+    // Validación de la zona. El criterio vive en utils/geofenceAsistencia: no
+    // saber dónde está alguien NO es saber que está dentro. Antes esto arrancaba
+    // en `true` y solo bajaba si HABÍA ubicación y quedaba lejos, así que sin
+    // ubicación se aprobaba desde cualquier lugar.
+    const ubicacion = validarUbicacion(att, gps)
+    const gpsValid = ubicacion.valido
 
     // Detectar tipo y auto-close de turno del día anterior
     const last = await getLastAttendance(businessId, user.uid)
@@ -372,6 +364,10 @@ export const markAttendanceFromQR = async (businessId, { scannedToken, user, gps
       timestamp: serverTimestamp(),
       gps: gps || null,
       gpsValid,
+      // Por qué quedó válida o no: lo leen el aviso al marcar, la etiqueta del
+      // historial y la columna del Excel, para que digan lo mismo.
+      gpsMotivo: ubicacion.motivo,
+      gpsDistancia: ubicacion.distancia,
       approvalStatus: gpsValid ? 'approved' : 'pending',
       createdBy: user.uid,
       autoClosed: false,
@@ -379,7 +375,7 @@ export const markAttendanceFromQR = async (businessId, { scannedToken, user, gps
       createdAt: serverTimestamp(),
     }
     const docRef = await addDoc(getAttendanceColRef(businessId), record)
-    return { success: true, id: docRef.id, type, gpsValid, ...enrichment }
+    return { success: true, id: docRef.id, type, gpsValid, gpsMotivo: ubicacion.motivo, gpsDistancia: ubicacion.distancia, ...enrichment }
   } catch (error) {
     console.error('Error registrando asistencia:', error)
     return { success: false, error: error.message }

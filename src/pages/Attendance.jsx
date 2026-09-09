@@ -1,3 +1,4 @@
+import { etiquetaDeUbicacion, avisoDeMarcacion } from '@/utils/geofenceAsistencia'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { scanBarcode } from '@/utils/scanBarcode'
@@ -463,7 +464,10 @@ export default function Attendance() {
     }
     const typeLabel = etiquetaDeMarca(res.type)
     if (res.gpsValid === false) {
-      toast.warning(`${typeLabel} registrada. Fuera de zona — pendiente de aprobación.`)
+      // El motivo importa: "no pudimos leer tu ubicación" se arregla dando el
+      // permiso, y "estás lejos" no. Decir siempre "fuera de zona" mandaba a
+      // buscar un problema que no era.
+      toast.warning(`${typeLabel} registrada. ${avisoDeMarcacion(res.gpsMotivo)}`, 9000)
     } else {
       toast.success(`${typeLabel} registrada correctamente`)
     }
@@ -635,7 +639,7 @@ export default function Attendance() {
       toast.info?.('No hay registros para exportar')
       return
     }
-    const headers = ['Fecha y hora', 'Empleado', 'Email', 'Sucursal', 'Tipo', 'Estado', 'GPS válido', 'Notas']
+    const headers = ['Fecha y hora', 'Empleado', 'Email', 'Sucursal', 'Tipo', 'Estado', 'Ubicación', 'Distancia (m)', 'Notas']
     const rows = records.map(r => [
       formatDateTime(r.timestamp),
       r.userName || '',
@@ -643,7 +647,8 @@ export default function Attendance() {
       r.branchName || '',
       etiquetaDeMarca(r.type),
       r.autoClosed ? 'Auto-cerrado' : (r.approvalStatus || ''),
-      r.gpsValid ? 'Sí' : 'No',
+      etiquetaDeUbicacion(r),
+      r.gpsDistancia == null ? '' : r.gpsDistancia,
       (r.notes || '').replace(/\n/g, ' '),
     ])
     const csv = [headers, ...rows]
@@ -788,7 +793,7 @@ export default function Attendance() {
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-xs text-blue-900">
                       <p className="flex items-start gap-2">
                         <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                        <span>Se pedirá permiso de ubicación. Si estás fuera de la zona configurada, la marcación quedará pendiente de aprobación.</span>
+                        <span>Se pedirá permiso de ubicación. Si estás fuera de la zona configurada, o si no se puede leer tu ubicación, la marcación quedará pendiente de aprobación.</span>
                       </p>
                     </div>
                   </div>
@@ -1601,7 +1606,9 @@ function SubUserAttendanceView({ weekRecords, onMark, marking, isNative, breaksA
                   </div>
                 </div>
                 {todaySummary.inMark?.gpsValid === false && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Pendiente</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700" title={etiquetaDeUbicacion(todaySummary.inMark)}>
+                    Pendiente · {etiquetaDeUbicacion(todaySummary.inMark)}
+                  </span>
                 )}
               </div>
 
@@ -1620,7 +1627,9 @@ function SubUserAttendanceView({ weekRecords, onMark, marking, isNative, breaksA
                   </div>
                 </div>
                 {todaySummary.outMark?.gpsValid === false && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Pendiente</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700" title={etiquetaDeUbicacion(todaySummary.outMark)}>
+                    Pendiente · {etiquetaDeUbicacion(todaySummary.outMark)}
+                  </span>
                 )}
               </div>
 
@@ -1696,7 +1705,7 @@ function SubUserAttendanceView({ weekRecords, onMark, marking, isNative, breaksA
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900">
         <p className="flex items-start gap-2">
           <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          <span>Se pedirá permiso de ubicación. Si estás fuera de la zona configurada, la marcación quedará pendiente de aprobación.</span>
+          <span>Se pedirá permiso de ubicación. Si estás fuera de la zona configurada, o si no se puede leer tu ubicación, la marcación quedará pendiente de aprobación.</span>
         </p>
       </div>
 
