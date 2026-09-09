@@ -36,6 +36,17 @@ enum PlanesVendibles {
         ("yape", "Yape"), ("plin", "Plin"), ("transferencia", "Transferencia"),
         ("efectivo", "Efectivo"), ("tarjeta", "Tarjeta"), ("otro", "Otro"),
     ]
+
+    /// Meses de regalo del programa de referidos, por plan.
+    ///
+    /// ⚠️ DUPLICADO, igual que los precios de arriba y por el mismo motivo:
+    /// Swift no puede leer `functions/src/data/referidos.js`, que es donde se
+    /// deciden. Si cambian allá, hay que cambiarlos aquí — y el que manda es
+    /// SIEMPRE el servidor: esto solo sirve para decirle al cliente qué se
+    /// lleva antes de mandar el enlace.
+    static let regalo: [String: Int] = [
+        "basico_mensual": 1, "mensual": 1, "semestral": 1, "anual": 2,
+    ]
 }
 
 /// Manda el formulario de alta a un lead que acaba de pagar.
@@ -59,6 +70,7 @@ struct EnviarAltaSheet: View {
     @State private var montoTocado = false
     @State private var nombre = ""
     @State private var metodo = "yape"
+    @State private var referidoPor = ""
     @State private var creando = false
     @State private var error: String?
     @State private var hecho: (enlace: String, mensaje: String)?
@@ -126,6 +138,29 @@ struct EnviarAltaSheet: View {
                         Text("El monto queda congelado como su precio de renovación, y el pago aparece en Pagos.")
                     }
 
+                    // Quién lo trajo. El código se comprueba al crear el enlace:
+                    // si está mal escrito el error sale ahora, que es cuando se
+                    // puede arreglar. Dejarlo pasar sería que el cliente que
+                    // refirió nunca cobre su mes y nadie se entere.
+                    Section {
+                        TextField("Código de quien lo refirió", text: $referidoPor)
+                            .keyboardType(.numberPad)
+                            .onChange(of: referidoPor) { _, nuevo in
+                                let soloNumeros = nuevo.filter(\.isNumber)
+                                if soloNumeros != nuevo { referidoPor = soloNumeros }
+                            }
+                    } header: {
+                        Text("¿Lo refirió un cliente?")
+                    } footer: {
+                        if let meses = PlanesVendibles.regalo[planId], let plan = PlanCatalogo.plan(planId) {
+                            Text("Con este plan, el referido usa \(plan.meses + meses) meses pagando \(plan.meses), y quien lo trajo gana 1 mes.")
+                        } else if !planId.isEmpty {
+                            Text("Este plan no entra al programa de referidos.")
+                        } else {
+                            Text("Opcional. Es el código de cliente que sale en Usuarios.")
+                        }
+                    }
+
                     if let error {
                         Section { Text(error).foregroundStyle(.red).font(.callout) }
                     }
@@ -178,6 +213,7 @@ struct EnviarAltaSheet: View {
                 "meses": plan.meses,
                 "precio": Double(monto.replacingOccurrences(of: ",", with: ".")) as Any,
                 "metodo": metodo,
+                "referidoPor": referidoPor.isEmpty ? NSNull() : referidoPor,
                 "limites": [
                     "maxInvoicesPerMonth": plan.maxComprobantes,
                     "maxBranches": plan.maxSucursales,
