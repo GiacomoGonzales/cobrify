@@ -7,7 +7,7 @@
  */
 export default {
   id: 'guias-remision',
-  actualizado: '06/09/2026',
+  actualizado: '10/09/2026',
   intro:
     'La guía de remisión es el documento que ampara el traslado de mercadería: dice qué se mueve, desde dónde, hacia dónde y en qué vehículo. Va a SUNAT igual que una factura, y es la que te piden si te fiscalizan en el camino.',
 
@@ -34,7 +34,7 @@ export default {
         {
           type: 'pasos',
           items: [
-            'Crea la guía (o genérala desde el comprobante de venta, que arrastra cliente y productos).',
+            'Crea la guía (o genérala desde el comprobante de venta, que arrastra cliente y productos). Cada bien llega con el **nombre** del producto, el mismo que va en la factura.',
             'Elige el **Motivo de traslado**. Si eliges **Otros**, aparece un campo obligatorio, **Descripción del motivo**: ahí escribes en tus palabras de qué se trata (por ejemplo, "Disposición final"). Ese texto es el que recibe SUNAT y el que sale impreso en la guía; sin él, SUNAT la rechaza.',
             'Completa **Origen y Destino**: el punto de partida y el punto de llegada con sus direcciones.',
             'Llena los **Datos de Transporte**: la **Modalidad**, la **Placa** del vehículo, el **Conductor** con su **DNI** y su **Licencia**.',
@@ -279,6 +279,10 @@ export default {
     {
       q: '¿Puedo emitir la guía desde la venta?',
       a: 'Sí. Desde el comprobante en la página Ventas tienes **Generar Guía de Remisión** y llega con el cliente y los productos ya cargados.',
+    },
+    {
+      q: '¿Por qué la guía muestra el nombre del producto y no su descripción?',
+      a: 'Porque la guía tiene que decir qué bien se traslada, y eso lo dice el **nombre**, el mismo que va en la factura. La descripción larga se puede repetir entre productos distintos, como varias presentaciones de un mismo producto, y en la guía no se podrían distinguir.',
     },
     {
       q: 'Me detuvieron y pidieron la guía, ¿la puedo mostrar en el celular?',

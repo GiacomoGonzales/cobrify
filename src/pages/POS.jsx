@@ -2491,8 +2491,13 @@ export default function POS() {
           return {
             id: product?.id || `guide-${Date.now()}-${idx}`,
             productId: item.productId || '',
-            name: item.name || '',
-            description: item.description || '',
+            // El nombre y la descripción del PRODUCTO, como en una venta
+            // normal. La guía guarda un solo texto por bien: tomarlo también
+            // como descripción repetía el nombre en el PDF, y las guías que
+            // traían la descripción larga dejaban la factura con esa
+            // descripción como nombre (CHACHITA, 10-set-2026).
+            name: product?.name || item.name || '',
+            description: product ? (product.description || '') : '',
             price: product?.price || item.price || 0,
             quantity: item.quantity || 1,
             unit: item.unit || 'NIU',

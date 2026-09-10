@@ -1,3 +1,4 @@
+import { textoDelBien } from '@/utils/bienDeLaGuia'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { X, Truck, MapPin, User, Package, Calendar, FileText, Plus, Trash2, ChevronDown, ChevronUp, Store, Search, Loader2, AlertTriangle } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
@@ -419,7 +420,10 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
             }
           }
 
-          const desc = item.description || item.name || ''
+          // El NOMBRE del producto, como en la factura, y no su descripción
+          // larga: CHACHITA emitió la T001-00000002 con cuatro rosquillas
+          // distintas que decían igual. Ver utils/bienDeLaGuia.
+          const desc = textoDelBien(item)
           return {
             id: index + 1,
             productId: item.productId || '',
