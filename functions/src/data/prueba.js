@@ -16,8 +16,14 @@
  * plan es lo que no miente.
  */
 
-/** Los días que dura una prueba. Giacomo, 10-set-2026: siete, no uno. */
-export const DIAS_DE_PRUEBA = 7
+/**
+ * Los días que dura una prueba.
+ *
+ * Giacomo lo movió dos veces el 10-set-2026: uno, luego siete, y al final
+ * TRES. Tres da para bajarse la app y probarla en serio, pero es corto
+ * suficiente para que el seguimiento llegue mientras todavía se acuerda.
+ */
+export const DIAS_DE_PRUEBA = 3
 
 /** ¿Esta suscripción es un periodo de prueba? */
 export function esPrueba(suscripcion) {

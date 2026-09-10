@@ -15699,7 +15699,11 @@ export const crearAltaPendiente = onRequest(
         success: true,
         codigo,
         enlace,
-        mensaje: mensajeDeAlta({ nombre: b.nombre, planNombre: b.planNombre, enlace }),
+        mensaje: mensajeDeAlta({
+          nombre: b.nombre, planNombre: b.planNombre, enlace,
+          esPrueba: altaDePrueba,
+          dias: altaDePrueba ? (Number(b.diasDePrueba) || DIAS_DE_PRUEBA) : null,
+        }),
       })
     } catch (error) {
       console.error('Error al crear el alta:', error)

@@ -125,10 +125,13 @@ export default function EnviarAltaModal({ conversacion, onClose, onPonerEnElComp
           <Campo etiqueta="Plan que contrató">
             <Selector value={plan} onChange={(e) => elegirPlan(e.target.value)}>
               <option value="">Elige el plan…</option>
+              {/* La prueba va PRIMERA y no al final: es el camino que más se va
+                  a usar cuando el asistente empiece a atender, y al final de la
+                  lista queda escondida detrás de seis planes. */}
+              <option value="trial">Prueba gratuita — {DIAS_DE_PRUEBA} días, sin pago</option>
               {PLANES.map((id) => (
                 <option key={id} value={id}>{PLANS[id].name} — S/ {PLANS[id].totalPrice}</option>
               ))}
-              <option value="trial">Prueba gratuita — {DIAS_DE_PRUEBA} días, sin pago</option>
             </Selector>
           </Campo>
           {esPrueba ? (

@@ -7,7 +7,9 @@ import { getCustomPlans } from '@/services/customPlanService'
 import { getVendedores } from '@/services/vendedorService'
 import { getBranches } from '@/services/branchService'
 import { resumenDeUso } from '@/services/adminUsoService'
-import { cargarCuenta, diasParaVencer, enlaceRecordatorioWhatsapp } from '@/services/adminCuentasService'
+import { cargarCuenta, diasParaVencer, enlaceRecordatorioWhatsapp, convertirPruebaEnCuenta } from '@/services/adminCuentasService'
+import { esPrueba } from '@/data/prueba'
+import ConvertirPruebaModal from '@/components/admin/cuenta/ConvertirPruebaModal'
 import { RUBROS_ALFABETICOS, nombreRubro } from '@/data/rubros'
 import { nombreModo } from '@/utils/businessModes'
 import { useToast } from '@/contexts/ToastContext'
@@ -185,6 +187,22 @@ export default function AdminCuenta() {
     }
   }
 
+  /** Pasa la prueba a cuenta real: mismo cliente, mismos datos, plan pagado. */
+  async function convertirPrueba(planKey, monto, metodo) {
+    setProcesando(true)
+    try {
+      const r = await convertirPruebaEnCuenta(id, monto, metodo, planKey)
+      toast.success(`Ya es cuenta real: ${r.planName}. Vence el ${r.newPeriodEnd?.toLocaleDateString('es-PE')}`)
+      cerrarModal()
+      await cargar()
+    } catch (error) {
+      console.error('Error al convertir la prueba:', error)
+      toast.error(error.message || 'No se pudo convertir la prueba')
+    } finally {
+      setProcesando(false)
+    }
+  }
+
   async function cambiarPlan(userId, planKey) {
     const plan = PLANS[planKey] || customPlans[planKey]
     if (!plan) {
@@ -337,6 +355,7 @@ export default function AdminCuenta() {
   }
 
   const c = cuenta
+  const esCuentaDePrueba = esPrueba(c)
   const dias = diasParaVencer(c)
   const vencida = dias !== null && dias < 0
   const usados = c.usage?.invoicesThisMonth || 0
@@ -357,7 +376,15 @@ export default function AdminCuenta() {
       resumen={volver}
       acciones={
         <>
-          <Boton tamano="sm" variante="primario" onClick={() => setModal('pago')}>Registrar pago</Boton>
+          {/* En una cuenta de prueba, convertirla es LA acción: por eso va
+              primera y en primario, y el resto de botones de cobro no tienen
+              sentido hasta que deje de ser una prueba. */}
+          {esCuentaDePrueba && (
+            <Boton tamano="sm" variante="primario" onClick={() => setModal('convertir')}>
+              Convertir en cuenta real
+            </Boton>
+          )}
+          <Boton tamano="sm" variante={esCuentaDePrueba ? undefined : 'primario'} onClick={() => setModal('pago')}>Registrar pago</Boton>
           <Boton tamano="sm" onClick={renovarRapido} disabled={procesando}>Renovar con el mismo plan</Boton>
           <Boton tamano="sm" onClick={() => setModal('plan')}>Cambiar plan</Boton>
           <Boton tamano="sm" onClick={() => setModal('vencimiento')}>Cambiar vencimiento</Boton>
@@ -729,6 +756,9 @@ export default function AdminCuenta() {
         <Boton tamano="sm" variante="peligro" onClick={() => setModal('eliminar')}>Eliminar esta cuenta</Boton>
       </Seccion>
 
+      {modal === 'convertir' && (
+        <ConvertirPruebaModal cuenta={c} onClose={cerrarModal} onConvertir={convertirPrueba} procesando={procesando} />
+      )}
       {modal === 'pago' && (
         <UserDetailsModal user={c} type="payment" onClose={cerrarModal} onRegisterPayment={registrarPago} loading={procesando} toast={toast} customPlans={customPlans} />
       )}

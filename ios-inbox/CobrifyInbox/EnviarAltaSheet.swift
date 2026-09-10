@@ -42,7 +42,7 @@ enum PlanesVendibles {
     /// DUPLICADO A PROPÓSITO: el número vive en `functions/src/data/prueba.js`
     /// y Swift no puede leer un .js. El servidor es el que manda —él crea la
     /// suscripción—; esta copia solo pinta el texto. Si cambia allá, cambiar acá.
-    static let diasDePrueba = 7
+    static let diasDePrueba = 3
 
     /// Meses de regalo del programa de referidos, por plan.
     ///
@@ -119,10 +119,12 @@ struct EnviarAltaSheet: View {
                     Section("Plan que contrató") {
                         Picker("Plan", selection: $planId) {
                             Text("Elige el plan…").tag("")
+                            // La prueba va PRIMERA: es el camino que más se
+                            // va a usar, y al final queda escondida.
+                            Text("Prueba gratuita — \(PlanesVendibles.diasDePrueba) días, sin pago").tag("trial")
                             ForEach(PlanesVendibles.lista, id: \.id) { p in
                                 Text(nombreCorto(p)).tag(p.id)
                             }
-                            Text("Prueba gratuita — \(PlanesVendibles.diasDePrueba) días, sin pago").tag("trial")
                         }
                         .onChange(of: planId) { _, nuevo in
                             if !montoTocado, let precio = PlanesVendibles.precios[nuevo] {

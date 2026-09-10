@@ -50,16 +50,29 @@ export function altaParaElFormulario(datos) {
  * El mensaje que sale por WhatsApp. Va aquí y no en la pantalla para que el
  * texto sea el mismo venga de donde venga el envío.
  */
-export function mensajeDeAlta({ nombre, planNombre, enlace }) {
+export function mensajeDeAlta({ nombre, planNombre, enlace, esPrueba = false, dias = null }) {
   const saludo = nombre ? `¡Bienvenido a Cobrify, ${nombre.split(' ')[0]}! 🎉` : '¡Bienvenido a Cobrify! 🎉'
-  const plan = planNombre ? ` del *${planNombre}*` : ''
+
+  // A quien viene a PROBAR no se le habla de un pago que no hizo. Decía "ya
+  // registramos tu pago del Prueba de 7 días", que además de falso es la
+  // primera frase que lee: empezar mintiéndole es el peor arranque posible.
+  // Y los días van en el mensaje, no escondidos: que sepa desde el minuto uno
+  // cuánto le dura, y no se entere el día que se le acaba.
+  const cuerpo = esPrueba
+    ? `Te dejamos lista tu *prueba gratuita${dias ? ` de ${dias} días` : ''}*. `
+      + 'Entra aquí para activarla, son 3 minutos:'
+    : `Ya registramos tu pago${planNombre ? ` del *${planNombre}*` : ''}. `
+      + 'Entra aquí para activar tu cuenta, son 3 minutos:'
+
   return [
     saludo,
     '',
-    `Ya registramos tu pago${plan}. Entra aquí para activar tu cuenta, son 3 minutos:`,
+    cuerpo,
     '',
     enlace,
     '',
-    'Cualquier cosa me escribes por acá.',
+    esPrueba
+      ? 'Pruébalo con calma y cualquier duda me escribes por acá, que te guío.'
+      : 'Cualquier cosa me escribes por acá.',
   ].join('\n')
 }

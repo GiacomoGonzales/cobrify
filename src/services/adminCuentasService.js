@@ -1,6 +1,6 @@
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
+import { collection, deleteField, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { PLANS, nuncaVence } from '@/services/subscriptionService'
+import { PLANS, nuncaVence, registerPayment } from '@/services/subscriptionService'
 import { nombreRubro } from '@/data/rubros'
 
 // Una cuenta del admin sale de tres documentos con el mismo id: subscriptions
@@ -292,4 +292,54 @@ export function enlaceRecordatorioWhatsapp(cuenta) {
     `Hola ${cuenta.businessName || ''}, te escribimos de Cobrify. Tu suscripción${detalle} ${vencida ? 'venció' : 'está por vencer'}. ¿Deseas renovar?`
   )
   return `https://wa.me/${numero}?text=${mensaje}`
+}
+
+/**
+ * CONVIERTE UNA PRUEBA EN CUENTA REAL, sin cambiar de cuenta.
+ *
+ * El cliente se queda con TODO lo que cargó durante la prueba —sus productos,
+ * sus clientes, sus ventas— porque es la misma cuenta de siempre: solo cambia
+ * el plan. Eso es justo lo que hace que probar valga la pena; obligarlo a
+ * empezar de cero al comprar tiraría a la basura el trabajo que ya hizo, que
+ * es precisamente lo que lo tenía enganchado.
+ *
+ * Se apoya en `registerPayment` en vez de escribir la suscripción a mano, y no
+ * es pereza: esa función ya cambia el plan, desbloquea el acceso, pone los
+ * límites del plan nuevo, reinicia el cupo de comprobantes, congela el precio
+ * de renovación y deja el pago en el historial. Reescribir todo eso acá sería
+ * mantener dos caminos que tienen que hacer lo mismo, y el segundo siempre se
+ * queda atrás.
+ *
+ * Lo único que le falta es borrar la marca de la prueba, que se hace después.
+ *
+ * Lo que se desbloquea SOLO, sin tocar nada: el envío a SUNAT. El candado del
+ * servidor mira el plan, así que en cuanto deja de ser `trial` puede emitir.
+ * Los comprobantes que emitió DURANTE la prueba conservan su marca de "sin
+ * validez", y así debe ser: nunca fueron válidos y ya están impresos.
+ *
+ * @param {string} userId
+ * @param {number} monto    lo que pagó
+ * @param {string} metodo   cómo pagó
+ * @param {string} planId   el plan que contrató
+ */
+export async function convertirPruebaEnCuenta(userId, monto, metodo, planId) {
+  const antes = await getDoc(doc(db, 'subscriptions', userId))
+  if (!antes.exists()) throw new Error('Esta cuenta no existe')
+  if (antes.data()?.plan !== 'trial') throw new Error('Esta cuenta no está en periodo de prueba')
+
+  const r = await registerPayment(userId, Number(monto), metodo, planId)
+
+  // La marca de la prueba se BORRA, no se pone en null: dejarla en null la
+  // haría indistinguible de una cuenta que nunca probó, y la página de Trials
+  // necesita saber cuáles vinieron de una prueba para medir la conversión.
+  await updateDoc(doc(db, 'subscriptions', userId), {
+    trialEndsAt: deleteField(),
+    /** Vino de una prueba y la convirtió. Es el final del embudo. */
+    pruebaConvertidaEn: serverTimestamp(),
+    /** Cuándo terminaba la prueba, para saber si convirtió a tiempo o tarde. */
+    pruebaVencia: antes.data()?.trialEndsAt || null,
+    updatedAt: serverTimestamp(),
+  })
+
+  return r
 }
