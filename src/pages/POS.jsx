@@ -454,7 +454,16 @@ export default function POS() {
    */
   const bonificacionParaSunat = (item) => {
     if (!item?.isBonificacion) return {}
-    const ref = Number(item.bonificacionRefPrice) || 0
+    // El valor de referencia puede no estar guardado en la línea: pasa cuando
+    // se regala algo que ya estaba en el carrito a precio 0, o cuando la marca
+    // viene de una versión vieja de la app. Antes eso devolvía {} y la línea
+    // salía con precio 0 y afectación 30 -> rechazo 3105. Ahora se busca el
+    // precio de lista en el mismo orden que `referenciaDeRegalo`, para que el
+    // cajero no tenga que saber nada de esto.
+    const ficha = productsRaw.find(p => p.id === item.id)
+    const ref = Number(item.bonificacionRefPrice) > 0
+      ? Number(item.bonificacionRefPrice)
+      : Number(item.originalPrice ?? item.basePrice ?? ficha?.price ?? 0) || 0
     const cant = Number(item.quantity) || 0
     if (ref <= 0 || cant <= 0) return {}
     return {

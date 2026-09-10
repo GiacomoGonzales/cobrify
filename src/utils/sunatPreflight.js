@@ -91,22 +91,39 @@ export function revisarAntesDeEmitir({ documentType, items = [], customer = null
     const precio = numero(item.unitPrice ?? item.price)
     const cantidad = numero(item.quantity)
     const referencia = numero(item.referencePrice ?? item.originalUnitPrice ?? item.listPrice)
-    const esBonificacion = item.isBonificacion === true || numero(item.itemDiscount) > 0
+    // El descuento por ítem es la SEÑAL de que la línea ya se convirtió en una
+    // gratuita bien formada: el valor viaja como descuento y el precio unitario
+    // deja de ser cero. Es lo que mira el generador del XML para declararla.
+    const yaDeclarada = numero(item.itemDiscount) > 0
 
     /**
      * Regalo sin valor declarado.
      *
      * SUNAT no acepta una línea "con cobro" que valga cero: o se cobra algo, o
      * es una entrega gratuita y hay que declarar cuánto vale lo que se regala.
-     * Sin ese número el comprobante sale declarando un regalo de valor cero,
-     * que es lo que terminó rebotando en APU MARKET (error 3105, 13 boletas).
+     *
+     * ⚠️ Acá había un agujero, y era JUSTO el caso que seguía rebotando. La
+     * condición eximía a lo que estuviera marcado como bonificación
+     * (`isBonificacion === true`), dando por hecho que marcarlo bastaba. No
+     * basta: marcar la línea NO le pone un valor. Una bonificación marcada
+     * pero SIN valor de referencia sale igual con precio 0 y afectación 30,
+     * que es exactamente lo que SUNAT rechaza con 3105. Es decir, el aviso se
+     * callaba precisamente cuando tenía que hablar.
+     *
+     * APU MARKET, 26 boletas rechazadas entre julio y setiembre de 2026: TODAS
+     * tenían una línea marcada "(BONIFICACIÓN)" con precio 0 y sin referencia.
+     *
+     * Lo que importa no es la etiqueta sino si la línea lleva un valor
+     * declarable. Por eso ahora solo se exime a la que YA fue convertida.
      */
-    if (precio === 0 && cantidad > 0 && referencia <= 0 && !esBonificacion) {
+    if (precio === 0 && cantidad > 0 && referencia <= 0 && !yaDeclarada) {
       errores.push({
         linea,
         producto,
-        problema: 'va con precio 0 y no se sabe cuánto vale',
-        solucion: 'Ponle su precio en Productos y márcalo como bonificación al cobrar, o quítalo de la venta.',
+        problema: item.isBonificacion === true
+          ? 'se regala, pero no se sabe cuánto vale'
+          : 'va con precio 0 y no se sabe cuánto vale',
+        solucion: 'Ponle su precio de lista al producto y vuelve a marcarlo como bonificación, o quítalo de la venta.',
       })
     }
   })
