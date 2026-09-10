@@ -62,6 +62,7 @@ import { db } from '@/lib/firebase'
 import { printProductBarcodes, isPrinterReady } from '@/services/thermalPrinterService'
 import GuideLink from '@/components/guide/GuideLink'
 import CampoCantidad from '@/components/ui/CampoCantidad'
+import { codigosQueFaltan } from '@/utils/codigosDeVariante'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
 // UNITS y getUnitLabel viven ahora en '@/utils/units' (reusados por Inventario,
@@ -487,7 +488,16 @@ export default function Products() {
   // 10") — el cliente cree que es el stock, pero es una por variante. Con esto
   // elige cuantas de CADA variante, y 0 la salta. Sin entrada = 1 (default).
   const [labelVariantQuantities, setLabelVariantQuantities] = useState({})
-  const variantQtyKey = (productId, v, i) => `${productId}__${v?.sku || i}`
+  /**
+   * La clave con la que se guarda la cantidad de CADA variante.
+   *
+   * Va por POSICIÓN y no por SKU. Con el SKU, dos variantes que comparten
+   * código —o que lo tienen vacío y quedaron iguales— caían en la misma
+   * clave: los campos de la pantalla mostraban el mismo número, cambiar uno
+   * cambiaba todos, y al imprimir cada variante recibía la cantidad de la
+   * otra. La posición dentro del producto siempre es única.
+   */
+  const variantQtyKey = (productId, v, i) => `${productId}__${i}`
   const getVariantQty = (productId, v, i) => {
     const raw = labelVariantQuantities[variantQtyKey(productId, v, i)]
     return raw === undefined ? 1 : raw
@@ -4015,10 +4025,11 @@ export default function Products() {
     for (const p of selectedProds) {
       const hasVars = includeVariants && p.hasVariants && Array.isArray(p.variants) && p.variants.length > 0
       if (hasVars) {
-        p.variants.forEach((v, vi) => {
-          if (getVariantQty(p.id, v, vi) <= 0) return
-          if (!v.barcode) faltantes.push({ productId: p.id, type: 'variant', variantIndex: vi, value: v.sku ? stripped(v.sku) : null })
-        })
+        // Cada variante necesita un código PROPIO; el criterio (y el porqué)
+        // está en src/utils/codigosDeVariante.js.
+        for (const f of codigosQueFaltan(p.variants, (v, vi) => getVariantQty(p.id, v, vi))) {
+          faltantes.push({ productId: p.id, type: 'variant', variantIndex: f.indice, value: f.valor })
+        }
       } else if (!p.code) {
         faltantes.push({ productId: p.id, type: 'product', value: p.sku ? stripped(p.sku) : null })
       }
