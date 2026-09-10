@@ -74,6 +74,7 @@ import { generateInvoicesExcel } from '@/services/invoiceExportService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 import { aplicarTamanoDeHoja } from '@/utils/printPageSize'
 import { montosPorAfectacion } from '@/utils/peruUtils'
+import { notasDeLaFactura, motivoParaNoEmitirNota } from '@/utils/notasDeCredito'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { Capacitor } from '@capacitor/core'
 import { downloadFromUrl, downloadBlob } from '@/utils/nativeDownload'
@@ -4117,6 +4118,17 @@ Gracias por tu preferencia.`
                         const parent = invoices.find(inv =>
                           inv.id === invoice.referencedInvoiceFirestoreId || inv.number === invoice.referencedDocumentId
                         )
+                        // Si OTRAS notas ya cubren la factura, reenviar esta la
+                        // acreditaría de más, y SUNAT la aceptaría igual (IS ALFA,
+                        // 10-set-2026: una nota "rechazada" por un error de firma y
+                        // tres aceptadas encima por la misma factura).
+                        if (parent) {
+                          const motivo = motivoParaNoEmitirNota(parent, notasDeLaFactura(parent, invoices, { salvo: invoice.id }), invoice.total)
+                          if (motivo) {
+                            toast.error(`No se puede reenviar la ${invoice.number}. ${motivo}`)
+                            return
+                          }
+                        }
                         if (parent && Number(invoice.total) > Number(parent.total) + 0.01) {
                           const ok = window.confirm(
                             `ATENCIÓN: esta NC (${formatCurrency(invoice.total, invoice.currency)}) EXCEDE el total de la factura ${parent.number} (${formatCurrency(parent.total, parent.currency)}).\n\n` +

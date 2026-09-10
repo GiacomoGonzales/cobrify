@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useInvoicePermissions } from '@/hooks/useInvoicePermissions'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { estadoInicialSunat } from '@/utils/estadoInicialSunat'
+import { esNotaDeCredito, notasDeLaFactura, resumenDeNotas, motivoParaNoEmitirNota } from '@/utils/notasDeCredito'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -67,6 +68,8 @@ export default function CreateCreditNote() {
   const submitGuardRef = useRef(false)
   const [isSaving, setIsSaving] = useState(false)
   const [invoices, setInvoices] = useState([])
+  // Las notas de crédito ya emitidas: qué le queda a cada factura.
+  const [notasCargadas, setNotasCargadas] = useState([])
   const [selectedInvoice, setSelectedInvoice] = useState(null)
   const [series, setSeries] = useState(null)
   const [message, setMessage] = useState(null)
@@ -414,6 +417,7 @@ export default function CreateCreditNote() {
                  canAccessInvoice(inv)
         )
         setInvoices(acceptedInvoices)
+        setNotasCargadas((invoicesResult.data || []).filter(esNotaDeCredito))
       }
 
       if (seriesResult.success && seriesResult.data) {
@@ -1027,6 +1031,31 @@ export default function CreateCreditNote() {
       if (fresh.sunatStatus === 'voided' || fresh.status === 'voided') {
         setMessage({ type: 'error', text: `La ${selectedInvoice.number} ya fue dada de BAJA en SUNAT — está anulada y no se puede (ni hace falta) emitirle una nota de crédito. SUNAT la rechazaría con "documento de baja".` })
         return
+      }
+
+      // Otra nota por la misma factura. SUNAT acepta cada nota por separado
+      // mientras no pase ella sola del total, así que dos anulaciones de la
+      // misma factura entran las dos (IS ALFA, 10-set-2026: tres notas
+      // aceptadas de S/ 3,000 contra una factura de S/ 3,000). Se lee fresco y
+      // no de la lista cargada: la otra nota pudo nacer hace un minuto en otra
+      // pestaña. El criterio vive en utils/notasDeCredito.
+      {
+        const { collection, query, where, getDocs } = await import('firebase/firestore')
+        const comprobantes = collection(db, 'businesses', getBusinessId(), 'invoices')
+        const [porId, porNumero] = await Promise.all([
+          getDocs(query(comprobantes, where('referencedInvoiceFirestoreId', '==', selectedInvoice.id))),
+          getDocs(query(comprobantes, where('referencedDocumentId', '==', selectedInvoice.number))),
+        ])
+        const vistas = new Map()
+        for (const d of [...porId.docs, ...porNumero.docs]) vistas.set(d.id, { id: d.id, ...d.data() })
+        const factura = { ...fresh, id: selectedInvoice.id }
+        const notas = notasDeLaFactura(factura, [...vistas.values()], { salvo: editingNC?.id })
+        const { total: totalDeEstaNota } = calculateTotals()
+        const motivo = motivoParaNoEmitirNota(factura, notas, totalDeEstaNota)
+        if (motivo) {
+          setMessage({ type: 'error', text: motivo })
+          return
+        }
       }
     } catch (freshErr) {
       // Si la verificación falla por red, no bloquear la emisión (la validación
@@ -1655,6 +1684,29 @@ export default function CreateCreditNote() {
                     </div>
                   </div>
                 )}
+
+                {/* Las notas que esta factura ya tiene, antes de llenar nada: es
+                    donde uno se entera de que ya la anuló. */}
+                {selectedInvoice && (() => {
+                  const notas = notasDeLaFactura(selectedInvoice, notasCargadas, { salvo: editingNC?.id })
+                  if (notas.length === 0) return null
+                  const { saldo } = resumenDeNotas(selectedInvoice, notas)
+                  const bloqueo = motivoParaNoEmitirNota(selectedInvoice, notas, 0)
+                  return (
+                    <div className={`p-3 rounded-lg border text-sm space-y-1 ${bloqueo ? 'border-red-200 bg-red-50 text-red-800' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
+                      <p className="font-medium">Notas de crédito de esta factura</p>
+                      <ul className="space-y-0.5">
+                        {notas.map(n => (
+                          <li key={n.id} className="flex justify-between gap-3">
+                            <span>{n.number} · {n.sunatStatus === 'accepted' ? 'aceptada' : n.sunatStatus === 'rejected' ? 'rechazada' : 'sin respuesta de SUNAT'}</span>
+                            <span className="tabular-nums">{formatCurrency(n.total, n.currency)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <p>{bloqueo || `Queda ${formatCurrency(saldo, selectedInvoice.currency)} por acreditar.`}</p>
+                    </div>
+                  )
+                })()}
               </CardContent>
             </Card>
 
