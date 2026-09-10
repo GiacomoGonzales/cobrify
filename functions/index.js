@@ -14449,6 +14449,26 @@ async function avisarMensajeNuevoWa(phoneNumberId, m) {
     const ownerId = cuentaSnap.data()?.ownerId
     if (!ownerId) return
 
+    // El número del ícono: cuántas conversaciones tienen algo sin leer, el
+    // mismo criterio que el chip "Sin leer" de la app. Antes iba un 1 fijo, y
+    // como la app nunca lo borraba, el ícono decía "1" con todo leído.
+    //
+    // Se cuenta DESPUÉS de sumar este mensaje (guardarMensajeEntrante
+    // incrementa `sinLeer` antes de llamar acá), así que ya lo incluye. Y se
+    // cuentan TODAS las conversaciones, sin filtrar por cuenta, igual que la
+    // bandeja del iPhone: el día que haya más de una cuenta de WhatsApp
+    // (Fase 10), las dos tienen que filtrar por la misma. La bandeja carga
+    // las 200 más recientes y, al abrirse, iguala el ícono a lo que ve.
+    //
+    // Si contar falla, va el 1 de siempre: el aviso no se cae por el número.
+    let sinLeer = 1
+    try {
+      const c = await db.collection('whatsappConversations').where('sinLeer', '>', 0).count().get()
+      sinLeer = c.data().count
+    } catch (e) {
+      console.error('[WhatsApp] No se pudieron contar las conversaciones sin leer:', e.message)
+    }
+
     // Los avisos de WhatsApp van solo a la app Cobrify Chat si esta
     // instalada; sin ella, a todas las apps como siempre.
     await sendPushNotification(
@@ -14456,7 +14476,7 @@ async function avisarMensajeNuevoWa(phoneNumberId, m) {
       m.nombre || m.waId,
       m.texto || 'Te envio un archivo',
       { type: 'whatsapp', conversationId: idConversacionWa(phoneNumberId, m.waId) },
-      { preferPlatform: 'ios-inbox' }
+      { preferPlatform: 'ios-inbox', badge: sinLeer }
     )
   } catch (error) {
     // Que falle el aviso nunca debe costar el mensaje.

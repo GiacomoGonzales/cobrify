@@ -1,12 +1,19 @@
 import Foundation
 import FirebaseFirestore
+import UserNotifications
 
 /// La bandeja en vivo: escucha `whatsappConversations` igual que la web
 /// (más reciente primero). Firestore empuja los cambios y además los deja en
 /// caché local, así que la lista abre al instante aunque no haya señal.
 @MainActor
 final class InboxStore: ObservableObject {
-    @Published var conversaciones: [Conversacion] = []
+    /// Cada vez que cambia la lista, el número del ícono se iguala a las
+    /// conversaciones con algo sin leer — el mismo criterio que el chip "Sin
+    /// leer". Antes la app no lo tocaba nunca: cada aviso de WhatsApp lo ponía
+    /// en un 1 fijo y se quedaba ahí aunque se leyera todo (10-set-2026).
+    @Published var conversaciones: [Conversacion] = [] {
+        didSet { sincronizarInsignia() }
+    }
     @Published var cargando = true
     @Published var error: String?
 
@@ -45,6 +52,14 @@ final class InboxStore: ObservableObject {
     func parar() {
         listener?.remove()
         listener = nil
+    }
+
+    /// El número del ícono, igual a lo que de verdad falta por leer. Lo que
+    /// se lee en otro dispositivo también lo baja: la lista llega por el
+    /// mismo listener.
+    private func sincronizarInsignia() {
+        let n = conversaciones.filter { $0.sinLeer > 0 }.count
+        UNUserNotificationCenter.current().setBadgeCount(n) { _ in }
     }
 
     /// Poner el contador en cero al abrir. Mismo campo que permite la regla

@@ -175,6 +175,11 @@ function buildResult(userIds, tokensByUser, platforms = null) {
   const byPlatform = {}
   for (const uid of userIds) {
     for (const t of tokensByUser.get(uid) || []) {
+      // Cobrify Chat es la bandeja INTERNA de WhatsApp del equipo, no una app
+      // de clientes: una campaña ("tu plan vence", "califica la app") nunca va
+      // ahí. Sin esto, una campaña sin filtro de plataforma le llegaba al
+      // iPhone de Giacomo, y con el ícono puesto en "1".
+      if (t.platform === 'ios-inbox') continue
       if (active(platforms) && !platforms.includes(t.platform)) continue
       tokens.push(t.token)
       tokenUserMap[t.token] = uid

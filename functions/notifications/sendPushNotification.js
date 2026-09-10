@@ -22,7 +22,7 @@ import { getMessaging } from 'firebase-admin/messaging'
  */
 export async function sendPushNotification(userId, title, body, data = {}, options = {}) {
   try {
-    const { allowSecondaryUsers = false, preferPlatform = null } = options
+    const { allowSecondaryUsers = false, preferPlatform = null, badge = 1 } = options
 
     console.log('📨 sendPushNotification called')
     console.log('   userId:', userId)
@@ -57,10 +57,22 @@ export async function sendPushNotification(userId, title, body, data = {}, optio
       return { success: false, error: 'No tokens' }
     }
 
+    // Cobrify Chat ('ios-inbox') es SOLO la bandeja de WhatsApp: los demás
+    // avisos (ventas, pedidos, stock, Yape, vencimientos) no van ahí. Le
+    // ponían el ícono en "1" por algo que la app ni muestra, y tocarlos no
+    // abría nada (10-set-2026).
+    let tokenDocs = tokensSnapshot.docs
+    if (preferPlatform !== 'ios-inbox') {
+      tokenDocs = tokenDocs.filter(doc => doc.data().platform !== 'ios-inbox')
+      if (tokenDocs.length === 0) {
+        console.log(`🔕 ${userId} solo tiene Cobrify Chat, y este aviso no es de WhatsApp`)
+        return { success: false, error: 'No tokens' }
+      }
+    }
+
     // preferPlatform: si el usuario tiene tokens de esa plataforma, el aviso
     // va SOLO ahí (ej: los de WhatsApp solo a la app Cobrify Chat). Si no
     // tiene ninguno, se cae al comportamiento de siempre: a todos.
-    let tokenDocs = tokensSnapshot.docs
     if (preferPlatform) {
       const preferidos = tokenDocs.filter(doc => doc.data().platform === preferPlatform)
       if (preferidos.length > 0) {
@@ -102,7 +114,11 @@ export async function sendPushNotification(userId, title, body, data = {}, optio
               title,
               body
             },
-            badge: 1,
+            // El número del ícono. Por defecto 1, como siempre para todos los
+            // avisos; Cobrify Chat manda el número REAL de conversaciones sin
+            // leer (ver avisarMensajeNuevoWa): un 1 fijo que la app nunca
+            // borraba dejaba el ícono diciendo "1" con todo leído.
+            badge,
             sound: 'default'
           }
         }
