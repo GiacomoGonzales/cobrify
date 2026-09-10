@@ -1239,12 +1239,22 @@ export default function Chat() {
           dibujar nada — de ahí que no se sienta pesado en un Android modesto.
           En escritorio no cambia nada: `max-md:` solo aplica por debajo de md.
           Y con "reducir movimiento" activado en el sistema, no hay animación. */}
+      {/* `min-w-0` en <main> NO es decorativo. Es una columna flex-1 entre la
+          lista y la ficha, y sin él nunca se encoge por debajo de su contenido
+          más ancho. La cita de una respuesta va con `truncate` —una sola
+          línea—, y el tope de la burbuja es en porcentaje, que mientras se
+          calcula el ancho de la columna todavía no vale nada: responder a un
+          mensaje largo ensanchaba la conversación a más de 1.100 px, y como la
+          raíz corta con overflow-hidden, los mensajes propios, la cabecera y
+          la ficha quedaban FUERA de la pantalla (10-set-2026, primera
+          conversación real de Giacomo). Con el freno la columna mide lo que le
+          toca y la cita se corta con puntos suspensivos. */}
       <main
         onDragEnter={alEntrarArrastre}
         onDragOver={(e) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault() }}
         onDragLeave={alSalirArrastre}
         onDrop={alSoltarArchivos}
-        className={`relative flex-1 flex flex-col bg-gray-200
+        className={`relative flex-1 min-w-0 flex flex-col bg-gray-200
           max-md:absolute max-md:inset-0 max-md:z-20
           max-md:transition-transform max-md:duration-200 max-md:ease-out
           motion-reduce:transition-none
