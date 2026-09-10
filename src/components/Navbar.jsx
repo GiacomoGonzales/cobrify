@@ -257,7 +257,7 @@ function Navbar() {
             {/* El mismo dibujo que ve al darse de alta desde el chat: ahí
                 reconoció la tienda por su marca, no por una flecha. */}
             {tiendaApp.cual === 'ios'
-              ? <LogoAppStore className="w-7 h-7 text-gray-900" />
+              ? <LogoAppStore className="w-7 h-7" />
               : <LogoPlayStore className="w-7 h-7" />}
           </button>
         )}

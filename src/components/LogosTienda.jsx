@@ -1,17 +1,53 @@
+import iconoAppStore from '@/assets/images/appstore.jpg'
+
 /**
- * Las marcas de las tiendas, dibujadas como SVG.
+ * Las marcas de las tiendas, en un solo lugar.
  *
- * Van vectoriales y no como imagen para que no dependan de una descarga: esta
- * pantalla es lo último que ve alguien que acaba de pagar, y un logo que no
- * carga ahí se ve peor que no ponerlo.
+ * Las que son formas planas van dibujadas como SVG, para que no dependan de
+ * una descarga: una de las pantallas donde salen es lo último que ve alguien
+ * que acaba de pagar, y un logo que no carga ahí se ve peor que no ponerlo.
+ * La del App Store va como imagen porque dibujarla a mano no le hace justicia
+ * (el porqué está en su propio comentario).
  *
  * Si algún día quieres los distintivos oficiales ("Disponible en Google Play",
  * "Descárgalo en el App Store"), Apple y Google los publican como imagen con
  * sus reglas de uso; se cambian aquí y en ningún otro sitio.
  */
 
-/** La manzana de Apple. Silueta, sin degradado: se lee a 20 px. */
+/**
+ * El ÍCONO DEL APP STORE: el cuadrado azul con la "A" blanca.
+ *
+ * No confundir con la manzana (`LogoApple`, más abajo). La manzana es la marca
+ * de la empresa; lo que la gente reconoce como "la tienda de iPhone" es este
+ * cuadrito azul, que es el que ve en su pantalla de inicio. Estuvo la manzana
+ * un rato en la cabecera y no se leía como "acá se descarga la app".
+ *
+ * Este va como IMAGEN y no dibujado a mano, al revés que los demás de este
+ * archivo: la "A" del App Store son tres barras con brillo y volumen, y
+ * redibujarla con trazos planos da un resultado pobre —se probó—. La imagen
+ * pesa 12 KB, viaja en el bundle (no es una descarga de fuera) y se sirve del
+ * mismo sitio que el resto.
+ *
+ * Las esquinas las redondea el CSS: el archivo viene cuadrado y en una
+ * cabecera de íconos sueltos un cuadrado con punta desentona.
+ */
 export function LogoAppStore({ className = 'w-5 h-5' }) {
+  return (
+    <img
+      src={iconoAppStore}
+      alt=""
+      aria-hidden="true"
+      className={`rounded-[22%] object-contain ${className}`}
+    />
+  )
+}
+
+/**
+ * La manzana de Apple. Silueta, sin degradado: se lee a 20 px y toma el color
+ * del texto, así que sirve sobre fondos oscuros donde el cuadro azul del App
+ * Store se perdería.
+ */
+export function LogoApple({ className = 'w-5 h-5' }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
       <path d="M16.37 12.76c.02-2.2 1.8-3.26 1.88-3.31-1.02-1.5-2.62-1.7-3.19-1.72-1.36-.14-2.65.8-3.34.8-.69 0-1.75-.78-2.87-.76-1.48.02-2.84.86-3.6 2.18-1.53 2.66-.39 6.6 1.1 8.76.73 1.06 1.6 2.25 2.74 2.2 1.1-.04 1.51-.71 2.84-.71 1.32 0 1.7.71 2.86.69 1.18-.02 1.93-1.08 2.65-2.14.84-1.23 1.18-2.42 1.2-2.48-.03-.01-2.29-.88-2.31-3.5zM14.2 5.9c.6-.74 1.01-1.76.9-2.78-.87.04-1.93.58-2.56 1.31-.56.65-1.06 1.69-.93 2.69.97.07 1.97-.49 2.59-1.22z" />
