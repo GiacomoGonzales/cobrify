@@ -1,0 +1,249 @@
+/*
+ * Réplica de citex.com.pe (10-set-2026). Estas reglas son las de su web,
+ * copiadas y acotadas a .citex-replica (la raíz del catálogo con su tema):
+ * no tocan el resto de la app. Lo que cambió respecto de su web:
+ *   - la cabecera es pegajosa y no fija, para que la tienda de abajo sepa
+ *     dónde empieza;
+ *   - las capas bajan (cabecera 45, menú 44, WhatsApp 35) para que el carrito
+ *     y la ficha del producto (50 y 60) queden encima;
+ *   - las reglas de su portada apuntaban a "#root section:first-of-type" y acá
+ *     van a .citex-hero.
+ */
+
+.citex-replica,
+.citex-replica * { font-family: Inter, Helvetica, Arial, sans-serif; }
+.citex-replica .serif,
+.citex-replica .catalog-heading { font-family: "Instrument Serif", Georgia, serif; }
+.citex-replica .montserrat { font-family: "Montserrat", sans-serif; }
+.citex-replica { background: #FAFAF8; color: #1E1E1E; -webkit-font-smoothing: antialiased; }
+.citex-replica ::selection { background: #000; color: #fff; }
+.citex-replica a:focus-visible,
+.citex-replica button:focus-visible,
+.citex-replica input:focus-visible,
+.citex-replica select:focus-visible,
+.citex-replica summary:focus-visible { outline: 2px solid #25D366; outline-offset: 3px; }
+
+/* Anclas: la cabecera pegajosa no tiene que tapar el título al llegar. */
+.citex-replica #inicio,
+.citex-replica #nosotros,
+.citex-replica #tienda,
+.citex-replica #ubicacion,
+.citex-replica #cotizacion,
+.citex-replica #preguntas-frecuentes { scroll-margin-top: 52px; }
+
+/* ── Cabecera ── */
+.citex-replica .citex-index-header{position:sticky;top:0;z-index:45;height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:#1e1e1e;color:#c8c8c8;border-bottom:1px solid rgba(255,255,255,.06);box-sizing:border-box}
+.citex-replica .citex-index-nav{display:flex;align-items:center;gap:32px}
+.citex-replica .citex-index-nav a{color:#c8c8c8;text-decoration:none;font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:500}
+.citex-replica .citex-index-nav a:hover{color:#fff}
+.citex-replica .citex-index-nav-right{position:absolute;right:20px;display:flex;align-items:center;gap:24px}
+.citex-replica .citex-index-logo{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center}
+.citex-replica .citex-index-logo img{display:block;height:20px;width:auto;object-fit:contain}
+.citex-replica .citex-index-menu-button{display:none;width:44px;height:44px;padding:0;border:0;background:none;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;color:#fff}
+.citex-replica .citex-index-menu-button span{display:block;width:24px;height:2px;background:currentColor;transition:transform .2s}
+.citex-replica .citex-index-menu-button[aria-expanded="true"] span:first-child{transform:translateY(4px) rotate(45deg)}
+.citex-replica .citex-index-menu-button[aria-expanded="true"] span:last-child{transform:translateY(-4px) rotate(-45deg)}
+.citex-replica .citex-index-nav a.citex-index-store{display:inline-flex;align-items:center;justify-content:center;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:8px 16px;font-size:12px;font-weight:600;letter-spacing:.12em;white-space:nowrap}
+.citex-replica .citex-index-country{font-size:12px;letter-spacing:.1em;color:#c8c8c8}
+/* Carrito y cuenta: la tienda los necesita y su web no los tiene. */
+.citex-replica .citex-index-cart{position:relative;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;border:0;background:none;color:#fff;cursor:pointer}
+.citex-replica .citex-index-cart:hover{opacity:.8}
+.citex-replica .citex-index-cart-badge{position:absolute;top:1px;right:-3px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:#fff;color:#1e1e1e;font-size:10px;font-weight:600;line-height:16px;text-align:center}
+.citex-replica .citex-index-cart-movil{display:none}
+.citex-replica .citex-index-mobile-menu{display:none;position:fixed;inset:52px 0 0;z-index:44;min-height:calc(100vh - 52px);padding:40px 24px 48px;overflow-y:auto;background:#1e1e1e}
+.citex-replica .citex-index-mobile-menu.is-open{display:grid;align-content:start;gap:32px}
+.citex-replica .citex-index-mobile-menu a{color:#fff;text-decoration:none;font-weight:300;font-size:28px;line-height:42px;letter-spacing:.08em;text-transform:uppercase}
+.citex-replica .citex-index-mobile-menu a:last-child{margin-top:26px;color:rgba(255,255,255,.55);font-size:13px;line-height:19.5px;letter-spacing:.18em}
+@media(min-width:1024px){.citex-replica .citex-index-header{padding:0 40px}.citex-replica .citex-index-nav-right{right:40px}}
+@media(max-width:1023px){
+  .citex-replica .citex-index-nav-left,
+  .citex-replica .citex-index-reclamaciones,
+  .citex-replica .citex-index-country,
+  .citex-replica .citex-index-account{display:none}
+  .citex-replica .citex-index-menu-button{display:flex}
+}
+@media(max-width:640px){
+  .citex-replica .citex-index-header{display:grid;grid-template-columns:44px 1fr 44px;gap:8px;height:56px;padding:0 14px}
+  .citex-replica .citex-index-menu-button{grid-column:1;width:44px;height:44px}
+  .citex-replica .citex-index-logo{grid-column:2;position:static;transform:none;justify-self:center;min-width:0}
+  .citex-replica .citex-index-logo img{height:19px;max-width:112px}
+  .citex-replica .citex-index-nav-right{display:none}
+  .citex-replica .citex-index-cart-movil{display:inline-flex;grid-column:3;justify-self:center}
+  .citex-replica .citex-index-mobile-menu{inset:56px 0 0;min-height:calc(100svh - 56px);padding:34px 22px calc(34px + env(safe-area-inset-bottom))}
+  .citex-replica .citex-index-mobile-menu a{font-size:24px;line-height:36px;letter-spacing:.07em}
+  .citex-replica #inicio,
+  .citex-replica #nosotros,
+  .citex-replica #tienda,
+  .citex-replica #ubicacion,
+  .citex-replica #cotizacion,
+  .citex-replica #preguntas-frecuentes { scroll-margin-top: 56px; }
+}
+@media(max-width:374px){
+  .citex-replica .citex-index-header{grid-template-columns:40px 1fr 40px;padding:0 10px;gap:6px}
+  .citex-replica .citex-index-menu-button{width:40px}
+  .citex-replica .citex-index-logo img{height:17px;max-width:96px}
+}
+
+/* ── Portada ── */
+.citex-replica .citex-hero-title{margin:0;color:#fff;font-weight:400;font-size:clamp(40px,6vw,76px);line-height:1.02;letter-spacing:0;text-align:left;max-width:780px;text-wrap:balance}
+.citex-replica .citex-hero-lead{max-width:440px;margin:18px 0 0;color:rgba(255,255,255,.76);font-size:15px;line-height:1.55}
+.citex-replica .citex-hero-actions{justify-content:flex-start;flex-wrap:wrap}
+.citex-replica .citex-hero-actions .citex-hero-quote{background:#25D366;border-color:#25D366;color:#111}
+.citex-replica .citex-hero-actions .citex-hero-quote:hover{background:#fff;border-color:#fff;color:#111}
+
+/* ── 04 a 06: Por qué CITEX, cotización y preguntas ── */
+.citex-replica .citex-conversion,
+.citex-replica .citex-trust,
+.citex-replica .citex-final-cta,
+.citex-replica .footer{max-width:100%;overflow-x:hidden;box-sizing:border-box}
+.citex-replica .citex-conversion{background:#f4f3ef;color:#1e1e1e;padding:88px 8%;border-top:1px solid rgba(0,0,0,.08)}
+.citex-replica .citex-conversion-inner{max-width:1400px;margin:0 auto}
+.citex-replica .citex-kicker{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:rgba(0,0,0,.48)}
+.citex-replica .citex-conversion h2{font-family:"Instrument Serif",Georgia,serif;font-size:clamp(36px,5vw,64px);font-weight:400;line-height:.95;margin:16px 0 0;max-width:650px}
+.citex-replica .citex-section-head{display:grid;grid-template-columns:1.1fr .9fr;gap:56px;align-items:end}
+.citex-replica .citex-section-copy{max-width:440px;margin:0;color:rgba(0,0,0,.64);font-size:14px;line-height:1.65}
+.citex-replica .citex-catalog-strip{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:1px;background:rgba(0,0,0,.12);margin-top:46px;border:1px solid rgba(0,0,0,.12)}
+.citex-replica .citex-catalog-card{background:#fff;padding:24px;min-height:170px;display:flex;flex-direction:column;justify-content:space-between;text-decoration:none;color:#1e1e1e;transition:background .2s,color .2s}
+.citex-replica .citex-catalog-card:first-child{background:#1e1e1e;color:#fff}
+.citex-replica .citex-catalog-card:hover{background:#e9e2d6;color:#1e1e1e}
+.citex-replica .citex-catalog-card span{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:currentColor;opacity:.56}
+.citex-replica .citex-catalog-card strong{display:block;margin-top:14px;font-size:23px;font-weight:500;line-height:1.08;max-width:12ch}
+.citex-replica .citex-catalog-card p{margin:18px 0 0;font-size:13px;line-height:1.5;color:currentColor;opacity:.68;max-width:29ch}
+.citex-replica .citex-benefits{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(0,0,0,.12);margin-top:56px}
+.citex-replica .citex-benefit{background:#f4f3ef;padding:26px 22px;min-height:150px}
+.citex-replica .citex-benefit strong{display:block;font-size:16px;font-weight:500;margin-bottom:10px}
+.citex-replica .citex-benefit p,
+.citex-replica .citex-process p{font-size:13px;line-height:1.6;color:rgba(0,0,0,.62);margin:0}
+.citex-replica .citex-process{display:grid;grid-template-columns:repeat(4,1fr);gap:28px;margin-top:72px;padding-top:28px;border-top:1px solid rgba(0,0,0,.14)}
+.citex-replica .citex-step-number{font-size:12px;letter-spacing:.14em;color:rgba(0,0,0,.42);margin-bottom:18px}
+.citex-replica .citex-process strong{display:block;font-size:15px;font-weight:500;margin-bottom:8px}
+.citex-replica .citex-quote{display:grid;grid-template-columns:1fr 1fr;gap:56px;margin-top:80px;padding-top:72px;border-top:1px solid rgba(0,0,0,.14)}
+.citex-replica .citex-quote-intro p{max-width:400px;font-size:14px;line-height:1.6;color:rgba(0,0,0,.62);margin-top:22px}
+.citex-replica .citex-open-calculator{display:inline-flex;align-items:center;margin-top:24px;padding:14px 22px;border:1px solid #1e1e1e;border-radius:999px;background:#1e1e1e;color:#fff;text-decoration:none;font:600 12px Inter,Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase}
+.citex-replica .citex-open-calculator:hover{background:transparent;color:#1e1e1e}
+.citex-replica .citex-open-calculator:focus-visible{outline:2px solid #1e1e1e;outline-offset:4px}
+.citex-replica .citex-form{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.citex-replica .citex-form label{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:rgba(0,0,0,.55)}
+.citex-replica .citex-form .citex-form-wide{grid-column:1/-1}
+.citex-replica .citex-form input,
+.citex-replica .citex-form select{display:block;width:100%;margin-top:8px;padding:13px 0;border:0;border-bottom:1px solid rgba(0,0,0,.25);border-radius:0;background:transparent;color:#1e1e1e;font:14px Montserrat,sans-serif;outline:0}
+.citex-replica .citex-form input:focus,
+.citex-replica .citex-form select:focus{border-color:#1e1e1e}
+.citex-replica .citex-form button{grid-column:1/-1;margin-top:14px;width:max-content;padding:14px 20px;border:1px solid #1e1e1e;background:#1e1e1e;color:#fff;font:600 12px Montserrat,sans-serif;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+.citex-replica .citex-form button:hover{background:#fff;color:#1e1e1e}
+.citex-replica .citex-form-status{grid-column:1/-1;margin:0;color:rgba(0,0,0,.62);font-size:12px;line-height:1.5}
+.citex-replica .citex-faq{display:grid;grid-template-columns:1fr 1.5fr;gap:56px;margin-top:80px;padding-top:72px;border-top:1px solid rgba(0,0,0,.14)}
+.citex-replica .citex-faq details{border-top:1px solid rgba(0,0,0,.18);padding:18px 0}
+.citex-replica .citex-faq details:last-child{border-bottom:1px solid rgba(0,0,0,.18)}
+.citex-replica .citex-faq summary{cursor:pointer;font-size:14px;font-weight:500;list-style:none;padding-right:25px;position:relative}
+.citex-replica .citex-faq summary::-webkit-details-marker{display:none}
+.citex-replica .citex-faq summary:after{content:"+";position:absolute;right:0;font-size:20px;font-weight:300}
+.citex-replica .citex-faq details[open] summary:after{content:"−"}
+.citex-replica .citex-faq details p{font-size:13px;line-height:1.6;color:rgba(0,0,0,.62);margin:12px 0 0;max-width:600px}
+
+/* ── 07 Confianza y 08 Empieza tu pedido ── */
+.citex-replica .citex-trust{background:#1e1e1e;color:#fff;padding:76px 8%}
+.citex-replica .citex-trust-inner{max-width:1400px;margin:0 auto;display:grid;grid-template-columns:1.1fr .9fr;gap:56px;align-items:start}
+.citex-replica .citex-trust h2{font-family:"Instrument Serif",Georgia,serif;font-size:clamp(36px,5vw,58px);font-weight:400;line-height:.95;margin:16px 0 0;max-width:430px}
+.citex-replica .citex-trust .citex-kicker{color:rgba(255,255,255,.5)}
+.citex-replica .citex-trust-copy{font-size:14px;line-height:1.6;color:rgba(255,255,255,.62);max-width:420px;margin:22px 0 28px}
+.citex-replica .citex-trust-link{display:inline-block;color:#fff;border-bottom:1px solid rgba(255,255,255,.7);padding-bottom:6px;text-decoration:none;font-size:12px;letter-spacing:.1em;text-transform:uppercase}
+.citex-replica .citex-trust-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:rgba(255,255,255,.16)}
+.citex-replica .citex-trust-card{background:#1e1e1e;padding:28px 24px;min-height:150px}
+.citex-replica .citex-trust-card strong{display:block;font-size:25px;font-weight:400;margin-bottom:12px}
+.citex-replica .citex-trust-card span{font-size:12px;line-height:1.5;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.52)}
+.citex-replica .citex-final-cta{background:#f4f3ef;color:#1e1e1e;padding:0 8% 88px}
+.citex-replica .citex-final-cta-inner{max-width:1400px;margin:0 auto;padding:36px 0 0;border-top:1px solid rgba(0,0,0,.14);display:grid;grid-template-columns:1.1fr .9fr;gap:56px;align-items:center}
+.citex-replica .citex-final-cta h2{font-family:"Instrument Serif",Georgia,serif;font-size:clamp(34px,4.5vw,58px);font-weight:400;line-height:.96;margin:0;max-width:620px}
+.citex-replica .citex-final-cta p{font-size:14px;line-height:1.65;color:rgba(0,0,0,.62);margin:14px 0 0;max-width:520px}
+.citex-replica .citex-final-actions{display:flex;flex-wrap:wrap;gap:12px;justify-content:flex-end}
+.citex-replica .citex-final-actions a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:13px 18px;border:1px solid #1e1e1e;text-decoration:none;color:#1e1e1e;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+.citex-replica .citex-final-actions a:first-child{background:#1e1e1e;color:#fff}
+.citex-replica .citex-final-actions a:hover{background:#fff;color:#1e1e1e}
+
+/* ── Pie ── */
+.citex-replica .footer{background:#121212;color:#fff;padding:56px 8%}
+.citex-replica .footer-inner{max-width:1400px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:56px}
+.citex-replica .footer .label{font-size:12px;letter-spacing:0.2em;text-transform:uppercase;color:#fff;margin-bottom:16px}
+.citex-replica .footer p,
+.citex-replica .footer a{font-size:13px;line-height:1.7;color:rgba(255,255,255,0.6);text-decoration:none}
+.citex-replica .footer a:hover{color:#fff}
+.citex-replica .footer .white{color:#fff}
+.citex-replica .footer-link-group{margin-top:26px}
+.citex-replica .footer-link-group .label{margin-bottom:12px}
+.citex-replica .legal-links{display:flex;flex-wrap:wrap;gap:12px;margin-top:0}
+.citex-replica .legal-links a{border:1px solid rgba(255,255,255,0.15);padding:8px 12px;border-radius:999px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase}
+.citex-replica .footer-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+.citex-replica .footer-actions a{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:10px 14px;border:1px solid rgba(255,255,255,0.18);color:#fff;text-decoration:none;font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase}
+.citex-replica .footer-actions a:first-child{background:#25D366;border-color:#25D366;color:#121212}
+.citex-replica .footer-actions a:hover{background:#fff;color:#121212;border-color:#fff}
+.citex-replica .bottom-bar{max-width:1400px;margin:48px auto 0;padding-top:24px;border-top:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;font-size:12px;color:rgba(255,255,255,0.4);letter-spacing:0.1em}
+
+/* WhatsApp flotante: por debajo del carrito y de la ficha del producto. */
+.citex-replica .citex-whatsapp{z-index:35}
+
+/* ── Anchos: sus mismos cortes ── */
+@media(max-width:1023px){
+  .citex-replica .citex-conversion,
+  .citex-replica .citex-trust{padding-left:24px;padding-right:24px}
+  .citex-replica .citex-final-cta{padding-left:24px;padding-right:24px}
+  .citex-replica .footer{padding-left:24px;padding-right:24px}
+  .citex-replica .citex-section-head{grid-template-columns:1fr;gap:22px}
+  .citex-replica .citex-section-copy{max-width:620px}
+}
+@media(max-width:800px){
+  .citex-replica .citex-catalog-strip{grid-template-columns:1fr}
+  .citex-replica .citex-benefits,
+  .citex-replica .citex-process{grid-template-columns:1fr 1fr}
+  .citex-replica .citex-quote,
+  .citex-replica .citex-faq{grid-template-columns:1fr;gap:32px;margin-top:56px;padding-top:56px}
+  .citex-replica .citex-trust-inner,
+  .citex-replica .citex-final-cta-inner{grid-template-columns:1fr;gap:28px}
+  .citex-replica .citex-final-actions{justify-content:flex-start}
+  .citex-replica .citex-conversion{padding-top:64px}
+  .citex-replica .citex-hero-title{font-size:clamp(32px,8.8vw,46px);line-height:1.08}
+  .citex-replica .citex-hero-actions a{width:100%;max-width:320px}
+}
+@media(max-width:640px){
+  .citex-replica .citex-hero{height:auto;min-height:calc(100svh - 56px)}
+  .citex-replica .citex-hero-media:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.58),rgba(0,0,0,.28) 55%,rgba(0,0,0,.12));pointer-events:none}
+  .citex-replica .citex-hero-media img{object-position:60% 0}
+  .citex-replica .citex-hero-body{min-height:calc(100svh - 56px);height:auto;align-items:flex-start;padding-top:76px;padding-bottom:32px}
+  .citex-replica .citex-hero-pad{padding-left:22px;padding-right:22px}
+  .citex-replica .citex-hero-copy{max-width:360px}
+  .citex-replica .citex-hero-lead{font-size:16px;line-height:1.55;margin-top:16px;max-width:31ch}
+  .citex-replica .citex-hero-actions{width:100%;gap:12px;margin-top:26px}
+  .citex-replica .citex-hero-actions a{width:100%;max-width:100%;min-height:54px;height:auto;padding:15px 18px;font-size:12px;letter-spacing:.14em}
+  .citex-replica #nosotros > div{min-width:0;grid-template-columns:minmax(0,1fr)}
+  .citex-replica #nosotros > div > div{min-width:0}
+  .citex-replica #nosotros h2{overflow-wrap:break-word}
+  .citex-replica #nosotros .flex.gap-8{flex-wrap:wrap;gap:20px}
+  .citex-replica #citex-quote-form input,
+  .citex-replica #citex-quote-form select{font-size:16px}
+  .citex-replica .citex-conversion{padding:58px 20px}
+  .citex-replica .citex-trust{padding:58px 20px}
+  .citex-replica .citex-final-cta{padding:0 20px 64px}
+  .citex-replica .footer{padding:42px 20px calc(42px + env(safe-area-inset-bottom))}
+  .citex-replica .bottom-bar{display:block}
+  .citex-replica .bottom-bar span{display:block;margin-top:10px}
+}
+@media(max-width:520px){
+  .citex-replica .citex-benefits,
+  .citex-replica .citex-process,
+  .citex-replica .citex-form,
+  .citex-replica .citex-trust-grid{grid-template-columns:1fr}
+  .citex-replica .citex-benefit,
+  .citex-replica .citex-catalog-card{min-height:auto}
+  .citex-replica .citex-form .citex-form-wide{grid-column:auto}
+  .citex-replica .citex-form button,
+  .citex-replica .citex-final-actions a,
+  .citex-replica .footer-actions a{grid-column:auto;width:100%}
+  .citex-replica .legal-links{gap:8px}
+  .citex-replica .legal-links a{text-align:center;padding:9px 10px;font-size:11px;letter-spacing:.08em}
+  .citex-replica .footer-inner > div:last-child > div{grid-template-columns:1fr !important}
+}
+@media(max-width:374px){
+  .citex-replica .citex-hero-title{font-size:30px}
+  .citex-replica .citex-hero-lead{font-size:15px}
+  .citex-replica .citex-hero-actions a{min-height:50px}
+}

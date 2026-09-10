@@ -990,7 +990,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // derecha, estilo menus.pe / apps de delivery). En móvil siempre es la barra
   // superior: el sidebar es exclusivo de pantallas md+.
   const desktopNav = business?.catalogDesktopNav === 'sidebar' ? 'sidebar' : 'top'
-  const sidebarNav = desktopNav === 'sidebar'
+  // La réplica a medida trae su propia estructura, sin columna lateral.
+  const sidebarNav = desktopNav === 'sidebar' && !themeFull.replica
   // Grilla efectiva: config del negocio > propuesta del tema > masonry.
   // 'magazine' = cuadrícula uniforme donde la 1ra tarjeta ocupa 2x2 (revista).
   const catalogLayoutRaw = business?.catalogLayout || themeLayout.grid || 'masonry'
@@ -1354,6 +1355,39 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // Total items en carrito
   const cartItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0)
 
+  // RÉPLICA A MEDIDA: un tema puede traer su propia cabecera, portada,
+  // secciones y pie (src/components/catalog/aMedida). Se cargan con import
+  // dinámico, así que a los demás catálogos no les pesan. Hoy solo CITEX.
+  const replicaId = themeFull.replica || null
+  const [replicaMod, setReplicaMod] = useState(null)
+  useEffect(() => {
+    if (replicaId !== 'citex') {
+      setReplicaMod(null)
+      return undefined
+    }
+    let vigente = true
+    import('@/components/catalog/aMedida/citex/ReplicaCitex').then((m) => { if (vigente) setReplicaMod(m) })
+    return () => { vigente = false }
+  }, [replicaId])
+  const Replica = replicaId && replicaMod ? replicaMod : null
+  // Su web mide todo con la raíz en 16px y la app la baja al 90%: con la
+  // réplica, 16px, o cada medida en rem saldría un 10% más chica que en su web.
+  useEffect(() => {
+    if (!Replica) return undefined
+    const antes = document.documentElement.style.fontSize
+    document.documentElement.style.fontSize = '16px'
+    return () => { document.documentElement.style.fontSize = antes }
+  }, [Replica])
+  const irATienda = () => {
+    const tienda = document.getElementById('tienda')
+    if (tienda) tienda.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+  // "Ver precios" de una línea de su web: filtra la tienda y baja a ella.
+  const verLineaDeReplica = (texto) => {
+    setSearchQuery(texto || '')
+    setTimeout(irATienda, 60)
+  }
+
   // Pantalla "Temporalmente fuera de servicio" — se muestra cuando la
   // suscripción del negocio está suspendida/bloqueada. El cliente final
   // ve un mensaje neutro y profesional, sin productos ni opción de pedir.
@@ -1479,10 +1513,16 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     cardVariant: themeLayout.card || 'classic',
   }
 
+  // La réplica todavía no llegó: un instante en blanco es mejor que ver el
+  // catálogo de siempre y que después cambie entero.
+  if (replicaId && !Replica) {
+    return <div className="min-h-screen bg-[#FAFAF8]" />
+  }
+
   return (
     <CatalogThemeProvider business={business} themeId={effectiveTheme}>
     <div
-      className={`min-h-screen ${thBg} ${thFontWrapper}`}
+      className={`min-h-screen ${thBg} ${thFontWrapper} ${Replica ? `${replicaId}-replica` : ''}`}
       style={{
         ...themeCssVars,
         ...(themeFonts.body ? { fontFamily: themeFonts.body } : {}),
@@ -1556,6 +1596,21 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       {/* Header — chrome por tema (Fase 2): sombra que aparece al scrollear
           (o filete del acento en bold), nombre con la voz tipografica del
           tema y carrito en la forma que el tema pide. */}
+      {Replica ? (
+        <Replica.Cabecera
+          cantidadEnCarrito={cartItemsCount}
+          onCarrito={() => setCartOpen(true)}
+          conCuentas={customerAccountsOn}
+          onCuenta={() => {
+            if (catalogUser) {
+              setAccountTab('orders')
+              setAccountOpen(true)
+            } else {
+              setAuthModalOpen(true)
+            }
+          }}
+        />
+      ) : (
       <header
         className={`${thHeaderBg} sticky ${isRestaurantMenu && tableFromUrl ? 'top-[41px]' : 'top-0'} z-40 transition-shadow duration-300 ${headerScrolled ? 'shadow-md' : 'shadow-sm'}`}
         style={themeChrome.headerScrollFx === 'accent-border' ? { borderBottom: `2px solid ${headerScrolled ? themeAccent : 'transparent'}` } : undefined}
@@ -1814,6 +1869,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           </div>
         </div>
       </header>
+      )}
 
       {/* Layout de dos columnas en escritorio (catalogDesktopNav='sidebar'):
           columna fija de categorías a la izquierda + hero/productos a la derecha.
@@ -1953,7 +2009,12 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
       {/* Hero / Búsqueda — carrusel (F2.2) si está activado, banner cuando hay
           portada única, clásico (gradient) si no hay nada */}
-      {themeChrome.heroCover === 'collage' ? (
+      {Replica ? (
+        <>
+          <Replica.Portada />
+          <Replica.SeccionesAntes onVerLinea={verLineaDeReplica} />
+        </>
+      ) : themeChrome.heroCover === 'collage' ? (
         /* Collage de fanzine (Zine): reemplaza a portada y carrusel — la foto
            va DENTRO del collage, recortada y pegada, no como banner. */
         <>
@@ -2498,8 +2559,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         </div>
       )}
 
+      {Replica && <Replica.EncabezadoTienda />}
       {/* Observaciones del catálogo */}
-      {business?.catalogObservations && (
+      {Replica ? <Replica.Notas texto={business?.catalogObservations} /> : business?.catalogObservations && (
         <div className="max-w-7xl mx-auto px-4 mt-4">
           {/* Los ramales isDark/isCafe eran de temas que ya no existen en el
               registro ('dark'/'tech'/'cafe') — siempre caían al caso base. */}
@@ -2520,7 +2582,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           en escritorio: las categorías viven en la columna izquierda. La fila
           existe aunque no haya categorías: la LUPA vive aquí (port shopifree). */}
       {(rootCategories.length > 0 || products.length > 0) && (
-        <div data-catalog-categories className={`${thCard} ${thBorderColor} border-b sticky top-16 md:top-20 z-30 ${sidebarNav ? 'md:bg-transparent md:border-0 md:static' : ''}`}>
+        <div data-catalog-categories className={`${thCard} ${thBorderColor} border-b sticky ${Replica ? 'top-[56px] sm:top-[52px]' : 'top-16 md:top-20'} z-30 ${sidebarNav ? 'md:bg-transparent md:border-0 md:static' : ''}`}>
           <div className={sidebarNav ? 'px-4 md:px-0' : 'max-w-7xl mx-auto px-4'}>
             {/* Categorías raíz — SIEMPRE una fila con scroll horizontal (A1 del
                 rediseño): en desktop el wrap multilínea comía media pantalla con
@@ -3131,7 +3193,15 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       {/* Footer (port shopifree): 3 columnas — marca, contacto+horario y
           redes sociales (business.catalogSocial, se configuran en Mi Catalogo
           Online). Vive en su propio componente y se pinta con tokens. */}
-      <CatalogFooter business={business} sidebarNav={sidebarNav} />
+      {Replica ? (
+        <>
+          <Replica.SeccionesDespues />
+          <Replica.Pie />
+          <Replica.Flotantes />
+        </>
+      ) : (
+        <CatalogFooter business={business} sidebarNav={sidebarNav} />
+      )}
 
       {/* Sin barra flotante de carrito en movil: tapaba la ultima fila de
           productos justo cuando el cliente sigue comprando, y el carrito ya

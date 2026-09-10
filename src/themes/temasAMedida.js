@@ -27,6 +27,9 @@ const CITEX = {
   category: 'retail',
   isNew: false,
   soloPara: ['A9e8PaWWtqXY8DPoG9eLBPSMCro1'],
+  // Réplica de su web: cabecera, portada, secciones y pie propios
+  // (src/components/catalog/aMedida/citex). Sin ella, el tema solo pinta.
+  replica: 'citex',
   swatch: { bg: '#FFFFFF', card: '#F4F4F4', accent: '#1E1E1E' },
   accent: '#1E1E1E',
   // El negro de la marca no se cambia desde el selector de color: el negocio
@@ -35,11 +38,11 @@ const CITEX = {
   fonts: {
     heading: "'Instrument Serif', Georgia, serif",
     body: "Inter, 'Helvetica Neue', Arial, sans-serif",
-    googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Instrument+Serif&display=swap',
+    googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=Montserrat:wght@300;400;500;600;700&display=swap',
   },
   tokens: {
     colors: {
-      background: '#FFFFFF', surface: '#FFFFFF', surfaceHover: '#F4F4F4',
+      background: '#FAFAF8', surface: '#FFFFFF', surfaceHover: '#F4F4F4',
       text: '#1E1E1E', textMuted: '#8A8A8A', textInverted: '#FFFFFF',
       border: '#E6E6E6', badge: '#1E1E1E', badgeText: '#FFFFFF',
     },
@@ -61,9 +64,9 @@ const CITEX = {
   },
   layout: { hero: 'classic', categories: 'underline', grid: null, card: 'classic' },
   classes: {
-    bg: 'bg-white',
-    card: 'bg-white',
-    cardShadow: 'bg-white',
+    bg: 'bg-[#FAFAF8]',
+    card: 'bg-[#FAFAF8]',
+    cardShadow: 'bg-transparent',
     text: 'text-[#1E1E1E]',
     textMuted: 'text-[#8A8A8A]',
     textFaint: 'text-[#6E6E6E]',
@@ -71,7 +74,7 @@ const CITEX = {
     headerBg: 'bg-[#1E1E1E]',
     catInactive: 'bg-transparent text-[#8A8A8A] hover:text-[#1E1E1E] uppercase tracking-[0.14em] text-xs font-medium',
     // Pestañas de categoría como el menú de su web: mayúsculas espaciadas.
-    catTabText: 'text-xs font-medium uppercase tracking-[0.14em]',
+    catTabText: 'text-[11px] font-[500] uppercase tracking-[0.18em]',
     viewActive: 'bg-[#F4F4F4]',
     viewHover: 'hover:bg-[#F4F4F4]',
     catBadge: 'bg-[#1E1E1E] text-white uppercase tracking-[0.12em] text-[10px] font-semibold',
@@ -84,10 +87,12 @@ const CITEX = {
     heroFallbackBg: 'bg-[#1E1E1E]',
     cartBadgeBg: '#FFFFFF',
     cartBadgeColor: '#1E1E1E',
-    cardRadius: 'rounded-none',
+    // Como las fotos de sus tarjetas: 12px de radio sobre un fondo arena.
+    cardRadius: 'rounded-[12px]',
+    cardFrame: 'bg-[#E8E5E0]',
     cardShadowEffect: 'transition-opacity hover:opacity-90',
-    productNameClass: 'text-sm font-normal text-[#1E1E1E]',
-    priceClass: 'text-sm font-medium text-[#1E1E1E]',
+    productNameClass: 'text-[15px] font-[500] tracking-[-0.01em] text-[#1E1E1E]',
+    priceClass: 'text-[13px] font-[600] tracking-[0.02em] text-[#1E1E1E]',
     detailNameClass: 'catalog-heading text-3xl md:text-4xl font-normal text-[#1E1E1E]',
     detailPriceClass: 'text-2xl font-medium text-[#1E1E1E]',
     fontWrapper: 'font-sans',
@@ -99,7 +104,7 @@ const CITEX = {
     footerBorder: 'border-[#333333]',
     footerIconBg: 'rgba(255,255,255,0.08)',
     // Botones principales: cápsula en mayúsculas, como "Comprar ahora".
-    ctaText: '!rounded-full uppercase tracking-[0.14em] text-[13px] font-semibold',
+    ctaText: '!rounded-full uppercase tracking-[0.12em] text-[12px] font-[600]',
   },
 }
 
