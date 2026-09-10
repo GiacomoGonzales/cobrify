@@ -558,6 +558,13 @@ export async function sendToQPse(xml, ruc, tipoDocumento, serie, correlativo, co
           }
         } catch (consultaError) {
           console.warn(`⚠️ Error en consulta (intento ${intento}):`, consultaError.message)
+          // Para facturas, boletas y notas QPse contesta SIEMPRE "la consulta de
+          // estado no aplica para este tipo de comprobante (use la respuesta del
+          // envío)". Insistir 5 veces dejaba el comprobante ~20 segundos en
+          // "enviando" sin ganar nada, y en esa ventana se editó una boleta de JMC
+          // que SUNAT ya había aceptado (B020-00000045, 25-ago-2026). La
+          // respuesta del envío es la definitiva.
+          if (String(consultaError.message || '').toLowerCase().includes('no aplica para este tipo de comprobante')) break
         }
       }
 

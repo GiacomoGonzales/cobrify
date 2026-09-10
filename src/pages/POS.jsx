@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react'
 import { isPharmaLikeMode } from '@/utils/businessModes'
 import { estadoInicialSunat } from '@/utils/estadoInicialSunat'
+import { comprobanteYaEnviado, motivoParaNoEditar } from '@/utils/edicionDeComprobante'
 import { cupoDeComprobantes, avisoDeCupo } from '@/utils/cupoDeComprobantes'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
@@ -2597,6 +2598,17 @@ export default function POS() {
         toast.error('No se pudo cargar el documento para editar')
         appNavigate('facturas')
         return
+      }
+
+      // Lo que ya salió hacia SUNAT no se edita (la URL se puede escribir a
+      // mano o quedar abierta en otra pestaña). Ver utils/edicionDeComprobante.
+      {
+        const _aEditar = invoiceSnap.data()
+        if (['factura', 'boleta'].includes(_aEditar.documentType) && comprobanteYaEnviado(_aEditar)) {
+          toast.error(motivoParaNoEditar(_aEditar), 9000)
+          appNavigate('facturas')
+          return
+        }
       }
 
       const invoice = { id: invoiceSnap.id, ...invoiceSnap.data() }
@@ -7705,7 +7717,7 @@ ${textoDeErrores(revision.errores)}`, 9000)
         // MODO EDICIÓN: Actualizar documento existente (sincrónico - no es venta frecuente)
         console.log('📝 Actualizando documento existente:', editingInvoiceId)
 
-        const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore')
+        const { doc, getDoc, updateDoc, serverTimestamp } = await import('firebase/firestore')
         const { db } = await import('@/lib/firebase')
 
         // === Ajuste de inventario por DIFERENCIA ===
@@ -7753,6 +7765,19 @@ ${textoDeErrores(revision.errores)}`, 9000)
           updatedByName: user.displayName || user.email || 'Usuario',
           // Mantener estado SUNAT original (pendiente)
           sunatStatus: editingInvoiceData.sunatStatus || 'pending',
+        }
+
+        // Se relee JUSTO antes de guardar: el envío a SUNAT pudo salir mientras
+        // esta pantalla estaba abierta. La B020-00000045 de JMC se editó 20
+        // segundos después de que SUNAT ya había aceptado la versión anterior.
+        if (['factura', 'boleta'].includes(editingInvoiceData.documentType)) {
+          const _fresco = await getDoc(invoiceRef)
+          if (_fresco.exists() && comprobanteYaEnviado(_fresco.data())) {
+            toast.error(motivoParaNoEditar(_fresco.data()), 9000)
+            checkoutGuardRef.current = false
+            setIsProcessing(false)
+            return
+          }
         }
 
         await updateDoc(invoiceRef, updateData)

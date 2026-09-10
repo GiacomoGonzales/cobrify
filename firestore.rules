@@ -374,6 +374,29 @@ service cloud.firestore {
 
     // Helper function to check if user can access business data
     // Returns true if: user is owner OR user is active sub-user of owner
+    // Los MONTOS de un comprobante que ya salió hacia SUNAT no se cambian desde
+    // la app: SUNAT se queda con lo que recibió. JMC (B020-00000045, 25-ago-2026)
+    // editó una boleta a 3 m³ mientras se enviaba con 1 m³; el sistema quedó en
+    // S/ 570 y SUNAT en S/ 190. La regla cubre también la app con bundle viejo.
+    // `items` NO está a propósito: después de la venta se le agrega el desglose de
+    // lotes (saleStockDeduction), y cambiar una cantidad cambia el total igual.
+    // Tampoco serie/número (el renumerador de soporte los corrige a sabiendas) ni
+    // la fecha ("Editar fecha y reenviar" de las notas de crédito la cambia en
+    // notas firmadas o trabadas en envío, a propósito).
+    function camposFiscalesDelComprobante() {
+      return ['total', 'subtotal', 'igv', 'documentType', 'currency', 'exchangeRate',
+              'taxConfig', 'discount', 'globalDiscount',
+              'opGravadas', 'opExoneradas', 'opInafectas'];
+    }
+
+    // Mismo criterio que src/utils/edicionDeComprobante.js: en envío, aceptado,
+    // firmado, anulándose, anulado, agotado, o pendiente con un envío intentado
+    // (un envío cortado pudo haber llegado). Lo rechazado y lo nunca enviado se edita.
+    function comprobanteYaEnviado(d) {
+      return d.get('sunatStatus', '') in ['sending', 'accepted', 'signed', 'SIGNED', 'voiding', 'voided', 'failed_permanent']
+        || (d.get('sunatStatus', '') == 'pending' && d.get('sunatSentAt', null) != null);
+    }
+
     function canAccessBusiness(userId) {
       return isOwner(userId) || isSubUserOf(userId);
     }
@@ -497,7 +520,13 @@ service cloud.firestore {
       match /invoices/{invoiceId} {
         // Admins pueden leer todas las facturas
         allow read: if isAdmin() || (isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId));
-        allow write: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        allow create, delete: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+        // Todo lo demás se puede actualizar (pagos, estado, archivado, lotes…),
+        // salvo los montos de lo que ya salió hacia SUNAT (ver comprobanteYaEnviado).
+        // El servidor escribe con Admin SDK y no pasa por acá.
+        allow update: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId)
+          && !(comprobanteYaEnviado(resource.data)
+               && request.resource.data.diff(resource.data).affectedKeys().hasAny(camposFiscalesDelComprobante()));
       }
 
       // Subcollection: Deleted Invoices — LOG DE AUDITORÍA de eliminaciones

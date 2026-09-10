@@ -75,6 +75,7 @@ import InvoiceTicket from '@/components/InvoiceTicket'
 import { aplicarTamanoDeHoja } from '@/utils/printPageSize'
 import { montosPorAfectacion } from '@/utils/peruUtils'
 import { notasDeLaFactura, motivoParaNoEmitirNota } from '@/utils/notasDeCredito'
+import { comprobanteYaEnviado } from '@/utils/edicionDeComprobante'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { Capacitor } from '@capacitor/core'
 import { downloadFromUrl, downloadBlob } from '@/utils/nativeDownload'
@@ -3948,7 +3949,10 @@ Gracias por tu preferencia.`
               return (
                 <>
                   {/* Editar documento.
-                      Factura/boleta: solo mientras SUNAT no la haya aceptado.
+                      Factura/boleta: solo si nunca salió hacia SUNAT o SUNAT la
+                      rechazó. "No aceptada" no alcanzaba: mientras se enviaba se
+                      podía editar, y SUNAT se quedó con otra cantidad (JMC,
+                      B020-00000045). Ver utils/edicionDeComprobante.
                       Nota de venta: no va a SUNAT, así que se puede editar siempre —
                       pero es opcional (Configuración) y por defecto NO se puede,
                       porque al editar no se ajusta el stock.
@@ -3956,7 +3960,7 @@ Gracias por tu preferencia.`
                       nota y su factura diciendo cosas distintas) y las anuladas. */}
                   {permisosComprobante.editar &&
                    ((invoice.documentType === 'factura' || invoice.documentType === 'boleta')
-                      ? invoice.sunatStatus !== 'accepted'
+                      ? !comprobanteYaEnviado(invoice)
                       : invoice.documentType === 'nota_venta' &&
                         businessSettings?.allowEditNotaVenta === true &&
                         !invoice.convertedTo &&
