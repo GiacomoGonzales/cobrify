@@ -3,7 +3,7 @@ import { rucDeEmpresa } from '@/utils/rucDeEmpresa'
 import { infoDeCredito } from '../../functions/src/utils/creditoDelComprobante.js'
 import jsPDF from 'jspdf'
 import { contrastTextColor } from '@/utils/pdfColors'
-import { getNotaVentaLegend } from '@/utils/documentLegends'
+import { getNotaVentaLegend, LEYENDA_PRUEBA, esComprobanteDePrueba } from '@/utils/documentLegends'
 import { documentLabelLong, esRuc } from '@/utils/documentType'
 import { formatDate, formatQuantity } from '@/lib/utils'
 import { getCurrencySymbol, normalizeCurrency } from '@/utils/currency'
@@ -2952,6 +2952,20 @@ export const generateInvoicePDF = async (invoice, companySettings, download = tr
     // Misma leyenda que los tickets. Antes decia "EFECTOS" y los tickets
     // "FINES": el mismo documento se contradecia segun donde se imprimiera.
     doc.text(getNotaVentaLegend(companySettings), MARGIN_LEFT, footerY + 10)
+    footerY += 20
+  }
+
+  // La marca de PRUEBA va aparte del bloque de la nota de venta, y a
+  // propósito: un comprobante de prueba puede ser una boleta o una factura, no
+  // solo una nota de venta. En rojo y en negrita porque es lo único que
+  // distingue este papel de uno de verdad.
+  if (esComprobanteDePrueba(invoice)) {
+    doc.setFontSize(9)
+    doc.setFont(undefined, 'bold')
+    doc.setTextColor(180, 45, 40)
+    doc.text(LEYENDA_PRUEBA, MARGIN_LEFT, footerY + 10)
+    doc.setFont(undefined, 'normal')
+    doc.setTextColor(...MEDIUM_GRAY)
     footerY += 20
   }
 

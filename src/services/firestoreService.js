@@ -19,6 +19,7 @@ import {
   onSnapshot,
 } from 'firebase/firestore'
 import { db, auth } from '@/lib/firebase'
+import { esPrueba } from '@/data/prueba'
 import { generatePetId, normalizePets } from '@/utils/petUtils'
 import { buscarLoteEnAlmacen, cantidadDeLote, idDeLote } from '@/utils/batchLookup'
 import { calcularStockPorAlmacen } from '@/utils/warehouseStockMath'
@@ -125,6 +126,35 @@ export const createInvoiceWithNumber = async (userId, invoiceData, documentType,
       }
     }
 
+    /**
+     * ¿Nace en una cuenta de PRUEBA? Se marca en el comprobante, no se
+     * consulta después.
+     *
+     * El sello viaja EN el documento por dos razones. La primera es práctica:
+     * los tres sitios que pintan un comprobante —el PDF, el ticket de pantalla
+     * y la impresora Bluetooth— ya reciben el comprobante, así que no hay que
+     * hacerles llegar una bandera desde media docena de pantallas distintas.
+     *
+     * La segunda importa más: un comprobante emitido durante la prueba SIGUE
+     * siendo de prueba aunque el cliente compre mañana. Si se mirara el plan
+     * al imprimir, el día que convierta se le quitaría la marca a papeles que
+     * nunca fueron válidos, y esos papeles ya están en manos de alguien.
+     *
+     * La lectura va fuera de la transacción, como la revisión de arriba: una
+     * lectura de más por comprobante no se nota, y meterla dentro complica la
+     * transacción sin ganar nada.
+     */
+    let esDePrueba = false
+    try {
+      const subSnap = await getDoc(doc(db, 'subscriptions', userId))
+      esDePrueba = esPrueba(subSnap.exists() ? subSnap.data() : null)
+    } catch (e) {
+      // Si no se puede leer, NO se marca: poner "sin validez" en el
+      // comprobante de un cliente que paga es mucho peor que no ponerlo en el
+      // de una prueba. El envío a SUNAT lo bloquea el servidor igual.
+      console.error('[Prueba] No se pudo comprobar la suscripción:', e?.message)
+    }
+
     const businessRef = doc(db, 'businesses', userId)
     const invoicesCollection = collection(db, 'businesses', userId, 'invoices')
     // Generar ID del documento de factura antes de la transacción
@@ -184,6 +214,9 @@ export const createInvoiceWithNumber = async (userId, invoiceData, documentType,
         correlativeNumber: nextNumber,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        // Solo cuando SÍ es de prueba: así los comprobantes de siempre no
+        // engordan con un campo en false que no le sirve a nadie.
+        ...(esDePrueba ? { esPrueba: true } : {}),
       }
 
       // 4. Ejecutar ambas operaciones en la misma transacción

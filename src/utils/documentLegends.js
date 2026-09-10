@@ -58,3 +58,20 @@ export const wrapLegend = (texto, charsPorLinea = 32) => {
   if (actual) lineas.push(actual)
   return lineas
 }
+
+/**
+ * LA MARCA DE UN COMPROBANTE DE PRUEBA.
+ *
+ * Una cuenta en periodo de prueba emite igual —para eso es una prueba— pero
+ * nada de lo que salga se manda a SUNAT. Sin esta marca, el papel que imprime
+ * parece un comprobante de verdad, y un papel que parece fiscal y no lo es
+ * puede acabar en manos de un cliente final. Por eso va en los tres sitios
+ * donde se pinta: el PDF, el ticket de pantalla y la impresora térmica.
+ *
+ * NO es configurable, a diferencia de la leyenda de la nota de venta: esa la
+ * decide el negocio, esta la decidimos nosotros y no debe poder quitarse.
+ */
+export const LEYENDA_PRUEBA = 'DOCUMENTO DE PRUEBA - SIN VALIDEZ TRIBUTARIA'
+
+/** ¿Este comprobante nació en una cuenta de prueba? */
+export const esComprobanteDePrueba = (invoice) => invoice?.esPrueba === true

@@ -11,6 +11,7 @@
  */
 
 import { mesesDeRegalo, MESES_PARA_QUIEN_REFIERE } from '../data/referidos.js'
+import { esPrueba, DIAS_DE_PRUEBA } from '../data/prueba.js'
 
 /**
  * @param {FirebaseFirestore.Firestore} db
@@ -28,17 +29,27 @@ import { mesesDeRegalo, MESES_PARA_QUIEN_REFIERE } from '../data/referidos.js'
  */
 export async function crearSuscripcion(db, {
   uid, email, businessName, plan, meses = 1, precio = null,
-  limites = null, metodo = 'manual', referidoPor = null, FieldValue, Timestamp,
+  limites = null, metodo = 'manual', referidoPor = null, diasDePrueba = null,
+  FieldValue, Timestamp,
 }) {
+  // Una PRUEBA se cuenta en días y no en meses, y no lleva pago, ni precio
+  // congelado, ni meses de regalo. Se marca con `trialEndsAt` —el campo que ya
+  // existía y nunca se usaba— para que el trabajo diario que vence
+  // suscripciones la suspenda sola sin ninguna maquinaria nueva.
+  const prueba = esPrueba({ plan })
   // Los meses de regalo del programa de referidos van DE ENTRADA, sumados al
   // vencimiento. Para el cliente da igual que al final —14 meses son 14 meses—
   // pero ponerlos al final obliga a que alguien se acuerde un año después de
   // extenderle la cuenta, y eso es lo que se olvida.
-  const regalo = referidoPor ? mesesDeRegalo(plan) : 0
+  const regalo = !prueba && referidoPor ? mesesDeRegalo(plan) : 0
 
   const desde = new Date()
   const hasta = new Date()
-  hasta.setMonth(desde.getMonth() + Number(meses || 1) + regalo)
+  if (prueba) {
+    hasta.setDate(desde.getDate() + Number(diasDePrueba || DIAS_DE_PRUEBA))
+  } else {
+    hasta.setMonth(desde.getMonth() + Number(meses || 1) + regalo)
+  }
 
   const pago = precio != null
     ? [{ amount: Number(precio), method: metodo, date: Timestamp.fromDate(desde), plan, note: 'Pago inicial (alta)' }]
@@ -53,11 +64,11 @@ export async function crearSuscripcion(db, {
     startDate: Timestamp.fromDate(desde),
     currentPeriodStart: Timestamp.fromDate(desde),
     currentPeriodEnd: Timestamp.fromDate(hasta),
-    trialEndsAt: null,
+    trialEndsAt: prueba ? Timestamp.fromDate(hasta) : null,
     lastPaymentDate: precio != null ? Timestamp.fromDate(desde) : null,
     nextPaymentDate: Timestamp.fromDate(hasta),
     paymentMethod: precio != null ? metodo : null,
-    monthlyPrice: precio != null && meses ? Number(precio) / Number(meses) : 0,
+    monthlyPrice: !prueba && precio != null && meses ? Number(precio) / Number(meses) : 0,
     /** Precio pactado congelado: renovar cobra esto, no el catálogo. */
     renewalPrice: precio != null ? Number(precio) : null,
     pricingFrozenAt: precio != null ? FieldValue.serverTimestamp() : null,

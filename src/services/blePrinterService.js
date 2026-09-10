@@ -6,7 +6,7 @@ import { lineasDelCliente } from '@/utils/datosDelClienteEnComprobante';
 
 import { Capacitor } from '@capacitor/core';
 import { getRealPayments } from '@/utils/receivables'
-import { getNotaVentaLegend, wrapLegend } from '@/utils/documentLegends'
+import { getNotaVentaLegend, wrapLegend, LEYENDA_PRUEBA } from '@/utils/documentLegends'
 import { justifyTicketText } from '@/utils/ticketFooter'
 import { BleClient, numbersToDataView, numberToUUID } from '@capacitor-community/bluetooth-le';
 import { prepareLogoForPrinting } from './imageProcessingService';
@@ -712,6 +712,7 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
       // Documento
       documentType,
       isNotaVenta,
+      esPruebaSinValidez,
       isInvoice,
       series,
       correlativeNumber,
@@ -1153,6 +1154,18 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
     // ========== FOOTER ==========
     commands.push(ESCPOSCommands.text(separator + '\n'));
     commands.push(ESCPOSCommands.align(1));
+
+    // La marca de prueba, antes de todo lo demás del pie. En papel térmico no
+    // hay color ni negrita que valga demasiado, así que va en su propia línea
+    // y partida al ancho del papel, que si no la impresora la corta sin avisar.
+    if (esPruebaSinValidez) {
+      commands.push(ESCPOSCommands.bold(true));
+      for (const linea of wrapLegend(LEYENDA_PRUEBA, paperWidth === 58 ? 32 : 48)) {
+        commands.push(ESCPOSCommands.text(convertSpanishText(linea) + '\n'));
+      }
+      commands.push(ESCPOSCommands.bold(false));
+      commands.push(ESCPOSCommands.text('\n'));
+    }
 
     if (isNotaVenta) {
       // Leyenda configurable (Configuracion > Documentos), partida al ancho.

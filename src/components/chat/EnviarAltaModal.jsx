@@ -4,6 +4,7 @@ import { PLANS, SELLABLE_PLAN_IDS } from '@/services/subscriptionService'
 import { useToast } from '@/contexts/ToastContext'
 import { Modal, Campo, Entrada, Selector, Boton, Aviso } from '@/components/admin/ui'
 import { mesesDeRegalo, mesesTotales } from '@/data/referidos'
+import { DIAS_DE_PRUEBA } from '@/data/prueba'
 
 const URL_ALTA = 'https://us-central1-cobrify-395fe.cloudfunctions.net/crearAltaPendiente'
 
@@ -43,8 +44,13 @@ export default function EnviarAltaModal({ conversacion, onClose, onPonerEnElComp
   const [creando, setCreando] = useState(false)
   const [hecho, setHecho] = useState(null)
 
+  // La prueba no es un plan más: no hay monto, no hay método de pago y no
+  // hay referido que premiar. Se trata aparte en todo el formulario.
+  const esPrueba = plan === 'trial'
+
   const elegirPlan = (id) => {
     setPlan(id)
+    if (id === 'trial') { setMonto(''); setMontoTocado(false); return }
     if (!montoTocado) setMonto(id && PLANS[id] ? String(PLANS[id].totalPrice) : '')
   }
 
@@ -61,11 +67,14 @@ export default function EnviarAltaModal({ conversacion, onClose, onPonerEnElComp
           waId: conversacion?.waId || null,
           nombre: nombre.trim(),
           plan,
-          planNombre: PLANS[plan]?.name || '',
-          meses: PLANS[plan]?.months || 1,
-          precio: monto ? Number(monto) : null,
-          metodo,
-          referidoPor: referidoPor.trim() || null,
+          planNombre: esPrueba ? `Prueba de ${DIAS_DE_PRUEBA} días` : (PLANS[plan]?.name || ''),
+          // En la prueba los días mandan sobre los meses: el servidor la crea
+          // con `diasDePrueba` y no con un mes que no se pagó.
+          meses: esPrueba ? 0 : (PLANS[plan]?.months || 1),
+          diasDePrueba: esPrueba ? DIAS_DE_PRUEBA : null,
+          precio: esPrueba ? null : (monto ? Number(monto) : null),
+          metodo: esPrueba ? null : metodo,
+          referidoPor: esPrueba ? null : (referidoPor.trim() || null),
           limites: PLANS[plan]?.limits || null,
         }),
       })
@@ -119,8 +128,17 @@ export default function EnviarAltaModal({ conversacion, onClose, onPonerEnElComp
               {PLANES.map((id) => (
                 <option key={id} value={id}>{PLANS[id].name} — S/ {PLANS[id].totalPrice}</option>
               ))}
+              <option value="trial">Prueba gratuita — {DIAS_DE_PRUEBA} días, sin pago</option>
             </Selector>
           </Campo>
+          {esPrueba ? (
+            <Aviso tono="neutro" titulo={`Prueba de ${DIAS_DE_PRUEBA} días`}>
+              No se cobra nada y sus comprobantes NO se envían a SUNAT: salen marcados
+              como sin validez. Al vencer se suspende sola. Si paga, la conviertes en
+              cuenta real desde su ficha y se queda con todo lo que cargó.
+            </Aviso>
+          ) : (
+          <>
           <div className="grid grid-cols-2 gap-3">
             <Campo etiqueta="Monto que pagó (S/)">
               <Entrada
@@ -139,10 +157,13 @@ export default function EnviarAltaModal({ conversacion, onClose, onPonerEnElComp
           <p className="-mt-1 text-[11.5px] text-gray-500">
             El monto queda congelado como su precio de renovación, y el pago aparece en Pagos.
           </p>
+          </>
+          )}
           {/* Quién lo trajo. El código se comprueba al crear el enlace: si está
               mal escrito, el error sale ahora, que es cuando se puede arreglar.
               Dejarlo pasar sería que el cliente que refirió nunca cobre su mes
               y nadie se entere. */}
+          {!esPrueba && (
           <Campo
             etiqueta="¿Lo refirió un cliente? (opcional)"
             ayuda={REGALO[plan]
@@ -158,6 +179,7 @@ export default function EnviarAltaModal({ conversacion, onClose, onPonerEnElComp
               placeholder="1000042"
             />
           </Campo>
+          )}
         </div>
       ) : (
         <div className="space-y-3">

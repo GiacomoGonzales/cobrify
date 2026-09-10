@@ -53,7 +53,7 @@ import { siguienteCodigoCliente, sugerirRubro } from './src/services/clientesSer
 import { sembrarCuenta } from './src/services/semillaService.js'
 import { origenDesdeLanding, origenDesdeAnuncio, origenDesdeReferido } from './src/data/origen.js'
 import { guionDeVentas } from './src/data/ventas.js'
-import { esPrueba } from './src/data/prueba.js'
+import { esPrueba, DIAS_DE_PRUEBA } from './src/data/prueba.js'
 import { responder as responderAsistente } from './src/services/asistenteService.js'
 import rubrosCatalogo from './src/data/rubros.json' with { type: 'json' }
 import { nuevoCodigoDeAlta, ESTADOS_ALTA, altaParaElFormulario, mensajeDeAlta } from './src/services/altasService.js'
@@ -15632,7 +15632,10 @@ export const crearAltaPendiente = onRequest(
       }
 
       const b = req.body || {}
-      if (!b.plan || !b.meses) {
+      // Una PRUEBA no tiene meses ni monto: se mide en días. Por eso la
+      // comprobación de `meses` no le aplica; exigírselo la haría imposible.
+      const altaDePrueba = esPrueba({ plan: b.plan })
+      if (!b.plan || (!altaDePrueba && !b.meses)) {
         res.status(400).json({ success: false, error: 'Falta el plan que le vendiste' }); return
       }
 
@@ -15671,7 +15674,8 @@ export const crearAltaPendiente = onRequest(
         nombre: b.nombre || '',
         plan: b.plan,
         planNombre: b.planNombre || '',
-        meses: Number(b.meses),
+        meses: Number(b.meses) || 0,
+        diasDePrueba: altaDePrueba ? (Number(b.diasDePrueba) || DIAS_DE_PRUEBA) : null,
         precio: b.precio != null ? Number(b.precio) : null,
         // Como pago. Va aqui y no se supone al activar: en Admin > Pagos se
         // ve el metodo de verdad (Yape, transferencia...) y no un generico.
@@ -15841,6 +15845,7 @@ export const completarAlta = onRequest(
       const codigoQuienRefiere = origenDelAlta?.canal === 'referido' ? origenDelAlta.id : null
 
       const { hasta, mesesDeRegalo: regalo } = await crearSuscripcion(db, {
+        diasDePrueba: alta.diasDePrueba || null,
         uid,
         email: usuario.email,
         businessName: datos.businessName,

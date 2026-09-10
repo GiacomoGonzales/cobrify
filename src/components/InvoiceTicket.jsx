@@ -1,7 +1,7 @@
 import { forwardRef } from 'react'
 import { rucDeEmpresa } from '@/utils/rucDeEmpresa'
 import { getRealPayments } from '@/utils/receivables'
-import { getNotaVentaLegend } from '@/utils/documentLegends'
+import { getNotaVentaLegend, LEYENDA_PRUEBA, esComprobanteDePrueba } from '@/utils/documentLegends'
 import React from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { getItemPriceBreakdown } from '@/utils/modifierHelpers'
@@ -1294,6 +1294,13 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
 
       {/* Footer */}
       <div className="ticket-footer">
+        {/* La marca de prueba va ARRIBA del pie y no al final: es lo primero
+            que tiene que ver quien reciba este papel, no una nota al pie. */}
+        {esComprobanteDePrueba(invoice) && (
+          <div className="representation-text" style={{ fontWeight: 700, color: '#B42D28' }}>
+            {LEYENDA_PRUEBA}
+          </div>
+        )}
         <div className="representation-text">
           {invoice.documentType === 'nota_venta'
             ? getNotaVentaLegend(companySettings)

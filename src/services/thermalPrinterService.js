@@ -5,7 +5,7 @@ import { nombreParaMostrar, razonSocialSiAporta } from '@/utils/nombreDelNegocio
 import { lineasDeFechaYHora, mostrarTitulosDeSeccion, lineasDeItem, usarFuentePequena, anchoDeLinea, tamanoDeQr, mostrarSeparadores } from '@/utils/ticketCompacto';
 import { clienteDelComprobante, lineasDelCliente } from '@/utils/datosDelClienteEnComprobante';
 import { getRealPayments } from '@/utils/receivables'
-import { getNotaVentaLegend, wrapLegend } from '@/utils/documentLegends'
+import { esComprobanteDePrueba, getNotaVentaLegend, wrapLegend, LEYENDA_PRUEBA } from '@/utils/documentLegends'
 import { documentLabel } from '@/utils/documentType'
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { prepareLogoForPrinting, prepareLogoRasterForEscPos } from './imageProcessingService';
@@ -1560,6 +1560,16 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
 
     printer = printer.align('center');
 
+    // La marca de prueba, antes del resto del pie: es lo primero que tiene que
+    // ver quien reciba el papel.
+    if (esComprobanteDePrueba(invoice)) {
+      printer = printer.bold();
+      for (const linea of wrapLegend(LEYENDA_PRUEBA, paperWidth === 58 ? 32 : 48)) {
+        printer = printer.text(convertSpanishText(linea) + '\n');
+      }
+      printer = printer.clearFormatting().text('\n');
+    }
+
     // Leyenda legal según tipo de documento
     if (isNotaVenta) {
       // Leyenda configurable (Configuracion > Documentos). Se parte segun el
@@ -2116,6 +2126,9 @@ const printBLETicket = async (invoice, business, paperWidth = 58) => {
       // Documento
       documentType: docType,
       isNotaVenta: isNotaVenta,
+      // Igual que la leyenda de nota de venta: el camino BLE recibe campos
+      // sueltos y no el comprobante, así que la marca se resuelve acá.
+      esPruebaSinValidez: esComprobanteDePrueba(invoice),
       isInvoice: isInvoice,
       series: invoice.series || 'B001',
       correlativeNumber: invoice.correlativeNumber || invoice.number,
@@ -2947,6 +2960,14 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
     builder.alignCenter()
       .text(format.separator)
       .newLine();
+
+    if (esComprobanteDePrueba(invoice)) {
+      builder.bold(true);
+      for (const linea of wrapLegend(LEYENDA_PRUEBA, paperWidth === 58 ? 32 : 48)) {
+        builder.text(convertSpanishText(linea)).newLine();
+      }
+      builder.bold(false).newLine();
+    }
 
     if (isNotaVenta) {
       builder.bold(true);

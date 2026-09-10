@@ -37,6 +37,13 @@ enum PlanesVendibles {
         ("efectivo", "Efectivo"), ("tarjeta", "Tarjeta"), ("otro", "Otro"),
     ]
 
+    /// Los días que dura una prueba.
+    ///
+    /// DUPLICADO A PROPÓSITO: el número vive en `functions/src/data/prueba.js`
+    /// y Swift no puede leer un .js. El servidor es el que manda —él crea la
+    /// suscripción—; esta copia solo pinta el texto. Si cambia allá, cambiar acá.
+    static let diasDePrueba = 7
+
     /// Meses de regalo del programa de referidos, por plan.
     ///
     /// ⚠️ DUPLICADO, igual que los precios de arriba y por el mismo motivo:
@@ -70,6 +77,9 @@ struct EnviarAltaSheet: View {
     @State private var montoTocado = false
     @State private var nombre = ""
     @State private var metodo = "yape"
+
+    /// La prueba no es un plan más: no lleva monto, ni método, ni referido.
+    private var esPrueba: Bool { planId == "trial" }
     @State private var referidoPor = ""
     @State private var creando = false
     @State private var error: String?
@@ -112,6 +122,7 @@ struct EnviarAltaSheet: View {
                             ForEach(PlanesVendibles.lista, id: \.id) { p in
                                 Text(nombreCorto(p)).tag(p.id)
                             }
+                            Text("Prueba gratuita — \(PlanesVendibles.diasDePrueba) días, sin pago").tag("trial")
                         }
                         .onChange(of: planId) { _, nuevo in
                             if !montoTocado, let precio = PlanesVendibles.precios[nuevo] {
@@ -120,6 +131,14 @@ struct EnviarAltaSheet: View {
                         }
                     }
 
+                    if esPrueba {
+                        Section {
+                            Text("No se cobra nada y sus comprobantes NO se envían a SUNAT: salen marcados como sin validez. Al vencer se suspende sola. Si paga, la conviertes en cuenta real desde su ficha y se queda con todo lo que cargó.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        } header: {
+                            Text("Prueba de \(PlanesVendibles.diasDePrueba) días")
+                        }
+                    } else {
                     Section {
                         HStack {
                             Text("S/")
@@ -137,11 +156,13 @@ struct EnviarAltaSheet: View {
                     } footer: {
                         Text("El monto queda congelado como su precio de renovación, y el pago aparece en Pagos.")
                     }
+                    }
 
                     // Quién lo trajo. El código se comprueba al crear el enlace:
                     // si está mal escrito el error sale ahora, que es cuando se
                     // puede arreglar. Dejarlo pasar sería que el cliente que
                     // refirió nunca cobre su mes y nadie se entere.
+                    if !esPrueba {
                     Section {
                         TextField("Código de quien lo refirió", text: $referidoPor)
                             .keyboardType(.numberPad)
@@ -159,6 +180,7 @@ struct EnviarAltaSheet: View {
                         } else {
                             Text("Opcional. Es el código de cliente que sale en Usuarios.")
                         }
+                    }
                     }
 
                     if let error {
@@ -199,7 +221,10 @@ struct EnviarAltaSheet: View {
     }
 
     private func crear() async {
-        guard let plan = PlanCatalogo.plan(planId) else { return }
+        // La prueba no está en el catálogo de planes vendibles —no se vende—,
+        // así que se arma a mano en vez de buscarla ahí.
+        guard esPrueba || PlanCatalogo.plan(planId) != nil else { return }
+        let plan = PlanCatalogo.plan(planId)
         creando = true
         error = nil
         defer { creando = false }
@@ -208,15 +233,16 @@ struct EnviarAltaSheet: View {
                 "conversationId": conv.id,
                 "waId": conv.waId,
                 "nombre": nombre.trimmingCharacters(in: .whitespaces),
-                "plan": plan.id,
-                "planNombre": plan.nombre,
-                "meses": plan.meses,
-                "precio": Double(monto.replacingOccurrences(of: ",", with: ".")) as Any,
-                "metodo": metodo,
-                "referidoPor": referidoPor.isEmpty ? NSNull() : referidoPor,
+                "plan": esPrueba ? "trial" : (plan?.id ?? ""),
+                "planNombre": esPrueba ? "Prueba de \(PlanesVendibles.diasDePrueba) días" : (plan?.nombre ?? ""),
+                "meses": esPrueba ? 0 : (plan?.meses ?? 1),
+                "diasDePrueba": esPrueba ? PlanesVendibles.diasDePrueba : NSNull(),
+                "precio": esPrueba ? NSNull() : (Double(monto.replacingOccurrences(of: ",", with: ".")) as Any),
+                "metodo": esPrueba ? NSNull() : metodo,
+                "referidoPor": (esPrueba || referidoPor.isEmpty) ? NSNull() : referidoPor,
                 "limites": [
-                    "maxInvoicesPerMonth": plan.maxComprobantes,
-                    "maxBranches": plan.maxSucursales,
+                    "maxInvoicesPerMonth": plan?.maxComprobantes ?? -1,
+                    "maxBranches": plan?.maxSucursales ?? 1,
                 ],
             ])
             guard let enlace = r["enlace"] as? String, let mensaje = r["mensaje"] as? String else {
