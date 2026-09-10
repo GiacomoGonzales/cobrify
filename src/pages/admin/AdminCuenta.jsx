@@ -6,6 +6,8 @@ import { PLANS, registerPayment, registrarCambioDePlan } from '@/services/subscr
 import { getCustomPlans } from '@/services/customPlanService'
 import { getVendedores } from '@/services/vendedorService'
 import { getBranches } from '@/services/branchService'
+import { getEmisores, getSeriesDelNegocio } from '@/services/emisoresService'
+import { TIPOS_DE_SERIE_DE_EMISOR } from '../../../functions/src/utils/emisorDelComprobante.js'
 import { resumenDeUso } from '@/services/adminUsoService'
 import { cargarCuenta, diasParaVencer, enlaceRecordatorioWhatsapp, convertirPruebaEnCuenta } from '@/services/adminCuentasService'
 import { esPrueba } from '@/data/prueba'
@@ -18,6 +20,7 @@ import UserDetailsModal from '@/components/admin/UserDetailsModal'
 import SunatModal from '@/components/admin/cuenta/SunatModal'
 import FuncionesModal, { FUNCIONES } from '@/components/admin/cuenta/FuncionesModal'
 import SucursalesModal from '@/components/admin/cuenta/SucursalesModal'
+import EmisoresModal from '@/components/admin/cuenta/EmisoresModal'
 import ContactoModal from '@/components/admin/cuenta/ContactoModal'
 import AsignarVendedorModal from '@/components/admin/cuenta/AsignarVendedorModal'
 import EliminarCuentaModal from '@/components/admin/cuenta/EliminarCuentaModal'
@@ -75,6 +78,9 @@ export default function AdminCuenta() {
   const [customPlans, setCustomPlans] = useState({})
   const [vendedores, setVendedores] = useState([])
   const [sucursales, setSucursales] = useState([])
+  // Varios RUC: los emisores adicionales y sus series (que viven en el doc del negocio).
+  const [emisores, setEmisores] = useState([])
+  const [emisorSeries, setEmisorSeries] = useState({})
   const [uso, setUso] = useState(null)
   const [cargandoUso, setCargandoUso] = useState(false)
   const [modal, setModal] = useState(null)
@@ -121,6 +127,7 @@ export default function AdminCuenta() {
     })()
     getVendedores().then(r => { if (vivo && r.success) setVendedores(r.data) }).catch(() => {})
     getBranches(id).then(r => { if (vivo && r.success) setSucursales(r.data) }).catch(() => {})
+    cargarEmisores(id)
     return () => { vivo = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
@@ -139,6 +146,13 @@ export default function AdminCuenta() {
   }, [cuenta?.id])
 
   const parchar = cambios => setCuenta(prev => (prev ? { ...prev, ...cambios } : prev))
+
+  // Los emisores se leen siempre (dos o tres docs, o ninguno): la sección
+  // solo se pinta con la función Varios RUC activa.
+  function cargarEmisores(cuentaId) {
+    getEmisores(cuentaId).then(r => { if (r.success) setEmisores(r.data) }).catch(() => {})
+    getSeriesDelNegocio(cuentaId).then(d => setEmisorSeries(d.emisorSeries || {})).catch(() => {})
+  }
   const cerrarModal = () => setModal(null)
 
   // ── Acciones ────────────────────────────────────────────────────────────────
@@ -624,6 +638,52 @@ export default function AdminCuenta() {
         </div>
       </Seccion>
 
+      {/* Varios RUC: solo con la función activa. El principal es el negocio;
+          los demás se eligen en el POS con el desplegable "Emitir con". */}
+      {c.features?.multiRuc && (
+        <Seccion
+          titulo={`Emisores (${emisores.filter(e => e.activo !== false).length + 1})`}
+          descripcion="Los RUC con los que esta cuenta puede emitir. El principal es el negocio; los demás se eligen en el POS."
+          sinRelleno
+          acciones={<Boton tamano="sm" onClick={() => setModal('emisores')}>Gestionar</Boton>}
+        >
+          <Tabla>
+            <thead>
+              <tr>
+                <Th>RUC</Th>
+                <Th>Razón social</Th>
+                <Th>Método</Th>
+                <Th>Régimen</Th>
+                <Th>Series</Th>
+                <Th>Estado</Th>
+              </tr>
+            </thead>
+            <tbody>
+              <Fila>
+                <Td className="tabular-nums">{c.ruc || '—'}</Td>
+                <Td className="font-medium whitespace-normal">{c.businessName} <span className="text-gray-400 font-normal">· principal</span></Td>
+                <Td apagado>{METODOS[c.emissionMethod] || c.emissionMethod}</Td>
+                <Td apagado>{REGIMENES[c.taxType] || c.taxType}</Td>
+                <Td apagado>Las del negocio</Td>
+                <Td apagado>Activo</Td>
+              </Fila>
+              {emisores.map(e => (
+                <Fila key={e.id} apagada={e.activo === false}>
+                  <Td className="tabular-nums">{e.ruc}</Td>
+                  <Td className="font-medium whitespace-normal">{e.businessName}</Td>
+                  <Td apagado>{METODOS[e.emissionMethod] || 'Sin configurar'}</Td>
+                  <Td apagado>{REGIMENES[e.emissionConfig?.taxConfig?.taxType] || REGIMENES.standard}</Td>
+                  <Td apagado className="whitespace-normal">
+                    {TIPOS_DE_SERIE_DE_EMISOR.map(t => emisorSeries[e.id]?.[t]?.serie).filter(Boolean).join(' · ') || '—'}
+                  </Td>
+                  <Td apagado>{e.activo === false ? 'Inactivo' : 'Activo'}</Td>
+                </Fila>
+              ))}
+            </tbody>
+          </Tabla>
+        </Seccion>
+      )}
+
       {c.subUsers.length > 0 && (
         <Seccion titulo={`Sub-usuarios (${c.subUsers.length})`} sinRelleno>
           <div className="sm:hidden divide-y divide-gray-100">
@@ -777,6 +837,7 @@ export default function AdminCuenta() {
           onCambio={cambios => parchar(cambios)}
         />
       )}
+      {modal === 'emisores' && <EmisoresModal cuenta={c} onClose={() => { cerrarModal(); cargarEmisores(id) }} />}
       {modal === 'contacto' && <ContactoModal cuenta={c} onClose={cerrarModal} onGuardado={cambios => parchar(cambios)} />}
       {modal === 'vendedor' && <AsignarVendedorModal cuenta={c} vendedores={vendedores} onClose={cerrarModal} onGuardado={cambios => parchar(cambios)} />}
       {modal === 'eliminar' && <EliminarCuentaModal cuenta={c} onClose={cerrarModal} onEliminada={() => navigate('/app/admin/users')} />}

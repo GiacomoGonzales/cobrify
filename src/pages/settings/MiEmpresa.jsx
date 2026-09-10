@@ -35,6 +35,9 @@ import { consultarRUC, consultarEstablecimientos } from '@/services/documentLook
 import { codigosDeUbigeo, ubigeoDeCodigos } from '@/utils/ubigeoDesdeConsulta'
 import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import { invalidateLogoCache } from '@/utils/pdfGenerator'
+// Los catálogos de cuentas bancarias son los mismos que usa la ficha del admin
+// para los RUC adicionales; viven en un solo sitio.
+import { BANCOS, TIPOS_CUENTA, MONEDAS, CUENTA_VACIA, etiquetaTipoCuenta, etiquetaMoneda } from '@/data/cuentasBancarias'
 
 // Lo que ve el demo en el formulario. No se guarda: `guardar` lo bloquea y
 // `onSubmit` corta antes para no subir nada a Storage.
@@ -59,16 +62,6 @@ const DATOS_DEMO = {
 // de donde venga el corte.
 const MENSAJE_DEMO = 'No se pueden guardar cambios en modo demo. Crea una cuenta para configurar tu empresa.'
 
-const BANCOS = ['BCP', 'BBVA', 'Interbank', 'Scotiabank', 'BanBif', 'Pichincha', 'Banco de la Nación', 'Otro']
-const TIPOS_CUENTA = [
-  { value: 'corriente', label: 'Corriente' },
-  { value: 'ahorros', label: 'Ahorros' },
-  { value: 'detracciones', label: 'Detracciones' },
-]
-const MONEDAS = [
-  { value: 'PEN', label: 'Soles' },
-  { value: 'USD', label: 'Dólares' },
-]
 const BILLETERAS = ['Yape', 'Plin']
 
 // Las mismas reglas de siempre para el logo y los QR: solo imágenes, hasta 2 MB.
@@ -76,15 +69,12 @@ const TIPOS_IMAGEN = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
 const IMAGEN_MAX_BYTES = 2 * 1024 * 1024
 const ACCEPT_IMAGEN = 'image/jpeg,image/jpg,image/png,image/webp'
 
-const CUENTA_VACIA = { bank: '', accountType: 'corriente', currency: 'PEN', accountNumber: '', cci: '' }
 const BILLETERA_VACIA = { provider: '', holderName: '', phoneNumber: '' }
 
 // Controles dentro de las tablas: más chicos que el Input normal.
 const CELDA = 'px-2 py-1 text-xs'
 
 // Sin tipo guardado se muestra "Corriente", como siempre.
-const etiquetaTipoCuenta = (valor) => TIPOS_CUENTA.find(t => t.value === valor)?.label || 'Corriente'
-const etiquetaMoneda = (valor) => (valor === 'PEN' ? 'Soles' : 'Dólares')
 
 /** El asterisco de campo obligatorio. Gris, como todo lo que no es acción. */
 const Obligatorio = () => <span className="text-gray-400 ml-1" aria-hidden="true">*</span>

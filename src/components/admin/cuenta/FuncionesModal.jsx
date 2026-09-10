@@ -11,6 +11,10 @@ export const FUNCIONES = [
   { clave: 'loans', etiqueta: 'Préstamos', ayuda: 'Módulo de préstamos bancarios y de terceros.' },
   { clave: 'certificates', etiqueta: 'Certificados', ayuda: 'Certificados de extintores (operatividad y capacitación).' },
   { clave: 'bulkDelete', etiqueta: 'Eliminación masiva', ayuda: 'Limpieza masiva de productos, ventas, clientes… Peligroso.' },
+  // Un local, un stock, más de un RUC. Los RUC adicionales se cargan en la
+  // ficha, en la sección Emisores, que aparece al activar esto. Apagado, el
+  // negocio no ve nada: ni el desplegable del POS ni la sección.
+  { clave: 'multiRuc', etiqueta: 'Varios RUC', ayuda: 'Emitir con más de un RUC desde el mismo POS. Los RUC se configuran en la ficha, en Emisores.' },
 ]
 
 export default function FuncionesModal({ cuenta, onClose, onGuardado }) {

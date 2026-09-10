@@ -792,6 +792,22 @@ service cloud.firestore {
         allow read, write: if isAuthenticated() && isOwner(userId);
       }
 
+      // Subcollection: Emisores ("Varios RUC": los RUC adicionales con los que
+      // la cuenta puede emitir). Los crea y edita SOLO el admin desde la ficha;
+      // el negocio y sus sub-usuarios los leen para elegir con cuál emitir.
+      // Nunca público: el catálogo no los necesita. Las credenciales de cada
+      // uno van en su propia subcolección `secrets`, con la misma regla que
+      // las del negocio (dueño y admin; el servidor con Admin SDK).
+      match /emisores/{emisorId} {
+        allow read, write: if isAdmin();
+        allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
+
+        match /secrets/{secretId} {
+          allow read, write: if isAdmin();
+          allow read, write: if isAuthenticated() && isOwner(userId);
+        }
+      }
+
       // Subcollection: Ingredients (Ingredientes - para modo restaurante)
       match /ingredients/{ingredientId} {
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);
