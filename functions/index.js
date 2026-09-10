@@ -1,4 +1,5 @@
 import { notasDeLaFactura, motivoParaNoEmitirNota } from './src/utils/notasDeCredito.js'
+import { esPrincipal, hayVariosRuc, negocioParaElDocumento, motivoPorRucDeLaReferencia, idDelContadorDelDia, campoDeEmisor, snapshotDeEmisor } from './src/utils/emisorDelComprobante.js'
 import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { onDocumentWritten, onDocumentUpdated, onDocumentCreated } from 'firebase-functions/v2/firestore'
@@ -348,6 +349,122 @@ async function attachEmissionSecrets(businessId, businessData) {
     console.error(`⚠️ attachEmissionSecrets(${businessId}):`, e.message)
   }
   return businessData
+}
+
+/**
+ * VARIOS RUC (fase 2, set-2026): un RUC adicional de la cuenta con sus
+ * credenciales. Misma forma que el negocio con `attachEmissionSecrets`: el doc
+ * `emisores/{eid}` trae la identidad y `emisores/{eid}/secrets/emission` las
+ * credenciales. SIN fallback a las del negocio: un emisor sin credenciales no
+ * firma, y nunca con las del RUC principal.
+ *
+ * @param {Map} [cache]  el reintento lee cada emisor una vez por corrida
+ * @returns {Promise<object|null>}  null si no existe
+ */
+async function cargarEmisor(businessId, emisorId, cache = null) {
+  const clave = `${businessId}/${emisorId}`
+  if (cache?.has(clave)) return cache.get(clave)
+  const ref = db.collection('businesses').doc(businessId).collection('emisores').doc(emisorId)
+  const [snap, secretos] = await Promise.all([ref.get(), ref.collection('secrets').doc('emission').get()])
+  let emisor = null
+  if (snap.exists) {
+    const datos = snap.data() || {}
+    const s = secretos.exists ? (secretos.data() || {}) : {}
+    emisor = { ...datos, id: emisorId }
+    if (s.sunat !== undefined) emisor.sunat = s.sunat
+    if (s.qpse !== undefined) emisor.qpse = s.qpse
+    if (s.emissionConfig !== undefined) {
+      emisor.emissionConfig = { ...(datos.emissionConfig || {}), ...s.emissionConfig }
+    }
+  }
+  cache?.set(clave, emisor)
+  return emisor
+}
+
+/**
+ * VARIOS RUC: el negocio con el que se firma, se anula o se consulta ESTE
+ * documento. La decisión es `negocioParaElDocumento` (emisorDelComprobante.js,
+ * con sus pruebas); acá solo se le da acceso a Firestore.
+ *
+ * Una cuenta de un solo RUC pasa sin una lectura de más y con el MISMO objeto:
+ * el camino de las cuentas de siempre no cambia. Si hay `error`, quien llama
+ * deja el documento como estaba, con el motivo a la vista.
+ *
+ * Si el emisor se dedujo por la serie, se deja escrito en el documento
+ * (`docRef`): la próxima operación —anular, reintentar— ya no deduce.
+ *
+ * @param {object} negocio  el doc del negocio YA con sus secretos
+ * @param {object} documento
+ * @param {{paraFirmar?: boolean, docRef?: object, cache?: Map}} [opciones]
+ */
+async function negocioQueFirma(businessId, negocio, documento, { paraFirmar = false, docRef = null, cache = null } = {}) {
+  const resuelto = await negocioParaElDocumento(documento, negocio, {
+    paraFirmar,
+    cargarEmisor: (emisorId) => cargarEmisor(businessId, emisorId, cache),
+  })
+  const numero = `${documento?.series || ''}-${documento?.correlativeNumber || ''}`
+  if (resuelto.error) {
+    console.log(`🛑 [Varios RUC] ${numero}: ${resuelto.error}`)
+    return resuelto
+  }
+  if (esPrincipal(resuelto.emisorId)) return resuelto
+  if (resuelto.deducido && docRef) {
+    try {
+      await docRef.update({ emisorId: resuelto.emisorId, emisor: snapshotDeEmisor(resuelto.emisor) })
+    } catch (err) {
+      console.error('No se pudo dejar escrito el emisor deducido:', err.message)
+    }
+  }
+  console.log(`🏷️ [Varios RUC] ${numero} va con el RUC ${resuelto.negocio.ruc} (emisor ${resuelto.emisorId}${resuelto.deducido ? ', deducido por la serie' : ''})`)
+  return resuelto
+}
+
+/**
+ * VARIOS RUC: una nota se firma con el RUC de la factura o boleta que
+ * modifica (ver `motivoPorRucDeLaReferencia`). null = puede salir.
+ */
+function revisarRucDeLaReferencia(businessId, negocio, nota, emisorDeLaNota, cache = null) {
+  return motivoPorRucDeLaReferencia(nota, emisorDeLaNota, negocio, {
+    cargarReferencia: async (id) => {
+      const snap = await db.collection('businesses').doc(businessId).collection('invoices').doc(id).get()
+      return snap.exists ? snap.data() : null
+    },
+    cargarEmisor: (emisorId) => cargarEmisor(businessId, emisorId, cache),
+  })
+}
+
+/**
+ * Las credenciales de emisión con la forma que esperan el router y los
+ * clientes de SUNAT y QPse, para los reenvíos en lote: el reintento automático
+ * y las dos herramientas del admin. Estaba copiado en las tres; con varios RUC
+ * se usa además una vez por emisor.
+ */
+function datosParaReenvio(datos) {
+  const copia = { ...datos }
+  if (datos.emissionConfig) {
+    const config = datos.emissionConfig
+    if (config.method === 'qpse') {
+      copia.qpse = {
+        enabled: config.qpse.enabled !== false,
+        usuario: config.qpse.usuario,
+        password: config.qpse.password,
+        environment: config.qpse.environment || 'demo',
+      }
+      copia.sunat = { enabled: false }
+    } else if (config.method === 'sunat_direct') {
+      copia.sunat = {
+        enabled: config.sunat.enabled !== false,
+        environment: config.sunat.environment || 'beta',
+        solUser: config.sunat.solUser,
+        solPassword: config.sunat.solPassword,
+        certificateName: config.sunat.certificateName,
+        certificatePassword: config.sunat.certificatePassword,
+        certificateData: config.sunat.certificateData,
+      }
+      copia.qpse = { enabled: false }
+    }
+  }
+  return copia
 }
 
 /**
@@ -1030,7 +1147,11 @@ export const sendInvoiceToSunat = onRequest(
             if (pauseSunat && !exceptions.includes(userId)) {
               const businessDoc = await db.collection('businesses').doc(userId).get()
               if (businessDoc.exists) {
-                const taxConfig = businessDoc.data()?.emissionConfig?.taxConfig
+                // Varios RUC: el régimen es el del RUC que emite el documento.
+                const emisorDelDoc = invoiceSnap.data()?.emisorId
+                const taxConfig = esPrincipal(emisorDelDoc)
+                  ? businessDoc.data()?.emissionConfig?.taxConfig
+                  : (await cargarEmisor(userId, String(emisorDelDoc).trim()))?.emissionConfig?.taxConfig
                 const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5
                 if (isReducedIgv) {
                   console.log(`⏸️ Envío de factura pausado por admin para negocio ${userId} (IGV reducido)`)
@@ -1140,8 +1261,18 @@ export const sendInvoiceToSunat = onRequest(
         return
       }
 
-      const businessData = businessDoc.data()
-      await attachEmissionSecrets(businessDoc.id, businessData)
+      const negocio = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, negocio)
+
+      // Varios RUC: se firma con el RUC del comprobante. Sin emisor es el del
+      // negocio, como siempre (ver negocioQueFirma).
+      const firma = await negocioQueFirma(businessDoc.id, negocio, invoiceData, { paraFirmar: true, docRef: invoiceRef })
+      if (firma.error) {
+        await revertirEnvioNoIniciado(invoiceRef, invoiceData.sunatStatus, firma.error)
+        res.status(firma.transitorio ? 503 : 400).json({ error: firma.error })
+        return
+      }
+      const businessData = firma.negocio
 
       // Mapear emissionConfig (configurado por super admin) al formato esperado
       if (businessData.emissionConfig) {
@@ -1841,7 +1972,11 @@ export const sendCreditNoteToSunat = onRequest(
             if (pauseSunat && !exceptions.includes(userId)) {
               const businessDoc = await db.collection('businesses').doc(userId).get()
               if (businessDoc.exists) {
-                const taxConfig = businessDoc.data()?.emissionConfig?.taxConfig
+                // Varios RUC: el régimen es el del RUC que emite el documento.
+                const emisorDelDoc = ncSnap.data()?.emisorId
+                const taxConfig = esPrincipal(emisorDelDoc)
+                  ? businessDoc.data()?.emissionConfig?.taxConfig
+                  : (await cargarEmisor(userId, String(emisorDelDoc).trim()))?.emissionConfig?.taxConfig
                 const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5
                 if (isReducedIgv) {
                   console.log(`⏸️ Envío NC de factura pausado por admin para negocio ${userId} (IGV reducido)`)
@@ -1945,8 +2080,26 @@ export const sendCreditNoteToSunat = onRequest(
         return
       }
 
-      const businessData = businessDoc.data()
-      await attachEmissionSecrets(businessDoc.id, businessData)
+      const negocio = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, negocio)
+
+      // Varios RUC: se firma con el RUC del comprobante. Sin emisor es el del
+      // negocio, como siempre (ver negocioQueFirma).
+      const firma = await negocioQueFirma(businessDoc.id, negocio, creditNoteData, { paraFirmar: true, docRef: creditNoteRef })
+      if (firma.error) {
+        await revertirEnvioNoIniciado(creditNoteRef, creditNoteData.sunatStatus, firma.error)
+        res.status(firma.transitorio ? 503 : 400).json({ error: firma.error })
+        return
+      }
+      const businessData = firma.negocio
+
+      // Varios RUC: la nota va con el RUC de la factura o boleta que modifica.
+      const rucDistinto = await revisarRucDeLaReferencia(businessDoc.id, negocio, creditNoteData, firma.emisorId)
+      if (rucDistinto) {
+        await revertirEnvioNoIniciado(creditNoteRef, creditNoteData.sunatStatus, rucDistinto)
+        res.status(400).json({ error: rucDistinto })
+        return
+      }
 
       // Mapear emissionConfig (configurado por super admin) al formato esperado
       if (businessData.emissionConfig) {
@@ -2568,7 +2721,11 @@ export const sendDebitNoteToSunat = onRequest(
             if (pauseSunat && !exceptions.includes(userId)) {
               const businessDoc = await db.collection('businesses').doc(userId).get()
               if (businessDoc.exists) {
-                const taxConfig = businessDoc.data()?.emissionConfig?.taxConfig
+                // Varios RUC: el régimen es el del RUC que emite el documento.
+                const emisorDelDoc = ndSnap.data()?.emisorId
+                const taxConfig = esPrincipal(emisorDelDoc)
+                  ? businessDoc.data()?.emissionConfig?.taxConfig
+                  : (await cargarEmisor(userId, String(emisorDelDoc).trim()))?.emissionConfig?.taxConfig
                 const isReducedIgv = taxConfig?.taxType === 'reduced' || taxConfig?.igvRate === 10.5
                 if (isReducedIgv) {
                   console.log(`⏸️ Envío ND de factura pausado por admin para negocio ${userId} (IGV reducido)`)
@@ -2672,8 +2829,26 @@ export const sendDebitNoteToSunat = onRequest(
         return
       }
 
-      const businessData = businessDoc.data()
-      await attachEmissionSecrets(businessDoc.id, businessData)
+      const negocio = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, negocio)
+
+      // Varios RUC: se firma con el RUC del comprobante. Sin emisor es el del
+      // negocio, como siempre (ver negocioQueFirma).
+      const firma = await negocioQueFirma(businessDoc.id, negocio, debitNoteData, { paraFirmar: true, docRef: debitNoteRef })
+      if (firma.error) {
+        await revertirEnvioNoIniciado(debitNoteRef, debitNoteData.sunatStatus, firma.error)
+        res.status(firma.transitorio ? 503 : 400).json({ error: firma.error })
+        return
+      }
+      const businessData = firma.negocio
+
+      // Varios RUC: la nota va con el RUC de la factura o boleta que modifica.
+      const rucDistinto = await revisarRucDeLaReferencia(businessDoc.id, negocio, debitNoteData, firma.emisorId)
+      if (rucDistinto) {
+        await revertirEnvioNoIniciado(debitNoteRef, debitNoteData.sunatStatus, rucDistinto)
+        res.status(400).json({ error: rucDistinto })
+        return
+      }
 
       // Mapear emissionConfig (configurado por super admin) al formato esperado
       if (businessData.emissionConfig) {
@@ -4812,6 +4987,8 @@ export const retryPendingInvoices = onSchedule(
       let totalSuccess = 0
       let totalFailed = 0
       let totalSkipped = 0
+      // Varios RUC: cada emisor se lee una vez por corrida.
+      const emisoresDeLaCorrida = new Map()
 
       for (const businessDoc of businessesSnapshot.docs) {
         const businessId = businessDoc.id
@@ -4819,7 +4996,7 @@ export const retryPendingInvoices = onSchedule(
       await attachEmissionSecrets(businessDoc.id, businessData)
 
         // Verificar que el negocio tenga configuración de emisión
-        if (!businessData.emissionConfig && !businessData.sunat?.enabled && !businessData.qpse?.enabled) {
+        if (!businessData.emissionConfig && !businessData.sunat?.enabled && !businessData.qpse?.enabled && !hayVariosRuc(businessData)) {
           continue // Saltar negocios sin configuración SUNAT
         }
 
@@ -4852,30 +5029,7 @@ export const retryPendingInvoices = onSchedule(
         }
 
         // Mapear emissionConfig al formato esperado (igual que en sendInvoiceToSunat)
-        const businessDataForEmission = { ...businessData }
-        if (businessData.emissionConfig) {
-          const config = businessData.emissionConfig
-          if (config.method === 'qpse') {
-            businessDataForEmission.qpse = {
-              enabled: config.qpse.enabled !== false,
-              usuario: config.qpse.usuario,
-              password: config.qpse.password,
-              environment: config.qpse.environment || 'demo',
-            }
-            businessDataForEmission.sunat = { enabled: false }
-          } else if (config.method === 'sunat_direct') {
-            businessDataForEmission.sunat = {
-              enabled: config.sunat.enabled !== false,
-              environment: config.sunat.environment || 'beta',
-              solUser: config.sunat.solUser,
-              solPassword: config.sunat.solPassword,
-              certificateName: config.sunat.certificateName,
-              certificatePassword: config.sunat.certificatePassword,
-              certificateData: config.sunat.certificateData,
-            }
-            businessDataForEmission.qpse = { enabled: false }
-          }
-        }
+        const businessDataForEmission = datosParaReenvio(businessData)
 
         // Buscar facturas/boletas pendientes de este negocio
         const invoicesRef = db.collection('businesses').doc(businessId).collection('invoices')
@@ -4945,19 +5099,66 @@ export const retryPendingInvoices = onSchedule(
             const docNumber = `${invoiceData.series}-${invoiceData.correlativeNumber}`
             console.log(`🚀 [RETRY] Procesando ${docNumber} (intento ${retryCount + 1})...`)
 
+            // ── VARIOS RUC: cada comprobante con SU RUC ──
+            // Antes los datos del negocio se armaban una vez y todo se reenviaba
+            // con eso: un comprobante del segundo RUC habría salido ACEPTADO con
+            // el RUC del primero, con el XML, la firma y el nombre del archivo
+            // coherentes entre sí. Sin emisor es el negocio de siempre, sin una
+            // lectura de más.
+            const firma = await negocioQueFirma(businessId, businessData, invoiceData, {
+              paraFirmar: true, docRef: invoicesRef.doc(invoiceId), cache: emisoresDeLaCorrida,
+            })
+            if (firma.error && firma.transitorio) {
+              totalSkipped++
+              continue
+            }
+            const esDeUnEmisor = !firma.error && !esPrincipal(firma.emisorId)
+            const datosDeEmision = esDeUnEmisor ? datosParaReenvio(firma.negocio) : businessDataForEmission
+            const motivoParaNoEnviar = firma.error
+              || (esDeUnEmisor && !datosDeEmision.sunat?.enabled && !datosDeEmision.qpse?.enabled
+                ? `El RUC ${datosDeEmision.ruc} no tiene configurado el envío a SUNAT. Comunícate con soporte.`
+                : null)
+              || (['nota_credito', 'nota_debito'].includes(invoiceData.documentType)
+                ? await revisarRucDeLaReferencia(businessId, businessData, invoiceData, firma.emisorId, emisoresDeLaCorrida)
+                : null)
+            if (motivoParaNoEnviar) {
+              // Como la nota de crédito de más: sin enviar y con el motivo a la
+              // vista. El reintento no lo vuelve a tomar; se manda a mano cuando
+              // se corrija lo que falta.
+              console.log(`🛑 [RETRY] ${docNumber} no se envía: ${motivoParaNoEnviar}`)
+              await invoicesRef.doc(invoiceId).update({
+                sunatStatus: 'not_sent',
+                sunatSendingStartedAt: null,
+                sunatError: motivoParaNoEnviar,
+                updatedAt: FieldValue.serverTimestamp(),
+              })
+              totalSkipped++
+              continue
+            }
+            // La pausa de facturas con IGV reducido mira el régimen de SU RUC.
+            if (esDeUnEmisor && invoiceData.documentType === 'factura' && pauseSunatRestaurants
+                && !pauseSunatExceptions.includes(businessId)) {
+              const regimen = firma.negocio.emissionConfig?.taxConfig
+              if (regimen?.taxType === 'reduced' || regimen?.igvRate === 10.5) {
+                console.log(`⏸️ [RETRY] ${docNumber}: pausa de facturas con IGV reducido (RUC ${datosDeEmision.ruc})`)
+                totalSkipped++
+                continue
+              }
+            }
+
             // ── PRE-VERIFICACIÓN: Consultar si SUNAT ya tiene el documento ──
             // Solo para SUNAT directo + facturas (getStatusCdr no soporta boletas ni QPse)
-            const isSunatDirect = !!(businessDataForEmission.sunat?.enabled)
+            const isSunatDirect = !!(datosDeEmision.sunat?.enabled)
             const isFactura = invoiceData.documentType?.toLowerCase() === 'factura'
 
             if (isSunatDirect && isFactura) {
               try {
                 console.log(`🔍 [RETRY] Verificando si SUNAT ya tiene ${docNumber}...`)
                 const statusCheck = await getStatusCdr({
-                  ruc: businessData.ruc,
-                  solUser: businessDataForEmission.sunat.solUser,
-                  solPassword: businessDataForEmission.sunat.solPassword,
-                  environment: businessDataForEmission.sunat.environment || 'beta',
+                  ruc: datosDeEmision.ruc,
+                  solUser: datosDeEmision.sunat.solUser,
+                  solPassword: datosDeEmision.sunat.solPassword,
+                  environment: datosDeEmision.sunat.environment || 'beta',
                   documentType: '01',
                   series: invoiceData.series,
                   number: String(invoiceData.correlativeNumber)
@@ -5025,7 +5226,7 @@ export const retryPendingInvoices = onSchedule(
             const emisor = invoiceData.documentType === 'nota_credito' ? emitirNotaCredito
               : invoiceData.documentType === 'nota_debito' ? emitirNotaDebito
               : emitirComprobante
-            const result = await emisor(invoiceForEmission, businessDataForEmission)
+            const result = await emisor(invoiceForEmission, datosDeEmision)
 
             // ── MANEJO DE 1033: Documento ya registrado en SUNAT ──
             const resultCode = String(result.responseCode || '')
@@ -5249,6 +5450,8 @@ export const resendPendingBoletas = onRequest(
       let totalSuccess = 0
       let totalFailed = 0
       const details = []
+      // Varios RUC: cada emisor se lee una vez por corrida.
+      const emisoresDeLaCorrida = new Map()
 
       for (const businessDoc of businessDocs) {
         const businessId = businessDoc.id
@@ -5256,7 +5459,7 @@ export const resendPendingBoletas = onRequest(
       await attachEmissionSecrets(businessDoc.id, businessData)
 
         // Verificar que tenga configuración de emisión
-        if (!businessData.emissionConfig && !businessData.sunat?.enabled && !businessData.qpse?.enabled) {
+        if (!businessData.emissionConfig && !businessData.sunat?.enabled && !businessData.qpse?.enabled && !hayVariosRuc(businessData)) {
           continue
         }
 
@@ -5285,30 +5488,7 @@ export const resendPendingBoletas = onRequest(
         totalFound += pendingBoletas.size
 
         // Mapear emissionConfig al formato esperado
-        const businessDataForEmission = { ...businessData }
-        if (businessData.emissionConfig) {
-          const config = businessData.emissionConfig
-          if (config.method === 'qpse') {
-            businessDataForEmission.qpse = {
-              enabled: config.qpse.enabled !== false,
-              usuario: config.qpse.usuario,
-              password: config.qpse.password,
-              environment: config.qpse.environment || 'demo',
-            }
-            businessDataForEmission.sunat = { enabled: false }
-          } else if (config.method === 'sunat_direct') {
-            businessDataForEmission.sunat = {
-              enabled: config.sunat.enabled !== false,
-              environment: config.sunat.environment || 'beta',
-              solUser: config.sunat.solUser,
-              solPassword: config.sunat.solPassword,
-              certificateName: config.sunat.certificateName,
-              certificatePassword: config.sunat.certificatePassword,
-              certificateData: config.sunat.certificateData,
-            }
-            businessDataForEmission.qpse = { enabled: false }
-          }
-        }
+        const businessDataForEmission = datosParaReenvio(businessData)
 
         for (const invoiceDoc of pendingBoletas.docs) {
           const invoiceData = invoiceDoc.data()
@@ -5332,7 +5512,18 @@ export const resendPendingBoletas = onRequest(
               correlativeNumber: invoiceData.correlativeNumber,
             }
 
-            const result = await emitirComprobante(invoiceForEmission, businessDataForEmission)
+            // Varios RUC: cada comprobante con SU RUC (ver retryPendingInvoices).
+            const firma = await negocioQueFirma(businessId, businessData, invoiceData, {
+              paraFirmar: true, docRef: invoicesRef.doc(invoiceId), cache: emisoresDeLaCorrida,
+            })
+            if (firma.error) {
+              console.log(`🛑 [RESEND-BOLETAS] ${invoiceData.series}-${invoiceData.correlativeNumber}: ${firma.error}`)
+              totalFailed++
+              continue
+            }
+            const datosDeEmision = esPrincipal(firma.emisorId) ? businessDataForEmission : datosParaReenvio(firma.negocio)
+
+            const result = await emitirComprobante(invoiceForEmission, datosDeEmision)
 
             // Manejo de 1033: Documento ya registrado en SUNAT
             const resCode = String(result.responseCode || '')
@@ -5468,13 +5659,15 @@ export const testRetryPendingInvoices = onRequest(
       const businessDocs = filterBusinessId
         ? (businessesSnapshot.exists ? [businessesSnapshot] : [])
         : businessesSnapshot.docs
+      // Varios RUC: cada emisor se lee una vez por corrida.
+      const emisoresDeLaCorrida = new Map()
 
       for (const businessDoc of businessDocs) {
         const businessId = businessDoc.id
         const businessData = businessDoc.data()
       await attachEmissionSecrets(businessDoc.id, businessData)
 
-        if (!businessData.emissionConfig && !businessData.sunat?.enabled && !businessData.qpse?.enabled) {
+        if (!businessData.emissionConfig && !businessData.sunat?.enabled && !businessData.qpse?.enabled && !hayVariosRuc(businessData)) {
           continue
         }
 
@@ -5512,30 +5705,7 @@ export const testRetryPendingInvoices = onRequest(
         details.push({ businessId, pendingCount: pendingInvoices.size })
 
         // Mapear emissionConfig
-        const businessDataForEmission = { ...businessData }
-        if (businessData.emissionConfig) {
-          const config = businessData.emissionConfig
-          if (config.method === 'qpse') {
-            businessDataForEmission.qpse = {
-              enabled: config.qpse.enabled !== false,
-              usuario: config.qpse.usuario,
-              password: config.qpse.password,
-              environment: config.qpse.environment || 'demo',
-            }
-            businessDataForEmission.sunat = { enabled: false }
-          } else if (config.method === 'sunat_direct') {
-            businessDataForEmission.sunat = {
-              enabled: config.sunat.enabled !== false,
-              environment: config.sunat.environment || 'beta',
-              solUser: config.sunat.solUser,
-              solPassword: config.sunat.solPassword,
-              certificateName: config.sunat.certificateName,
-              certificatePassword: config.sunat.certificatePassword,
-              certificateData: config.sunat.certificateData,
-            }
-            businessDataForEmission.qpse = { enabled: false }
-          }
-        }
+        const businessDataForEmission = datosParaReenvio(businessData)
 
         for (const invoiceDoc of pendingInvoices.docs) {
           const invoiceData = invoiceDoc.data()
@@ -5570,7 +5740,18 @@ export const testRetryPendingInvoices = onRequest(
               correlativeNumber: invoiceData.correlativeNumber,
             }
 
-            const result = await emitirComprobante(invoiceForEmission, businessDataForEmission)
+            // Varios RUC: cada comprobante con SU RUC (ver retryPendingInvoices).
+            const firma = await negocioQueFirma(businessId, businessData, invoiceData, {
+              paraFirmar: true, docRef: invoicesRef.doc(invoiceId), cache: emisoresDeLaCorrida,
+            })
+            if (firma.error) {
+              console.log(`🛑 [RETRY-TEST] ${invoiceData.series}-${invoiceData.correlativeNumber}: ${firma.error}`)
+              totalFailed++
+              continue
+            }
+            const datosDeEmision = esPrincipal(firma.emisorId) ? businessDataForEmission : datosParaReenvio(firma.negocio)
+
+            const result = await emitirComprobante(invoiceForEmission, datosDeEmision)
 
             // Manejo de 1033: Documento ya registrado en SUNAT
             const testResCode = String(result.responseCode || '')
@@ -5802,8 +5983,17 @@ export const voidInvoice = onRequest(
         return
       }
 
-      const businessData = businessDoc.data()
-      await attachEmissionSecrets(businessDoc.id, businessData)
+      const negocio = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, negocio)
+
+      // Varios RUC: la baja la firma el RUC con el que salió el comprobante
+      // (sin emisor, el del negocio, como siempre).
+      const firma = await negocioQueFirma(businessDoc.id, negocio, invoiceData, { docRef: invoiceRef })
+      if (firma.error) {
+        res.status(firma.transitorio ? 503 : 400).json({ error: firma.error })
+        return
+      }
+      const businessData = firma.negocio
 
       // Obtener configuración de emisión (puede estar en emissionConfig o sunat)
       const emissionConfig = businessData.emissionConfig || {}
@@ -5845,7 +6035,8 @@ export const voidInvoice = onRequest(
       const todayStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`
 
       // Usar un documento contador para el día
-      const counterDocRef = voidedDocsRef.doc(`counter_${todayStr}`)
+      // Cada RUC numera sus bajas del día (ver idDelContadorDelDia).
+      const counterDocRef = voidedDocsRef.doc(idDelContadorDelDia(todayStr, firma.emisorId))
 
       let correlativo = 1
       const counterDoc = await counterDocRef.get()
@@ -5950,6 +6141,7 @@ export const voidInvoice = onRequest(
 
         // Guardar intento fallido
         await voidedDocsRef.add({
+          ...campoDeEmisor(firma.emisorId),
           voidedDocId,
           dateStr: todayStr,
           correlativo,
@@ -5975,6 +6167,7 @@ export const voidInvoice = onRequest(
 
       // 8. Guardar documento de baja con ticket
       const voidedDocRef = await voidedDocsRef.add({
+        ...campoDeEmisor(firma.emisorId),
         voidedDocId,
         dateStr: todayStr,
         correlativo,
@@ -6331,8 +6524,17 @@ export const checkVoidStatus = onRequest(
 
       // Consultar estado en SUNAT
       const businessDoc = await db.collection('businesses').doc(userId).get()
-      const businessData = businessDoc.data()
-      await attachEmissionSecrets(businessDoc.id, businessData)
+      const negocio = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, negocio)
+      // Varios RUC: el ticket lo consulta el RUC que mandó la baja. El doc de
+      // la baja lo guarda (`emisorId`); sin campo es del principal, como toda
+      // baja anterior a esto.
+      const firma = await negocioQueFirma(businessDoc.id, negocio, { emisorId: voidedData.emisorId })
+      if (firma.error) {
+        res.status(firma.transitorio ? 503 : 400).json({ error: firma.error })
+        return
+      }
+      const businessData = firma.negocio
       const invoiceRef = db.collection('businesses').doc(userId).collection('invoices').doc(voidedData.invoiceId)
 
       // Detectar si fue enviado por QPSe o SUNAT directo
@@ -6640,8 +6842,17 @@ export const voidBoleta = onRequest(
         return
       }
 
-      const businessData = businessDoc.data()
-      await attachEmissionSecrets(businessDoc.id, businessData)
+      const negocio = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, negocio)
+
+      // Varios RUC: la baja la firma el RUC con el que salió el comprobante
+      // (sin emisor, el del negocio, como siempre).
+      const firma = await negocioQueFirma(businessDoc.id, negocio, boletaData, { docRef: boletaRef })
+      if (firma.error) {
+        res.status(firma.transitorio ? 503 : 400).json({ error: firma.error })
+        return
+      }
+      const businessData = firma.negocio
 
       // Obtener configuración de emisión
       const emissionConfig = businessData.emissionConfig || {}
@@ -6681,7 +6892,8 @@ export const voidBoleta = onRequest(
       const todayStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`
 
       // Usar documento contador para el día
-      const counterDocRef = summaryDocsRef.doc(`counter_${todayStr}`)
+      // Cada RUC numera sus resúmenes del día (ver idDelContadorDelDia).
+      const counterDocRef = summaryDocsRef.doc(idDelContadorDelDia(todayStr, firma.emisorId))
 
       let correlativo = 1
       const counterDoc = await counterDocRef.get()
@@ -6825,6 +7037,7 @@ export const voidBoleta = onRequest(
 
         // Guardar intento fallido
         await summaryDocsRef.add({
+          ...campoDeEmisor(firma.emisorId),
           summaryDocId,
           dateStr: todayStr,
           correlativo,
@@ -6851,6 +7064,7 @@ export const voidBoleta = onRequest(
 
       // 12. Guardar documento de resumen con ticket
       const summaryDocRef = await summaryDocsRef.add({
+        ...campoDeEmisor(firma.emisorId),
         summaryDocId,
         dateStr: todayStr,
         correlativo,
@@ -7175,8 +7389,17 @@ export const voidBoletaQPse = onRequest(
         return
       }
 
-      const businessData = businessDoc.data()
-      await attachEmissionSecrets(businessDoc.id, businessData)
+      const negocio = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, negocio)
+
+      // Varios RUC: la baja la firma el RUC con el que salió el comprobante
+      // (sin emisor, el del negocio, como siempre).
+      const firma = await negocioQueFirma(businessDoc.id, negocio, boletaData, { docRef: boletaRef })
+      if (firma.error) {
+        res.status(firma.transitorio ? 503 : 400).json({ error: firma.error })
+        return
+      }
+      const businessData = firma.negocio
 
       // Obtener configuración de QPse
       const emissionConfig = businessData.emissionConfig || {}
@@ -7215,7 +7438,8 @@ export const voidBoletaQPse = onRequest(
       const todayStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`
 
       // Usar documento contador para el día
-      const counterDocRef = summaryDocsRef.doc(`counter_${todayStr}`)
+      // Cada RUC numera sus resúmenes del día (ver idDelContadorDelDia).
+      const counterDocRef = summaryDocsRef.doc(idDelContadorDelDia(todayStr, firma.emisorId))
 
       let correlativo = 1
       const counterDoc = await counterDocRef.get()
@@ -7359,6 +7583,7 @@ export const voidBoletaQPse = onRequest(
 
       // 12. Guardar documento de resumen
       const summaryDocRef = await summaryDocsRef.add({
+        ...campoDeEmisor(firma.emisorId),
         summaryDocId,
         dateStr: todayStr,
         correlativo,
@@ -7633,8 +7858,17 @@ export const voidInvoiceQPse = onRequest(
         return
       }
 
-      const businessData = businessDoc.data()
-      await attachEmissionSecrets(businessDoc.id, businessData)
+      const negocio = businessDoc.data()
+      await attachEmissionSecrets(businessDoc.id, negocio)
+
+      // Varios RUC: la baja la firma el RUC con el que salió el comprobante
+      // (sin emisor, el del negocio, como siempre).
+      const firma = await negocioQueFirma(businessDoc.id, negocio, invoiceData, { docRef: invoiceRef })
+      if (firma.error) {
+        res.status(firma.transitorio ? 503 : 400).json({ error: firma.error })
+        return
+      }
+      const businessData = firma.negocio
 
       // Obtener configuración de QPse
       const emissionConfig = businessData.emissionConfig || {}
@@ -7673,7 +7907,8 @@ export const voidInvoiceQPse = onRequest(
       const todayStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`
 
       // Usar documento contador para el día
-      const counterDocRef = voidedDocsRef.doc(`counter_${todayStr}`)
+      // Cada RUC numera sus bajas del día (ver idDelContadorDelDia).
+      const counterDocRef = voidedDocsRef.doc(idDelContadorDelDia(todayStr, firma.emisorId))
 
       let correlativo = 1
       const counterDoc = await counterDocRef.get()
@@ -7771,6 +8006,7 @@ export const voidInvoiceQPse = onRequest(
 
       // 10. Guardar documento de comunicación de baja
       const voidedDocRef = await voidedDocsRef.add({
+        ...campoDeEmisor(firma.emisorId),
         voidedDocId,
         dateStr: todayStr,
         correlativo,

@@ -274,3 +274,193 @@ export function seriesSugeridas(n = 1) {
     nota_debito_boleta: `BD${c}1`,
   }
 }
+
+// ---------------------------------------------------------------------------
+// El servidor: con qué RUC se firma, se anula o se consulta cada documento.
+// ---------------------------------------------------------------------------
+
+/** ¿La cuenta tiene más de un RUC? Sin series de emisor, nadie más pudo haber emitido. */
+export function hayVariosRuc(negocio) {
+  return Object.keys(negocio?.emisorSeries || {}).length > 0
+}
+
+/**
+ * Milisegundos de una fecha como venga guardada: Timestamp de Firestore (con
+ * `toMillis`, o serializado como `seconds`/`_seconds`), Date, texto o número.
+ * null si no hay forma de leerla.
+ */
+export function aMilisegundos(valor) {
+  if (valor === undefined || valor === null || valor === '') return null
+  if (typeof valor === 'number') return Number.isFinite(valor) ? valor : null
+  if (typeof valor === 'string') {
+    const t = Date.parse(valor)
+    return Number.isNaN(t) ? null : t
+  }
+  if (valor instanceof Date) return Number.isNaN(valor.getTime()) ? null : valor.getTime()
+  if (typeof valor.toMillis === 'function') return valor.toMillis()
+  if (typeof valor.toDate === 'function') return valor.toDate().getTime()
+  const segundos = valor.seconds ?? valor._seconds
+  if (typeof segundos === 'number') {
+    return segundos * 1000 + Math.floor((valor.nanoseconds ?? valor._nanoseconds ?? 0) / 1e6)
+  }
+  return null
+}
+
+/**
+ * De qué emisor es un documento que se va a firmar, anular o consultar.
+ *
+ * - Lleva `emisorId`: ese. Al firmarlo por primera vez (`paraFirmar`), su serie
+ *   no puede ser de OTRO RUC de la cuenta: sería un documento numerado con el
+ *   contador de un RUC que se quiere firmar con el otro. Al anular manda el
+ *   campo: el documento ya salió con ese RUC, aunque después se hayan
+ *   cambiado las series.
+ * - No lo lleva: el principal, salvo que su serie sea de un emisor adicional
+ *   (un camino que se olvidó del campo). Entonces es de ese emisor, y
+ *   `deducido` pide confirmarlo con las fechas (`confirmarEmisorDeducido`).
+ *
+ * @returns {{emisorId: string, deducido: boolean} | {error: string}}
+ */
+export function emisorDelDocumento(documento, negocio, { paraFirmar = false } = {}) {
+  const declarado = emisorIdDe(documento)
+  const conCampo = !vacio(documento?.emisorId)
+  const serie = limpio(documento?.series).toUpperCase()
+  const dueno = serie ? emisorPorSerie(serie, negocio) : null
+
+  if (conCampo) {
+    if (paraFirmar && dueno !== null && dueno !== declarado) {
+      return {
+        error: `La serie ${serie} es de otro RUC de la cuenta: este comprobante no se envía para no firmarlo con el RUC equivocado. Comunícate con soporte.`,
+      }
+    }
+    return { emisorId: declarado, deducido: false }
+  }
+  if (dueno !== null && dueno !== EMISOR_PRINCIPAL) return { emisorId: dueno, deducido: true }
+  return { emisorId: EMISOR_PRINCIPAL, deducido: false }
+}
+
+/**
+ * Una serie es del emisor desde que el emisor existe. Un documento sin
+ * `emisorId` anterior al emisor es del principal: es de cuando la cuenta usaba
+ * esa serie, antes de dársela al emisor. Sin las dos fechas no se adivina:
+ * firmar con el RUC equivocado no tiene vuelta.
+ *
+ * @param {object} documento
+ * @param {object} emisor  el doc del emisor, con `id` y `creadoEn`
+ * @returns {{emisorId: string} | {error: string}}
+ */
+export function confirmarEmisorDeducido(documento, emisor) {
+  const delDocumento = aMilisegundos(documento?.createdAt)
+  const delEmisor = aMilisegundos(emisor?.creadoEn)
+  if (delDocumento === null || delEmisor === null) {
+    return {
+      error: `No se puede saber con qué RUC se emitió este comprobante: su serie ${limpio(documento?.series).toUpperCase()} es del RUC ${limpio(emisor?.ruc)}, pero el comprobante no lo dice. Comunícate con soporte.`,
+    }
+  }
+  return { emisorId: delDocumento < delEmisor ? EMISOR_PRINCIPAL : limpio(emisor.id) }
+}
+
+/**
+ * El negocio con el que se firma, se anula o se consulta un documento.
+ *
+ * Una cuenta de un solo RUC sale por el primer `return`, sin leer nada y con
+ * el MISMO objeto que entró: el camino de siempre no cambia. Con un emisor
+ * adicional devuelve el negocio con el emisor encima (`empresaEfectiva`), que
+ * es lo que leen los generadores de XML, el router y los clientes de SUNAT y
+ * QPse sin enterarse de que hay otro RUC.
+ *
+ * Nunca cae al principal "por las dudas": si el emisor no existe, o la serie
+ * es de otro RUC, devuelve `error`. `transitorio` = no se pudo leer; vale la
+ * pena reintentar.
+ *
+ * @param {object} documento
+ * @param {object} negocio  el doc del negocio, ya con sus credenciales
+ * @param {object} opciones
+ * @param {(emisorId: string) => Promise<object|null>} opciones.cargarEmisor
+ *   trae el emisor con sus credenciales, o null si no existe. El servidor lo
+ *   lee de Firestore; las pruebas, de un objeto.
+ * @param {boolean} [opciones.paraFirmar]
+ * @returns {Promise<{negocio: object, emisorId: string, emisor?: object, deducido?: boolean} | {error: string, transitorio?: boolean}>}
+ */
+export async function negocioParaElDocumento(documento, negocio, { cargarEmisor, paraFirmar = false } = {}) {
+  const decision = emisorDelDocumento(documento, negocio, { paraFirmar })
+  if (decision.error) return { error: decision.error }
+  if (esPrincipal(decision.emisorId)) return { negocio, emisorId: EMISOR_PRINCIPAL }
+
+  let emisor
+  try {
+    emisor = await cargarEmisor(decision.emisorId)
+  } catch {
+    return { error: 'No se pudo leer el RUC de este comprobante. Vuelve a intentarlo en unos minutos.', transitorio: true }
+  }
+  if (!emisor) {
+    return { error: 'El RUC con el que se emitió este comprobante ya no está configurado en la cuenta. Comunícate con soporte.' }
+  }
+  emisor = { ...emisor, id: decision.emisorId }
+
+  if (decision.deducido) {
+    const confirmado = confirmarEmisorDeducido(documento, emisor)
+    if (confirmado.error) return { error: confirmado.error }
+    if (esPrincipal(confirmado.emisorId)) return { negocio, emisorId: EMISOR_PRINCIPAL }
+  }
+  return {
+    negocio: empresaEfectiva(negocio, emisor),
+    emisorId: decision.emisorId,
+    emisor,
+    deducido: decision.deducido,
+  }
+}
+
+/**
+ * Una nota de crédito o de débito la firma el MISMO RUC que emitió el
+ * comprobante que modifica. Solo se mira en cuentas con más de un RUC: con
+ * uno solo son del mismo por definición, y no se lee nada.
+ *
+ * Ante la duda (la referencia no está, o no se puede resolver) no se frena:
+ * que conteste SUNAT, como con la nota de crédito de más.
+ *
+ * @param {object} nota
+ * @param {string} emisorDeLaNota  el que ya se resolvió para firmarla
+ * @param {object} negocio
+ * @param {{cargarReferencia: (id: string) => Promise<object|null>, cargarEmisor: Function}} fuentes
+ * @returns {Promise<string|null>}  el motivo para no firmarla, o null
+ */
+export async function motivoPorRucDeLaReferencia(nota, emisorDeLaNota, negocio, { cargarReferencia, cargarEmisor } = {}) {
+  const referenciaId = limpio(nota?.referencedInvoiceFirestoreId)
+  if (!referenciaId) return null
+  if (!hayVariosRuc(negocio) && esPrincipal(nota?.emisorId)) return null
+
+  let referencia
+  try {
+    referencia = await cargarReferencia(referenciaId)
+  } catch {
+    return null
+  }
+  if (!referencia) return null
+
+  const suya = await negocioParaElDocumento(referencia, negocio, { cargarEmisor })
+  if (suya.error) return null
+  const deLaNota = esPrincipal(emisorDeLaNota) ? EMISOR_PRINCIPAL : limpio(emisorDeLaNota)
+  if (suya.emisorId === deLaNota) return null
+
+  const numero = limpio(referencia.number) || `${limpio(referencia.series)}-${limpio(referencia.correlativeNumber)}`
+  return `Esta nota modifica el comprobante ${numero}, que es del RUC ${limpio(suya.negocio?.ruc)}. Una nota se emite con el mismo RUC de su comprobante; comunícate con soporte.`
+}
+
+/**
+ * El contador del día de las comunicaciones de baja (RA) y de los resúmenes
+ * diarios (RC). Cada RUC numera los suyos: el `RA-20260910-1` del RUC A y el
+ * del RUC B son documentos distintos para SUNAT. El principal sigue con el
+ * contador de siempre.
+ */
+export function idDelContadorDelDia(fecha, emisorId) {
+  return esPrincipal(emisorId) ? `counter_${fecha}` : `counter_${limpio(emisorId)}_${fecha}`
+}
+
+/**
+ * Lo que se guarda en la baja o en el resumen para saber después con qué RUC
+ * se mandó: la consulta del ticket la tiene que hacer el mismo RUC. El
+ * principal no lleva nada, igual que los comprobantes.
+ */
+export function campoDeEmisor(emisorId) {
+  return esPrincipal(emisorId) ? {} : { emisorId: limpio(emisorId) }
+}
