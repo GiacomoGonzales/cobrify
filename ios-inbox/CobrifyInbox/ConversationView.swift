@@ -10,6 +10,12 @@ struct ConversationView: View {
     let alAbrir: () -> Void
     @StateObject private var store = MensajesStore()
     @State private var borrador = ""
+    /// Cuándo salió lo último del compositor. Lo usa el `onChange` del cuadro
+    /// para borrar lo que el teclado vuelva a meter justo después de enviar.
+    @State private var momentoDeEnvio: Date?
+    /// El último TEXTO enviado y cuándo: un segundo toque con el mismo texto a
+    /// los pocos segundos no se manda otra vez.
+    @State private var ultimoTextoEnviado: (texto: String, cuando: Date)?
     @State private var errorEnvio: String?
     @State private var mostrarGaleria = false
     @State private var fotoSeleccionada: PhotosPickerItem?
@@ -780,6 +786,24 @@ struct ConversationView: View {
                         TextField("Mensaje", text: $borrador, axis: .vertical)
                             .lineLimit(1...5)
                             .focused($cuadroEnfocado)
+                            .onChange(of: borrador) { _, nuevo in
+                                // Escribiendo rápido, el teclado del iPhone (autocorrector
+                                // y predicción) puede volver a meter en el cuadro el mensaje
+                                // que se acaba de enviar: SwiftUI borra el texto, pero el
+                                // cuadro de UIKit todavía no se enteró y le escribe encima lo
+                                // que tenía. Pasó en la primera conversación real (10-set):
+                                // el mensaje salió, el cuadro quedó lleno y otro toque lo
+                                // habría mandado dos veces. En tres décimas de segundo nadie
+                                // empieza un mensaje nuevo, así que lo que aparezca en ese
+                                // hueco es el teclado, y se vuelve a borrar.
+                                //
+                                // SALVO si el envío falló: ahí el texto vuelve a propósito
+                                // para no perder lo escrito, y `errorEnvio` se pone ANTES de
+                                // devolverlo, así que esta guarda lo deja en paz.
+                                guard let m = momentoDeEnvio, !nuevo.isEmpty, errorEnvio == nil,
+                                      Date().timeIntervalSince(m) < 0.3 else { return }
+                                borrador = ""
+                            }
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
                             // Radio fijo y no cápsula: con una línea se ve
@@ -953,6 +977,7 @@ struct ConversationView: View {
         if let media = mediaPendiente {
             mediaPendiente = nil
             borrador = ""
+            momentoDeEnvio = Date()
             errorEnvio = nil
             let eco = Mensaje(pendienteTipo: media.tipo, texto: texto)
             store.pendientes.append(eco)
@@ -971,9 +996,19 @@ struct ConversationView: View {
             return
         }
         guard !texto.isEmpty else { return }
+        // Un segundo toque con EXACTAMENTE el mismo texto a los pocos segundos
+        // no es un mensaje nuevo: es el cuadro que se volvió a llenar solo (ver
+        // el `onChange` de `borrador`) o un dedo que tocó dos veces. Mandarlo
+        // otra vez es el duplicado que el cliente ve como un error nuestro.
+        if let u = ultimoTextoEnviado, u.texto == texto, Date().timeIntervalSince(u.cuando) < 5 {
+            borrador = ""
+            return
+        }
         let cita = respondiendoA?.id
         respondiendoA = nil
         borrador = ""
+        momentoDeEnvio = Date()
+        ultimoTextoEnviado = (texto, Date())
         errorEnvio = nil
         // Sin bloquear el compositor: el mensaje ya se ve y puedes seguir
         // escribiendo el siguiente mientras este viaja.
@@ -981,6 +1016,11 @@ struct ConversationView: View {
             let error = await store.enviar(texto: texto, conversationId: conv.id, respondeA: cita)
             if let error {
                 errorEnvio = error
+                // Un envío que FALLÓ no cuenta como enviado. Sin esto, reintentar
+                // con el mismo texto en los 5 s siguientes chocaba con la red
+                // contra duplicados de `enviar()`: borraba el cuadro y no mandaba
+                // nada, justo cuando el usuario intentaba reenviarlo.
+                ultimoTextoEnviado = nil
                 // El texto vuelve al borrador: nada se pierde por un fallo.
                 if borrador.isEmpty { borrador = texto }
             }
