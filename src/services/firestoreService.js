@@ -23,6 +23,7 @@ import { generatePetId, normalizePets } from '@/utils/petUtils'
 import { buscarLoteEnAlmacen, cantidadDeLote, idDeLote } from '@/utils/batchLookup'
 import { calcularStockPorAlmacen } from '@/utils/warehouseStockMath'
 import { esDeSucursal } from '@/utils/branchScope'
+import { revisarAntesDeEmitir, textoDeErrores } from '@/utils/sunatPreflight'
 
 /**
  * Servicio para interactuar con Firestore
@@ -87,6 +88,43 @@ export const createInvoice = async (userId, invoiceData) => {
  */
 export const createInvoiceWithNumber = async (userId, invoiceData, documentType, warehouseId = null, branchId = null) => {
   try {
+    /**
+     * ÚLTIMA DEFENSA: una línea que SUNAT va a rechazar no llega a tener número.
+     *
+     * Cada pantalla revisa lo suyo antes de cobrar, y ahí el aviso es mucho
+     * mejor: se corrige la venta en el momento, con el cliente delante. Pero
+     * las pantallas son varias —POS, comprobante manual, emisión masiva, el
+     * chat, la conversión de una nota de venta— y agregar una nueva sin
+     * acordarse de revisar es lo más fácil del mundo. De hecho ya pasó: la
+     * revisión existía desde agosto solo en dos de ellas.
+     *
+     * Acá pasan TODAS, y pasa ANTES de la transacción que asigna el
+     * correlativo. Es la diferencia entre "no se pudo emitir" y "se emitió
+     * un comprobante muerto que gastó un número": hasta junio de 2026 el
+     * servidor rechazaba DESPUÉS de crearlo y dejaba huecos en la
+     * correlatividad que había que reenviar a mano.
+     *
+     * El caso que motivó esto: productos cargados con precio 0 que se
+     * regalan. SUNAT no acepta una línea que valga cero sin decir cuánto
+     * vale lo regalado, y devuelve el error 3105 tumbando el comprobante
+     * entero (26 boletas de un solo negocio entre julio y setiembre).
+     */
+    const revision = revisarAntesDeEmitir({
+      documentType,
+      items: invoiceData?.items || [],
+      // El cliente ya lo revisan las pantallas y acá puede venir con otra
+      // forma según el camino; revisar las LÍNEAS es lo que ninguna otra
+      // capa garantiza.
+      customer: null,
+    })
+    if (revision.errores.length > 0) {
+      return {
+        success: false,
+        error: 'SUNAT rechazaría este comprobante:\n\n' + textoDeErrores(revision.errores),
+        erroresSunat: revision.errores,
+      }
+    }
+
     const businessRef = doc(db, 'businesses', userId)
     const invoicesCollection = collection(db, 'businesses', userId, 'invoices')
     // Generar ID del documento de factura antes de la transacción
