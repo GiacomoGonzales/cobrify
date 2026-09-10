@@ -263,8 +263,24 @@ export function calculateMixedInvoiceAmounts(items, igvRate = 18) {
  *             hasGravada:boolean, hasExoOrIna:boolean }}
  */
 export function getComprobanteBreakdown(invoice, companySettings) {
-  const opExo = Number(invoice?.opExoneradas || 0)
-  const opIna = Number(invoice?.opInafectas || 0)
+  // Lo que el comprobante congeló al emitirse: el POS, el folio de hotel y la
+  // cotización guardan opExoneradas/opInafectas. Las notas de crédito y de
+  // débito, la emisión masiva, el chat y el comprobante manual NO los guardan,
+  // y para esos se leen las líneas con el criterio que usaban los reportes
+  // (afectación 20 = exonerado, 30 = inafecto; su precio no lleva IGV). Sin
+  // esto, la nota de crédito de un producto exonerado salía como OP. GRAVADA
+  // en el papel y en los reportes.
+  let opExo = Number(invoice?.opExoneradas || 0)
+  let opIna = Number(invoice?.opInafectas || 0)
+  if (!(opExo > 0 || opIna > 0) && Array.isArray(invoice?.items)) {
+    for (const item of invoice.items) {
+      const monto = (Number(item?.quantity) || 1) * (Number(item?.price || item?.unitPrice) || 0)
+      if (item?.taxAffectation === '20') opExo += monto
+      else if (item?.taxAffectation === '30') opIna += monto
+    }
+    opExo = Number(opExo.toFixed(2))
+    opIna = Number(opIna.toFixed(2))
+  }
   const igv = Number(invoice?.igv ?? invoice?.tax ?? 0)
   const total = Number(invoice?.total || 0)
   // Base sin IGV (gravada + exonerada + inafecta). Un comprobante viejo sin
