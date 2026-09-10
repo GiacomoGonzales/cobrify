@@ -14,6 +14,7 @@ import { getUnreadNotifications, checkAndCreateSubscriptionNotifications } from 
 import NotificationPanel from './NotificationPanel'
 import GuidePanel from './guide/GuidePanel'
 import { ABRIR_GUIA_EVENT } from './guide/GuideLink'
+import { nombreDelVisitante } from '@/utils/nombreDelVisitante'
 
 // Modo de negocio → etiqueta + ícono (para el selector de local del Navbar)
 const MODE_META = {
@@ -144,6 +145,9 @@ function Navbar() {
 
   // Etiqueta sutil del modo demo (el badge vive DENTRO del header, no como
   // una cinta aparte que descuadra el layout). El modo se anexa en pantallas sm+.
+  // Quién está mirando el demo, si vino por un enlace con su nombre.
+  const nombreVisitante = isDemoMode ? nombreDelVisitante() : null
+
   const demoModeLabel = {
     restaurant: 'Restaurante',
     pharmacy: 'Farmacia',
@@ -175,6 +179,21 @@ function Navbar() {
             <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: branding.primaryColor }} />
             DEMO
             {demoModeLabel && <span className="hidden sm:inline font-normal text-gray-400">· {demoModeLabel}</span>}
+          </span>
+        )}
+
+        {/* El nombre de QUIEN está mirando, si llegó por un enlace con `?negocio=`.
+            El asistente de ventas manda el demo ya con el nombre de su negocio, y
+            sin esto no lo vería en ninguna parte: el nombre solo se pinta dentro
+            de los comprobantes. Se dice "así se vería para X" y no se renombra el
+            demo a secas, porque es la verdad: no es su cuenta, es una muestra. */}
+        {isDemoMode && nombreVisitante && (
+          <span className="inline-flex items-center gap-1.5 text-[12.5px] text-gray-500 min-w-0" title={`Así se vería Cobrify para ${nombreVisitante}`}>
+            {/* La coletilla se cae en el celular, que es donde la mayoría abre
+                el enlace del WhatsApp y el encabezado no da para más. El nombre
+                no se cae nunca: es lo único que importa de esta franja. */}
+            <span className="hidden sm:inline text-gray-400">así se vería para</span>
+            <strong className="font-semibold text-gray-800 truncate max-w-[130px] sm:max-w-[220px]">{nombreVisitante}</strong>
           </span>
         )}
 

@@ -1,9 +1,9 @@
 import { createContext, useContext, useState, useEffect, useSyncExternalStore } from 'react'
 import { iniciarDemo, limpiarDemo, datosDemo, suscribirDemo } from '@/data/demo/demoStore'
+import { conNombreDelVisitante } from '@/utils/nombreDelVisitante'
 
 const DemoContext = createContext(null)
 
-// Datos de ejemplo para el demo
 const generateDemoData = () => {
   const today = new Date()
   const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1)
@@ -1690,7 +1690,7 @@ export const DemoProvider = ({ children, rubro = null }) => {
     isDemoMode: true,
     // El vivo manda: es el que trae las ventas y los productos que el
     // visitante creó en esta sesión.
-    demoData: datosVivos || demoData,
+    demoData: conNombreDelVisitante(datosVivos || demoData),
     rubroDemo: rubro,
   }
 

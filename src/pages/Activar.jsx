@@ -223,8 +223,15 @@ export default function Activar() {
   // banco, "Bienvenido, Rosa" suena a persona.
   const primerNombre = (alta?.nombre || '').trim().split(' ')[0]
 
+  // Una prueba y una cuenta contratada no se saludan igual. El que viene a
+  // probar tiene que SABER que está probando desde la primera línea: si se
+  // entera al séptimo día, cuando se le vence, se siente engañado.
+  const esPrueba = alta?.plan === 'trial'
+  const saludo = `Bienvenido${primerNombre ? `, ${primerNombre}` : ''}. `
+    + (esPrueba ? 'Vamos a activar tu periodo de prueba.' : 'Vamos a crear tu cuenta.')
+
   return (
-    <Marco bajada={`Bienvenido${primerNombre ? `, ${primerNombre}` : ''}. Vamos a crear tu cuenta.`}>
+    <Marco bajada={saludo}>
       <Pasos actual={paso} />
 
       {paso === 0 && (
@@ -577,11 +584,15 @@ function Final({ listo, alta, correo }) {
           </svg>
         </div>
         <h1 className="text-[19px] font-semibold text-gray-900">
-          Tu cuenta está lista{alta.nombre ? `, ${alta.nombre.split(' ')[0]}` : ''}
+          {alta.plan === 'trial' ? 'Tu prueba está lista' : 'Tu cuenta está lista'}
+          {alta.nombre ? `, ${alta.nombre.split(' ')[0]}` : ''}
         </h1>
         {vence && (
           <p className="mt-1 text-[13px] text-gray-500">
-            {alta.planNombre ? `${alta.planNombre} · a` : 'A'}ctiva hasta el {vence}
+            {alta.plan === 'trial'
+              // En la prueba la fecha es LO que hay que ver: es lo que se acaba.
+              ? `Puedes probarlo hasta el ${vence}`
+              : `${alta.planNombre ? `${alta.planNombre} · a` : 'A'}ctiva hasta el ${vence}`}
           </p>
         )}
       </div>

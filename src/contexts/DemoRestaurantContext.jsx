@@ -1,4 +1,5 @@
 import { createContext, useContext, useState } from 'react'
+import { conNombreDelVisitante } from '@/utils/nombreDelVisitante'
 
 const DemoRestaurantContext = createContext(null)
 
@@ -1174,10 +1175,11 @@ export function DemoRestaurantProvider({ children }) {
   const [demoData] = useState(generateRestaurantDemoData())
   const [isDemo] = useState(true)
 
+  const conNombre = conNombreDelVisitante(demoData)
   const value = {
-    ...demoData,
+    ...conNombre,
     isDemo,
-    user: demoData.user,
+    user: conNombre.user,
     getBusinessId: () => 'demo-restaurant-user',
   }
 

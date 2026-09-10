@@ -17,8 +17,12 @@ import { validarCambioDePlan, registroDeCambioDePlan } from '@/utils/cambioDePla
 import { db } from '../lib/firebase';
 import { notifyPaymentReceived, notifySubscriptionRenewed, notifyPlanChanged, notifyWelcome } from './notificationService';
 import { getCustomPlans } from './customPlanService';
+import { PLANES_VENDIBLES } from '@/data/planes'
 
 // Planes disponibles - Nuevos precios 2025
+// Los SEIS que se venden hoy viven en `@/data/planes` (reexporta el archivo de
+// `functions/`), para que el servidor lea los mismos precios que esta pantalla.
+// Los de abajo son planes viejos y heredados: no se venden, solo se respetan.
 export const PLANS = {
   trial: {
     name: "Prueba Gratuita",
@@ -43,70 +47,18 @@ export const PLANS = {
   // fija el cobro del reseller: Básico 100, resto 500 (QPse) o ilimitado (SUNAT
   // directo). maxBranches aquí es metadata; el cobro del reseller no la modifica.
   // ============================================
-  basico_mensual: {
-    name: "Plan Básico - 1 Mes",
-    category: "qpse",
-    months: 1,
-    pricePerMonth: 19.90,
-    totalPrice: 19.90,
-    emissionMethod: "qpse",
-    // 100 comprobantes desde el 24-jul-2026 (antes 500). SOLO para altas y cambios
-    // de plan NUEVOS: los clientes antiguos con 500 conservan su límite porque la
-    // renovación del mismo plan preserva los limits del doc (ver registerPayment y
-    // el webhook de Flow, que en renovación no tocan limits).
-    limits: { maxInvoicesPerMonth: 100, maxCustomers: -1, maxProducts: -1, maxBranches: 1, sunatIntegration: true, multiUser: true }
-  },
-  mensual: {
-    name: "Plan Mensual - 1 Mes",
-    category: "qpse",
-    months: 1,
-    pricePerMonth: 29.90,
-    totalPrice: 29.90,
-    emissionMethod: "qpse",
-    limits: { maxInvoicesPerMonth: 1000, maxCustomers: -1, maxProducts: -1, maxBranches: -1, sunatIntegration: true, multiUser: true }
-  },
-  semestral: {
-    name: "Plan Semestral - 6 Meses",
-    category: "qpse",
-    months: 6,
-    pricePerMonth: 24.98, // 149.90 / 6
-    totalPrice: 149.90,
-    emissionMethod: "qpse",
-    limits: { maxInvoicesPerMonth: 1000, maxCustomers: -1, maxProducts: -1, maxBranches: -1, sunatIntegration: true, multiUser: true }
-  },
-  anual: {
-    name: "Plan Anual - 12 Meses",
-    category: "qpse",
-    months: 12,
-    pricePerMonth: 16.66, // 199.90 / 12
-    totalPrice: 199.90,
-    emissionMethod: "qpse",
-    limits: { maxInvoicesPerMonth: 1000, maxCustomers: -1, maxProducts: -1, maxBranches: -1, sunatIntegration: true, multiUser: true }
-  },
+  basico_mensual: PLANES_VENDIBLES.basico_mensual,
+  mensual: PLANES_VENDIBLES.mensual,
+  semestral: PLANES_VENDIBLES.semestral,
+  anual: PLANES_VENDIBLES.anual,
   // Ilimitado en ciclo MENSUAL. Mismo nivel que ilimitado_anual (todo ilimitado),
   // solo cambia el ciclo de cobro. Existe para que el nivel "Ilimitado" se pueda
   // pagar mes a mes o al año (ver PLAN_MATRIX más abajo).
-  ilimitado_mensual: {
-    name: "Plan Ilimitado - 1 Mes",
-    category: "qpse",
-    months: 1,
-    pricePerMonth: 39.90,
-    totalPrice: 39.90,
-    emissionMethod: "qpse",
-    limits: { maxInvoicesPerMonth: -1, maxCustomers: -1, maxProducts: -1, maxBranches: -1, sunatIntegration: true, multiUser: true }
-  },
+  ilimitado_mensual: PLANES_VENDIBLES.ilimitado_mensual,
   // Todo ilimitado por 12 meses, sin CDT propio (emite por QPse). Formaliza el
   // plan "custom" que se venía asignando a mano y coincide con los términos
   // publicados (299.90 sin IGV / 353.90 con IGV).
-  ilimitado_anual: {
-    name: "Plan Ilimitado - 12 Meses",
-    category: "qpse",
-    months: 12,
-    pricePerMonth: 24.99, // 299.90 / 12
-    totalPrice: 299.90,
-    emissionMethod: "qpse",
-    limits: { maxInvoicesPerMonth: -1, maxCustomers: -1, maxProducts: -1, maxBranches: -1, sunatIntegration: true, multiUser: true }
-  },
+  ilimitado_anual: PLANES_VENDIBLES.ilimitado_anual,
 
   // ============================================
   // PLAN BÁSICO QPSE (100 comprobantes/mes)

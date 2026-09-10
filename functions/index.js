@@ -52,6 +52,10 @@ import { resolveAudience } from './src/services/audienceService.js'
 import { siguienteCodigoCliente, sugerirRubro } from './src/services/clientesService.js'
 import { sembrarCuenta } from './src/services/semillaService.js'
 import { origenDesdeLanding, origenDesdeAnuncio, origenDesdeReferido } from './src/data/origen.js'
+import { guionDeVentas } from './src/data/ventas.js'
+import { esPrueba } from './src/data/prueba.js'
+import { responder as responderAsistente } from './src/services/asistenteService.js'
+import rubrosCatalogo from './src/data/rubros.json' with { type: 'json' }
 import { nuevoCodigoDeAlta, ESTADOS_ALTA, altaParaElFormulario, mensajeDeAlta } from './src/services/altasService.js'
 import { crearSuscripcion, premiarAQuienRefiere, deshacerCuenta } from './src/services/suscripcionesService.js'
 
@@ -888,6 +892,34 @@ export const sendInvoiceToSunat = onRequest(
             return
           }
         }
+      }
+
+      // ---- Las cuentas de PRUEBA no mandan nada a SUNAT ----
+      // El candado va acá, en el servidor, y no en la pantalla: da igual desde
+      // qué pantalla se llame —el POS, la ficha del chat, la emisión masiva—,
+      // por acá pasan todas. Un candado en el navegador se salta con la
+      // consola abierta; este no.
+      //
+      // Sin esto, una prueba intentaba emitir, SUNAT la rechazaba por
+      // certificado, y el que estaba probando el sistema veía un error rojo en
+      // su primera venta. El comprobante SÍ se genera y se imprime: lleva su
+      // marca de "sin validez" y se queda en casa.
+      try {
+        const subPrueba = await db.collection('subscriptions').doc(userId).get()
+        if (esPrueba(subPrueba.data())) {
+          console.log(`🧪 [Prueba] ${userId} está en periodo de prueba: no se envía a SUNAT`)
+          res.status(200).json({
+            success: false,
+            esPrueba: true,
+            error: 'En el periodo de prueba los comprobantes no se envían a SUNAT. '
+              + 'Al contratar un plan se activa el envío y se desbloquea todo.',
+          })
+          return
+        }
+      } catch (e) {
+        // Si no se puede leer la suscripción NO se bloquea: dejar sin emitir a
+        // un cliente que paga es peor que dejar pasar una prueba.
+        console.error('[Prueba] No se pudo comprobar la suscripción:', e.message)
       }
 
       console.log(`📤 Iniciando envío a SUNAT - Usuario: ${userId}, Factura: ${invoiceId}`)
@@ -16136,4 +16168,62 @@ export const eliminarAlta = onRequest(
       res.status(500).json({ success: false, error: 'No se pudo borrar el alta' })
     }
   },
+)
+
+
+// =====================================================================
+// ASISTENTE DE VENTAS — banco de pruebas
+//
+// Todavia NO esta conectado a WhatsApp a proposito: esto lo llama una
+// pantalla del admin donde Giacomo hace de cliente. Primero se afina
+// hablando con el, y recien cuando conteste bien se engancha a la bandeja.
+//
+// Solo admin: la llave de Claude se paga por uso, y un endpoint abierto que
+// llama a un modelo es una factura esperando a que alguien la encuentre.
+// =====================================================================
+
+export const asistenteVentas = onRequest(
+  {
+    region: 'us-central1', timeoutSeconds: 60, memory: '512MiB',
+    invoker: 'public', cors: true, secrets: ['ANTHROPIC_API_KEY'],
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ success: false, error: 'Method not allowed' }); return }
+
+    try {
+      const cabecera = req.headers.authorization
+      if (!cabecera || !cabecera.startsWith('Bearer ')) {
+        res.status(401).json({ success: false, error: 'No autorizado' }); return
+      }
+      const quien = await auth.verifyIdToken(cabecera.split('Bearer ')[1])
+      if (!(await esAdministrador(quien.uid))) {
+        res.status(403).json({ success: false, error: 'Solo administradores' }); return
+      }
+
+      const mensajes = Array.isArray(req.body?.mensajes) ? req.body.mensajes : []
+      if (!mensajes.length) {
+        res.status(400).json({ success: false, error: 'No hay nada que contestar' }); return
+      }
+      // Un hilo larguisimo no mejora la respuesta y sí multiplica el costo.
+      const ultimos = mensajes.slice(-30)
+
+      const guion = guionDeVentas({
+        rubros: rubrosCatalogo.rubros || [],
+        contacto: req.body?.contacto || null,
+      })
+
+      const salida = await responderAsistente({
+        apiKey: process.env.ANTHROPIC_API_KEY,
+        guion,
+        mensajes: ultimos,
+      })
+
+      res.json({ success: true, ...salida })
+    } catch (error) {
+      console.error('[Asistente] Error:', error.message)
+      res.status(500).json({ success: false, error: error.message })
+    }
+  }
 )

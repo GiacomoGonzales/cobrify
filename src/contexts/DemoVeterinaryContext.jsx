@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
+import { conNombreDelVisitante } from '@/utils/nombreDelVisitante'
 
 const DemoVeterinaryContext = createContext(null)
 
@@ -1413,7 +1414,7 @@ export const DemoVeterinaryProvider = ({ children }) => {
 
   const value = {
     isDemoMode: true,
-    demoData,
+    demoData: conNombreDelVisitante(demoData),
   }
 
   return <DemoVeterinaryContext.Provider value={value}>{children}</DemoVeterinaryContext.Provider>

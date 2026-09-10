@@ -1,4 +1,4 @@
-import { Navigate, useParams } from 'react-router-dom'
+import { Navigate, useParams, useLocation } from 'react-router-dom'
 import { esRubroDemo } from '@/data/demo/rubros'
 
 /**
@@ -10,6 +10,8 @@ import { esRubroDemo } from '@/data/demo/rubros'
  */
 export default function Demo() {
   const { rubro } = useParams()
+  // La query se arrastra: `?negocio=` trae el nombre del visitante.
+  const { search } = useLocation()
   const destino = rubro && esRubroDemo(rubro) ? `/demo/${rubro}/dashboard` : '/demo/dashboard'
-  return <Navigate to={destino} replace />
+  return <Navigate to={`${destino}${search}`} replace />
 }

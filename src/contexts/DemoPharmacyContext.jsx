@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
+import { conNombreDelVisitante } from '@/utils/nombreDelVisitante'
 
 const DemoPharmacyContext = createContext(null)
 
@@ -1453,7 +1454,7 @@ export const DemoPharmacyProvider = ({ children }) => {
 
   const value = {
     isDemoMode: true,
-    demoData,
+    demoData: conNombreDelVisitante(demoData),
   }
 
   return <DemoPharmacyContext.Provider value={value}>{children}</DemoPharmacyContext.Provider>

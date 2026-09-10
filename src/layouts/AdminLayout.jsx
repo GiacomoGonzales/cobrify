@@ -16,6 +16,7 @@ const ITEMS = [
   { path: '/app/admin/users', label: 'Usuarios' },
   { path: '/app/admin/altas', label: 'Altas' },
   { path: '/app/admin/origen', label: 'Origen' },
+  { path: '/app/admin/asistente', label: 'Asistente' },
   { path: '/app/admin/resellers', label: 'Resellers' },
   { path: '/app/admin/payments', label: 'Pagos' },
   { path: '/app/admin/cpe', label: 'Comprobantes' },

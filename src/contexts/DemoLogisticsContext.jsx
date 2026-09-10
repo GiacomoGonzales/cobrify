@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
+import { conNombreDelVisitante } from '@/utils/nombreDelVisitante'
 
 const DemoLogisticsContext = createContext(null)
 
@@ -175,7 +176,7 @@ export const DemoLogisticsProvider = ({ children }) => {
     }
   }, [demoData])
 
-  const value = { isDemoMode: true, demoData }
+  const value = { isDemoMode: true, demoData: conNombreDelVisitante(demoData) }
 
   return <DemoLogisticsContext.Provider value={value}>{children}</DemoLogisticsContext.Provider>
 }
