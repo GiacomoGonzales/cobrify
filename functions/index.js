@@ -1,3 +1,4 @@
+import { notasDeLaFactura, motivoParaNoEmitirNota } from './src/utils/notasDeCredito.js'
 import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { onDocumentWritten, onDocumentUpdated, onDocumentCreated } from 'firebase-functions/v2/firestore'
@@ -780,6 +781,80 @@ async function revertirEnvioNoIniciado(docRef, estadoPrevio, motivo) {
     })
   } catch (err) {
     console.error('No se pudo revertir el estado de envío:', err.message)
+  }
+}
+
+/**
+ * ¿Esta nota de crédito acreditaría su factura de más?
+ *
+ * SUNAT acepta cada nota por separado mientras no pase ella sola del total de
+ * la factura, así que dos anulaciones de la misma factura entran las dos. La
+ * pantalla ya lo impide, pero la app con un bundle viejo no, y el reintento
+ * automático manda lo que encuentre pendiente: IS ALFA terminó con tres notas
+ * aceptadas de S/ 3,000 contra una factura de S/ 3,000 (19 y 24-ago-2026).
+ * Acá pasan TODAS antes de firmarse.
+ *
+ * Solo cuenta lo que SUNAT ya aceptó (`enCursoBloquea: false`): si hay dos en
+ * curso sale la primera y la segunda se frena cuando le toca. El criterio es el
+ * mismo de la pantalla (src/utils/notasDeCredito reexporta el de functions).
+ *
+ * @returns {Promise<{motivo: string, factura: object, acreditado: number}|null>}
+ */
+async function revisarNotaDeCreditoDeMas(businessId, notaId, nota) {
+  const facturaId = nota?.referencedInvoiceFirestoreId
+  // Una nota "externa" (de un comprobante de otro sistema) no tiene factura acá.
+  if (!facturaId || nota?.documentType !== 'nota_credito') return null
+  try {
+    const comprobantes = db.collection('businesses').doc(businessId).collection('invoices')
+    const [facturaSnap, hermanasSnap] = await Promise.all([
+      comprobantes.doc(facturaId).get(),
+      comprobantes.where('referencedInvoiceFirestoreId', '==', facturaId).get(),
+    ])
+    if (!facturaSnap.exists) return null
+    const factura = { id: facturaId, ...facturaSnap.data() }
+    const notas = notasDeLaFactura(factura, hermanasSnap.docs.map(d => ({ id: d.id, ...d.data() })), { salvo: notaId })
+    const motivo = motivoParaNoEmitirNota(factura, notas, nota.total, { enCursoBloquea: false })
+    if (!motivo) return null
+    const acreditado = notas
+      .filter(n => n.sunatStatus === 'accepted')
+      .reduce((a, n) => a + (Number(n.total) || 0), 0)
+    return { motivo, factura, acreditado }
+  } catch (err) {
+    // Ante la duda no se frena: que conteste SUNAT.
+    console.error('No se pudo revisar las otras notas de la factura:', err.message)
+    return null
+  }
+}
+
+/**
+ * Deja la nota sin enviar, con el motivo a la vista, y la factura como la
+ * dejaron las notas que SÍ aceptó SUNAT. 'not_sent' y no 'rejected': SUNAT no
+ * la evaluó, y los crones ignoran 'not_sent' a propósito.
+ */
+async function frenarNotaDeCreditoDeMas(businessId, notaRef, notaId, revision) {
+  await notaRef.update({
+    sunatStatus: 'not_sent',
+    sunatSendingStartedAt: null,
+    sunatError: revision.motivo,
+    updatedAt: FieldValue.serverTimestamp(),
+  })
+  // Al crearla, la pantalla de la nota (en la app vieja, sin el candado) marcó
+  // la factura "pendiente de anulación" apuntando a ESTA nota, que no va a
+  // salir. Se la devuelve a lo que dicen las aceptadas.
+  const { factura, acreditado } = revision
+  const total = Number(factura.total) || 0
+  if (factura.pendingCreditNoteId === notaId && acreditado > 0) {
+    try {
+      await db.collection('businesses').doc(businessId).collection('invoices').doc(factura.id).update({
+        status: acreditado >= total - 0.01 ? 'cancelled' : 'partial_refund',
+        pendingCreditNoteId: FieldValue.delete(),
+        pendingCreditNoteNumber: FieldValue.delete(),
+        pendingCreditNoteTotal: FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+    } catch (err) {
+      console.error('No se pudo devolver el estado de la factura:', err.message)
+    }
   }
 }
 
@@ -1939,6 +2014,16 @@ export const sendCreditNoteToSunat = onRequest(
         } catch (limitError) {
           console.error('⚠️ Error al verificar límite (continuando):', limitError)
         }
+      }
+
+      // 3.9. ¿Acreditaría la factura de más? Se frena ANTES de firmar: una nota
+      // aceptada ya no se deshace (ver revisarNotaDeCreditoDeMas).
+      const notaDeMas = await revisarNotaDeCreditoDeMas(userId, creditNoteId, creditNoteData)
+      if (notaDeMas) {
+        console.log(`🛑 NC ${creditNoteData.series}-${creditNoteData.correlativeNumber} no se envía: ${notaDeMas.motivo}`)
+        await frenarNotaDeCreditoDeMas(userId, creditNoteRef, creditNoteId, notaDeMas)
+        res.status(409).json({ error: notaDeMas.motivo })
+        return
       }
 
       // 4. Emitir nota de crédito usando la función específica
@@ -4915,6 +5000,17 @@ export const retryPendingInvoices = onSchedule(
                 }
               } catch (checkErr) {
                 console.log(`⚠️ [RETRY] No se pudo verificar estado en SUNAT: ${checkErr.message} - procediendo con reenvío`)
+              }
+            }
+
+            // ── NOTA DE CRÉDITO DE MÁS: no se reenvía (ver revisarNotaDeCreditoDeMas) ──
+            if (invoiceData.documentType === 'nota_credito') {
+              const notaDeMas = await revisarNotaDeCreditoDeMas(businessId, invoiceId, invoiceData)
+              if (notaDeMas) {
+                console.log(`🛑 [RETRY] ${docNumber} no se envía: ${notaDeMas.motivo}`)
+                await frenarNotaDeCreditoDeMas(businessId, invoicesRef.doc(invoiceId), invoiceId, notaDeMas)
+                totalSkipped++
+                continue
               }
             }
 
