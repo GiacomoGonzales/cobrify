@@ -30,28 +30,31 @@ export default function AvisoDeActualizacion({ soloIcono = false, className = ''
         onClick={actualizar}
         disabled={actualizando}
         title={`${texto}. ${detalle}.`}
-        className={`mx-auto flex items-center justify-center w-9 h-9 rounded-lg text-primary-600 hover:bg-primary-50 transition-colors ${className}`}
+        className={`mx-auto flex items-center justify-center w-9 h-9 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors ${className}`}
       >
         <RefreshCw className={`w-4 h-4 ${actualizando ? 'animate-spin' : ''}`} />
       </button>
     )
   }
 
+  // Neutro a propósito (10-set-2026): en azul competía con la opción activa
+  // del menú, que es la única que tiene que resaltar. Mismos grises que el
+  // resto del menú lateral.
   return (
     <button
       onClick={actualizar}
       disabled={actualizando}
       title={detalle}
-      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border border-primary-200 bg-primary-50/60 text-left hover:bg-primary-50 disabled:opacity-70 disabled:cursor-wait transition-colors ${className}`}
+      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border border-gray-200 bg-white text-left hover:bg-gray-50 disabled:opacity-70 disabled:cursor-wait transition-colors ${className}`}
     >
-      <RefreshCw className={`w-4 h-4 flex-shrink-0 text-primary-600 ${actualizando ? 'animate-spin' : ''}`} />
+      <RefreshCw className={`w-4 h-4 flex-shrink-0 text-gray-500 ${actualizando ? 'animate-spin' : ''}`} />
       <span className="min-w-0">
-        <span className="block text-xs font-medium text-primary-900 truncate">
+        <span className="block text-xs font-medium text-gray-800 truncate">
           {actualizando ? 'Actualizando...' : texto}
         </span>
         {/* Sin `truncate`: en el menú entran dos líneas cortas, y media frase
             con puntos suspensivos no dice nada. */}
-        <span className="block text-[11px] leading-snug text-primary-700/70">{detalle}</span>
+        <span className="block text-[11px] leading-snug text-gray-500">{detalle}</span>
       </span>
     </button>
   )
