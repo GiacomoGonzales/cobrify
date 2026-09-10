@@ -12858,14 +12858,20 @@ Gracias por tu preferencia.`
                     (líneas 4460+); este aviso lo refleja para no confundir al
                     cajero (caso real reportado: cliente con RUC en boleta). */}
                 {documentType === 'boleta' && amounts.total > 700 && (
-                  <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-lg">
-                    <div className="flex items-start gap-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  // Van sobre el blanco del modal, asi que el fondo es un gris
+                  // muy suave con borde fino y el color queda solo en el icono.
+                  // Es el mismo lenguaje del aviso de caja: azul para lo que hay
+                  // que cumplir, verde para el estado de la venta.
+                  <div className="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                    <div className="flex items-start gap-2.5">
+                      <span className="flex-shrink-0 w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                        <AlertTriangle className="w-4 h-4" />
+                      </span>
                       <div className="flex-1">
-                        <p className="text-sm font-semibold text-amber-800">
+                        <p className="text-sm font-semibold text-gray-900">
                           Normativa SUNAT
                         </p>
-                        <p className="text-xs text-amber-700 mt-1">
+                        <p className="text-xs text-gray-600 mt-1">
                           Las boletas mayores a S/ 700.00 requieren obligatoriamente un <strong>documento de identidad</strong> (DNI, RUC, CE o Pasaporte) y el <strong>nombre completo</strong> del cliente
                         </p>
                       </div>
@@ -13059,28 +13065,30 @@ Gracias por tu preferencia.`
                 <div className="border-t pt-4 mt-4 space-y-3">
                   {/* Si es factura al crédito, mostrar mensaje en lugar de métodos de pago */}
                   {documentType === 'factura' && paymentType === 'credito' ? (
-                    <div className="p-4 bg-amber-50 border border-amber-300 rounded-lg">
+                    <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
                       <div className="flex items-start gap-3">
-                        <CreditCard className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                        <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                          <CreditCard className="w-4 h-4" />
+                        </span>
                         <div className="flex-1">
-                          <p className="text-sm font-semibold text-amber-900">
+                          <p className="text-sm font-semibold text-gray-900">
                             Factura al Crédito
                           </p>
-                          <p className="text-xs text-amber-700 mt-1">
+                          <p className="text-xs text-gray-600 mt-1">
                             No requiere pago inmediato. El cliente pagará según las condiciones de crédito.
                           </p>
-                          <p className="text-xs text-amber-700 mt-2">
+                          <p className="text-xs text-gray-600 mt-2">
                             <strong>Monto pendiente:</strong> {formatCurrency(amounts.total, currency)}
                           </p>
                           {/* Con cuotas manda cada cuota, no esta fecha: mostrarla
                               aca seria un tercer plazo a la vista que no existe. */}
                           {paymentDueDate && paymentInstallments.length === 0 && (
-                            <p className="text-xs text-amber-700 mt-1">
+                            <p className="text-xs text-gray-600 mt-1">
                               <strong>Vencimiento:</strong> {new Date(paymentDueDate + 'T00:00:00').toLocaleDateString('es-PE')}
                             </p>
                           )}
                           {paymentInstallments.length > 0 && (
-                            <p className="text-xs text-amber-700 mt-1">
+                            <p className="text-xs text-gray-600 mt-1">
                               <strong>Cuotas:</strong> {paymentInstallments.length}
                             </p>
                           )}
