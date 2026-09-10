@@ -26,7 +26,7 @@ import { clienteDelComprobante, lineasDelCliente } from '@/utils/datosDelCliente
  * - Código QR para validación
  * - Representación impresa
  */
-const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, webPrintLegible: webPrintLegibleProp = false, ticketFontSize, compactPrint = false, printMargins = 8, simplePrint = false, a4SheetPrint = false, showItemUnit = false }, ref) => {
+const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, webPrintLegible: webPrintLegibleProp = false, ticketFontSize, compactPrint = false, printMargins = 8, simplePrint = false, a4SheetPrint = false, showItemUnit = false, basicPrint = false }, ref) => {
   // Estado para detectar si el logo es cuadrado
   const [isSquareLogo, setIsSquareLogo] = React.useState(false)
 
@@ -772,12 +772,51 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           }
         }
         ` : ''}
+        ${basicPrint ? `
+        /* FORMATO BÁSICO (texto plano).
+           Una sola letra monoespaciada, un solo tamaño, sin negritas, sin
+           mayúsculas forzadas, sin espaciado entre letras, sin fondos ni
+           imágenes sueltas. Es para las ticketeras que se imprimen desde el
+           navegador con el driver de Windows y se atragantan con alguna
+           variación tipográfica: una RedPOS RED-E803B sacaba la leyenda del
+           pie —la única línea a 7pt en negrita— como símbolos encimados
+           (10-set-2026). Quedan solo los QR generados (vector) porque el de
+           SUNAT es obligatorio en la representación impresa. */
+        .ticket-container, .ticket-container * {
+          font-family: "Courier New", Courier, monospace !important;
+          font-weight: 400 !important;
+          font-style: normal !important;
+          text-transform: none !important;
+          letter-spacing: 0 !important;
+          background: transparent !important;
+          color: #000 !important;
+          text-shadow: none !important;
+          box-shadow: none !important;
+          border-radius: 0 !important;
+        }
+        .ticket-container {
+          font-size: ${webPrintLegible ? (is58mm ? '9pt' : '10pt') : (is58mm ? '7pt' : '8pt')} !important;
+          line-height: 1.25 !important;
+        }
+        .ticket-container * {
+          font-size: inherit !important;
+          line-height: inherit !important;
+        }
+        /* Lo que era un fondo negro pasa a ser un par de líneas, como en la
+           impresión simple: se distingue sin pintar nada. */
+        .document-type, .total-row.final {
+          border-top: 1px solid #000 !important;
+          border-bottom: 1px solid #000 !important;
+        }
+        ` : ''}
       `}</style>
 
       {/* HEADER - Datos del Emisor */}
       <div className="ticket-header">
         {/* Logo de la empresa/sucursal (si existe). Prefiere el logo de la sucursal emisora. */}
-        {(invoice.branchLogoUrl || companySettings?.logoUrl) && (
+        {/* En el formato básico no va el logo: es una imagen, y el formato
+            existe para no mandarle a la impresora nada que no sea texto. */}
+        {!basicPrint && (invoice.branchLogoUrl || companySettings?.logoUrl) && (
           <img
             src={invoice.branchLogoUrl || companySettings.logoUrl}
             alt="Logo"
@@ -1426,6 +1465,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
 
         {companySettings?.ticketQrEnabled && (() => {
           const qrMode = companySettings.ticketQrMode === 'image' ? 'image' : 'auto'
+          // Formato básico: sin imágenes sueltas. El QR generado (vector) sí sale.
+          if (basicPrint && qrMode === 'image') return null
           // Modo imagen: usa la imagen subida si existe. Si no, no muestra.
           if (qrMode === 'image' && companySettings.ticketQrImageUrl) {
             return (

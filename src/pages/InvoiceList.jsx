@@ -396,6 +396,7 @@ export default function InvoiceList() {
   const [compactPrint, setCompactPrint] = useState(false)
   const [printMargins, setPrintMargins] = useState(8)
   const [simplePrint, setSimplePrint] = useState(false)
+  const [basicPrint, setBasicPrint] = useState(false)
   const [a4SheetPrint, setA4SheetPrint] = useState(false)
   const [showItemUnit, setShowItemUnit] = useState(false)
   const [ticketPaperWidth, setTicketPaperWidth] = useState(80)
@@ -417,6 +418,7 @@ export default function InvoiceList() {
         setCompactPrint(printerConfigResult.config.compactPrint || false)
         setPrintMargins(printerConfigResult.config.printMargins ?? 8)
         setSimplePrint(printerConfigResult.config.simplePrint || false)
+        setBasicPrint(printerConfigResult.config.basicPrint || false)
         setA4SheetPrint(printerConfigResult.config.a4SheetPrint || false)
         setShowItemUnit(printerConfigResult.config.showItemUnit || false)
         setTicketPaperWidth(printerConfigResult.config.paperWidth || 80)
@@ -451,6 +453,7 @@ export default function InvoiceList() {
         setCompactPrint(c.compactPrint || false)
         setPrintMargins(c.printMargins ?? 8)
         setSimplePrint(c.simplePrint || false)
+        setBasicPrint(c.basicPrint || false)
         setA4SheetPrint(c.a4SheetPrint || false)
         setTicketPaperWidth(c.paperWidth || 80)
         setAjustarHoja(c.ajustarHojaAlTicket !== false)
@@ -6064,7 +6067,7 @@ Gracias por tu preferencia.`
       {/* Hidden Ticket Component for Printing - Individual (modal o fila) */}
       {(viewingInvoice || rowPrintInvoice) && (
         <div className="hidden print:block">
-          <InvoiceTicket ref={ticketRef} invoice={viewingInvoice || rowPrintInvoice} companySettings={companySettings} paperWidth={ticketPaperWidth} webPrintLegible={webPrintLegible} ticketFontSize={ticketFontSize} compactPrint={compactPrint} printMargins={printMargins} simplePrint={simplePrint} a4SheetPrint={a4SheetPrint} showItemUnit={showItemUnit} />
+          <InvoiceTicket ref={ticketRef} invoice={viewingInvoice || rowPrintInvoice} companySettings={companySettings} paperWidth={ticketPaperWidth} webPrintLegible={webPrintLegible} ticketFontSize={ticketFontSize} compactPrint={compactPrint} printMargins={printMargins} simplePrint={simplePrint} basicPrint={basicPrint} a4SheetPrint={a4SheetPrint} showItemUnit={showItemUnit} />
         </div>
       )}
 
@@ -6092,7 +6095,7 @@ Gracias por tu preferencia.`
             }
           `}</style>
           {invoices.filter(inv => selectedInvoiceIds.has(inv.id)).map(inv => (
-            <InvoiceTicket key={inv.id} invoice={inv} companySettings={companySettings} paperWidth={ticketPaperWidth} webPrintLegible={webPrintLegible} ticketFontSize={ticketFontSize} compactPrint={compactPrint} printMargins={printMargins} simplePrint={simplePrint} a4SheetPrint={a4SheetPrint} showItemUnit={showItemUnit} />
+            <InvoiceTicket key={inv.id} invoice={inv} companySettings={companySettings} paperWidth={ticketPaperWidth} webPrintLegible={webPrintLegible} ticketFontSize={ticketFontSize} compactPrint={compactPrint} printMargins={printMargins} simplePrint={simplePrint} basicPrint={basicPrint} a4SheetPrint={a4SheetPrint} showItemUnit={showItemUnit} />
           ))}
         </div>,
         document.body

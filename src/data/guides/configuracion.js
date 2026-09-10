@@ -518,7 +518,7 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Acá emparejas la ticketera y eliges el **ancho de papel** (58 u 80 mm). Hay cinco ajustes de ahorro y legibilidad:',
+          text: 'Acá emparejas la ticketera y eliges el **ancho de papel** (58 u 80 mm). Hay varios ajustes de ahorro y legibilidad:',
         },
         {
           type: 'tabla',
@@ -529,6 +529,7 @@ export default {
             ['Imprimir en hoja A4', 'Si imprimes en tinta o láser en vez de térmica'],
             ['Mostrar unidad de medida en el ticket', 'Agrega la unidad junto a la cantidad'],
             ['Impresión simple (sin fondos negros)', 'Quita los fondos oscuros. Úsala si tu impresora los saca borrosos o gasta mucho'],
+            ['Formato básico (texto plano)', 'Una sola letra, sin negritas, fondos ni logo; solo quedan los QR. Para ticketeras que imprimen símbolos raros o líneas encimadas desde el navegador'],
             ['Ajustar la hoja al largo del ticket', 'Viene activada. El sistema le pide al navegador una hoja del largo exacto del comprobante'],
           ],
         },

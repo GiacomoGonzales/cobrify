@@ -596,7 +596,7 @@ export const isPrinterReady = () => {
 const OPCIONES_DEL_TICKET = [
   'showItemUnit', 'ticketFontSize', 'webPrintLegible', 'kitchenFontSize',
   'compactPrint', 'ultraCompactKitchen', 'printMargins', 'simplePrint',
-  'a4SheetPrint', 'ajustarHojaAlTicket', 'cutFeedLines',
+  'basicPrint', 'a4SheetPrint', 'ajustarHojaAlTicket', 'cutFeedLines',
 ];
 
 /** Copia las opciones del ticket al negocio. No lanza: es un respaldo. */
@@ -664,6 +664,7 @@ export const savePrinterConfig = async (userId, printerConfig) => {
       compactPrint: cfg.compactPrint || false,
       printMargins: cfg.printMargins ?? 8, // mm, impresión web
       simplePrint: cfg.simplePrint || false, // sin fondos negros
+      basicPrint: cfg.basicPrint || false, // texto plano: una letra, sin negritas ni imágenes (ticket web)
       cutFeedLines: cfg.cutFeedLines ?? 5, // líneas de avance antes del corte
       ultraCompactKitchen: cfg.ultraCompactKitchen || false,
       a4SheetPrint: cfg.a4SheetPrint || false, // tinta/láser, no térmica

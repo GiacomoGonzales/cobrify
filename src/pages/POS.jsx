@@ -1074,6 +1074,7 @@ export default function POS() {
   const [compactPrint, setCompactPrint] = useState(false)
   const [printMargins, setPrintMargins] = useState(8)
   const [simplePrint, setSimplePrint] = useState(false)
+  const [basicPrint, setBasicPrint] = useState(false)
   const [a4SheetPrint, setA4SheetPrint] = useState(false)
   const [showItemUnit, setShowItemUnit] = useState(false)
   const [ticketPaperWidth, setTicketPaperWidth] = useState(80)
@@ -1806,6 +1807,7 @@ export default function POS() {
           setCompactPrint(printerConfigResult.config.compactPrint || false)
           setPrintMargins(printerConfigResult.config.printMargins ?? 8)
           setSimplePrint(printerConfigResult.config.simplePrint || false)
+          setBasicPrint(printerConfigResult.config.basicPrint || false)
           setA4SheetPrint(printerConfigResult.config.a4SheetPrint || false)
           setShowItemUnit(printerConfigResult.config.showItemUnit || false)
           setTicketPaperWidth(printerConfigResult.config.paperWidth || 80)
@@ -9122,6 +9124,7 @@ ${textoDeErrores(revision.errores)}`, 9000)
           setCompactPrint(fresh.config.compactPrint || false)
           setPrintMargins(fresh.config.printMargins ?? 8)
           setSimplePrint(fresh.config.simplePrint || false)
+          setBasicPrint(fresh.config.basicPrint || false)
           setA4SheetPrint(fresh.config.a4SheetPrint || false)
           setTicketPaperWidth(fresh.config.paperWidth || 80)
           // Dar un tick para que el ticket se re-renderice con los valores frescos antes de imprimir
@@ -14584,6 +14587,7 @@ Gracias por tu preferencia.`
             compactPrint={compactPrint}
             printMargins={printMargins}
             simplePrint={simplePrint}
+            basicPrint={basicPrint}
             a4SheetPrint={a4SheetPrint}
             showItemUnit={showItemUnit}
           />

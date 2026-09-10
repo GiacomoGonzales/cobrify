@@ -1816,6 +1816,23 @@ export default function Impresion() {
               descripcion="Reemplaza los fondos negros (tipo de documento, total a pagar) por bordes con texto negro. Para impresoras que no imprimen bien los fondos oscuros o pierden el texto blanco."
             />
 
+            {/* Solo para el ticket del navegador: la impresión térmica desde la
+                app ya manda texto plano por su cuenta. */}
+            {!enApp && (
+              <Ajuste
+                id="opcion-basicPrint"
+                checked={printerConfig.basicPrint || false}
+                onChange={(e) =>
+                  guardarLocal(
+                    { basicPrint: e.target.checked },
+                    e.target.checked ? 'Formato básico activado' : 'Formato básico desactivado'
+                  )
+                }
+                titulo="Formato básico (texto plano)"
+                descripcion="Una sola letra de máquina, un solo tamaño, sin negritas, sin fondos ni logo. Solo quedan los códigos QR. Úsalo si el ticket sale con símbolos raros o líneas encimadas: hay ticketeras que se atragantan con cualquier cambio de letra."
+              />
+            )}
+
             {/* Márgenes y ajuste de hoja son CSS del navegador: solo en web. */}
             {!enApp && (
               <>
