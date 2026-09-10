@@ -1,3 +1,4 @@
+import { configDeImpuestosDePrecuenta } from '@/utils/igvDePrecuenta'
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
@@ -1055,12 +1056,8 @@ export default function Orders() {
         phone: businessData.phone || '',
         logoUrl: businessData.logoUrl || '',
       }
-      if (businessData.emissionConfig?.taxConfig) {
-        taxConfig = {
-          igvRate: businessData.emissionConfig.taxConfig.igvRate ?? 18,
-          igvExempt: businessData.emissionConfig.taxConfig.igvExempt ?? false,
-        }
-      }
+      // Impuestos de la precuenta, con la opción de ocultar el IGV (utils/igvDePrecuenta)
+      taxConfig = configDeImpuestosDePrecuenta(businessData)
       if (businessData.restaurantConfig) {
         recargoConsumoConfig = {
           enabled: businessData.restaurantConfig.recargoConsumoEnabled ?? false,

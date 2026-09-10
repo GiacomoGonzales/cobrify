@@ -95,6 +95,8 @@ const RESTAURANTE_POR_DEFECTO = {
   // Recargo al Consumo (Decreto Ley N° 25988)
   recargoConsumoEnabled: false,
   recargoConsumoRate: 10, // Porcentaje del recargo (1-13%)
+  // La precuenta sin las líneas de subtotal e IGV (utils/igvDePrecuenta).
+  ocultarIgvEnPrecuenta: false,
   // POR CONSUMO: el comprobante sale con una sola línea en vez del detalle
   // de platos. Adentro no cambia nada (ver comprobantePorConsumo.js).
   porConsumoEnabled: false,
@@ -1432,6 +1434,17 @@ export default function PuntoDeVenta() {
                     </div>
                   )}
                 </Ajuste>
+
+                {/* La precuenta sin el IGV. Pedido de un cliente (10-set-2026). */}
+                <Ajuste
+                  id="opcion-ocultarIgvEnPrecuenta"
+                  checked={rc.ocultarIgvEnPrecuenta === true}
+                  onChange={e => ponerRestaurante({ ocultarIgvEnPrecuenta: e.target.checked })}
+                  titulo="Ocultar el IGV en la precuenta"
+                  descripcion={rc.ocultarIgvEnPrecuenta
+                    ? 'Activado: la precuenta muestra el detalle, los descuentos, el recargo y el total, sin las líneas de subtotal e IGV. El comprobante que emites al cobrar sigue saliendo con su IGV.'
+                    : 'Desactivado: la precuenta muestra el subtotal sin IGV y el IGV antes del total.'}
+                />
 
                 {/* POR CONSUMO: el comprobante con una sola línea */}
                 <Ajuste

@@ -1,4 +1,5 @@
 import { lineasDelCliente } from '@/utils/datosDelClienteEnComprobante';
+import { bloqueDeIgvEnPrecuenta } from '@/utils/igvDePrecuenta';
 /**
  * Servicio alternativo de impresión Bluetooth usando @capacitor-community/bluetooth-le
  * Este servicio se usa como fallback en iOS cuando el plugin capacitor-thermal-printer falla
@@ -1465,10 +1466,12 @@ export const printBLEPreBill = async (order, table, business, taxConfig = { igvR
     }
 
     // Totales
-    if (!taxConfig.igvExempt) {
+    // El negocio puede ocultar el IGV en la precuenta (utils/igvDePrecuenta).
+    const bloqueDeIgv = bloqueDeIgvEnPrecuenta(taxConfig);
+    if (bloqueDeIgv === 'desglose') {
       commands.push(ESCPOSCommands.text('Subtotal: S/ ' + subtotal.toFixed(2) + '\n'));
       commands.push(ESCPOSCommands.text('IGV (' + taxConfig.igvRate + '%): S/ ' + tax.toFixed(2) + '\n'));
-    } else {
+    } else if (bloqueDeIgv === 'exonerada') {
       commands.push(ESCPOSCommands.text('*** Exonerado de IGV ***\n'));
     }
 
@@ -1591,7 +1594,7 @@ export const printBLESplitPreBill = async (order, table, business, taxConfig = {
       commands.push(ESCPOSCommands.text(halfSeparator + '\n'));
       commands.push(ESCPOSCommands.align(2));
 
-      if (!taxConfig.igvExempt) {
+      if (bloqueDeIgvEnPrecuenta(taxConfig) === 'desglose') {
         commands.push(ESCPOSCommands.text('Subtotal: S/ ' + subtotal.toFixed(2) + '\n'));
         commands.push(ESCPOSCommands.text('IGV (' + taxConfig.igvRate + '%): S/ ' + tax.toFixed(2) + '\n'));
       }

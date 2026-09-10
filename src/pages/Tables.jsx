@@ -1,3 +1,4 @@
+import { configDeImpuestosDePrecuenta } from '@/utils/igvDePrecuenta'
 import { useState, useEffect, useRef } from 'react'
 import { Grid3x3, Plus, Users, Clock, CheckCircle, XCircle, Edit, Trash2, Loader2, Receipt, Wine } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -169,13 +170,8 @@ export default function Tables() {
 
         if (businessSnap.exists()) {
           const businessData = businessSnap.data()
-          // El taxConfig está dentro de emissionConfig
-          if (businessData.emissionConfig?.taxConfig) {
-            setTaxConfig({
-              igvRate: businessData.emissionConfig.taxConfig.igvRate ?? 18,
-              igvExempt: businessData.emissionConfig.taxConfig.igvExempt ?? false
-            })
-          }
+          // Impuestos de la precuenta (utils/igvDePrecuenta)
+          setTaxConfig(configDeImpuestosDePrecuenta(businessData))
         }
       } catch (error) {
         console.error('Error al cargar configuración de impuestos:', error)
@@ -1033,13 +1029,8 @@ export default function Tables() {
         }
 
         // Obtener configuración de impuestos
-        // El taxConfig está dentro de emissionConfig
-        if (businessData.emissionConfig?.taxConfig) {
-          taxConfig = {
-            igvRate: businessData.emissionConfig.taxConfig.igvRate ?? 18,
-            igvExempt: businessData.emissionConfig.taxConfig.igvExempt ?? false
-          }
-        }
+        // Impuestos de la precuenta, con la opción de ocultar el IGV (utils/igvDePrecuenta)
+        taxConfig = configDeImpuestosDePrecuenta(businessData)
 
         // Obtener configuración de Recargo al Consumo
         if (businessData.restaurantConfig) {
@@ -1115,10 +1106,7 @@ export default function Tables() {
           address: businessResult.data?.address || '',
           phone: businessResult.data?.phone || '',
         } : { tradeName: 'RESTAURANTE' }
-        const taxConfig = {
-          igvRate: businessResult.data?.emissionConfig?.taxConfig?.igvRate ?? 18,
-          igvExempt: businessResult.data?.emissionConfig?.taxConfig?.igvExempt ?? false,
-        }
+        const taxConfig = configDeImpuestosDePrecuenta(businessResult.data)
         const recargoConsumoConfig = {
           enabled: businessResult.data?.restaurantConfig?.recargoConsumoEnabled ?? false,
           rate: businessResult.data?.restaurantConfig?.recargoConsumoRate ?? 10,
@@ -1177,10 +1165,7 @@ export default function Tables() {
         phone: businessResult.data?.phone || '',
         logoUrl: businessResult.data?.logoUrl || '',
       } : {}
-      const taxConfig = {
-        igvRate: businessResult.data?.emissionConfig?.taxConfig?.igvRate ?? 18,
-        igvExempt: businessResult.data?.emissionConfig?.taxConfig?.igvExempt ?? false,
-      }
+      const taxConfig = configDeImpuestosDePrecuenta(businessResult.data)
       const recargoConsumoConfig = {
         enabled: businessResult.data?.restaurantConfig?.recargoConsumoEnabled ?? false,
         rate: businessResult.data?.restaurantConfig?.recargoConsumoRate ?? 10,

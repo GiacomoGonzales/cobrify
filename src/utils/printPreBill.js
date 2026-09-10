@@ -1,4 +1,5 @@
 import { formatBreakdownHtmlRows, getItemPriceBreakdown } from './modifierHelpers'
+import { bloqueDeIgvEnPrecuenta } from './igvDePrecuenta'
 
 import { printHtmlIframe } from './printHtmlIframe'
 
@@ -520,7 +521,7 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
         </div>
         ` : ''}
         ` : ''}
-        ${!taxConfig.igvExempt ? `
+        ${bloqueDeIgvEnPrecuenta(taxConfig) === 'desglose' ? `
         <div class="row">
           <span>SUBTOTAL:</span>
           <span>S/ ${subtotal.toFixed(2)}</span>
@@ -529,11 +530,11 @@ export const printPreBill = (table, order, businessInfo = {}, taxConfig = { igvR
           <span>IGV (${taxConfig.igvRate}%):</span>
           <span>S/ ${tax.toFixed(2)}</span>
         </div>
-        ` : `
+        ` : bloqueDeIgvEnPrecuenta(taxConfig) === 'exonerada' ? `
         <div class="exempt-notice">
           <span>⚠ EMPRESA EXONERADA DE IGV</span>
         </div>
-        `}
+        ` : ''}
         ${recargoConsumo > 0 ? `
         <div class="row" style="color: #059669;">
           <span>RECARGO CONSUMO (${recargoConsumoConfig.rate}%):</span>
@@ -646,7 +647,7 @@ export const printAllSplitPreBills = (table, order, splitData, businessInfo = {}
       `}).join('')}
 
       <div class="totals">
-        ${!taxConfig.igvExempt ? `
+        ${bloqueDeIgvEnPrecuenta(taxConfig) === 'desglose' ? `
         <div class="row">
           <span>SUBTOTAL:</span>
           <span>S/ ${subtotal.toFixed(2)}</span>

@@ -1,4 +1,5 @@
 import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
+import { bloqueDeIgvEnPrecuenta } from '@/utils/igvDePrecuenta';
 import { rucDeEmpresa, lineaRuc } from '@/utils/rucDeEmpresa';
 import { infoDeCredito } from '../../functions/src/utils/creditoDelComprobante.js';
 import { nombreParaMostrar, razonSocialSiAporta } from '@/utils/nombreDelNegocio';
@@ -2013,10 +2014,12 @@ export const printPreBill = async (order, table, business, taxConfig = { igvRate
       }
     }
 
-    if (!taxConfig.igvExempt) {
+    // El negocio puede ocultar el IGV en la precuenta (utils/igvDePrecuenta).
+    const bloqueDeIgv = bloqueDeIgvEnPrecuenta(taxConfig);
+    if (bloqueDeIgv === 'desglose') {
       totalsText += `Subtotal: S/ ${subtotal.toFixed(2)}\n` +
                     `IGV (${taxConfig.igvRate}%): S/ ${tax.toFixed(2)}\n`;
-    } else {
+    } else if (bloqueDeIgv === 'exonerada') {
       totalsText += '*** Empresa exonerada de IGV ***\n';
     }
 
@@ -3354,11 +3357,12 @@ const buildPreBillEscPos = (order, table, business, taxConfig = { igvRate: 18, i
       }
     }
 
-    // Totales
-    if (!taxConfig.igvExempt) {
+    // Totales. El negocio puede ocultar el IGV en la precuenta (utils/igvDePrecuenta).
+    const bloqueDeIgv = bloqueDeIgvEnPrecuenta(taxConfig);
+    if (bloqueDeIgv === 'desglose') {
       builder.text(`Subtotal: S/ ${subtotal.toFixed(2)}`).newLine()
         .text(`IGV (${taxConfig.igvRate}%): S/ ${tax.toFixed(2)}`).newLine();
-    } else {
+    } else if (bloqueDeIgv === 'exonerada') {
       builder.text('*** Exonerado de IGV ***').newLine();
     }
 
@@ -3469,7 +3473,7 @@ const buildSplitPreBillEscPos = (order, table, business, taxConfig, paperWidth, 
   }
 
   builder.text(format.halfSeparator).newLine().alignRight();
-  if (!taxConfig.igvExempt) {
+  if (bloqueDeIgvEnPrecuenta(taxConfig) === 'desglose') {
     builder.text(`Subtotal: S/ ${subtotal.toFixed(2)}`).newLine()
       .text(`IGV (${taxConfig.igvRate}%): S/ ${tax.toFixed(2)}`).newLine();
   }

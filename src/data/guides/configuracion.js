@@ -15,7 +15,7 @@
  */
 export default {
   id: 'configuracion',
-  actualizado: '08/09/2026',
+  actualizado: '10/09/2026',
   intro:
     'Configuración es donde el sistema se adapta a tu negocio: qué comprobantes emites, qué puede tocar tu cajero, qué aparece en el menú y cómo salen tus impresiones. Esta guía recorre las once pestañas y explica qué hace cada opción y qué cambia cuando la prendes.',
 
@@ -346,6 +346,7 @@ export default {
             ['Requerir pago antes de enviar a cocina', 'No se manda a preparar hasta que esté pagado'],
             ['Seguimiento de estado por item individual', 'Cada plato de la mesa avanza por su cuenta, no todo el pedido junto'],
             ['Recargo al Consumo', 'Agrega el recargo al consumo a la cuenta'],
+            ['Ocultar el IGV en la precuenta', 'La precuenta sale sin las líneas de subtotal e IGV. El comprobante no cambia'],
           ],
         },
         {

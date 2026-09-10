@@ -16,7 +16,7 @@
  */
 export default {
   id: 'mesas',
-  actualizado: '16/08/2026',
+  actualizado: '10/09/2026',
   intro:
     'Mesas es el tablero de tu salón: qué está ocupado, cuánto lleva consumido cada mesa y cuál está libre. Desde acá se toma el pedido, se maneja lo que pasa durante la comida —juntar, mover, dividir— y se cobra.',
 
@@ -196,6 +196,10 @@ export default {
         {
           type: 'ojo',
           text: 'La precuenta no es comprobante y no declara nada ante SUNAT. Después de imprimirla todavía hay que cobrar y emitir la boleta o factura.',
+        },
+        {
+          type: 'consejo',
+          text: 'Si no quieres que la precuenta muestre el IGV, activa **Ocultar el IGV en la precuenta** en **Configuración > Punto de venta**, junto al recargo al consumo. La precuenta sale con el detalle, los descuentos, el recargo y el total, sin las líneas de subtotal e IGV. El comprobante sigue saliendo con su IGV.',
         },
       ],
     },
