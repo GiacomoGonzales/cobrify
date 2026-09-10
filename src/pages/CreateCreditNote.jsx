@@ -1132,7 +1132,7 @@ export default function CreateCreditNote() {
         if (sendRes?.success) {
           setMessage({ type: 'success', text: `Nota de Crédito ${editingNC.number} corregida y reenviada a SUNAT.` })
         } else {
-          setMessage({ type: 'error', text: `NC corregida, pero SUNAT respondió: ${sendRes?.error || sendRes?.message || 'error desconocido'}. Puedes reintentar el envío desde Ventas.` })
+          setMessage({ type: 'error', text: `NC corregida, pero el envío no se completó: ${sendRes?.error || sendRes?.message || 'error desconocido'}. Puedes reintentar el envío desde Ventas.` })
         }
         setTimeout(() => appNavigate('facturas'), 2500)
       } catch (error) {

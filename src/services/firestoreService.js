@@ -2096,7 +2096,11 @@ export const sendInvoiceToSunat = async (userId, invoiceId) => {
       } catch {
         errorData = { error: errorText }
       }
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+      // Un envío que no llegó a SUNAT vuelve con `isTransient` y un mensaje que
+      // dice que se reintentará: sin él, se leía como un rechazo más.
+      throw new Error(errorData.isTransient && errorData.message
+        ? `${errorData.message} Motivo: ${errorData.error}`
+        : (errorData.error || `HTTP error! status: ${response.status}`))
     }
 
     const result = await response.json()
@@ -2165,7 +2169,11 @@ export const sendCreditNoteToSunat = async (userId, creditNoteId) => {
       } catch {
         errorData = { error: errorText }
       }
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+      // Un envío que no llegó a SUNAT vuelve con `isTransient` y un mensaje que
+      // dice que se reintentará: sin él, se leía como un rechazo más.
+      throw new Error(errorData.isTransient && errorData.message
+        ? `${errorData.message} Motivo: ${errorData.error}`
+        : (errorData.error || `HTTP error! status: ${response.status}`))
     }
 
     const result = await response.json()
@@ -3439,7 +3447,11 @@ export const sendDispatchGuideToSunat = async (businessId, guideId) => {
       } catch {
         errorData = { error: errorText }
       }
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+      // Un envío que no llegó a SUNAT vuelve con `isTransient` y un mensaje que
+      // dice que se reintentará: sin él, se leía como un rechazo más.
+      throw new Error(errorData.isTransient && errorData.message
+        ? `${errorData.message} Motivo: ${errorData.error}`
+        : (errorData.error || `HTTP error! status: ${response.status}`))
     }
 
     const result = await response.json()
@@ -3691,7 +3703,11 @@ export const sendCarrierDispatchGuideToSunat = async (businessId, guideId) => {
       } catch {
         errorData = { error: errorText }
       }
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
+      // Un envío que no llegó a SUNAT vuelve con `isTransient` y un mensaje que
+      // dice que se reintentará: sin él, se leía como un rechazo más.
+      throw new Error(errorData.isTransient && errorData.message
+        ? `${errorData.message} Motivo: ${errorData.error}`
+        : (errorData.error || `HTTP error! status: ${response.status}`))
     }
 
     const result = await response.json()

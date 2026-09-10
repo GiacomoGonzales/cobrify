@@ -293,6 +293,14 @@ export default function CreateDebitNote() {
             text: `Nota de Débito ${debitNoteNumber} firmada pero pendiente de envío a SUNAT. ${sunatResult.message || ''}`
           })
           setTimeout(() => appNavigate('facturas'), 3000)
+        } else if (sunatResult.isTransient) {
+          // No llegó a SUNAT (el proveedor no pudo firmar, SUNAT caído): queda
+          // pendiente y el reintento automático la manda. No es un rechazo.
+          setMessage({
+            type: 'info',
+            text: `Nota de Débito ${debitNoteNumber} creada. ${sunatResult.message || 'Se reintentará automáticamente.'} Motivo: ${sunatResult.error || 'sin respuesta'}`
+          })
+          setTimeout(() => appNavigate('facturas'), 4000)
         } else {
           // El documento fue creado pero rechazado por SUNAT
           setMessage({

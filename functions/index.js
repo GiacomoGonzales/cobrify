@@ -648,6 +648,16 @@ const TEXTOS_SIN_RESPUESTA = [
   // para que releer un comprobante ya guardado dé el mismo veredicto que darlo
   // por primera vez.
   'no se recibió respuesta de sunat',
+  // Lo que falla en QPse ANTES de que el documento salga hacia SUNAT: el token,
+  // la firma o una respuesta vacía (los textos son los de qpseService.js).
+  // SUNAT no llegó a ver nada, así que no hay rechazo que informar. La NC
+  // FC01-00000002 de IS ALFA quedó "rechazada" con "Error al firmar con QPse:
+  // errors.unauthenticated" y se emitieron tres más encima (19-ago-2026). Si
+  // la causa fuera permanente (credenciales vencidas), el reintento se rinde
+  // solo a los 50 intentos y deja el motivo.
+  'error al autenticar con qpse',
+  'error al firmar con qpse',
+  'qpse no devolvió',
 ]
 
 /**
@@ -1212,8 +1222,11 @@ export const sendInvoiceToSunat = onRequest(
           return
         }
 
-        // Verificar si es error temporal (SUNAT caído, timeout, etc.)
-        const isTransientError = isTransientSunatError(errorCode, errorMessage)
+        // ¿Se reintenta? El mismo criterio que el reintento automático: un
+        // error pasajero (SUNAT caído, timeout) o uno que ni llegó a SUNAT (el
+        // proveedor no pudo firmar) no es un rechazo. Antes esta rama solo
+        // miraba los pasajeros, y un fallo de firma de QPse quedaba "rechazado".
+        const isTransientError = estadoDeEnvio(emissionResult) === 'pending'
 
         if (isTransientError) {
           // Error temporal → mantener como 'pending' para reintento automático
@@ -1246,7 +1259,7 @@ export const sendInvoiceToSunat = onRequest(
             error: errorMessage,
             method: emissionResult.method,
             isTransient: true,
-            message: 'Error temporal de SUNAT. El documento se reintentará automáticamente.'
+            message: 'El comprobante no llegó a SUNAT. Se reintentará automáticamente.'
           })
           return
         }
@@ -2005,6 +2018,45 @@ export const sendCreditNoteToSunat = onRequest(
           return
         }
 
+        // ¿SUNAT llegó a evaluarla? Un fallo del proveedor al firmar, un token
+        // vencido o un corte NO son un rechazo: la nota ni salió. Marcarla
+        // "rechazada" le decía al usuario que SUNAT la había mirado, y así se
+        // emitieron tres notas encima de una que solo había fallado al firmarse
+        // (IS ALFA, FC01-00000002, 19-ago-2026). Mismo criterio que el
+        // reintento automático (`estadoDeEnvio`): queda pendiente y se reintenta.
+        if (estadoDeEnvio(emissionResult) === 'pending') {
+          console.log(`⏳ NC sin respuesta de SUNAT (${ncErrorMessage}) - queda 'pending' para reintento`)
+          await creditNoteRef.update({
+            sunatStatus: 'pending',
+            sunatResponse: {
+              code: ncErrorCode,
+              description: ncErrorMessage,
+              observations: [],
+              error: true,
+              method: emissionResult.method,
+              isTransient: true
+            },
+            lastRetryError: {
+              code: ncErrorCode,
+              description: ncErrorMessage,
+              timestamp: new Date().toISOString(),
+              isTransient: true
+            },
+            retryCount: FieldValue.increment(1),
+            sunatSendingStartedAt: null,
+            sunatSentAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          })
+
+          res.status(503).json({
+            error: ncErrorMessage,
+            method: emissionResult.method,
+            isTransient: true,
+            message: 'La nota de crédito no llegó a SUNAT. Se reintentará automáticamente.'
+          })
+          return
+        }
+
         // Actualizar NC con error
         await creditNoteRef.update({
           sunatStatus: 'rejected',
@@ -2015,6 +2067,7 @@ export const sendCreditNoteToSunat = onRequest(
             error: true,
             method: emissionResult.method
           },
+          sunatSendingStartedAt: null,
           sunatSentAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
         })
@@ -2612,8 +2665,12 @@ export const sendDebitNoteToSunat = onRequest(
         // Verificar si SUNAT dice que ya fue registrada o aceptada (puede venir como SOAP Fault en reintentos)
         // IMPORTANTE: "con otros datos" = conflicto de datos, NO es aceptación
         const ndMsgLower = (ndErrorMessage || '').toLowerCase()
-        // "con otros datos" también indica que SUNAT ya tiene el documento
-        const ndAlreadyRegistered = (
+        // "CON OTROS DATOS" = el correlativo lo tiene OTRO documento en SUNAT:
+        // el nuestro no llegó. Mismo criterio que facturas y notas de crédito
+        // (el de las ND decía lo contrario y la daba por aceptada).
+        const ndErrDataConflict = ndMsgLower.includes('con otros datos') &&
+          await hasCorrelativeConflict(userId, debitNoteId, debitNoteData.number)
+        const ndAlreadyRegistered = !ndErrDataConflict && (
           ndErrorCode === '1033' || (ndErrorCode || '').includes('1033') ||
           ndMsgLower.includes('registrado previamente') ||
           ndMsgLower.includes('ha sido aceptada') ||
@@ -2679,6 +2736,45 @@ export const sendDebitNoteToSunat = onRequest(
           return
         }
 
+        // ¿SUNAT llegó a evaluarla? Un fallo del proveedor al firmar, un token
+        // vencido o un corte NO son un rechazo: la nota ni salió. Marcarla
+        // "rechazada" le decía al usuario que SUNAT la había mirado, y así se
+        // emitieron tres notas encima de una que solo había fallado al firmarse
+        // (IS ALFA, FC01-00000002, 19-ago-2026). Mismo criterio que el
+        // reintento automático (`estadoDeEnvio`): queda pendiente y se reintenta.
+        if (estadoDeEnvio(emissionResult) === 'pending') {
+          console.log(`⏳ ND sin respuesta de SUNAT (${ndErrorMessage}) - queda 'pending' para reintento`)
+          await debitNoteRef.update({
+            sunatStatus: 'pending',
+            sunatResponse: {
+              code: ndErrorCode,
+              description: ndErrorMessage,
+              observations: [],
+              error: true,
+              method: emissionResult.method,
+              isTransient: true
+            },
+            lastRetryError: {
+              code: ndErrorCode,
+              description: ndErrorMessage,
+              timestamp: new Date().toISOString(),
+              isTransient: true
+            },
+            retryCount: FieldValue.increment(1),
+            sunatSendingStartedAt: null,
+            sunatSentAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          })
+
+          res.status(503).json({
+            error: ndErrorMessage,
+            method: emissionResult.method,
+            isTransient: true,
+            message: 'La nota de débito no llegó a SUNAT. Se reintentará automáticamente.'
+          })
+          return
+        }
+
         // Actualizar ND con error
         await debitNoteRef.update({
           sunatStatus: 'rejected',
@@ -2689,6 +2785,7 @@ export const sendDebitNoteToSunat = onRequest(
             error: true,
             method: emissionResult.method
           },
+          sunatSendingStartedAt: null,
           sunatSentAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
         })
@@ -2704,15 +2801,24 @@ export const sendDebitNoteToSunat = onRequest(
       // Código 1033 = "El comprobante fue registrado previamente" o "ha sido aceptada"
       // IMPORTANTE: "con otros datos" = conflicto de datos, NO es aceptación
       const ndDescLower = (emissionResult.description || '').toLowerCase()
-      // "con otros datos" también indica que SUNAT ya tiene el documento
-      const isAlreadyRegistered = (
+      // "CON OTROS DATOS" = ese correlativo ya está tomado en SUNAT por un
+      // documento DISTINTO: el nuestro NO llegó. Ver el bloque de las NC.
+      const isNdDataConflict = ndDescLower.includes('con otros datos') &&
+        await hasCorrelativeConflict(userId, debitNoteId, debitNoteData.number)
+      const isAlreadyRegistered = !isNdDataConflict && (
         emissionResult.responseCode === '1033' ||
         (emissionResult.responseCode || '').includes('1033') ||
         ndDescLower.includes('registrado previamente') ||
         ndDescLower.includes('ha sido aceptada') ||
         ndDescLower.includes('ha sido aceptado'))
 
-      if (isAlreadyRegistered) {
+      if (isNdDataConflict) {
+        console.log('🛑 Codigo 1033 CON OTROS DATOS en ND: correlativo tomado por otro documento')
+        emissionResult.accepted = false
+        emissionResult.description =
+          'SUNAT ya tiene ese numero de nota de debito registrado con datos distintos. ' +
+          'Esta ND NO fue aceptada: hay que emitirla de nuevo con el numero siguiente.'
+      } else if (isAlreadyRegistered) {
         const allowedStatuses = ['pending', 'not_sent', 'signed', 'rejected', 'sending']
         const isOurDocument = allowedStatuses.includes(debitNoteData.sunatStatus)
 
