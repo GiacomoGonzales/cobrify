@@ -492,7 +492,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
         .item-details {
           display: flex;
           justify-content: space-between;
-          align-items: flex-start;
+          align-items: baseline;
           gap: ${is58mm ? '2px' : '4px'};
           font-size: ${webPrintLegible ? (is58mm ? '10pt' : '11pt') : (is58mm ? '7pt' : '8pt')};
           font-weight: ${webPrintLegible ? '700' : '600'};
@@ -514,6 +514,16 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           white-space: nowrap;
         }
 
+        /* La CANTIDAD, un escalón por encima del resto de la fila. Es lo que
+           el almacén lee para despachar, y con la misma letra que el precio
+           se perdía entre los números: "30 x S/ 2.50" pide leer tres cifras
+           para encontrar la que importa. Ya se había engrosado la fila entera
+           (8-set); la queja siguió en el almacén (EDIN SOLANO, 10-set-2026). */
+        .item-qty {
+          font-size: ${webPrintLegible ? (is58mm ? '13pt' : '14pt') : (is58mm ? '9pt' : '10.5pt')};
+          font-weight: 800;
+        }
+
         .item-code {
           font-size: ${webPrintLegible ? (is58mm ? '9pt' : '10pt') : (is58mm ? '6pt' : '7pt')};
           color: #000;
@@ -531,6 +541,15 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           white-space: pre-wrap;
           overflow-wrap: break-word;
           word-break: break-word;
+        }
+
+        /* Las observaciones DE ESTA VENTA (a qué local va, cómo entregarla)
+           se leen al despachar, igual que la cantidad. Van un escalón por
+           encima del texto secundario; el pie y las leyendas, que comparten
+           .ticket-nota, se quedan como estaban. */
+        .ticket-observaciones {
+          font-size: ${webPrintLegible ? (is58mm ? '12pt' : '13pt') : (is58mm ? '8.5pt' : '9.5pt')};
+          font-weight: 700;
         }
 
         .ticket-subtitulo {
@@ -705,6 +724,12 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
         }
         .ticket-nota, .ticket-subtitulo {
           font-size: ${is58mm ? '5.5pt' : '6.5pt'} !important;
+        }
+        .item-qty {
+          font-size: ${is58mm ? '6.5pt' : '7.5pt'} !important;
+        }
+        .ticket-observaciones {
+          font-size: ${is58mm ? '6.5pt' : '7.5pt'} !important;
         }
         .ticket-sub {
           font-size: ${is58mm ? '5pt' : '6pt'} !important;
@@ -982,7 +1007,11 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
               <div key={index} className="item-row">
                 <div className="item-desc">{showItemUnit ? `${qtyFormatted} ${measureUnit}  ${cleanName}` : itemName}</div>
                 <div className="item-details">
-                  <span style={{ whiteSpace: 'normal' }}>{qtyFormatted}{unitSuffix} x {formatCurrency(desglose.baseUnit)}</span>
+                  <span style={{ whiteSpace: 'normal' }}>
+                    {/* La cantidad, más grande que el precio: es lo que se lee al
+                        despachar (ver .item-qty). */}
+                    <strong className="item-qty">{qtyFormatted}{unitSuffix}</strong> x {formatCurrency(desglose.baseUnit)}
+                  </span>
                   <span style={{ whiteSpace: 'nowrap' }}>{formatCurrency(lineTotal)}</span>
                 </div>
                 {desglose.lineas.map((l, i) => (
@@ -1286,7 +1315,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
       {invoice.notes && (
         <div className="ticket-section">
           <div className="section-title">OBSERVACIONES</div>
-          <div className="ticket-nota">
+          <div className="ticket-nota ticket-observaciones">
             {invoice.notes}
           </div>
         </div>

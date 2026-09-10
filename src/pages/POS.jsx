@@ -14552,26 +14552,19 @@ Gracias por tu preferencia.`
             ref={ticketRef}
             invoice={{
               ...lastInvoiceData,
+              // La línea TAL COMO se guardó, no una copia armada a mano. Antes se
+              // elegían los campos uno por uno, y cada vez que el ticket necesitaba
+              // uno nuevo faltaba acá: la unidad, el descuento, el lote, la variante,
+              // la serie… El último fue `allowDecimalQuantity`, del que depende que
+              // salga "30 KG" y no solo "30". Reimpreso desde Ventas —que pasa el
+              // comprobante guardado— salía bien; recién vendido, no (EDIN SOLANO,
+              // 10-set-2026). Con la línea completa, el ticket del POS y el de Ventas
+              // leen exactamente lo mismo. Solo se nombran aparte los dos campos que
+              // el ticket busca con otro nombre.
               items: (lastInvoiceData.items || []).map(item => ({
-                code: item.code,
-                name: item.name,
+                ...item,
                 description: item.name,
-                quantity: item.quantity,
                 price: item.unitPrice,
-                unit: item.unit, // unidad de medida (para que el ticket no caiga a "UNIDAD" genérico)
-                observations: item.observations,
-                // Descuento por ítem: sin esto el ticket post-venta mostraba solo el
-                // descuento total abajo (parecía global) aunque fuera individual.
-                ...(item.itemDiscount > 0 && { itemDiscount: item.itemDiscount }),
-                // Lote/vencimiento para que el ticket los muestre (farmacia)
-                ...(item.batchNumber && { batchNumber: item.batchNumber }),
-                ...(item.batchExpiryDate && { batchExpiryDate: item.batchExpiryDate }),
-                // Variante (talla, color, ...) para mostrarla en el ticket
-                ...(item.isVariant && { isVariant: true, variantSku: item.variantSku, variantAttributes: item.variantAttributes }),
-                // Presentación elegida (CAJA, PACK, ...): el ticket la antepone con showItemUnit
-                ...(item.presentationName && { presentationName: item.presentationName, presentationFactor: item.presentationFactor }),
-                ...(item.serialNumber && { serialNumber: item.serialNumber }),
-        ...(item.serialNumber2 && { serialNumber2: item.serialNumber2 }),
               })),
               series: lastInvoiceData.series,
               number: lastInvoiceData.number,
