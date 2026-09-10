@@ -9,7 +9,7 @@ import {
   Info,
   Clock,
   Trash2,
-  Image as ImageIcon, Tag } from 'lucide-react'
+  Image as ImageIcon, Tag, EyeOff } from 'lucide-react'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '@/lib/firebase'
 import { Boton, Seccion, Tabla, Th, Td, Fila, FilaVacia } from '@/components/admin/ui'
@@ -372,6 +372,7 @@ function MaintenanceSection() {
 
           {/* Accesos huérfanos: cuentas de Firebase que no son de nadie. */}
           <AccesosHuerfanosCard />
+          <CorreosDeSoporteCard />
 
           {/* Info */}
           <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
@@ -401,6 +402,117 @@ function MaintenanceSection() {
  * le manden. Conserva a quien tenga ficha, plan, negocio, sea admin, reseller o
  * vendedor, compre en el catálogo de algún cliente, o cuyo acceso sea de hoy.
  */
+/**
+ * Quita el correo del admin de los accesos de soporte viejos.
+ *
+ * Hasta el 10-set-2026, "Entrar como este cliente" dejaba el correo personal
+ * de quien entraba en el registro que el cliente ve en su Cuenta. La pantalla
+ * ya no lo pinta, pero el correo seguía dentro del documento, a un clic de la
+ * consola del navegador. Esto lo quita de los registros viejos.
+ *
+ * Igual que la de huérfanos: la lista la arma el servidor, primero se mira y
+ * la limpieza solo se habilita después. No borra el registro: le cambia el
+ * correo por "Equipo de soporte de Cobrify".
+ */
+function CorreosDeSoporteCard() {
+  const [mirando, setMirando] = useState(false)
+  const [limpiando, setLimpiando] = useState(false)
+  const [visto, setVisto] = useState(null)
+  const [hecho, setHecho] = useState(null)
+  const [error, setError] = useState(null)
+
+  async function correr(dryRun) {
+    dryRun ? setMirando(true) : setLimpiando(true)
+    setError(null)
+    if (dryRun) { setVisto(null); setHecho(null) }
+    try {
+      const fn = httpsCallable(functions, 'limpiarCorreosDeSoporte', { timeout: 120000 })
+      const r = await fn({ dryRun })
+      dryRun ? setVisto(r.data) : setHecho(r.data)
+    } catch (e) {
+      console.error(e)
+      setError(e.message || String(e))
+    } finally {
+      dryRun ? setMirando(false) : setLimpiando(false)
+    }
+  }
+
+  async function limpiar() {
+    if (!confirm(
+      `Se va a quitar tu correo de ${visto?.conCorreo ?? 0} registros de acceso de soporte.\n\n` +
+      'El registro se conserva: en lugar del correo dirá "Equipo de soporte de Cobrify".\n\n' +
+      '¿Confirmar?'
+    )) return
+    await correr(false)
+  }
+
+  const fecha = (iso) => (iso ? new Date(iso).toLocaleDateString('es-PE') : '—')
+
+  return (
+    <div className="bg-white rounded-lg p-5 border border-gray-200">
+      <div className="flex items-start gap-3">
+        <EyeOff className="w-6 h-6 text-gray-600 flex-shrink-0 mt-1" />
+        <div className="flex-1">
+          <h4 className="font-medium text-gray-900">Tu correo en los accesos de soporte</h4>
+          <p className="text-sm text-gray-600 mt-1">
+            Hasta el 10 de setiembre, al entrar a una cuenta se guardaba tu correo en el registro que
+            el cliente ve en su Cuenta. La pantalla ya no lo muestra, pero seguía dentro del registro.
+            Esto se lo quita y deja «Equipo de soporte de Cobrify». Mira primero: la limpieza solo se
+            habilita después.
+          </p>
+
+          <div className="flex gap-2 mt-3">
+            <button
+              type="button"
+              onClick={() => correr(true)}
+              disabled={mirando || limpiando}
+              className="px-3 py-1.5 text-sm rounded-md border border-gray-300 bg-white text-gray-700 hover:border-gray-400 disabled:opacity-50"
+            >
+              {mirando ? 'Buscando…' : 'Buscar'}
+            </button>
+            <button
+              type="button"
+              onClick={limpiar}
+              disabled={!visto?.conCorreo || mirando || limpiando}
+              className="px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {limpiando ? 'Limpiando…' : `Limpiar ${visto?.conCorreo ?? 0}`}
+            </button>
+          </div>
+
+          {visto && !hecho && (
+            <div className="mt-3 text-sm text-gray-700">
+              <p>
+                <strong>{visto.conCorreo}</strong> de {visto.revisados} registros todavía tienen tu correo.
+                {visto.conCorreo === 0 && ' No hay nada que limpiar.'}
+              </p>
+              {!!visto.muestra?.length && (
+                <ul className="mt-2 max-h-48 overflow-y-auto rounded-md border border-gray-200 bg-white divide-y divide-gray-100">
+                  {visto.muestra.map((m, i) => (
+                    <li key={i} className="px-3 py-1.5 text-xs flex justify-between gap-3">
+                      <span className="truncate">{m.negocio || 'Sin nombre'}</span>
+                      <span className="text-gray-400 whitespace-nowrap">{fecha(m.cuando)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {hecho && (
+            <p className="mt-3 text-sm text-gray-700">
+              Listo: se quitó tu correo de <strong>{hecho.limpiados}</strong> registros. Ahora dicen
+              «Equipo de soporte de Cobrify».
+            </p>
+          )}
+
+          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function AccesosHuerfanosCard() {
   const [mirando, setMirando] = useState(false)
   const [borrando, setBorrando] = useState(false)

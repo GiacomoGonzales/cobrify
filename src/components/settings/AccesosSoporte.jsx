@@ -66,7 +66,10 @@ export default function AccesosSoporte() {
         <div className="divide-y divide-gray-100 rounded-lg border border-gray-200">
           {accesos.map((a) => (
             <div key={a.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 px-4 py-2.5">
-              <span className="text-sm text-gray-900">{a.adminEmail || 'Soporte de Cobrify'}</span>
+              {/* NUNCA `adminEmail`: los registros viejos todavía lo traen, y
+                  el correo personal de quien entró no es asunto del cliente.
+                  Lo que le importa es que entró el equipo y cuándo. */}
+              <span className="text-sm text-gray-900">{a.quien || 'Equipo de soporte de Cobrify'}</span>
               <span className="text-[12.5px] text-gray-500 tabular-nums">{cuando(a.createdAt)}</span>
             </div>
           ))}

@@ -15360,9 +15360,18 @@ export const entrarComoCliente = onRequest(
         soporteNegocio: String(negocio).slice(0, 80),
       })
 
+      // SIN el correo del admin. Este documento lo LEE EL CLIENTE (ver
+      // firestore.rules), y leer es leerlo entero: las reglas de Firestore no
+      // ocultan campos sueltos. Esconderlo solo en la pantalla dejaba el correo
+      // personal de Giacomo a un clic de la consola del navegador de cualquier
+      // cliente al que se le entró a la cuenta.
+      //
+      // El uid SÍ se queda: dice por dentro qué miembro del equipo entró, que
+      // es la rendición de cuentas que justifica este registro, y a un
+      // cliente no le sirve para nada.
       await db.collection('accesosSoporte').add({
         adminUid: admin.uid,
-        adminEmail: admin.email || null,
+        quien: 'Equipo de soporte de Cobrify',
         targetUid,
         negocio,
         createdAt: FieldValue.serverTimestamp(),
@@ -16121,6 +16130,63 @@ export const accesosHuerfanos = onCall(
     console.log(`🧹 Admin ${request.auth.uid} borró ${borrados} accesos huérfanos de ${huerfanos.length}`)
     return { dryRun: false, revisados, huerfanos: huerfanos.length, borrados, fallos }
   },
+)
+
+/**
+ * QUITA EL CORREO DEL ADMIN DE LOS ACCESOS DE SOPORTE VIEJOS.
+ *
+ * Desde el 10-set-2026 `entrarComoCliente` ya no guarda `adminEmail` en
+ * `accesosSoporte`: ese registro lo lee EL PROPIO CLIENTE (su pantalla de
+ * Cuenta), y las reglas de Firestore no ocultan campos sueltos al leer. El
+ * correo personal de Giacomo le llegaba al navegador aunque la pantalla no lo
+ * pintara. Esto limpia los registros escritos antes del arreglo.
+ *
+ * Mismo patrón que `accesosHuerfanos`: la lista la arma el SERVIDOR —nunca se
+ * acepta una desde el navegador— y por defecto SOLO MIRA. Tocar datos de
+ * producción pasa solo si se pide explícitamente.
+ *
+ * NO borra el registro, que es la rendición de cuentas de quién entró y
+ * cuándo: le quita el correo y le pone el nombre del equipo en su lugar.
+ */
+export const limpiarCorreosDeSoporte = onCall(
+  { region: 'us-central1', cors: true, timeoutSeconds: 120, memory: '256MiB' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Debe estar autenticado')
+    if (!(await esAdministrador(request.auth.uid))) throw new HttpsError('permission-denied', 'Solo administradores')
+
+    const soloMirar = request.data?.dryRun !== false // por seguridad, mirar es lo que pasa si no se dice nada
+
+    // La colección es chica (nació el 7-set) y se filtra en memoria: una
+    // consulta por "campo distinto de null" pediría un índice solo para esto.
+    const snap = await db.collection('accesosSoporte').get()
+    const conCorreo = snap.docs.filter((d) => d.get('adminEmail') != null)
+
+    const muestra = conCorreo.slice(0, 50).map((d) => ({
+      negocio: d.get('negocio') || null,
+      cuando: d.get('createdAt')?.toDate?.()?.toISOString?.() || null,
+    }))
+
+    if (soloMirar) {
+      return { dryRun: true, revisados: snap.size, conCorreo: conCorreo.length, muestra }
+    }
+
+    // De a 400 por lote (el tope de Firestore es 500).
+    let limpiados = 0
+    for (let i = 0; i < conCorreo.length; i += 400) {
+      const lote = conCorreo.slice(i, i + 400)
+      const batch = db.batch()
+      for (const d of lote) {
+        batch.update(d.ref, {
+          adminEmail: FieldValue.delete(),
+          quien: 'Equipo de soporte de Cobrify',
+        })
+      }
+      await batch.commit()
+      limpiados += lote.length
+    }
+    console.log(`🧹 Admin ${request.auth.uid} quitó el correo de ${limpiados} accesos de soporte`)
+    return { dryRun: false, revisados: snap.size, conCorreo: conCorreo.length, limpiados, muestra }
+  }
 )
 
 /**
