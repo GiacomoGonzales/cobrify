@@ -203,7 +203,7 @@ export default function CartDrawer({
   // del tema — en bold es OSCURO. El modo oscuro entra por un bloque CSS
   // scoped (.catalog-cart-dark) que re-pinta inputs/labels/grises del
   // checkout inline de una vez. Hook ANTES de cualquier return.
-  const { tokens } = useCatalogTheme()
+  const { tokens, classes: thCarrito } = useCatalogTheme()
   const esOscuro = !!tokens.effects.darkMode
   // Las reglas viven en PanelTemaCss, compartidas con la cuenta del comprador
   // y el login: los tres paneles estan escritos en gris de Tailwind y los tres
@@ -1076,7 +1076,7 @@ export default function CartDrawer({
                 {(isRestaurantMenu || business?.catalogOnlineOrders !== false) ? (
                   <button
                     onClick={() => setPaso('datos')}
-                    className="w-full py-4 text-white rounded-2xl font-semibold text-lg transition-opacity hover:opacity-80 flex items-center justify-center gap-2"
+                    className={`w-full py-4 text-white ${thCarrito?.ctaText || 'rounded-2xl font-semibold text-lg'} transition-opacity hover:opacity-80 flex items-center justify-center gap-2`}
                     style={{ backgroundColor: getCatalogAccent(business) }}
                   >
                     Continuar con el pedido
@@ -1085,7 +1085,7 @@ export default function CartDrawer({
                 ) : (
                   <button
                     onClick={() => onCheckout(appliedCoupon ? { ...appliedCoupon, discount: couponDiscountInCcy } : null)}
-                    className="w-full py-4 text-white rounded-2xl font-semibold text-lg transition-opacity hover:opacity-80 flex items-center justify-center gap-2"
+                    className={`w-full py-4 text-white ${thCarrito?.ctaText || 'rounded-2xl font-semibold text-lg'} transition-opacity hover:opacity-80 flex items-center justify-center gap-2`}
                     style={{ backgroundColor: getCatalogAccent(business) }}
                   >
                     <MessageCircle className="w-5 h-5" />

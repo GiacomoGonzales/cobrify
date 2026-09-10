@@ -24,7 +24,12 @@
  * cae a light — esa red de seguridad no se toca.
  */
 
+import { TEMAS_A_MEDIDA } from './temasAMedida'
+
 export const CATALOG_THEMES = {
+  // Los temas a medida van primero: a su dueño le aparecen arriba en la
+  // galería, y a nadie más (ver getCatalogThemesList).
+  ...TEMAS_A_MEDIDA,
   light: {
     id: 'light',
     name: 'Estándar',
@@ -852,6 +857,9 @@ export function getCatalogTheme(themeId) {
  */
 export const DEFAULT_CATALOG_ACCENT = '#10B981'
 export function getCatalogAccent(business, themeIdOverride) {
+  // Un tema a medida trae el color de la marca y no se elige.
+  const temaElegido = CATALOG_THEMES[themeIdOverride || business?.catalogTheme]
+  if (temaElegido?.acentoFijo) return temaElegido.accent
   const custom = business?.catalogColor
   if (custom && custom.toLowerCase() !== DEFAULT_CATALOG_ACCENT.toLowerCase()) {
     return custom
@@ -863,6 +871,7 @@ export function getCatalogAccent(business, themeIdOverride) {
 /**
  * Lista de temas en orden estable (el orden de declaración es el de la galería).
  */
-export function getCatalogThemesList() {
-  return Object.values(CATALOG_THEMES)
+export function getCatalogThemesList(businessId = null) {
+  // Un tema a medida (soloPara) solo lo ve el negocio que lo pagó.
+  return Object.values(CATALOG_THEMES).filter((t) => !t.soloPara || (!!businessId && t.soloPara.includes(businessId)))
 }

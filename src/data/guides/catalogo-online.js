@@ -60,6 +60,10 @@ export default {
         },
         {
           type: 'texto',
+          text: 'También en **Apariencia**, en **Pestaña del navegador**, eliges el **título de la pestaña** (por ejemplo, "Mi Tienda - Tienda online") y su **ícono**. Si no los cambias, la pestaña muestra el nombre del negocio con "Catálogo" y tu logo. Ese título es también el que sale al compartir el enlace.',
+        },
+        {
+          type: 'texto',
           text: 'En **Apariencia > Buscador** eliges cómo busca tu cliente. Por defecto hay una **lupa** al inicio de la fila de categorías, que abre un panel de búsqueda. Si activas **Barra de búsqueda siempre visible**, en su lugar aparece una barra a la vista que va filtrando los productos mientras el cliente escribe, sin abrir nada. Conviene cuando tu gente busca por nombre casi siempre; la lupa deja más espacio para las categorías.',
         },
         {

@@ -63,7 +63,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
   // Tokens del tema (port shopifree): el drawer se pinta con la superficie
   // del tema — en bold es OSCURO como el resto del catalogo (antes era blanco
   // fijo). OJO: hook ANTES del early return de abajo (regla de hooks).
-  const { tokens } = useCatalogTheme()
+  const { tokens, classes: thModal } = useCatalogTheme()
   const esOscuro = !!tokens.effects.darkMode
   const bordeOpcion = esOscuro ? 'border-gray-700 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'
   const bordeRadio = esOscuro ? 'border-gray-600' : 'border-gray-300'
@@ -1261,7 +1261,7 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
           <button
             onClick={handleAddToCart}
             disabled={outOfStock}
-            className={`w-full py-4 font-semibold text-lg flex items-center justify-center gap-2 transition-opacity ${
+            className={`w-full py-4 ${thModal?.ctaText || 'font-semibold text-lg'} flex items-center justify-center gap-2 transition-opacity ${
               outOfStock ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'hover:opacity-80'
             }`}
             style={{

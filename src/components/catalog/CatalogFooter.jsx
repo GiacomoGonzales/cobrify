@@ -60,9 +60,17 @@ export default function CatalogFooter({ business, sidebarNav = false }) {
   const waNumber = business?.catalogWhatsapp || business?.whatsapp || business?.phone
   const footerLogo = business?.catalogLogoLandscape || business?.catalogLogoUrl || business?.logoUrl
   const footerIsLandscape = !!business?.catalogLogoLandscape
+  // Pie con color propio (tema a medida de CITEX: #1E1E1E como su web). Sin
+  // footerBg, los colores de siempre, que son los del resto de la página.
+  const fText = th.footerText || th.text || 'text-gray-900'
+  const fMuted = th.footerMuted || th.textMuted || 'text-gray-500'
+  const fFaint = th.footerFaint || th.textFaint || 'text-gray-400'
+  const fBorder = th.footerBorder || th.borderColor || 'border-gray-200'
+  const fondoIcono = th.footerIconBg || tokens.colors.surfaceHover
+  const filtroLogoPie = theme?.chrome?.footerLogoInvert ? { filter: 'brightness(0) invert(1)' } : null
 
   return (
-    <footer className={`${th.borderColor || 'border-gray-200'} border-t mt-12 ${sidebarNav ? 'md:hidden' : ''}`}>
+    <footer className={`${th.footerBg || ''} ${fBorder} border-t mt-12 ${sidebarNav ? 'md:hidden' : ''}`}>
       <div className="max-w-7xl mx-auto px-6 py-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-10 md:gap-8">
 
@@ -74,7 +82,7 @@ export default function CatalogFooter({ business, sidebarNav = false }) {
                   src={optimizeImageUrl(footerLogo, footerIsLandscape ? 'logo_landscape' : 'logo_square')}
                   alt={business?.name}
                   className={`${footerIsLandscape ? 'h-11 max-w-[220px]' : 'w-12 h-12'} object-contain`}
-                  style={footerIsLandscape ? undefined : { borderRadius: radioLogo }}
+                  style={{ ...(footerIsLandscape ? {} : { borderRadius: radioLogo }), ...(filtroLogoPie || {}) }}
                 />
               ) : (
                 <div
@@ -85,13 +93,13 @@ export default function CatalogFooter({ business, sidebarNav = false }) {
                 </div>
               )}
               {!footerIsLandscape && (
-                <span className={`font-semibold text-lg ${th.text || 'text-gray-900'}`}>
+                <span className={`font-semibold text-lg ${fText}`}>
                   {business?.name || business?.businessName}
                 </span>
               )}
             </div>
             {(business?.catalogTagline || business?.catalogWelcome) && (
-              <p className={`text-sm leading-relaxed ${th.textMuted || 'text-gray-500'}`}>
+              <p className={`text-sm leading-relaxed ${fMuted}`}>
                 {business?.catalogTagline || business?.catalogWelcome}
               </p>
             )}
@@ -99,7 +107,7 @@ export default function CatalogFooter({ business, sidebarNav = false }) {
 
           {/* Columna 2: contacto + horario */}
           <div className="space-y-4">
-            <h3 className={`text-sm font-semibold uppercase tracking-wide ${th.text || 'text-gray-900'}`}>
+            <h3 className={`text-sm font-semibold uppercase tracking-wide ${fText}`}>
               Contacto
             </h3>
             <div className="space-y-3">
@@ -108,27 +116,27 @@ export default function CatalogFooter({ business, sidebarNav = false }) {
                   href={`https://wa.me/${String(waNumber).replace(/\D/g, '')}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`flex items-center gap-3 text-sm hover:underline ${th.textMuted || 'text-gray-500'}`}
+                  className={`flex items-center gap-3 text-sm hover:underline ${fMuted}`}
                 >
-                  <MessageCircle className={`w-5 h-5 ${th.textFaint || 'text-gray-400'}`} />
+                  <MessageCircle className={`w-5 h-5 ${fFaint}`} />
                   WhatsApp {business?.catalogWhatsapp || business?.whatsapp || business?.phone}
                 </a>
               )}
               {business?.phone && (
                 <a
                   href={`tel:${business.phone}`}
-                  className={`flex items-center gap-3 text-sm hover:underline ${th.textMuted || 'text-gray-500'}`}
+                  className={`flex items-center gap-3 text-sm hover:underline ${fMuted}`}
                 >
-                  <Phone className={`w-5 h-5 ${th.textFaint || 'text-gray-400'}`} />
+                  <Phone className={`w-5 h-5 ${fFaint}`} />
                   {business.phone}
                 </a>
               )}
               {business?.email && (
                 <a
                   href={`mailto:${business.email}`}
-                  className={`flex items-center gap-3 text-sm hover:underline ${th.textMuted || 'text-gray-500'}`}
+                  className={`flex items-center gap-3 text-sm hover:underline ${fMuted}`}
                 >
-                  <Mail className={`w-5 h-5 ${th.textFaint || 'text-gray-400'}`} />
+                  <Mail className={`w-5 h-5 ${fFaint}`} />
                   {business.email}
                 </a>
               )}
@@ -137,19 +145,19 @@ export default function CatalogFooter({ business, sidebarNav = false }) {
                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(business.address)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`flex items-start gap-3 text-sm hover:underline ${th.textMuted || 'text-gray-500'}`}
+                  className={`flex items-start gap-3 text-sm hover:underline ${fMuted}`}
                 >
-                  <MapPin className={`w-5 h-5 flex-shrink-0 mt-0.5 ${th.textFaint || 'text-gray-400'}`} />
+                  <MapPin className={`w-5 h-5 flex-shrink-0 mt-0.5 ${fFaint}`} />
                   <span>{business.address}</span>
                 </a>
               )}
 
               {/* Horario semanal (se conserva del footer anterior) */}
               {business?.businessHours?.enabled && (
-                <div className={`pt-2 ${th.textFaint || 'text-gray-400'}`}>
+                <div className={`pt-2 ${fFaint}`}>
                   <div className="flex items-center gap-2 mb-2">
                     <Clock className="w-4 h-4" />
-                    <span className={`text-sm font-semibold ${th.textMuted || 'text-gray-500'}`}>Horario</span>
+                    <span className={`text-sm font-semibold ${fMuted}`}>Horario</span>
                     {(() => {
                       const status = isBusinessOpen(business.businessHours)
                       return (
@@ -181,7 +189,7 @@ export default function CatalogFooter({ business, sidebarNav = false }) {
           {/* Columna 3: redes sociales (solo si el negocio configuro alguna) */}
           {redes.length > 0 && (
             <div className="space-y-4">
-              <h3 className={`text-sm font-semibold uppercase tracking-wide ${th.text || 'text-gray-900'}`}>
+              <h3 className={`text-sm font-semibold uppercase tracking-wide ${fText}`}>
                 Síguenos
               </h3>
               <div className="flex gap-3">
@@ -192,8 +200,8 @@ export default function CatalogFooter({ business, sidebarNav = false }) {
                     target="_blank"
                     rel="noopener noreferrer"
                     title={red.charAt(0).toUpperCase() + red.slice(1)}
-                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-transform hover:scale-110 ${th.textMuted || 'text-gray-500'}`}
-                    style={{ backgroundColor: tokens.colors.surfaceHover }}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-transform hover:scale-110 ${fMuted}`}
+                    style={{ backgroundColor: fondoIcono }}
                   >
                     {SOCIAL_ICONS[red]}
                   </a>
@@ -204,7 +212,7 @@ export default function CatalogFooter({ business, sidebarNav = false }) {
         </div>
 
         {/* Barra inferior */}
-        <div className={`mt-12 pt-6 border-t flex flex-col md:flex-row md:items-center md:justify-between gap-3 ${th.borderColor || 'border-gray-200'}`}>
+        <div className={`mt-12 pt-6 border-t flex flex-col md:flex-row md:items-center md:justify-between gap-3 ${fBorder}`}>
           <p className={`text-sm ${th.footerPowered || 'text-gray-400'}`}>
             © {new Date().getFullYear()} {business?.name || business?.businessName}
           </p>

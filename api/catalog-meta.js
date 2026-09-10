@@ -84,7 +84,9 @@ async function findBusinessByCatalogSlug(slug) {
       catalogColor: fields.catalogColor?.stringValue || null,
       catalogSocialImage: fields.catalogSocialImage?.stringValue || null,
       catalogLogoUrl: fields.catalogLogoUrl?.stringValue || null,
-      logoUrl: fields.logoUrl?.stringValue || null
+      logoUrl: fields.logoUrl?.stringValue || null,
+      // El título de la pestaña que eligió el negocio (Apariencia).
+      catalogPageTitle: fields.catalogPageTitle?.stringValue || null
     }
   } catch (error) {
     console.error('Error fetching from Firestore:', error)
@@ -94,6 +96,10 @@ async function findBusinessByCatalogSlug(slug) {
 
 function generateHTML(business, slug) {
   const businessName = business.name || business.businessName || 'Catálogo'
+  // El título que eligió el negocio, o el de siempre. Va dentro de atributos
+  // HTML: comillas y signos de menor se escapan.
+  const pageTitle = String(business.catalogPageTitle || `${businessName} - Catálogo de Productos`)
+    .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
   const tagline = business.catalogTagline || `Catálogo de productos de ${businessName}`
   const description = business.catalogWelcome || tagline
   const logoUrl = business.catalogLogoUrl || business.logoUrl || 'https://cobrifyperu.com/logo.png'
@@ -106,21 +112,21 @@ function generateHTML(business, slug) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${businessName} - Catálogo de Productos</title>
+  <title>${pageTitle}</title>
   <meta name="description" content="${description}" />
   <meta name="theme-color" content="${themeColor}" />
   <link rel="icon" href="${logoUrl}" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="${businessName}" />
   <meta property="og:url" content="${url}" />
-  <meta property="og:title" content="${businessName} - Catálogo de Productos" />
+  <meta property="og:title" content="${pageTitle}" />
   <meta property="og:description" content="${description}" />
   <meta property="og:image" content="${socialImageUrl}" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta property="og:locale" content="es_PE" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="${businessName} - Catálogo de Productos" />
+  <meta name="twitter:title" content="${pageTitle}" />
   <meta name="twitter:description" content="${description}" />
   <meta name="twitter:image" content="${socialImageUrl}" />
 </head>

@@ -200,6 +200,10 @@ export default function Catalogo() {
   const [catalogLogoLandscape, setCatalogLogoLandscape] = useState('')    // logo horizontal (opcional, reemplaza cuadrado+nombre)
   const [uploadingCatalogLogo, setUploadingCatalogLogo] = useState(false)
   const [uploadingCatalogLogoLandscape, setUploadingCatalogLogoLandscape] = useState(false)
+  // La pestaña del navegador del catálogo: título e ícono propios.
+  const [catalogPageTitle, setCatalogPageTitle] = useState('')
+  const [catalogFaviconUrl, setCatalogFaviconUrl] = useState('')
+  const [uploadingFavicon, setUploadingFavicon] = useState(false)
   const [businessHours, setBusinessHours] = useState({
     enabled: false,
     days: {
@@ -304,6 +308,8 @@ export default function Catalogo() {
     setCatalogSearchBar(businessData.catalogSearchBar === true)
     setCatalogLogoUrl(businessData.catalogLogoUrl || '')
     setCatalogLogoLandscape(businessData.catalogLogoLandscape || '')
+    setCatalogPageTitle(businessData.catalogPageTitle || '')
+    setCatalogFaviconUrl(businessData.catalogFaviconUrl || '')
     setCatalogShowAllPrices(businessData.catalogShowAllPrices !== false)
     setCatalogAllowTakeaway(businessData.catalogAllowTakeaway !== false)
     setCatalogAllowDelivery(businessData.catalogAllowDelivery !== false)
@@ -564,6 +570,8 @@ export default function Catalogo() {
       catalogSearchBar,
       catalogLogoUrl: catalogLogoUrl || null,
       catalogLogoLandscape: catalogLogoLandscape || null,
+      catalogPageTitle: (catalogPageTitle || '').trim() || null,
+      catalogFaviconUrl: catalogFaviconUrl || null,
       // La cantidad minima por nivel de precio se configura AHORA EN
       // CADA PRODUCTO (useAutoPriceByQty + priceMinQtys). El campo del
       // negocio ya no se escribe desde aca: el valor que tengan los
@@ -1397,7 +1405,7 @@ export default function Catalogo() {
 
                     {(() => {
                     const TEMAS_VISIBLES = 6
-                    const listaTemas = getCatalogThemesList()
+                    const listaTemas = getCatalogThemesList(getBusinessId())
                     const hayDeMas = listaTemas.length > TEMAS_VISIBLES
                     const iActual = listaTemas.findIndex(t => t.id === catalogTheme)
                     // Si el tema aplicado quedo fuera del corte, ocupa el
@@ -1618,6 +1626,59 @@ export default function Catalogo() {
                       </div>
                     </div>
                   </div>
+                  </div>
+                </div>
+
+                {/* Pestaña del navegador: título e ícono propios del catálogo.
+                    Pedido de CITEX ("CITEX - Tienda" y su favicon); sirve a todos. */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                  <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                    <Image className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900">Pestaña del navegador</h3>
+                      <p className="text-xs text-gray-500">El título y el ícono que se ven arriba, en la pestaña</p>
+                    </div>
+                  </div>
+                  <div className="px-5 py-5 space-y-5">
+                    <div className="space-y-1.5">
+                      <label htmlFor="catalog-page-title" className="block text-sm font-medium text-gray-800">Título de la pestaña</label>
+                      <input
+                        id="catalog-page-title"
+                        type="text"
+                        maxLength={70}
+                        value={catalogPageTitle}
+                        onChange={(e) => setCatalogPageTitle(e.target.value)}
+                        placeholder={`${businessSettings?.name || businessSettings?.businessName || 'Mi tienda'} - Catálogo`}
+                        className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      />
+                      <p className="text-xs text-gray-500">Vacío, usa el nombre del negocio con "Catálogo". También es el título al compartir el enlace.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-gray-800">
+                        Ícono de la pestaña <span className="text-xs font-normal text-gray-500">(opcional)</span>
+                      </p>
+                      <ImageDropZone
+                        value={catalogFaviconUrl}
+                        uploading={uploadingFavicon}
+                        className="w-24 h-24"
+                        label="Toca o arrastra el ícono"
+                        hint="Cuadrado. Si no lo subes, se usa tu logo."
+                        onClear={() => { setCatalogFaviconUrl(''); toast.success('Ícono quitado') }}
+                        onFile={async (file) => {
+                          setUploadingFavicon(true)
+                          try {
+                            const url = await uploadImage(await compressForLogoSquare(file), { folder: 'cobrify/branding', businessId: getBusinessId() })
+                            setCatalogFaviconUrl(url)
+                            toast.success('Ícono subido')
+                          } catch (err) {
+                            console.error('Error subiendo el ícono de la pestaña:', err)
+                            toast.error('Error al subir el ícono')
+                          } finally {
+                            setUploadingFavicon(false)
+                          }
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
 

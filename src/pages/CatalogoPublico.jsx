@@ -584,11 +584,13 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     if (!business) return
     const businessName = business.name || business.businessName || ''
     if (businessName) {
-      document.title = isRestaurantMenu
+      // El título que eligió el negocio (Apariencia), o el de siempre.
+      document.title = business.catalogPageTitle?.trim() || (isRestaurantMenu
         ? `${businessName} - Menú Digital`
-        : `${businessName} - Catálogo`
+        : `${businessName} - Catálogo`)
     }
-    const displayLogo = business.catalogLogoUrl || business.logoUrl
+    // El ícono de la pestaña: el que subió el negocio para eso, o su logo.
+    const displayLogo = business.catalogFaviconUrl || business.catalogLogoUrl || business.logoUrl
     if (displayLogo) {
       const favicons = document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"], link[rel="shortcut icon"]')
       favicons.forEach(el => el.setAttribute('href', displayLogo))
@@ -1005,7 +1007,9 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   // lleno con el radio del tema (los temas que hablan en bloques de color).
   const catBtnClass = (active) => {
     if (categoriesVariant === 'underline') {
-      return `px-3 py-2 text-sm font-medium whitespace-nowrap flex-shrink-0 border-b-2 transition-colors bg-transparent ${
+      // catTabText: la letra de las pestañas, si el tema la pide (CITEX las
+      // quiere en mayúsculas espaciadas, como el menú de su web).
+      return `px-3 py-2 ${themeClasses.catTabText || 'text-sm font-medium'} whitespace-nowrap flex-shrink-0 border-b-2 transition-colors bg-transparent ${
         active ? 'font-semibold' : `border-transparent ${themeClasses.textMuted}`
       }`
     }
@@ -1047,6 +1051,15 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const thViewHover = themeClasses.viewHover
   const thCatBadge = themeClasses.catBadge
   const thListBadge = themeClasses.listBadge
+  // Cabecera oscura sobre una página clara (tema a medida de CITEX): el texto
+  // y los iconos de la cabecera no pueden usar el color del resto de la
+  // página. Sin headerDark son los de siempre.
+  const headerOscuro = themeChrome.headerDark === true
+  const thHeaderText = headerOscuro ? 'text-white' : thText
+  const thHeaderMuted = headerOscuro ? 'text-[#C8C8C8] hover:text-white' : thTextMuted
+  const thHeaderHover = headerOscuro ? 'hover:bg-white/10' : thViewHover
+  // Logo negro sobre la cabecera negra: se pinta de blanco.
+  const filtroLogoCabecera = themeChrome.headerLogoInvert ? { filter: 'brightness(0) invert(1)' } : null
   /**
    * BUSCADOR: lupa o barra a la vista.
    *
@@ -1564,7 +1577,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                   menú lateral de escritorio. */}
               <button
                 onClick={() => { setDrawerExpandedCategory(selectedCategory); setCategoryDrawerOpen(true) }}
-                className={`md:hidden p-2 -ml-2 rounded-lg flex-shrink-0 ${thViewHover}`}
+                className={`md:hidden p-2 -ml-2 rounded-lg flex-shrink-0 ${thHeaderHover} ${headerOscuro ? 'text-white' : ''}`}
                 aria-label="Abrir menú"
               >
                 <Menu className="w-5 h-5" />
@@ -1578,7 +1591,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                      parejo aunque la imagen no sea exactamente 1:1. El logo
                      horizontal se deja tal cual: recortarlo lo mutilaria. */
                   className={`${headerIsLandscape ? 'h-9 md:h-12 max-w-[200px] md:max-w-[300px] w-auto' : 'h-10 w-10 md:h-14 md:w-14 overflow-hidden'} object-contain flex-shrink-0`}
-                  style={headerIsLandscape ? undefined : { borderRadius: themeChrome.headerLogoRound ? '9999px' : 'var(--ct-radius-lg, 0.75rem)' }}
+                  style={{ ...(headerIsLandscape ? {} : { borderRadius: themeChrome.headerLogoRound ? '9999px' : 'var(--ct-radius-lg, 0.75rem)' }), ...(filtroLogoCabecera || {}) }}
                   onLoad={(e) => {
                     if (!business?.catalogLogoLandscape) {
                       const { naturalWidth, naturalHeight } = e.target
@@ -1602,7 +1615,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               {!headerIsLandscape && (
               <div className="min-w-0">
                 <h1
-                  className={`${themeChrome.headerName || 'font-bold'} text-lg md:text-2xl truncate ${themeChrome.headerNameSpectrum ? 'catalog-spectrum-text' : (themeChrome.headerNameStamp || themeChrome.headerNameGlow) ? '' : thText}`}
+                  className={`${themeChrome.headerName || 'font-bold'} text-lg md:text-2xl truncate ${themeChrome.headerNameSpectrum ? 'catalog-spectrum-text' : (themeChrome.headerNameStamp || themeChrome.headerNameGlow) ? '' : thHeaderText}`}
                   style={themeChrome.headerNameGlow
                     // Halo detras del nombre: en fondo oscuro es lo que le da
                     // cuerpo a una serif fina.
@@ -1621,7 +1634,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                   {business?.name || business?.businessName}
                 </h1>
                 {business?.catalogTagline && (
-                  <p className={`text-sm hidden md:block ${thTextMuted}`}>{business.catalogTagline}</p>
+                  <p className={`text-sm hidden md:block ${thHeaderMuted}`}>{business.catalogTagline}</p>
                 )}
               </div>
               )}
@@ -1663,7 +1676,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
               ) : (
                 <button
                   onClick={() => setAuthModalOpen(true)}
-                  className={`hidden md:flex flex-shrink-0 items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${thTextMuted} ${thViewHover}`}
+                  className={`hidden md:flex flex-shrink-0 items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${thHeaderMuted} ${thHeaderHover}`}
                   style={{ borderRadius: 'var(--ct-radius-md, 0.5rem)' }}
                 >
                   <User className="w-[18px] h-[18px]" />
@@ -1767,10 +1780,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
             ) : themeChrome.headerCart === 'ghost' ? (
               <button
                 onClick={() => setCartOpen(true)}
-                className={`relative w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${thViewHover}`}
+                className={`relative w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${thHeaderHover}`}
                 aria-label={isRestaurantMenu ? 'Ver pedido' : 'Ver carrito'}
               >
-                <ShoppingBag className={`w-[22px] h-[22px] ${thText}`} />
+                <ShoppingBag className={`w-[22px] h-[22px] ${thHeaderText}`} />
                 {cartItemsCount > 0 && (
                   <span
                     className="absolute top-0 right-0 w-5 h-5 text-[11px] font-semibold rounded-full flex items-center justify-center"
