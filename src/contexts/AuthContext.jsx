@@ -539,14 +539,20 @@ export const AuthProvider = ({ children }) => {
             setBusinessSettings(null)
           }
 
-          // Inicializar notificaciones push en móvil (para sesión restaurada)
-          try {
-            console.log('📱 Inicializando notificaciones push para usuario:', firebaseUser.uid)
-            await initializePushNotifications(firebaseUser.uid)
-          } catch (error) {
+          // Notificaciones push en móvil (para sesión restaurada).
+          //
+          // NO se espera. El comentario de siempre decía "no bloquear si fallan",
+          // pero el `await` bloqueaba igual aunque salieran bien: `setIsLoading`
+          // corre en el `finally` de todo esto, así que la app entera se quedaba
+          // en la pantalla de carga hasta que terminara. Y en iPhone esto tarda
+          // a propósito —espera 1.5 s a que el sistema entregue el token APNs y
+          // reintenta hasta 5 veces—, o sea hasta 9 segundos mirando el spinner
+          // para algo que no tiene nada que ver con entrar al sistema.
+          //
+          // Se lanza y sigue: cuando el token llegue se guarda solo.
+          initializePushNotifications(firebaseUser.uid).catch((error) => {
             console.error('Error al inicializar notificaciones push:', error)
-            // No bloquear si fallan las notificaciones
-          }
+          })
         } else {
           // Usuario no autenticado
           setUser(null)
