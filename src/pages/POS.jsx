@@ -141,6 +141,7 @@ import GuideLink from '@/components/guide/GuideLink'
 import { diasDeRecordatorio } from '@/utils/vetReminders'
 import { repreciarPorCantidad } from '@/utils/autoPriceByQty'
 import { revisarAntesDeEmitir, textoDeErrores } from '@/utils/sunatPreflight'
+import { bonificacionParaSunat as bonificacionSunat } from '@/utils/bonificacion'
 import { lineasPorConsumo, TEXTO_POR_CONSUMO } from '@/utils/comprobantePorConsumo'
 import { sePuedeGuardar, productoDesdePersonalizado } from '@/utils/productoRapido'
 import AutoGrowTextarea from '@/components/ui/AutoGrowTextarea'
@@ -438,42 +439,11 @@ export default function POS() {
   //
   // Las bonificaciones se resuelven aparte (afectación 15/30) y no pasan por acá.
   /**
-   * Una bonificación, en el lenguaje que SUNAT (y nuestro generador de XML)
-   * entiende: NO es una línea de precio 0, es una línea a su VALOR REFERENCIAL
-   * con un descuento del 100%.
-   *
-   * El generador (functions/src/utils/xmlGenerator.js) reconoce la bonificación
-   * cuando `itemDiscount` iguala el total de la línea, y recién ahí la declara
-   * con afectación 15 (Gravado - Bonificaciones), PriceTypeCode 02 y tributo
-   * 9996 (GRA), que es lo que exige el Catálogo 07. Mandarla como precio 0
-   * "a secas" la declaraba como inafecta de valor cero — el caso que SUNAT
-   * rechaza con error 3105 (auditoría 18-ago-2026).
-   *
-   * Sin valor referencial (un producto del catálogo que de verdad vale 0) no
-   * hay nada que declarar como regalo: se deja pasar tal cual, como siempre.
+   * El precio de la ficha del producto, que es lo unico que el criterio no
+   * puede averiguar solo. El resto vive en src/utils/bonificacion.js.
    */
-  const bonificacionParaSunat = (item) => {
-    if (!item?.isBonificacion) return {}
-    // El valor de referencia puede no estar guardado en la línea: pasa cuando
-    // se regala algo que ya estaba en el carrito a precio 0, o cuando la marca
-    // viene de una versión vieja de la app. Antes eso devolvía {} y la línea
-    // salía con precio 0 y afectación 30 -> rechazo 3105. Ahora se busca el
-    // precio de lista en el mismo orden que `referenciaDeRegalo`, para que el
-    // cajero no tenga que saber nada de esto.
-    const ficha = productsRaw.find(p => p.id === item.id)
-    const ref = Number(item.bonificacionRefPrice) > 0
-      ? Number(item.bonificacionRefPrice)
-      : Number(item.originalPrice ?? item.basePrice ?? ficha?.price ?? 0) || 0
-    const cant = Number(item.quantity) || 0
-    if (ref <= 0 || cant <= 0) return {}
-    return {
-      unitPrice: ref,
-      subtotal: 0,
-      itemDiscount: Number((ref * cant).toFixed(2)),
-      itemDiscountType: 'amount',
-      isBonificacion: true,
-    }
-  }
+  const precioDeFicha = (item) => Number(productsRaw.find(p => p.id === item?.id)?.price) || 0
+  const bonificacionParaSunat = (item) => bonificacionSunat(item, precioDeFicha(item))
 
   /**
    * Regalo puesto "a mano": el vendedor deja el precio en 0 en vez de usar el
@@ -6541,6 +6511,12 @@ export default function POS() {
       igvRate: resolveItemIgvRate(item),
       isBonificacion: item.isBonificacion,
       itemDiscount: item.itemDiscount,
+      // Se revisa la linea TAL COMO va a salir, no como esta en el carrito.
+      // Una bonificacion con su valor de referencia se convierte aca en una
+      // linea con precio y descuento -que es lo que SUNAT acepta-, asi que no
+      // tiene por que frenarse. La que no tiene de donde sacar el valor se
+      // queda en precio 0 y ES la que hay que frenar.
+      ...bonificacionParaSunat(item),
       ...referenciaDeRegalo(item),
     }))
     const revision = revisarAntesDeEmitir({
