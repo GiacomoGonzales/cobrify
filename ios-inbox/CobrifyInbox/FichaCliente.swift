@@ -77,6 +77,12 @@ struct FichaCliente {
         guard let vence else { return nil }
         return Int(ceil(vence.timeIntervalSinceNow / 86400))
     }
+    /// ¿Está en periodo de prueba? Mismo criterio que el servidor: el PLAN,
+    /// no la bandera de límites, que en un plan a medida puede traer cualquier
+    /// cosa. Duplicado del `esPrueba` de `data/prueba.js` porque Swift no
+    /// puede leer un .js; si allá cambia el criterio, cambiar acá.
+    var esPrueba: Bool { plan == "trial" }
+
     /// ¿Se puede renovar desde la app? Solo si el plan está en el catálogo.
     var mesesDeRenovacion: Int? {
         guard let p = PlanCatalogo.plan(plan), p.meses > 0 else { return nil }
@@ -201,6 +207,23 @@ final class FichaStore: ObservableObject {
                 cambios["renewalPrice"] = monto
                 cambios["pricingFrozenAt"] = FieldValue.serverTimestamp()
             }
+        }
+
+        // Venía de una PRUEBA: es la misma cuenta y se queda con todo lo que
+        // cargó, solo cambia el plan. Va acá dentro y no en un método aparte
+        // a propósito: convertir es renovar con otro plan más estas tres
+        // líneas, y separarlo serían dos caminos que tienen que hacer lo mismo
+        // y que se separan en cuanto uno de los dos se toque.
+        //
+        // `trialEndsAt` se BORRA, no se pone en null: la página de Pruebas del
+        // admin necesita distinguir la cuenta que vino de una prueba de la que
+        // nunca probó, y un null las hace idénticas.
+        if f.esPrueba {
+            cambios["trialEndsAt"] = FieldValue.delete()
+            cambios["pruebaConvertidaEn"] = FieldValue.serverTimestamp()
+            cambios["pruebaVencia"] = f.vence.map { Timestamp(date: $0) } ?? NSNull()
+            // El envío a SUNAT se desbloquea solo: el candado del servidor mira
+            // el plan, y acá acaba de dejar de ser `trial`.
         }
 
         do {

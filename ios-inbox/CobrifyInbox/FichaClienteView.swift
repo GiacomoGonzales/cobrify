@@ -214,13 +214,16 @@ struct FichaClienteView: View {
                 }
             }
             Section {
-                if f.mesesDeRenovacion != nil {
+                // En una PRUEBA no hay nada que renovar: hay que convertirla.
+                // Es la misma pantalla y el mismo camino, solo cambia el
+                // rótulo — igual que en el panel web.
+                if f.mesesDeRenovacion != nil || f.esPrueba {
                     Button {
                         mostrarRenovar = true
                     } label: {
                         HStack(spacing: 8) {
-                            Image(systemName: "creditcard.fill")
-                            Text("Registrar renovación")
+                            Image(systemName: f.esPrueba ? "checkmark.seal.fill" : "creditcard.fill")
+                            Text(f.esPrueba ? "Convertir en cuenta real" : "Registrar renovación")
                         }
                         .fontWeight(.semibold)
                         .foregroundStyle(.white)
@@ -350,7 +353,9 @@ struct RenovarSheet: View {
                     } header: {
                         Text("Vencimiento")
                     } footer: {
-                        if planId == f.plan {
+                        if f.esPrueba {
+                            Text("Es la misma cuenta: se queda con sus productos, sus clientes y sus ventas de la prueba. Al convertirla se le desbloquea el envío a SUNAT. Los comprobantes que emitió durante la prueba conservan su marca de sin validez.")
+                        } else if planId == f.plan {
                             Text("Renovar el mismo plan conserva sus límites y su precio pactado, igual que en el panel web.")
                         }
                     }
@@ -359,7 +364,7 @@ struct RenovarSheet: View {
                     }
                 }
             }
-            .navigationTitle("Registrar renovación")
+            .navigationTitle(store.ficha?.esPrueba == true ? "Convertir en cuenta real" : "Registrar renovación")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -370,18 +375,29 @@ struct RenovarSheet: View {
                         Button {
                             confirmando = true
                         } label: {
-                            if trabajando { ProgressView() } else { Text("Renovar").fontWeight(.semibold) }
+                            if trabajando { ProgressView() } else {
+                                Text(store.ficha?.esPrueba == true ? "Convertir" : "Renovar").fontWeight(.semibold)
+                            }
                         }
-                        .disabled(montoNum == nil || trabajando)
+                        // En una prueba el plan arranca VACÍO —hay que
+                        // elegirlo—, así que sin esto el botón dejaba pulsar y
+                        // el resultado era "ese plan se gestiona desde la web",
+                        // un error que no dice nada de lo que pasó.
+                        .disabled(montoNum == nil || trabajando || planId.isEmpty)
                     }
                 }
             }
             .confirmationDialog(textoConfirmacion, isPresented: $confirmando, titleVisibility: .visible) {
-                Button("Sí, registrar el pago") { renovar() }
+                Button(store.ficha?.esPrueba == true ? "Sí, convertirla" : "Sí, registrar el pago") { renovar() }
                 Button("Cancelar", role: .cancel) {}
             }
             .onAppear {
-                if planId.isEmpty { planId = store.ficha?.plan ?? "" }
+                if planId.isEmpty {
+                    // En una prueba NO se precarga su plan: `trial` no está en
+                    // el catálogo y dejaría el selector en un valor imposible.
+                    // Que elija el que contrató, que es justo la decisión.
+                    planId = (store.ficha?.esPrueba == true) ? "" : (store.ficha?.plan ?? "")
+                }
                 if let v = store.ficha?.vence { fecha = max(v, Date()) }
             }
         }
@@ -408,6 +424,12 @@ struct RenovarSheet: View {
 
     private var textoConfirmacion: String {
         guard let f = store.ficha, let m = montoNum, let nuevo = vencimientoNuevo(f) else { return "" }
+        // En una prueba, "cambiando a X" se lee raro: no está cambiando de
+        // plan, está contratando el primero.
+        if f.esPrueba {
+            return "Convertir en cuenta real con \(PlanCatalogo.plan(planId)?.nombre ?? planId), "
+                + "S/ \(String(format: "%.2f", m)) por \(metodo), hasta el \(nuevo.formatted(date: .long, time: .omitted))"
+        }
         let cambio = planId != f.plan ? " cambiando a \(PlanCatalogo.plan(planId)?.nombre ?? planId)," : ""
         return "Registrar S/ \(String(format: "%.2f", m)) por \(metodo),\(cambio) y dejar el vencimiento el \(nuevo.formatted(date: .long, time: .omitted))"
     }
