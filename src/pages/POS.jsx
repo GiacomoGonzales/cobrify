@@ -9633,12 +9633,30 @@ Gracias por tu preferencia.`
   return (
     <div className="animate-fade-in px-2 sm:px-4 lg:h-full lg:flex lg:flex-col lg:overflow-hidden">
       {companySettings?.requireOpenCashRegister && !cashRegisterOpen && (
-        <div className="mb-4 flex items-center gap-3 p-4 bg-amber-50 border border-amber-300 rounded-lg text-amber-800">
-          <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-          <div>
-            <p className="font-semibold text-sm">Caja diaria no aperturada</p>
-            <p className="text-xs mt-0.5">Debe abrir la caja diaria antes de poder emitir ventas. Vaya a Caja Diaria para aperturar.</p>
+        // Blanco con borde fino y el color solo en el ícono, como el aviso
+        // de pedidos del catálogo. El amarillo a todo lo ancho, pegado a la
+        // cabecera, gritaba como si algo se hubiera roto: esto no es una
+        // falla, es un paso que falta. Y va con aire arriba, que antes
+        // quedaba encajado contra la barra.
+        <div className="mt-3 mb-4 flex items-start gap-3 p-3.5 bg-white border border-gray-200 rounded-xl">
+          <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+            <AlertTriangle className="w-4 h-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-sm text-gray-900">Caja diaria no aperturada</p>
+            <p className="text-xs mt-0.5 text-gray-500">Debes abrir la caja antes de poder emitir ventas.</p>
           </div>
+          {/* El aviso decia "vaya a Caja Diaria" y dejaba a la persona
+              buscando la pagina en el menu. Si el sistema sabe adonde hay
+              que ir, que lleve. */}
+          <Button
+            size="sm"
+            onClick={() => appNavigate('caja')}
+            className="flex-shrink-0 self-center whitespace-nowrap"
+          >
+            <Wallet className="w-4 h-4 mr-1.5" />
+            Abrir caja
+          </Button>
         </div>
       )}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6 lg:flex-1 lg:min-h-0">
@@ -12842,7 +12860,7 @@ Gracias por tu preferencia.`
                 {documentType === 'boleta' && amounts.total > 700 && (
                   <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-lg">
                     <div className="flex items-start gap-2">
-                      <span className="text-amber-600 text-lg">⚠️</span>
+                      <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
                       <div className="flex-1">
                         <p className="text-sm font-semibold text-amber-800">
                           Normativa SUNAT

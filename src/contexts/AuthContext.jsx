@@ -142,14 +142,41 @@ export const AuthProvider = ({ children }) => {
           setUser(userData)
           setIsAuthenticated(true)
 
+          // ── PRIMERA TANDA: las cuatro preguntas del arranque, a la vez ──
+          //
+          // Estas cuatro consultas dependen SOLO del uid (y del correo): qué
+          // rol tiene la persona y qué dice su ficha. Iban una detrás de otra,
+          // y como cada una es un viaje a Firestore, quien entraba esperaba la
+          // SUMA de las cuatro. En una oficina son décimas; en un celular con
+          // mala señal eran varios segundos de spinner antes de ver nada.
+          //
+          // Salen juntas y se leen abajo en el MISMO orden de siempre, así que
+          // ninguna decisión cambia: lo único que se solapa es la espera.
+          const enCurso = (p) => {
+            // Este catch vacío no se traga nada: solo marca la promesa como
+            // atendida para que el navegador no la reporte como "rechazo sin
+            // manejar" mientras estamos esperando a otra. El error de verdad
+            // vuelve a saltar en su `await`, dentro del try que ya lo trataba.
+            p.catch(() => {})
+            return p
+          }
+          const conTope = (promesa, ms, queEs) => Promise.race([
+            promesa,
+            new Promise((_, reject) => setTimeout(() => reject(new Error(queEs + ' timeout')), ms)),
+          ])
+
+          const pedidoAdmin = enCurso(conTope(isUserAdmin(firebaseUser.uid), 5000, 'Admin check'))
+          const pedidoReseller = enCurso(getDoc(doc(db, 'resellers', firebaseUser.uid)))
+          const pedidoDueno = enCurso(isBusinessAdmin(firebaseUser.uid))
+          // La ficha del usuario se leía DOS veces: una para decidir si es
+          // dueño y otra para sus permisos. Es el MISMO documento, así que se
+          // pide una sola vez y se usa en los dos sitios.
+          const pedidoFicha = enCurso(getUserData(firebaseUser.uid))
+
           // Verificar si es SUPER ADMIN (giiacomo@gmail.com)
           let superAdminStatus = false
           try {
-            const adminPromise = Promise.race([
-              isUserAdmin(firebaseUser.uid),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('Admin check timeout')), 5000))
-            ])
-            superAdminStatus = await adminPromise
+            superAdminStatus = await pedidoAdmin
           } catch (error) {
             console.error('Error al verificar super admin:', error)
             superAdminStatus = false
@@ -161,9 +188,8 @@ export const AuthProvider = ({ children }) => {
           let resellerDocId = null
           if (!superAdminStatus) {
             try {
-              // Primero buscar por UID
-              const resellerRef = doc(db, 'resellers', firebaseUser.uid)
-              let resellerDoc = await getDoc(resellerRef)
+              // Primero por UID (esa lectura ya salió arriba, con las demás)
+              let resellerDoc = await pedidoReseller
 
               if (resellerDoc.exists()) {
                 resellerDocId = firebaseUser.uid
@@ -198,7 +224,7 @@ export const AuthProvider = ({ children }) => {
           let businessOwnerStatus = false
           if (!superAdminStatus) {
             try {
-              businessOwnerStatus = await isBusinessAdmin(firebaseUser.uid)
+              businessOwnerStatus = await pedidoDueno
 
               // Un acceso creado hace un momento es un REGISTRO EN CURSO: la
               // cuenta de Firebase ya existe pero el negocio y el plan todavía
@@ -208,7 +234,7 @@ export const AuthProvider = ({ children }) => {
               const nacimiento = Date.parse(firebaseUser.metadata?.creationTime || '')
               const accesoRecienCreado = Number.isFinite(nacimiento) && Date.now() - nacimiento < 10 * 60 * 1000
 
-              const userDataCheck = await getUserData(firebaseUser.uid)
+              const userDataCheck = await pedidoFicha
               const sinDocumento = !userDataCheck.success || !userDataCheck.data
 
               if (sinDocumento) {
@@ -250,7 +276,9 @@ export const AuthProvider = ({ children }) => {
           let subUserAllowedBranches = []
           if (!superAdminStatus && !businessOwnerStatus) {
             try {
-              const userDataResult = await getUserData(firebaseUser.uid)
+              // La misma lectura de arriba: es el mismo documento y entre
+              // una cosa y otra no se escribió nada en él.
+              const userDataResult = await pedidoFicha
               console.log('📋 Datos del usuario secundario:', userDataResult)
               if (userDataResult.success && userDataResult.data) {
                 const userData = userDataResult.data
@@ -318,19 +346,31 @@ export const AuthProvider = ({ children }) => {
             console.log('👑 Business Owner o Admin - Acceso total a todos los almacenes')
           }
 
+          // ── SEGUNDA TANDA: plan, negocio y sucursales, a la vez ──────────
+          //
+          // Con el rol ya resuelto sabemos de qué negocio estamos hablando, y
+          // las tres consultas que faltan dependen solo de eso. No se necesitan
+          // entre ellas, así que tampoco tienen por qué hacer cola.
+          //
+          // Con esto el arranque pasa de SIETE viajes en fila a dos tandas.
+          const idDelNegocio = (businessOwnerStatus || superAdminStatus)
+            ? firebaseUser.uid
+            : (subUserOwnerId || firebaseUser.uid)
+          const idParaElPlan = subUserOwnerId || firebaseUser.uid
+
+          const pedidoPlan = enCurso(conTope(getSubscription(idParaElPlan), 5000, 'Subscription'))
+          const pedidoNegocio = enCurso(getDoc(doc(db, 'businesses', idDelNegocio)))
+          const pedidoSucursales = enCurso(getActiveBranches(idDelNegocio))
+
           // Obtener suscripción con timeout
           try {
             // Usar subUserOwnerId ya cargado arriba (más confiable que segunda llamada a getUserData)
             const isSubUser = !!subUserOwnerId
-            const ownerIdForSubscription = isSubUser ? subUserOwnerId : firebaseUser.uid
+            const ownerIdForSubscription = idParaElPlan
 
             console.log(`📋 Usuario: ${isSubUser ? 'Sub-usuario (owner: ' + ownerIdForSubscription + ')' : 'Principal'}`)
 
-            const subscriptionPromise = Promise.race([
-              getSubscription(ownerIdForSubscription),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('Subscription timeout')), 5000))
-            ])
-            let userSubscription = await subscriptionPromise
+            let userSubscription = await pedidoPlan
 
             // Sin suscripción: SOLO se intenta el rescate de sub-usuario (usar
             // la del dueño si el doc trae ownerId). NUNCA se crea un trial.
@@ -409,20 +449,10 @@ export const AuthProvider = ({ children }) => {
 
           // Cargar configuración del negocio (businessMode y settings completos)
           try {
-            let businessId
-
-            if (businessOwnerStatus || superAdminStatus) {
-              businessId = firebaseUser.uid
-              console.log('👑 Owner/Admin - usando propio UID como businessId:', businessId)
-            } else {
-              // Para usuarios secundarios, usar el ownerId ya obtenido de los permisos
-              businessId = subUserOwnerId || firebaseUser.uid
-              console.log('👤 Usuario secundario - businessId:', businessId)
-            }
-
-            console.log('🔍 Intentando cargar documento de businesses/' + businessId)
-            const businessRef = doc(db, 'businesses', businessId)
-            const businessDoc = await getDoc(businessRef)
+            // Se decidió arriba, al lanzar la segunda tanda.
+            const businessId = idDelNegocio
+            console.log('🔍 Cargando businesses/' + businessId)
+            const businessDoc = await pedidoNegocio
 
             console.log('🔍 Documento existe?', businessDoc.exists())
 
@@ -503,7 +533,7 @@ export const AuthProvider = ({ children }) => {
             // El modo efectivo deriva de la sucursal activa; si no hay/ no define modo,
             // se hereda el del doc del negocio → cuentas existentes no cambian.
             try {
-              const branchesResult = await getActiveBranches(businessId)
+              const branchesResult = await pedidoSucursales
               const branchList = branchesResult.success ? (branchesResult.data || []) : []
               setBranches(branchList)
 
