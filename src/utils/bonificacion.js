@@ -33,7 +33,9 @@ const numero = (v) => {
  *
  * 1. `bonificacionRefPrice`: lo que se guardó al marcarlo. Es el mejor dato.
  * 2. `originalPrice` / `basePrice`: lo que la línea valía antes.
- * 3. El precio de la ficha del producto, que pasa quien llama.
+ * 3. El precio de la ficha del producto, que pasa quien llama. Puede ser su
+ *    precio de venta o, si vale 0, el valor de referencia que se le pidió al
+ *    crearlo (`referencePrice` del producto).
  *
  * Devuelve 0 cuando no hay nada, y ese 0 es información: significa que este
  * regalo no se puede declarar.

@@ -439,6 +439,26 @@ export const productSchema = z.object({
   // Fecha de compra del stock ('YYYY-MM-DD' del input). Ver @/utils/purchaseDate.
   lastPurchaseDate: z.string().optional(),
   batchNumber: z.string().optional(),
+  /**
+   * Cuánto vale el producto cuando su precio de venta es 0.
+   *
+   * Un producto a 0 se puede vender igual —se regala—, pero SUNAT no acepta
+   * una línea que valga cero sin decir cuánto vale lo entregado: rechaza el
+   * comprobante ENTERO con el error 3105. Guardarlo acá, al crear el
+   * producto, es la única forma de que el dato exista cuando haga falta: al
+   * momento de cobrar ya no hay a quién preguntarle.
+   */
+  referencePrice: z
+    .union([
+      z.number().nonnegative('El precio de referencia no puede ser negativo'),
+      z.string().transform((val) => {
+        if (val === '' || val === null || val === undefined) return null
+        const num = parseFloat(val)
+        return isNaN(num) ? null : num
+      }).nullable(),
+    ])
+    .nullable()
+    .optional(),
 }).superRefine((data, ctx) => {
   // Validar precio solo si NO tiene variantes (variantes se validan en onSubmit con state
   // local) Y NO hay precio en dólares. Si el producto está anclado al dólar (priceUSD),
@@ -457,6 +477,30 @@ export const productSchema = z.object({
       code: z.ZodIssueCode.custom,
       message: 'Precio es requerido',
       path: ['price'],
+    })
+  }
+
+  /**
+   * Precio 0: entonces hay que decir cuánto vale.
+   *
+   * Poner 0 es legítimo —es el producto que se regala— pero deja al sistema
+   * sin poder emitir: SUNAT rechaza con 3105 una línea que valga cero sin
+   * declarar el valor de lo entregado, y se cae el comprobante entero. Un
+   * negocio llegó a 26 boletas rechazadas por esto, todas por productos
+   * cargados a 0 hacía meses.
+   *
+   * Se pide acá, al crear el producto, porque es el único momento en que
+   * alguien sabe la respuesta. Al cobrar, con el cliente en el mostrador, ya
+   * no hay a quién preguntarle y lo único que queda es frenar la venta.
+   */
+  const precio = Number(data.price)
+  const esCero = !sinPrecio && Number.isFinite(precio) && precio === 0
+  const referencia = Number(data.referencePrice)
+  if (!data.hasVariants && esCero && sinPrecioUSD && !(Number.isFinite(referencia) && referencia > 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Con precio 0, indica cuánto vale el producto para poder facturarlo',
+      path: ['referencePrice'],
     })
   }
 })

@@ -874,6 +874,29 @@ const ProductFormModal = ({
                 {...register('price')}
               />
 
+              {/* Precio 0 = se regala. Aparece solo entonces, y entonces es
+                  obligatorio: sin este número el producto no se puede poner
+                  en una boleta ni una factura (SUNAT rechaza el comprobante
+                  entero, error 3105). Se pregunta acá porque es el único
+                  momento en que alguien sabe la respuesta; al cobrar, con el
+                  cliente esperando, ya no hay a quién preguntarle. */}
+              {Number(watch('price')) === 0 && String(watch('price') ?? '') !== '' && !watch('hasVariants') && (
+                <div className="col-span-2">
+                  <Input
+                    label="¿Cuánto vale este producto?"
+                    type="number"
+                    step="any"
+                    required
+                    placeholder="0.00"
+                    error={errors.referencePrice?.message}
+                    {...register('referencePrice')}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Lo pusiste en 0, así que se entrega gratis. SUNAT igual necesita saber cuánto vale para aceptar el comprobante. El cliente no lo paga.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <Input
                   label="Costo"

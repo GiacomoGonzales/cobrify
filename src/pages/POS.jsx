@@ -442,7 +442,12 @@ export default function POS() {
    * El precio de la ficha del producto, que es lo unico que el criterio no
    * puede averiguar solo. El resto vive en src/utils/bonificacion.js.
    */
-  const precioDeFicha = (item) => Number(productsRaw.find(p => p.id === item?.id)?.price) || 0
+  const precioDeFicha = (item) => {
+    const ficha = productsRaw.find(p => p.id === item?.id)
+    // Si el producto vale 0 en su ficha, el valor lo da `referencePrice`,
+    // que es obligatorio justamente para esto (ver utils/schemas.js).
+    return Number(ficha?.price) || Number(ficha?.referencePrice) || 0
+  }
   const bonificacionParaSunat = (item) => bonificacionSunat(item, precioDeFicha(item))
 
   /**

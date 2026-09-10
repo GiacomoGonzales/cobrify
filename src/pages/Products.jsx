@@ -7121,6 +7121,34 @@ export default function Products() {
                       <p className="text-xs text-gray-500 mt-1">
                         Deja el precio en <strong>0</strong> para usarlo como bonificación/cortesía al agregarlo al POS.
                       </p>
+
+                      {/* Precio 0 = se regala. El campo aparece solo entonces, y
+                          entonces es obligatorio: sin este número el producto no
+                          se puede poner en una boleta ni en una factura, porque
+                          SUNAT rechaza el comprobante ENTERO (error 3105) si una
+                          línea vale cero y no dice cuánto vale lo entregado.
+
+                          Se pregunta acá, al cargar el producto, porque es el
+                          único momento en que alguien sabe la respuesta. Al
+                          cobrar, con el cliente en el mostrador, ya no hay a
+                          quién preguntarle y lo único que queda es frenar la
+                          venta (pasó: 26 boletas rechazadas de un solo negocio). */}
+                      {Number(watch('price')) === 0 && String(watch('price') ?? '') !== '' && !watch('hasVariants') && (
+                        <div className="mt-3">
+                          <Input
+                            label="¿Cuánto vale este producto?"
+                            type="number"
+                            step="any"
+                            required
+                            placeholder="0.00"
+                            error={errors.referencePrice?.message}
+                            {...register('referencePrice')}
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Lo pusiste en 0, así que se entrega gratis. SUNAT igual necesita saber cuánto vale para aceptar el comprobante; el cliente no lo paga.
+                          </p>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
