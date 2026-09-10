@@ -9,6 +9,7 @@
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { getDocumentRate, getDocumentTotalInBase, normalizeCurrency } from '@/utils/currency'
+import { montosPorAfectacion } from '@/utils/peruUtils'
 import { getInvoiceDate, getInvoiceTimeInfo, parseLocalDateString } from '@/utils/invoiceDate'
 
 /** Formatea la fecha de un comprobante (prioriza emissionDate) como dd/MM/yyyy. */
@@ -156,15 +157,9 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
         }).join(', ')
       : ''
 
-    let opGravada = 0, opExonerada = 0, opInafecta = 0
-    if (invoice.items && Array.isArray(invoice.items)) {
-      invoice.items.forEach(item => {
-        const itemTotal = (item.quantity || 1) * (item.price || item.unitPrice || 0)
-        if (item.taxAffectation === '20') opExonerada += itemTotal
-        else if (item.taxAffectation === '30') opInafecta += itemTotal
-        else opGravada += itemTotal
-      })
-    }
+    // Base imponible, exonerado e inafecto SIN IGV, con el mismo criterio que
+    // el PDF y el reporte contable (antes salía el importe con IGV adentro).
+    const { gravada: opGravada, exonerada: opExonerada, inafecta: opInafecta } = montosPorAfectacion(invoice, businessData)
 
     const sunatStatus = invoice.documentType === 'nota_venta'
       ? 'N/A'
@@ -212,12 +207,10 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   const totalSum = invoices.reduce((s, i) => s + getDocumentTotalInBase(i), 0)
   const taxBuckets = invoices.reduce((acc, inv) => {
     const rate = getDocumentRate(inv)
-    inv.items?.forEach(item => {
-      const t = (item.quantity || 1) * (item.price || item.unitPrice || 0) * rate
-      if (item.taxAffectation === '20') acc.e += t
-      else if (item.taxAffectation === '30') acc.i += t
-      else acc.g += t
-    })
+    const m = montosPorAfectacion(inv, businessData)
+    acc.g += m.gravada * rate
+    acc.e += m.exonerada * rate
+    acc.i += m.inafecta * rate
     return acc
   }, { g: 0, e: 0, i: 0 })
 
@@ -336,15 +329,12 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
     // Los documentos en USD se convierten con su TC congelado y el TC se
     // consigna en la columna "Tipo Cambio" (antes iba 1.000 fijo).
     const sunatRate = getDocumentRate(invoice)
-    let baseImponible = 0, importeExonerado = 0, importeInafecto = 0
-    if (invoice.items && Array.isArray(invoice.items)) {
-      invoice.items.forEach(item => {
-        const itemTotal = (item.quantity || 1) * (item.price || item.unitPrice || 0) * sunatRate
-        if (item.taxAffectation === '20') importeExonerado += itemTotal
-        else if (item.taxAffectation === '30') importeInafecto += itemTotal
-        else baseImponible += itemTotal
-      })
-    }
+    // Base imponible SIN IGV (es lo que SUNAT llama base imponible en el 14.1;
+    // antes iba con el IGV adentro y el registro no cuadraba con el SIRE).
+    const desglose = montosPorAfectacion(invoice, businessData)
+    const baseImponible = desglose.gravada * sunatRate
+    const importeExonerado = desglose.exonerada * sunatRate
+    const importeInafecto = desglose.inafecta * sunatRate
 
     const refDocType = invoice.referenceDocumentType ? (sunatDocTypeCodes[invoice.referenceDocumentType] || '') : ''
     const refParts = (invoice.referenceNumber || '').split('-')

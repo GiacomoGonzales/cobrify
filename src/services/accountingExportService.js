@@ -11,6 +11,7 @@
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { normalizeCurrency } from '@/utils/currency'
+import { montosPorAfectacion } from '@/utils/peruUtils'
 import {
   XLSX,
   cellStyle, centerStyle, numberStyleCcy, numberStyle, intStyle,
@@ -92,17 +93,14 @@ const esNotaDeCredito = (docType) =>
  * estaba copiado tres veces, que es justo donde el signo se habría arreglado en
  * una y no en las otras.
  */
-const montosContables = (inv) => {
+export const montosContables = (inv, businessData = null) => {
   const signo = esNotaDeCredito(inv.documentType) ? -1 : 1
-  let gravada = 0, exonerada = 0, inafecta = 0
-  if (Array.isArray(inv.items)) {
-    inv.items.forEach(item => {
-      const monto = (item.quantity || 1) * (item.price || item.unitPrice || 0)
-      if (item.taxAffectation === '20') exonerada += monto
-      else if (item.taxAffectation === '30') inafecta += monto
-      else gravada += monto
-    })
-  }
+  // "Op. Gravada" es la BASE IMPONIBLE, sin IGV. Antes se recalculaba de los
+  // ítems con cantidad x precio, y el precio trae el IGV adentro: la columna
+  // decía el importe con IGV y la suma del mes no cuadraba con SUNAT
+  // (observación de JMC, 10-set-2026). El criterio vive en peruUtils, el mismo
+  // que imprime el desglose en el PDF y el ticket.
+  const { gravada, exonerada, inafecta } = montosPorAfectacion(inv, businessData)
   return {
     signo,
     gravada: signo * gravada,
@@ -160,7 +158,7 @@ function buildAccountingWorkbook(filtered, businessData = null, periodLabel = nu
     invoiceCurrencies.push(invCcy)
 
     // Desglose tributario, ya con el signo que le toca al documento
-    const montos = montosContables(inv)
+    const montos = montosContables(inv, businessData)
 
     const typeNames = {
       factura: 'Factura', boleta: 'Boleta',
@@ -198,7 +196,7 @@ function buildAccountingWorkbook(filtered, businessData = null, periodLabel = nu
   const totalsByCurrency = filtered.reduce((acc, inv) => {
     const ccy = normalizeCurrency(inv.currency)
     if (!acc[ccy]) acc[ccy] = { gravada: 0, exonerada: 0, inafecta: 0, subtotal: 0, descuento: 0, igv: 0, total: 0 }
-    const m = montosContables(inv)
+    const m = montosContables(inv, businessData)
     acc[ccy].gravada += m.gravada
     acc[ccy].exonerada += m.exonerada
     acc[ccy].inafecta += m.inafecta
@@ -315,7 +313,7 @@ function appendIgvMonthlySheet(wb, invoices, businessData, periodLabel) {
       })
     }
     const e = agg.get(key)
-    const m = montosContables(inv)
+    const m = montosContables(inv, businessData)
     e.count += 1
     e.gravada += m.gravada
     e.exonerada += m.exonerada

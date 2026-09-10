@@ -266,7 +266,11 @@ export function getComprobanteBreakdown(invoice, companySettings) {
   const opExo = Number(invoice?.opExoneradas || 0)
   const opIna = Number(invoice?.opInafectas || 0)
   const igv = Number(invoice?.igv ?? invoice?.tax ?? 0)
-  const subtotal = Number(invoice?.subtotal || 0) // base sin IGV (gravada + exonerada + inafecta)
+  const total = Number(invoice?.total || 0)
+  // Base sin IGV (gravada + exonerada + inafecta). Un comprobante viejo sin
+  // `subtotal` la reconstruye de total - IGV: es la misma cuenta que hace el
+  // XML, y sin esto ese documento saldría con base 0 en los reportes.
+  const subtotal = Number(invoice?.subtotal) || (total > 0 ? Number((total - igv).toFixed(2)) : 0)
 
   // Manda la config guardada EN EL COMPROBANTE y recién después la del negocio,
   // igual que hace el generador del XML.
@@ -307,6 +311,33 @@ export function getComprobanteBreakdown(invoice, companySettings) {
     igv,
     hasGravada: gravada > 0,
     hasExoOrIna: exonerada > 0 || inafecta > 0,
+  }
+}
+
+/**
+ * Lo que un contador entiende por "Op. Gravada": la BASE IMPONIBLE, sin IGV.
+ *
+ * Los tres reportes que suman plata (reporte contable, exportación de Ventas
+ * y su hoja Registro de Ventas 14.1) recalculaban el desglose desde los ítems
+ * con `cantidad x precio`, y el precio del ítem ya trae el IGV: la columna
+ * decía 758.25 donde el contador esperaba 642.58, y la suma del mes no cuadraba
+ * con lo que SUNAT le propone en el SIRE (observación de JMC, 10-set-2026).
+ *
+ * `opGravadas` guardado en el comprobante TAMPOCO sirve: el POS congela ahí el
+ * total gravado CON IGV (`amounts.gravado.total`). La base es la que reconstruye
+ * `getComprobanteBreakdown`, que es la que imprimen el PDF y el ticket. Un solo
+ * criterio para lo que se imprime y lo que se declara.
+ *
+ * @returns {{ gravada:number, exonerada:number, inafecta:number, igv:number, total:number }}
+ */
+export function montosPorAfectacion(invoice, companySettings) {
+  const b = getComprobanteBreakdown(invoice, companySettings)
+  return {
+    gravada: b.gravada,
+    exonerada: b.exonerada,
+    inafecta: b.inafecta,
+    igv: b.igv,
+    total: Number(invoice?.total || 0),
   }
 }
 

@@ -73,6 +73,7 @@ import { plazoDeAnulacion } from '@/utils/plazoDeAnulacion'
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
 import InvoiceTicket from '@/components/InvoiceTicket'
 import { aplicarTamanoDeHoja } from '@/utils/printPageSize'
+import { montosPorAfectacion } from '@/utils/peruUtils'
 import CreateDispatchGuideModal from '@/components/CreateDispatchGuideModal'
 import { Capacitor } from '@capacitor/core'
 import { downloadFromUrl, downloadBlob } from '@/utils/nativeDownload'
@@ -4798,8 +4799,10 @@ Gracias por tu preferencia.`
                     <span>-{formatCurrency(viewingInvoice.discount, viewingInvoice.currency)}</span>
                   </div>
                 )}
-                {viewingInvoice.opGravadas > 0 && (
-                  <div className="flex justify-between"><span className="text-gray-600">Op. Gravadas</span><span>{formatCurrency(viewingInvoice.opGravadas, viewingInvoice.currency)}</span></div>
+                {/* La base imponible, sin IGV: `opGravadas` guarda el total gravado
+                    CON IGV, que no es lo que ese rótulo promete (ver peruUtils). */}
+                {montosPorAfectacion(viewingInvoice, companySettings).gravada > 0 && (
+                  <div className="flex justify-between"><span className="text-gray-600">Op. Gravadas</span><span>{formatCurrency(montosPorAfectacion(viewingInvoice, companySettings).gravada, viewingInvoice.currency)}</span></div>
                 )}
                 {viewingInvoice.opExoneradas > 0 && (
                   <div className="flex justify-between text-amber-600"><span>Op. Exoneradas</span><span>{formatCurrency(viewingInvoice.opExoneradas, viewingInvoice.currency)}</span></div>
