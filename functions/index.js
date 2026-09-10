@@ -648,15 +648,23 @@ const TEXTOS_SIN_RESPUESTA = [
   // para que releer un comprobante ya guardado dé el mismo veredicto que darlo
   // por primera vez.
   'no se recibió respuesta de sunat',
-  // Lo que falla en QPse ANTES de que el documento salga hacia SUNAT: el token,
-  // la firma o una respuesta vacía (los textos son los de qpseService.js).
+  // Lo que falla en QPse ANTES de que el documento salga hacia SUNAT y se
+  // arregla solo: el token rechazado un momento, un error interno de su base
+  // de datos o una respuesta vacía (los textos son los de qpseService.js).
   // SUNAT no llegó a ver nada, así que no hay rechazo que informar. La NC
   // FC01-00000002 de IS ALFA quedó "rechazada" con "Error al firmar con QPse:
-  // errors.unauthenticated" y se emitieron tres más encima (19-ago-2026). Si
-  // la causa fuera permanente (credenciales vencidas), el reintento se rinde
-  // solo a los 50 intentos y deja el motivo.
+  // errors.unauthenticated" y se emitieron tres más encima (19-ago-2026); la
+  // siguiente, un minuto después, pasó sin problema. Si la causa fuera
+  // permanente, el reintento se rinde solo a los 50 intentos con el motivo.
+  //
+  // NO va "Error al firmar con QPse" a secas: detrás de esa frase también
+  // vienen problemas de la cuenta que no se arreglan esperando —"El RUC ...
+  // ingresado no corresponde" (69 boletas de un solo negocio desde junio),
+  // "El nombre del archivo es incorrecto"—. Esos se quedan parados y a la
+  // vista, como la contraseña del certificado (decisión del 8-set).
   'error al autenticar con qpse',
-  'error al firmar con qpse',
+  'error al firmar con qpse: errors.unauthenticated',
+  'error al firmar con qpse: sqlstate',
   'qpse no devolvió',
 ]
 
