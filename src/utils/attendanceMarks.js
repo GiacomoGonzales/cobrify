@@ -103,24 +103,38 @@ export const resumenDelDia = (grupo) => {
   const inMark = marks.find((m) => m.type === MARCA_ENTRADA) || null
   const outMark = [...marks].reverse().find((m) => m.type === MARCA_SALIDA) || null
 
-  // Breaks: cada inicio con su fin. Un inicio sin fin NO se cuenta —no se sabe
-  // cuánto duró— pero se avisa, porque descontarlo mal sería peor que no
-  // descontarlo.
-  let breakMs = 0
-  let abierto = null
-  for (const m of marks) {
-    if (m.type === MARCA_BREAK_INICIO) { abierto = m; continue }
-    if (m.type === MARCA_BREAK_FIN && abierto) {
-      const dur = m._ts - abierto._ts
-      if (dur > 0) breakMs += dur
-      abierto = null
-    }
-  }
+  const { ms: breakMs, abierto } = breaksDelDia(marks)
 
   let totalMs = null
   if (inMark && outMark && outMark._ts > inMark._ts) {
     totalMs = Math.max(0, (outMark._ts - inMark._ts) - breakMs)
   }
 
-  return { inMark, outMark, totalMs, breakMs, breakAbierto: !!abierto, marks }
+  return { inMark, outMark, totalMs, breakMs, breakAbierto: abierto, marks }
+}
+
+/**
+ * Los breaks del día: cada inicio con su fin. Un inicio sin fin NO se cuenta
+ * —no se sabe cuánto duró— pero se avisa, porque descontarlo mal sería peor
+ * que no descontarlo.
+ *
+ * Lo usan el resumen de acá y la jornada (utils/jornadaAsistencia), que además
+ * compara lo marcado con el break programado del turno.
+ *
+ * @param {Array} marcas  ordenadas por `_ts`
+ * @returns {{ ms: number, tramos: number, abierto: boolean }}
+ */
+export const breaksDelDia = (marcas = []) => {
+  let ms = 0
+  let tramos = 0
+  let abierto = null
+  for (const m of marcas || []) {
+    if (m.type === MARCA_BREAK_INICIO) { abierto = m; continue }
+    if (m.type === MARCA_BREAK_FIN && abierto) {
+      const dur = m._ts - abierto._ts
+      if (dur > 0) { ms += dur; tramos++ }
+      abierto = null
+    }
+  }
+  return { ms, tramos, abierto: !!abierto }
 }

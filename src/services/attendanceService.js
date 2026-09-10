@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { MARCA_ENTRADA, MARCA_SALIDA, siguienteMarca } from '@/utils/attendanceMarks'
+import { normalizarHorario, errorDelHorario, DECISIONES_DE_HORA, DECISION_AJUSTADA } from '@/utils/jornadaAsistencia'
 import { getScheduleForDate } from './scheduleService'
 import { fetchApprovedTimeOffForDate } from './timeOffService'
 
@@ -83,8 +84,12 @@ const buildScheduleEnrichment = async (businessId, userId, timestamp, type, grac
  * Servicio de Control de Asistencia del Personal.
  *
  * Modelo:
- * - businesses/{bid}/branches/{branchId}.attendance = { enabled, token, gpsLat, gpsLng, gpsRadius, tokenGeneratedAt, tokenGeneratedBy }
- * - businesses/{bid}/attendance/{recordId}        = { userId, userName, branchId, branchName, type, timestamp, gps, gpsValid, approvalStatus, createdBy, notes, autoClosed }
+ * - businesses/{bid}/branches/{branchId}.attendance = { enabled, token, gpsLat, gpsLng, gpsRadius, tokenGeneratedAt, tokenGeneratedBy, gracePeriodMinutes, horario }
+ *   `horario` = { enabled, days: { 0..6: { open, from, to } } } es el horario del local
+ *   para la asistencia (ver utils/jornadaAsistencia).
+ * - businesses/{bid}/attendance/{recordId}        = { userId, userName, branchId, branchName, type, timestamp, gps, gpsValid, approvalStatus, createdBy, notes, autoClosed, ajusteHorario }
+ *   `ajusteHorario` = { decision: 'real'|'horario'|'ajustada', hora, porId, porNombre, en } es lo que
+ *   decidió el administrador sobre una marca fuera de horario. La hora marcada no se toca nunca.
  *
  * `type` puede ser 'in', 'out' y —si el negocio activó los breaks—
  * 'break_start' y 'break_end'. Qué marca corresponde en cada momento lo
@@ -166,6 +171,25 @@ export const setAttendanceBreaksEnabled = async (businessId, enabled) => {
 }
 
 /**
+ * Prende o apaga "Descontar el break del turno": las horas del día descuentan
+ * el break programado del turno de cada persona, lo haya marcado o no.
+ *
+ * Del negocio entero, igual que los breaks y por la misma razón.
+ */
+export const setAttendanceBreakProgramado = async (businessId, enabled) => {
+  try {
+    await setDoc(getBusinessDocRef(businessId), {
+      attendanceBreakProgramado: !!enabled,
+      updatedAt: serverTimestamp(),
+    }, { merge: true })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al cambiar el descuento del break programado:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Habilita o deshabilita asistencia en una sucursal, inicializando el token si no existía.
  */
 export const setAttendanceEnabled = async (businessId, branchId, enabled, userId) => {
@@ -233,6 +257,29 @@ export const updateBranchGracePeriod = async (businessId, branchId, minutes) => 
     return { success: true }
   } catch (error) {
     console.error('Error updateBranchGracePeriod:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Guarda el horario del local de una sucursal para la asistencia: desde qué
+ * hora cuenta una entrada y hasta qué hora una salida.
+ */
+export const updateBranchAttendanceHours = async (businessId, branchId, horario) => {
+  try {
+    const invalido = errorDelHorario(horario)
+    if (invalido) return { success: false, error: invalido }
+    const targetRef = getAttendanceTargetRef(businessId, branchId)
+    const snap = await getDoc(targetRef)
+    if (!snap.exists()) return { success: false, error: 'Destino no encontrado' }
+    const current = snap.data().attendance || {}
+    await updateDoc(targetRef, {
+      attendance: { ...current, horario: normalizarHorario(horario) },
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('Error updateBranchAttendanceHours:', error)
     return { success: false, error: error.message }
   }
 }
@@ -476,9 +523,11 @@ export const getAttendanceRecords = async (businessId, filters = {}) => {
     // Los registros de la Sucursal Principal guardan branchId = null (ver
     // createManualAttendance), asi que 'main' NO se puede comparar directo:
     // filtrar por igualdad devolvia cero registros.
+    // Y las del QR de la Principal guardan 'main': sin contarlas, filtrar por la
+    // Principal dejaba afuera todo lo que se marcó escaneando.
     if (branchId) {
       data = branchId === 'main'
-        ? data.filter(r => !r.branchId)
+        ? data.filter(r => !r.branchId || r.branchId === 'main')
         : data.filter(r => r.branchId === branchId)
     }
     if (fromDate) {
@@ -521,6 +570,37 @@ export const setAttendanceApproval = async (businessId, recordId, status, review
     return { success: true }
   } catch (error) {
     console.error('Error cambiando aprobación:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Lo que decide el administrador sobre la hora de una marca: que cuente la
+ * hora que marcó ('real'), la del horario ('horario') o otra ('ajustada').
+ *
+ * Se guarda al lado de la marca, que sigue diciendo a qué hora se escaneó: la
+ * hora que cuenta la calcula utils/jornadaAsistencia con esta decisión.
+ */
+export const guardarAjusteDeHora = async (businessId, recordId, { decision, hora = null, porId = null, porNombre = '' }) => {
+  try {
+    if (!DECISIONES_DE_HORA.includes(decision)) return { success: false, error: 'Decisión inválida' }
+    const fecha = hora instanceof Date ? hora : (hora ? new Date(hora) : null)
+    if (decision === DECISION_AJUSTADA && (!fecha || Number.isNaN(fecha.getTime()))) {
+      return { success: false, error: 'Falta la hora' }
+    }
+    await updateDoc(getAttendanceDocRef(businessId, recordId), {
+      ajusteHorario: {
+        decision,
+        hora: decision === DECISION_AJUSTADA ? Timestamp.fromDate(fecha) : null,
+        porId: porId || null,
+        porNombre: porNombre || '',
+        en: serverTimestamp(),
+      },
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('Error guardando el ajuste de hora:', error)
     return { success: false, error: error.message }
   }
 }

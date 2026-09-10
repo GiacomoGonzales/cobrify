@@ -406,11 +406,15 @@ export const getMonthScheduleAll = async (businessId, year, monthIndex) => {
  * el horario — y se descartan los dias que caen fuera. Sin tope de semanas:
  * el limite lo pone quien llama (el exportable acota a un ano).
  *
+ * Con `{ userId }` lee solo el horario de esa persona (una lectura por
+ * semana): es lo que usa la tarjeta del trabajador en Asistencia, que no
+ * necesita el de todo el equipo.
+ *
  * @returns {Promise<{ success, data: Array<{ fecha: string, date: Date,
  *   dayKey: string, userId: string, cell: object, published: boolean }> }>}
  *   `fecha` en formato YYYY-MM-DD, ordenado por fecha.
  */
-export const getScheduleRange = async (businessId, desde, hasta) => {
+export const getScheduleRange = async (businessId, desde, hasta, { userId = null } = {}) => {
   try {
     const inicio = new Date(desde.getFullYear(), desde.getMonth(), desde.getDate())
     const fin = new Date(hasta.getFullYear(), hasta.getMonth(), hasta.getDate())
@@ -430,7 +434,10 @@ export const getScheduleRange = async (businessId, desde, hasta) => {
     }
 
     const resultados = await Promise.all(
-      semanas.map((w) => getWeekScheduleAll(businessId, w.isoYear, w.isoWeek))
+      semanas.map((w) => (userId
+        ? getWeekSchedule(businessId, userId, w.isoYear, w.isoWeek)
+          .then((r) => ({ success: r.success, data: r.data ? [{ ...r.data, userId: r.data.userId || userId }] : [] }))
+        : getWeekScheduleAll(businessId, w.isoYear, w.isoWeek)))
     )
 
     const celdas = []

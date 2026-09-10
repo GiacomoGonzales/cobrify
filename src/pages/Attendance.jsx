@@ -29,8 +29,10 @@ import {
   markAttendanceFromQR,
   regenerateAttendanceToken,
   setAttendanceApproval,
+  setAttendanceBreakProgramado,
   setAttendanceBreaksEnabled,
   setAttendanceEnabled,
+  updateBranchAttendanceHours,
   updateBranchGeofence,
   updateBranchGracePeriod,
 } from '@/services/attendanceService'
@@ -42,10 +44,17 @@ import {
 } from '@/services/personnelService'
 import SchedulePlanner, { ALL_BRANCHES } from '@/components/personnel/SchedulePlanner'
 import VacationManager from '@/components/personnel/VacationManager'
+import JornadasAsistencia, { ChipDeHoraQueCuenta } from '@/components/personnel/JornadasAsistencia'
+import HorarioDelLocal from '@/components/personnel/HorarioDelLocal'
+import { getScheduleRange } from '@/services/scheduleService'
 import {
   resumenDelDia, etiquetaDeMarca, estadoDelDia, esMarcaDeBreak, etiquetaDeProximaMarca,
   MARCA_ENTRADA, MARCA_SALIDA, MARCA_BREAK_INICIO, MARCA_BREAK_FIN,
 } from '@/utils/attendanceMarks'
+import {
+  construirJornadas, indiceDeTurnos, claveDeFecha, horaCorta, duracionCorta, nombreDeLaReferencia,
+  ENCABEZADOS_DE_JORNADAS, filaDeJornadaParaExcel,
+} from '@/utils/jornadaAsistencia'
 
 const formatDateTime = (ts) => {
   if (!ts) return '-'
@@ -98,15 +107,8 @@ const colorDeMarca = (type) => {
 
 const formatTime = (date) => date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: false })
 
-const formatDuration = (ms) => {
-  if (ms == null || ms < 0) return '—'
-  const totalMin = Math.floor(ms / 60000)
-  const h = Math.floor(totalMin / 60)
-  const m = totalMin % 60
-  if (h === 0) return `${m}m`
-  if (m === 0) return `${h}h`
-  return `${h}h ${m}m`
-}
+// La misma forma que usa la vista Por jornada (utils/jornadaAsistencia).
+const formatDuration = duracionCorta
 
 const formatDayLabel = (date) => {
   const today = new Date()
@@ -191,6 +193,19 @@ export default function Attendance() {
   const [filterFrom, setFilterFrom] = useState(() => getCurrentWeekRange().from)
   const [filterTo, setFilterTo] = useState(() => getCurrentWeekRange().to)
 
+  // Marcaciones se ve "Por jornada" (una fila por persona y día, con la hora
+  // que cuenta) o "Cada marcación" (la lista de siempre). La elección se
+  // recuerda por negocio; sin elección, abre Por jornada si el negocio
+  // configuró el horario del local o el break programado.
+  const [vistaElegida, setVistaElegida] = useState(() => {
+    try { return localStorage.getItem(`attendance.vista.${getBusinessId?.() || ''}`) || null } catch { return null }
+  })
+  // Los turnos del planificador para las fechas de la lista: estiran el
+  // horario del local y dicen el break programado de cada día.
+  const [turnosDelRango, setTurnosDelRango] = useState([])
+  // Los del propio trabajador, para su tarjeta de la semana.
+  const [misTurnos, setMisTurnos] = useState([])
+
   // Modal de marcación manual
   const [showManualModal, setShowManualModal] = useState(false)
   const [guardandoManual, setGuardandoManual] = useState(false)
@@ -239,6 +254,61 @@ export default function Attendance() {
     }
   }, [accessibleScheduleBranches, selectedScheduleBranch])
 
+  // ----- Jornadas: la vista Por jornada de Marcaciones -----
+  // El cálculo vive en utils/jornadaAsistencia y es el mismo de la tarjeta del
+  // trabajador: lo que el administrador aprueba acá es lo que él ve.
+  const descontarBreakProgramado = businessSettings?.attendanceBreakProgramado === true
+  const breaksActivos = businessSettings?.attendanceBreaksEnabled === true
+  const horariosPorSucursal = useMemo(
+    () => new Map(branches.map((b) => [b.id, b.attendance?.horario || null])),
+    [branches]
+  )
+  const configuroJornada = descontarBreakProgramado || branches.some((b) => b.attendance?.horario?.enabled === true)
+  const vistaMarcaciones = vistaElegida || (configuroJornada ? 'jornadas' : 'marcas')
+  const elegirVista = (vista) => {
+    setVistaElegida(vista)
+    try { localStorage.setItem(`attendance.vista.${businessId || ''}`, vista) } catch { /* sin almacenamiento */ }
+  }
+
+  // Los turnos de las fechas que muestra la lista, releídos cada vez que la
+  // lista cambia. Con más de 120 días, solo los últimos 120: los días más
+  // viejos quedan sin turno y se cuentan con lo marcado.
+  useEffect(() => {
+    if (!canManage || isDemoMode || !businessId) return undefined
+    const fechas = records.map((r) => tsToDate(r.timestamp)).filter(Boolean).map((d) => d.getTime())
+    if (fechas.length === 0) {
+      setTurnosDelRango([])
+      return undefined
+    }
+    const masNueva = fechas.reduce((a, b) => Math.max(a, b))
+    const masVieja = fechas.reduce((a, b) => Math.min(a, b))
+    const desde = new Date(Math.max(masVieja, masNueva - 120 * 86400000))
+    let vigente = true
+    getScheduleRange(businessId, desde, new Date(masNueva)).then((res) => {
+      if (vigente && res.success) setTurnosDelRango(res.data || [])
+    })
+    return () => { vigente = false }
+  }, [records, canManage, isDemoMode, businessId])
+
+  const jornadas = useMemo(() => (canManage
+    ? construirJornadas(records, {
+      horarioDe: (id) => horariosPorSucursal.get(id) || null,
+      turnoDe: indiceDeTurnos(turnosDelRango),
+      descontarBreakProgramado,
+    })
+    : []), [canManage, records, horariosPorSucursal, turnosDelRango, descontarBreakProgramado])
+
+  // Para la lista de marcaciones: qué hora cuenta de cada marca.
+  const ladoPorMarca = useMemo(() => {
+    const mapa = new Map()
+    jornadas.forEach((j) => {
+      if (j.entrada?.marca?.id) mapa.set(j.entrada.marca.id, j.entrada)
+      if (j.salida?.marca?.id) mapa.set(j.salida.marca.id, j.salida)
+    })
+    return mapa
+  }, [jornadas])
+  const jornadasPorRevisar = jornadas.filter((j) => j.porRevisar).length
+
   useEffect(() => {
     loadInitial()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -285,13 +355,18 @@ export default function Attendance() {
       const sevenDaysAgo = new Date()
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
-      const [branchesRes, settingsRes, usersRes, lastRes, weekRes] = await Promise.all([
+      const [branchesRes, settingsRes, usersRes, lastRes, weekRes, turnosRes] = await Promise.all([
         getBranches(businessId),
         getCompanySettings(businessId),
         canManageSchedules ? getManagedUsers(businessId) : Promise.resolve({ success: true, data: [] }),
         user?.uid ? getLastAttendance(businessId, user.uid) : Promise.resolve({ success: true, data: null }),
         user?.uid
           ? getAttendanceRecords(businessId, { userId: user.uid, fromDate: sevenDaysAgo.toISOString(), max: 200 })
+          : Promise.resolve({ success: true, data: [] }),
+        // El turno del trabajador en esos días: dice desde qué hora cuenta su
+        // entrada y cuánto break se le descuenta (utils/jornadaAsistencia).
+        !canManage && user?.uid
+          ? getScheduleRange(businessId, sevenDaysAgo, new Date(), { userId: user.uid })
           : Promise.resolve({ success: true, data: [] }),
       ])
       // Sucursal principal: se representa con id 'main' y se nutre de companySettings.
@@ -308,6 +383,7 @@ export default function Attendance() {
       if (usersRes.success) setSubUsers(usersRes.data || [])
       if (lastRes.success) setLastMark(lastRes.data)
       if (weekRes.success) setMyWeekRecords(weekRes.data || [])
+      if (turnosRes.success) setMisTurnos(turnosRes.data || [])
       // Carga inicial filtrada por la semana en curso (estado inicial de los
       // filtros). Si el usuario quiere ver todo, presiona "Limpiar".
       if (canManage) await loadRecords({ fromDate: filterFrom || undefined, toDate: filterTo || undefined })
@@ -560,6 +636,37 @@ export default function Attendance() {
       : 'Se desactivó la marcación de break')
   }
 
+  /** "Descontar el break del turno": del negocio entero, como los breaks. */
+  const handleToggleBreakProgramado = async (enabled) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+    const res = await setAttendanceBreakProgramado(businessId, enabled)
+    if (!res.success) {
+      toast.error('No se pudo actualizar')
+      return
+    }
+    if (refreshBusinessSettings) await refreshBusinessSettings()
+    toast.success(enabled
+      ? 'Las horas ya descuentan el break del turno'
+      : 'Las horas vuelven a descontar solo el break marcado')
+  }
+
+  const handleSaveHorario = async (branchId, horario) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+    const res = await updateBranchAttendanceHours(businessId, branchId, horario)
+    if (res.success) {
+      toast.success(horario?.enabled ? 'Horario del local guardado' : 'Horario del local apagado')
+      await reloadBranches()
+    } else {
+      toast.error(res.error || 'No se pudo guardar el horario')
+    }
+  }
+
   const handleSaveGracePeriod = async (branchId, minutes) => {
     const res = await updateBranchGracePeriod(businessId, branchId, minutes)
     if (res.success) {
@@ -642,33 +749,54 @@ export default function Attendance() {
     }
   }
 
-  const exportCsv = () => {
-    if (records.length === 0) {
-      toast.info?.('No hay registros para exportar')
-      return
-    }
-    const headers = ['Fecha y hora', 'Empleado', 'Email', 'Sucursal', 'Tipo', 'Estado', 'Ubicación', 'Distancia (m)', 'Notas']
-    const rows = records.map(r => [
-      formatDateTime(r.timestamp),
-      r.userName || '',
-      r.userEmail || '',
-      r.branchName || '',
-      etiquetaDeMarca(r.type),
-      r.autoClosed ? 'Auto-cerrado' : (r.approvalStatus || ''),
-      etiquetaDeUbicacion(r),
-      r.gpsDistancia == null ? '' : r.gpsDistancia,
-      (r.notes || '').replace(/\n/g, ' '),
-    ])
+  const descargarCsv = (headers, rows, nombre) => {
     const csv = [headers, ...rows]
-      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
       .join('\n')
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `asistencia_${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = nombre
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  // Baja la vista que está abierta: por jornada o marcación por marcación.
+  const exportCsv = () => {
+    const hoy = new Date().toISOString().slice(0, 10)
+    if (vistaMarcaciones === 'jornadas') {
+      if (jornadas.length === 0) {
+        toast.info?.('No hay jornadas para exportar')
+        return
+      }
+      descargarCsv(ENCABEZADOS_DE_JORNADAS, jornadas.map(j => filaDeJornadaParaExcel(j, { breaksActivos })), `jornadas_${hoy}.csv`)
+      return
+    }
+    if (records.length === 0) {
+      toast.info?.('No hay registros para exportar')
+      return
+    }
+    const headers = ['Fecha y hora', 'Empleado', 'Email', 'Sucursal', 'Tipo', 'Estado', 'Ubicación', 'Distancia (m)', 'Notas', 'Hora que cuenta']
+    const rows = records.map(r => {
+      // Solo cuando la hora que cuenta no es la marcada (horario del local o
+      // ajuste del administrador).
+      const lado = ladoPorMarca.get(r.id)
+      const cuentaOtra = lado?.cuenta && lado.estado !== 'normal' && (!lado.real || horaCorta(lado.cuenta) !== horaCorta(lado.real))
+      return [
+        formatDateTime(r.timestamp),
+        r.userName || '',
+        r.userEmail || '',
+        r.branchName || '',
+        etiquetaDeMarca(r.type),
+        r.autoClosed ? 'Auto-cerrado' : (r.approvalStatus || ''),
+        etiquetaDeUbicacion(r),
+        r.gpsDistancia == null ? '' : r.gpsDistancia,
+        (r.notes || '').replace(/\n/g, ' '),
+        cuentaOtra ? horaCorta(lado.cuenta) : '',
+      ]
+    })
+    descargarCsv(headers, rows, `asistencia_${hoy}.csv`)
   }
 
   if (loading) {
@@ -839,6 +967,9 @@ export default function Attendance() {
                     marking={marking}
                     isNative={isNative}
                     breaksActivos={businessSettings?.attendanceBreaksEnabled === true}
+                    branches={branches}
+                    turnos={misTurnos}
+                    descontarBreakProgramado={descontarBreakProgramado}
                   />
                 )}
               </TabsContent>
@@ -875,6 +1006,41 @@ export default function Attendance() {
                       </div>
                     </div>
 
+                    {/* Por jornada (la hora que cuenta) o Cada marcación (la lista de siempre) */}
+                    <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 text-sm" role="tablist" aria-label="Cómo ver las marcaciones">
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={vistaMarcaciones === 'jornadas'}
+                        onClick={() => elegirVista('jornadas')}
+                        className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 ${vistaMarcaciones === 'jornadas' ? 'bg-white shadow-sm text-gray-900 font-medium' : 'text-gray-600 hover:text-gray-900'}`}
+                      >
+                        Por jornada
+                        {jornadasPorRevisar > 0 && (
+                          <span className="text-[11px] px-1.5 rounded-full chip-aviso tabular-nums">{jornadasPorRevisar}</span>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={vistaMarcaciones === 'marcas'}
+                        onClick={() => elegirVista('marcas')}
+                        className={`px-3 py-1.5 rounded-md ${vistaMarcaciones === 'marcas' ? 'bg-white shadow-sm text-gray-900 font-medium' : 'text-gray-600 hover:text-gray-900'}`}
+                      >
+                        Cada marcación
+                      </button>
+                    </div>
+
+                    {vistaMarcaciones === 'jornadas' ? (
+                      <JornadasAsistencia
+                        jornadas={jornadas}
+                        breaksActivos={breaksActivos}
+                        businessId={businessId}
+                        user={user}
+                        isDemoMode={isDemoMode}
+                        onCambio={applyFilters}
+                      />
+                    ) : (
                     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
                       {records.length === 0 ? (
                         <div className="p-8 text-center text-sm text-gray-500">
@@ -929,6 +1095,7 @@ export default function Attendance() {
                                             Tardanza · {r.lateMinutes}m
                                           </span>
                                         )}
+                                        <ChipDeHoraQueCuenta lado={ladoPorMarca.get(r.id)} />
                                       </div>
                                     </td>
                                     <td className="px-3 py-2 text-right">
@@ -983,6 +1150,7 @@ export default function Attendance() {
                                       Tardanza · {r.lateMinutes}m
                                     </span>
                                   )}
+                                  <ChipDeHoraQueCuenta lado={ladoPorMarca.get(r.id)} />
                                 </div>
                                 {r.approvalStatus === 'pending' && (
                                   <div className="flex gap-2 pt-1">
@@ -1002,6 +1170,7 @@ export default function Attendance() {
                         </>
                       )}
                     </div>
+                    )}
                   </div>
                 </TabsContent>
               )}
@@ -1265,6 +1434,31 @@ export default function Attendance() {
                           </p>
                         </div>
                       </label>
+
+                      {/* Break programado: del negocio entero (ver handleToggleBreakProgramado) */}
+                      <label className="flex items-start gap-3 cursor-pointer mt-4 pt-4 border-t border-gray-100">
+                        <input
+                          type="checkbox"
+                          checked={descontarBreakProgramado}
+                          onChange={(e) => handleToggleBreakProgramado(e.target.checked)}
+                          className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                            <Clock className="w-4 h-4 text-gray-500" />
+                            Descontar el break del turno
+                          </span>
+                          <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                            Las horas del día descuentan el break que tiene el turno de cada persona en
+                            Horarios, lo haya marcado o no. Por ejemplo: turno de 12:00 a 21:00 con 1 hora de
+                            break = 8 horas. Lo que marque queda como control: en Marcaciones, vista Por jornada,
+                            ves si tomó su break completo, lo interrumpió o se pasó.
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1.5">
+                            Un día sin turno asignado descuenta el break marcado, como siempre.
+                          </p>
+                        </div>
+                      </label>
                     </div>
 
                     {branches.length === 0 && (
@@ -1282,6 +1476,7 @@ export default function Attendance() {
                         onSaveGeofence={(geo) => handleSaveGeofence(branch.id, geo)}
                         onUseCurrentPos={() => handleUseCurrentPosForBranch(branch.id)}
                         onSaveGracePeriod={(minutes) => handleSaveGracePeriod(branch.id, minutes)}
+                        onSaveHorario={(horario) => handleSaveHorario(branch.id, horario)}
                       />
                     ))}
                   </div>
@@ -1372,7 +1567,7 @@ export default function Attendance() {
 }
 
 // Tarjeta de configuración por sucursal
-function BranchAttendanceCard({ branch, onToggle, onRegenerate, onSaveGeofence, onUseCurrentPos, onSaveGracePeriod }) {
+function BranchAttendanceCard({ branch, onToggle, onRegenerate, onSaveGeofence, onUseCurrentPos, onSaveGracePeriod, onSaveHorario }) {
   const toast = useToast()
   const att = branch.attendance || {}
   const enabled = att.enabled !== false && !!att.token
@@ -1560,6 +1755,10 @@ function BranchAttendanceCard({ branch, onToggle, onRegenerate, onSaveGeofence, 
               Default: 15 minutos.
             </p>
           </div>
+
+          {/* Horario del local: desde qué hora cuenta una entrada y hasta qué
+              hora una salida (utils/jornadaAsistencia). */}
+          <HorarioDelLocal horario={att.horario} onGuardar={onSaveHorario} />
         </div>
       ) : (
         <p className="text-sm text-gray-500 italic">Habilitá asistencia para generar el QR de esta sucursal.</p>
@@ -1568,19 +1767,59 @@ function BranchAttendanceCard({ branch, onToggle, onRegenerate, onSaveGeofence, 
   )
 }
 
-// Historial personal del sub-usuario
+// Lo que el trabajador ve debajo de su hora de entrada o de salida cuando la
+// hora que cuenta no es la que marcó. Le habla de tú; el administrador ve lo
+// mismo, en tercera persona, en Marcaciones > Por jornada.
+const notaParaElTrabajador = (lado) => {
+  if (!lado) return ''
+  const marcaste = lado.real ? `Marcaste ${horaCorta(lado.real)}` : ''
+  const referencia = nombreDeLaReferencia(lado, { tu: true })
+  const desdeHasta = lado.tipo === 'entrada' ? 'desde' : 'hasta'
+  switch (lado.estado) {
+    case 'por-revisar':
+      return `${marcaste} · por ahora cuenta ${desdeHasta} ${referencia}; tu encargado lo va a revisar`
+    case 'horario':
+      return `${marcaste} · cuenta ${desdeHasta} ${referencia}`
+    case 'ajustada':
+      return marcaste ? `${marcaste} · hora ajustada por tu encargado` : 'Hora ajustada por tu encargado'
+    case 'real':
+      return lado.fueraDeHorario ? 'Tu encargado aprobó la hora que marcaste' : ''
+    case 'automatica':
+      return `No marcaste tu salida: cuenta ${referencia}`
+    default:
+      return ''
+  }
+}
+
 /**
  * Vista de jornada para sub-usuarios:
  *  - Card "Hoy" con entrada/salida/total y botón contextual
  *  - Mini historial de últimos 6 días con resumen por jornada
+ *
+ * Las horas que muestra son las que CUENTAN (utils/jornadaAsistencia): con el
+ * horario del local, con lo que aprobó o ajustó el administrador y con el
+ * break programado del turno si el negocio lo descuenta. El botón, en cambio,
+ * sigue las marcas tal cual: dice qué va a registrar el próximo escaneo.
  */
-function SubUserAttendanceView({ weekRecords, onMark, marking, isNative, breaksActivos = false }) {
+function SubUserAttendanceView({ weekRecords, onMark, marking, isNative, breaksActivos = false, branches = [], turnos = [], descontarBreakProgramado = false }) {
   const grouped = useMemo(() => groupRecordsByDay(weekRecords || []), [weekRecords])
+
+  const jornadasPorDia = useMemo(() => {
+    const horarios = new Map((branches || []).map((b) => [b.id, b.attendance?.horario || null]))
+    const porDia = {}
+    construirJornadas(weekRecords || [], {
+      horarioDe: (id) => horarios.get(id) || null,
+      turnoDe: indiceDeTurnos(turnos),
+      descontarBreakProgramado,
+    }).forEach((j) => { porDia[claveDeFecha(j.fecha)] = j })
+    return porDia
+  }, [weekRecords, branches, turnos, descontarBreakProgramado])
 
   const today = new Date()
   const todayKey = dayKey(today)
   const todayGroup = grouped[todayKey]
   const todaySummary = summaryForDay(todayGroup)
+  const hoy = jornadasPorDia[todayKey] || null
 
   // 'idle' (no fichó), 'in' (trabajando), 'break' (almorzando), 'done'
   const state = estadoDelDia(todaySummary.marks)
@@ -1588,6 +1827,18 @@ function SubUserAttendanceView({ weekRecords, onMark, marking, isNative, breaksA
   // El texto lo decide utils/attendanceMarks, para que el botón del dueño y
   // el del trabajador digan siempre lo mismo.
   const buttonLabel = etiquetaDeProximaMarca(state, marking)
+
+  const entrada = hoy?.entrada || null
+  const salida = hoy?.salida || null
+  const brk = hoy?.break || null
+  const usaProgramado = brk?.fuente === 'programado' && brk.programadoMin > 0
+  const tomadoMs = brk?.tomadoMs || 0
+  const mostrarBreak = usaProgramado || (breaksActivos && (tomadoMs > 0 || state === 'break'))
+  const notaEntrada = notaParaElTrabajador(entrada)
+  const notaSalida = notaParaElTrabajador(salida)
+  // La marca de salida que hizo él (no la del cierre automático), para el
+  // aviso de ubicación.
+  const marcaDeSalida = salida?.marca && !salida.marca.autoClosed ? salida.marca : null
 
   // Días anteriores ordenados: descendente, excluyendo hoy
   const previousDays = Object.entries(grouped)
@@ -1621,49 +1872,49 @@ function SubUserAttendanceView({ weekRecords, onMark, marking, isNative, breaksA
             </p>
           ) : (
             <div className="space-y-2">
-              <div className="flex items-center justify-between p-3 rounded-lg bg-green-50 border border-green-200">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-green-600 text-white flex items-center justify-center text-xs font-bold">IN</div>
-                  <div>
+              <div className="flex items-center justify-between gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-8 h-8 shrink-0 rounded-full bg-green-600 text-white flex items-center justify-center text-xs font-bold">IN</div>
+                  <div className="min-w-0">
                     <p className="text-xs text-green-700 font-medium">Entrada</p>
                     <p className="text-base font-semibold text-green-900">
-                      {todaySummary.inMark ? formatTime(todaySummary.inMark._ts) : '—'}
+                      {entrada?.cuenta ? formatTime(entrada.cuenta) : '—'}
                     </p>
+                    {notaEntrada && <p className="text-[11px] text-green-800 leading-snug">{notaEntrada}</p>}
                   </div>
                 </div>
                 {/* Se mira el ESTADO, no el GPS: una marcación manual tiene gpsValid
                     false y no está pendiente de nada. */}
-                {todaySummary.inMark?.approvalStatus === 'pending' && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700" title={etiquetaDeUbicacion(todaySummary.inMark)}>
-                    Pendiente · {etiquetaDeUbicacion(todaySummary.inMark)}
+                {entrada?.marca?.approvalStatus === 'pending' && (
+                  <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700" title={etiquetaDeUbicacion(entrada.marca)}>
+                    Pendiente · {etiquetaDeUbicacion(entrada.marca)}
                   </span>
                 )}
               </div>
 
-              <div className={`flex items-center justify-between p-3 rounded-lg border ${
-                todaySummary.outMark ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200 border-dashed'
+              <div className={`flex items-center justify-between gap-2 p-3 rounded-lg border ${
+                salida?.cuenta ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200 border-dashed'
               }`}>
-                <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                    todaySummary.outMark ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs font-bold ${
+                    salida?.cuenta ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'
                   }`}>OUT</div>
-                  <div>
-                    <p className={`text-xs font-medium ${todaySummary.outMark ? 'text-blue-700' : 'text-gray-500'}`}>Salida</p>
-                    <p className={`text-base font-semibold ${todaySummary.outMark ? 'text-blue-900' : 'text-gray-400 italic'}`}>
-                      {todaySummary.outMark ? formatTime(todaySummary.outMark._ts) : 'Pendiente'}
+                  <div className="min-w-0">
+                    <p className={`text-xs font-medium ${salida?.cuenta ? 'text-blue-700' : 'text-gray-500'}`}>Salida</p>
+                    <p className={`text-base font-semibold ${salida?.cuenta ? 'text-blue-900' : 'text-gray-400 italic'}`}>
+                      {salida?.cuenta ? formatTime(salida.cuenta) : 'Pendiente'}
                     </p>
+                    {notaSalida && <p className="text-[11px] text-blue-800 leading-snug">{notaSalida}</p>}
                   </div>
                 </div>
-                {/* Se mira el ESTADO, no el GPS: una marcación manual tiene gpsValid
-                    false y no está pendiente de nada. */}
-                {todaySummary.outMark?.approvalStatus === 'pending' && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700" title={etiquetaDeUbicacion(todaySummary.outMark)}>
-                    Pendiente · {etiquetaDeUbicacion(todaySummary.outMark)}
+                {marcaDeSalida?.approvalStatus === 'pending' && (
+                  <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700" title={etiquetaDeUbicacion(marcaDeSalida)}>
+                    Pendiente · {etiquetaDeUbicacion(marcaDeSalida)}
                   </span>
                 )}
               </div>
 
-              {breaksActivos && (todaySummary.breakMs > 0 || state === 'break') && (
+              {mostrarBreak && (
                 <div className={`flex items-center justify-between p-3 rounded-lg border ${
                   state === 'break' ? 'bg-amber-50 border-amber-300' : 'bg-amber-50/50 border-amber-200'
                 }`}>
@@ -1673,26 +1924,38 @@ function SubUserAttendanceView({ weekRecords, onMark, marking, isNative, breaksA
                     </div>
                     <div>
                       <p className="text-xs text-amber-700 font-medium">
-                        {state === 'break' ? 'En break ahora' : 'Break acumulado'}
+                        {state === 'break' ? 'En break ahora' : (usaProgramado ? 'Break programado' : 'Break acumulado')}
                       </p>
                       <p className="text-base font-semibold text-amber-900">
-                        {todaySummary.breakMs > 0 ? formatDuration(todaySummary.breakMs) : 'Corriendo…'}
+                        {usaProgramado
+                          ? formatDuration(brk.programadoMin * 60000)
+                          : (tomadoMs > 0 ? formatDuration(tomadoMs) : 'Corriendo…')}
                       </p>
+                      {usaProgramado && (
+                        <p className="text-[11px] text-amber-800">
+                          {breaksActivos && tomadoMs > 0
+                            ? `Marcaste ${formatDuration(tomadoMs)}; se descuenta el programado`
+                            : 'Se descuenta de tus horas'}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
               )}
 
-              {todaySummary.totalMs != null && (
+              {hoy?.trabajadoMs != null && (
                 <div className="text-center pt-1">
                   <p className="text-xs text-gray-500">
-                    Total trabajado{todaySummary.breakMs > 0 ? ' (sin el break)' : ''}
+                    Total trabajado{brk?.descontadoMs > 0 ? (usaProgramado ? ' (sin el break programado)' : ' (sin el break)') : ''}
                   </p>
-                  <p className="text-2xl font-bold text-gray-900">{formatDuration(todaySummary.totalMs)}</p>
-                  {todaySummary.breakAbierto && (
+                  <p className="text-2xl font-bold text-gray-900">{formatDuration(hoy.trabajadoMs)}</p>
+                  {!usaProgramado && brk?.abierto && (
                     <p className="text-xs text-amber-700 mt-1">
                       Quedó un break sin cerrar: no se descontó del total.
                     </p>
+                  )}
+                  {hoy.porRevisar && (
+                    <p className="text-xs text-gray-500 mt-1">Puede cambiar cuando tu encargado revise tu horario.</p>
                   )}
                 </div>
               )}
@@ -1747,7 +2010,9 @@ function SubUserAttendanceView({ weekRecords, onMark, marking, isNative, breaksA
           </div>
           <div className="divide-y divide-gray-100">
             {previousDays.map(([key, group]) => {
-              const s = summaryForDay(group)
+              const j = jornadasPorDia[key]
+              const entro = j?.entrada?.cuenta
+              const salio = j?.salida?.cuenta
               return (
                 <div key={key} className="px-4 py-3 flex items-center justify-between hover:bg-gray-50">
                   <div className="flex-1 min-w-0">
@@ -1755,18 +2020,24 @@ function SubUserAttendanceView({ weekRecords, onMark, marking, isNative, breaksA
                     <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-500">
                       <span className="flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                        {s.inMark ? formatTime(s.inMark._ts) : '—'}
+                        {entro ? formatTime(entro) : '—'}
                       </span>
                       <span className="text-gray-300">→</span>
                       <span className="flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                        {s.outMark ? formatTime(s.outMark._ts) : '—'}
+                        {salio ? formatTime(salio) : '—'}
                       </span>
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-base font-bold text-gray-900">{formatDuration(s.totalMs)}</p>
-                    {!s.outMark && s.inMark && (
+                    <p className="text-base font-bold text-gray-900">{formatDuration(j?.trabajadoMs)}</p>
+                    {j?.porRevisar && (
+                      <span className="text-[10px] text-amber-700">en revisión</span>
+                    )}
+                    {!j?.porRevisar && j?.salida?.estado === 'automatica' && (
+                      <span className="text-[10px] text-gray-500">salida al cierre</span>
+                    )}
+                    {!j?.porRevisar && j?.entrada && ['sin-salida', 'en-curso'].includes(j?.salida?.estado) && (
                       <span className="text-[10px] text-yellow-600">sin salida</span>
                     )}
                   </div>
@@ -1780,6 +2051,7 @@ function SubUserAttendanceView({ weekRecords, onMark, marking, isNative, breaksA
   )
 }
 
+// Historial personal del sub-usuario
 function MyHistory({ businessId, userId }) {
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)
