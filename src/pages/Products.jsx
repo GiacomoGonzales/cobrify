@@ -61,6 +61,7 @@ import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore
 import { db } from '@/lib/firebase'
 import { printProductBarcodes, isPrinterReady } from '@/services/thermalPrinterService'
 import GuideLink from '@/components/guide/GuideLink'
+import CampoCantidad from '@/components/ui/CampoCantidad'
 
 // Unidades de medida SUNAT (Catálogo N° 03 - UN/ECE Rec 20)
 // UNITS y getUnitLabel viven ahora en '@/utils/units' (reusados por Inventario,
@@ -11103,16 +11104,13 @@ export default function Products() {
                   {!richVariants && (
                     <div className="flex items-center gap-2 ml-3">
                       <label className="text-xs text-gray-500">Cant:</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="100"
+                      <CampoCantidad
+                        min={1}
+                        max={100}
                         value={labelQuantities[product.id] || 1}
-                        onChange={(e) => setLabelQuantities(prev => ({
-                          ...prev,
-                          [product.id]: Math.max(1, Math.min(100, parseInt(e.target.value) || 1))
-                        }))}
+                        onChange={(n) => setLabelQuantities(prev => ({ ...prev, [product.id]: n }))}
                         className="w-16 px-2 py-1 border border-gray-300 rounded text-sm text-center"
+                        aria-label={`Cantidad de etiquetas de ${product.name}`}
                       />
                     </div>
                   )}
@@ -11131,17 +11129,14 @@ export default function Products() {
                               ? <span className="font-mono text-[10px] text-gray-400 ml-1.5">{String(v.barcode || v.sku).replace(/-/g, '')}</span>
                               : <span className="text-[10px] text-amber-600 font-medium ml-1.5">se generará al imprimir</span>}
                           </p>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
+                          <CampoCantidad
+                            min={0}
+                            max={100}
                             value={getVariantQty(product.id, v, vi)}
-                            onChange={(e) => setLabelVariantQuantities(prev => ({
-                              ...prev,
-                              [key]: Math.max(0, Math.min(100, parseInt(e.target.value) || 0))
-                            }))}
+                            onChange={(n) => setLabelVariantQuantities(prev => ({ ...prev, [key]: n }))}
                             className="w-14 px-2 py-0.5 border border-gray-300 rounded text-sm text-center"
                             title="0 = no imprimir esta variante"
+                            aria-label={`Cantidad de etiquetas de ${attrs}`}
                           />
                         </div>
                       )
