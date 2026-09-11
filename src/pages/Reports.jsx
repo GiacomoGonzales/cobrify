@@ -1,3 +1,4 @@
+import { TODOS_LOS_RUC, pasaFiltroDeRuc, opcionesDeRuc, etiquetaDeRuc, empresaDelFiltro } from '@/utils/filtroDeRuc'
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   TrendingUp,
@@ -237,7 +238,7 @@ export default function Reports() {
 }
 
 function ReportsGeneral() {
-  const { user, isDemoMode, demoData, getBusinessId, hasFeature, businessMode, filterBranchesByAccess, hasMainBranchAccess, allowedBranches, allowedWarehouses, isBusinessOwner, isAdmin, businessSettings, assignedSellerId, branchScope } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, hasFeature, businessMode, filterBranchesByAccess, hasMainBranchAccess, allowedBranches, allowedWarehouses, isBusinessOwner, isAdmin, businessSettings, assignedSellerId, branchScope, emisores } = useAppContext()
   const permisos = useDataPermissions()
   // Filtro de seguridad por ubicación (sucursal/almacén) para usuarios secundarios.
   // Debe declararse antes de cualquier return condicional para no romper el orden de hooks.
@@ -284,6 +285,11 @@ function ReportsGeneral() {
   // duplicarlo y podian contradecirse: el header en "Cabo Lopez" y el reporte
   // en "Los Agustinos". Los tokens coinciden: 'all' | 'main' | <branchId>.
   const filterBranch = branchScope || 'all'
+  // Varios RUC: el reporte de un RUC ('all' = todos). Solo con más de un RUC.
+  const [filterRuc, setFilterRuc] = useState(TODOS_LOS_RUC)
+  const conVariosRuc = (emisores || []).length > 0
+  // La cabecera de los Excel e impresiones: la del RUC elegido.
+  const negocioDelReporte = empresaDelFiltro(businessSettings, emisores || [], filterRuc)
   const [productSearch, setProductSearch] = useState('')
   const [productPage, setProductPage] = useState(0)
   // Imprimir el resumen por producto a demanda. Antes solo salía al pie del
@@ -309,7 +315,7 @@ function ReportsGeneral() {
   const productChartRef = useRef(null)
 
   // Resetear paginación cuando cambian los filtros
-  useEffect(() => { setProductPage(0) }, [dateRange, filterBranch, customStartDate, customEndDate])
+  useEffect(() => { setProductPage(0) }, [dateRange, filterBranch, customStartDate, customEndDate, filterRuc])
 
   // Helper para parsear fecha en zona horaria local (evita problemas con UTC)
   const parseLocalDate = (dateString) => {
@@ -672,7 +678,8 @@ function ReportsGeneral() {
     && inv.archived !== true
     && !['cancelled', 'voided', 'pending_cancellation', 'partial_refund_pending'].includes(inv.status)
     && enElPeriodo(inv)
-  )), [invoices, canAccess, canSeeSale, enElPeriodo])
+    && pasaFiltroDeRuc(inv, filterRuc)
+  )), [invoices, canAccess, canSeeSale, enElPeriodo, filterRuc])
 
   // Filtrar facturas por rango de fecha y calcular costos
   const filteredInvoices = useMemo(() => {
@@ -723,6 +730,8 @@ function ReportsGeneral() {
       // dejaba fuera las que la tienen en 'main': Reportes daba menos que Ventas
       // para el mismo periodo.
       if (!esDeSucursal(invoice, filterBranch)) return false
+      // Varios RUC: el RUC elegido (sin campo = el principal).
+      if (!pasaFiltroDeRuc(invoice, filterRuc)) return false
       return true
     })
 
@@ -763,7 +772,7 @@ function ReportsGeneral() {
     }
 
     return validInvoices.filter(enElPeriodo).map(addCostCalculations)
-  }, [invoices, enElPeriodo, calculateItemCost, isCustomItem, filterBranch, canAccess, canSeeSale])
+  }, [invoices, enElPeriodo, calculateItemCost, isCustomItem, filterBranch, canAccess, canSeeSale, filterRuc])
 
   // Función helper para calcular revenue del período anterior
   const getPreviousPeriodRevenue = useCallback(() => {
@@ -814,10 +823,11 @@ function ReportsGeneral() {
         // Excluir anuladas y en proceso de anulación (rechazadas SÍ cuentan)
         if (invoice.status === 'cancelled' || invoice.status === 'voided' || invoice.sunatStatus === 'voiding' || invoice.sunatStatus === 'voided') return false
         if (invoice.convertedTo) return false
+        if (!pasaFiltroDeRuc(invoice, filterRuc)) return false
         return invoiceDate >= startDate && invoiceDate <= endDate
       })
       .reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)
-  }, [invoices, dateRange, customStartDate, customEndDate])
+  }, [invoices, dateRange, customStartDate, customEndDate, filterRuc])
 
   // Calcular estadísticas generales
   // Multi-divisa: las agregaciones siempre se calculan en PEN base usando
@@ -1749,6 +1759,7 @@ function ReportsGeneral() {
       if (invoice.archived === true || invoice.convertedTo) return
       if (invoice.status === 'cancelled' || invoice.status === 'voided' ||
           invoice.sunatStatus === 'voiding' || invoice.sunatStatus === 'voided') return
+      if (!pasaFiltroDeRuc(invoice, filterRuc)) return
 
       const d = getInvoiceDate(invoice)
       if (!d || d < startDate || d > endDate) return
@@ -1762,7 +1773,7 @@ function ReportsGeneral() {
     return Object.entries(buckets)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([, v]) => Number(v.toFixed(2)))
-  }, [invoices, dateRange, customStartDate, customEndDate, canAccess, canSeeSale])
+  }, [invoices, dateRange, customStartDate, customEndDate, canAccess, canSeeSale, filterRuc])
 
   /** salesByPeriod + la serie del período anterior pegada por posición. */
   const salesTrendData = useMemo(
@@ -2853,15 +2864,15 @@ function ReportsGeneral() {
   const exportarReporteActual = async () => {
     switch (selectedReport) {
       case 'overview':
-        return exportGeneralReport({ stats, salesByMonth: salesByPeriod, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings, totalGastos: expenseStats.total, gananciaFinal })
+        return exportGeneralReport({ stats, salesByMonth: salesByPeriod, topProducts, topCustomers, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: negocioDelReporte, totalGastos: expenseStats.total, gananciaFinal })
       case 'sales':
-        return exportSalesReport({ stats, salesByMonth: salesByPeriod, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })
+        return exportSalesReport({ stats, salesByMonth: salesByPeriod, filteredInvoices, dateRange, paymentMethodStats, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: negocioDelReporte })
       case 'products':
-        return exportProductsReport({ topProducts, salesByCategory, salesByBrand, products, productCategories, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })
+        return exportProductsReport({ topProducts, salesByCategory, salesByBrand, products, productCategories, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: negocioDelReporte })
       case 'brands':
-        return exportBrandsReport({ salesByBrand, salesByVariant, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })
+        return exportBrandsReport({ salesByBrand, salesByVariant, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: negocioDelReporte })
       case 'customers':
-        return exportCustomersReport({ topCustomers, customers, filteredInvoices, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })
+        return exportCustomersReport({ topCustomers, customers, filteredInvoices, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: negocioDelReporte })
       case 'sellers':
         return exportSellersReport()
       case 'expenses':
@@ -2889,7 +2900,7 @@ function ReportsGeneral() {
   const productosParaImprimir = () => resumenDeProductos(productosFiltrados())
 
   const datosDeImpresion = () => ({
-    negocio: businessSettings || {},
+    negocio: negocioDelReporte || {},
     // El MISMO rótulo que ponen los Excel del reporte (reportExportService).
     periodo: getRangeLabel(dateRange, customStartDate, customEndDate),
     sucursal: getBranchLabel(),
@@ -3037,6 +3048,22 @@ function ReportsGeneral() {
             </div>
           )}
         </div>
+        {/* Varios RUC: el reporte de un solo RUC */}
+        {conVariosRuc && (
+          <>
+            <div className="hidden sm:block h-6 w-px bg-gray-200" />
+            <select
+              value={filterRuc}
+              onChange={e => setFilterRuc(e.target.value)}
+              className="w-full sm:w-auto px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value={TODOS_LOS_RUC}>Todos los RUC</option>
+              {opcionesDeRuc(businessSettings, emisores).map(o => (
+                <option key={o.value} value={o.value}>{etiquetaDeRuc(o)}</option>
+              ))}
+            </select>
+          </>
+        )}
         {/* La descarga del reporte activo, aprovechando el espacio libre de
             la barra. La etiqueta dice QUE descarga (Excel de Ventas, de
             Marcas...) segun la pestaña. En movil, de lado a lado. */}
@@ -4531,7 +4558,7 @@ function ReportsGeneral() {
               </select>
               {permisos.exportar && (
               <button
-                onClick={async () => await exportBrandDetailReport({ brandData: selectedBrandData, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: businessSettings })}
+                onClick={async () => await exportBrandDetailReport({ brandData: selectedBrandData, dateRange, customStartDate, customEndDate, branchLabel: getBranchLabel(), businessData: negocioDelReporte })}
                 disabled={selectedBrandData.products.length === 0}
                 className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -5939,6 +5966,12 @@ function ReportsGeneral() {
       {/* Reporte de Rentabilidad */}
       {selectedReport === 'profitability' && (
         <>
+          {/* Varios RUC: las ventas son del RUC elegido; los costos, de la cuenta. */}
+          {filterRuc !== TODOS_LOS_RUC && (
+            <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+              Las ventas son solo del RUC elegido. Los gastos y las compras son de toda la cuenta: no se separan por RUC.
+            </div>
+          )}
           {/* AVISO cuando se vendió sin comprar en el período.
               Este reporte compara lo que ENTRÓ contra lo que se GASTÓ ese mes;
               no mira el costo de la mercadería vendida. Un negocio que vende

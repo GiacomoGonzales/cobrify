@@ -8,7 +8,7 @@ import { getVendedores } from '@/services/vendedorService'
 import { getBranches } from '@/services/branchService'
 import { getEmisores, getSeriesDelNegocio } from '@/services/emisoresService'
 import { TIPOS_DE_SERIE_DE_EMISOR } from '../../../functions/src/utils/emisorDelComprobante.js'
-import { resumenDeUso } from '@/services/adminUsoService'
+import { resumenDeUso, firmasPorEmisor } from '@/services/adminUsoService'
 import { cargarCuenta, diasParaVencer, enlaceRecordatorioWhatsapp, convertirPruebaEnCuenta } from '@/services/adminCuentasService'
 import { esPrueba } from '@/data/prueba'
 import ConvertirPruebaModal from '@/components/admin/cuenta/ConvertirPruebaModal'
@@ -82,6 +82,8 @@ export default function AdminCuenta() {
   const [emisores, setEmisores] = useState([])
   const [emisorSeries, setEmisorSeries] = useState({})
   const [uso, setUso] = useState(null)
+  // Varios RUC: firmas por RUC adicional (el principal es el resto del total).
+  const [firmasPorRuc, setFirmasPorRuc] = useState(null)
   const [cargandoUso, setCargandoUso] = useState(false)
   const [modal, setModal] = useState(null)
   const [procesando, setProcesando] = useState(false)
@@ -144,6 +146,17 @@ export default function AdminCuenta() {
     return () => { vivo = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cuenta?.id])
+
+  // Varios RUC: las firmas de cada RUC, solo con la función y con emisores.
+  useEffect(() => {
+    if (!cuenta?.features?.multiRuc || emisores.length === 0) return
+    let vivo = true
+    firmasPorEmisor(id, emisores)
+      .then(r => { if (vivo) setFirmasPorRuc(r) })
+      .catch(e => console.error('Error contando las firmas por RUC:', e))
+    return () => { vivo = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cuenta?.id, cuenta?.features?.multiRuc, emisores])
 
   const parchar = cambios => setCuenta(prev => (prev ? { ...prev, ...cambios } : prev))
 
@@ -655,6 +668,7 @@ export default function AdminCuenta() {
                 <Th>Método</Th>
                 <Th>Régimen</Th>
                 <Th>Series</Th>
+                <Th>Firmas</Th>
                 <Th>Estado</Th>
               </tr>
             </thead>
@@ -665,6 +679,12 @@ export default function AdminCuenta() {
                 <Td apagado>{METODOS[c.emissionMethod] || c.emissionMethod}</Td>
                 <Td apagado>{REGIMENES[c.taxType] || c.taxType}</Td>
                 <Td apagado>Las del negocio</Td>
+                {/* El principal es el total menos lo de los emisores. */}
+                <Td apagado className="tabular-nums">
+                  {uso && firmasPorRuc
+                    ? Math.max(0, uso.invoices.firmas.total - Object.values(firmasPorRuc).reduce((a, b) => a + b, 0)).toLocaleString('es-PE')
+                    : '…'}
+                </Td>
                 <Td apagado>Activo</Td>
               </Fila>
               {emisores.map(e => (
@@ -676,6 +696,7 @@ export default function AdminCuenta() {
                   <Td apagado className="whitespace-normal">
                     {TIPOS_DE_SERIE_DE_EMISOR.map(t => emisorSeries[e.id]?.[t]?.serie).filter(Boolean).join(' · ') || '—'}
                   </Td>
+                  <Td apagado className="tabular-nums">{firmasPorRuc ? (firmasPorRuc[e.id] ?? 0).toLocaleString('es-PE') : '…'}</Td>
                   <Td apagado>{e.activo === false ? 'Inactivo' : 'Activo'}</Td>
                 </Fila>
               ))}

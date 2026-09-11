@@ -2721,7 +2721,7 @@ export const closeCashRegister = async (userId, sessionId, closingData, userUid 
       return { success: true, alreadyClosed: true }
     }
 
-    const { cash, card, transfer, yape, plin, rappi, pedidosYa, diDiFood, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, salesRappi, salesPedidosYa, salesDiDiFood, salesByCustomMethod, closingByCustomMethod, totalIncome, totalExpense, totalIncomeYape, totalExpenseYape, expectedAmount, difference, expectedAmountYape, differenceYape, totalIncomePlin, totalExpensePlin, expectedAmountPlin, differencePlin, invoiceCount, deferredPayments, deferredTotal, usd } = closingData
+    const { cash, card, transfer, yape, plin, rappi, pedidosYa, diDiFood, totalSales, salesCash, salesCard, salesTransfer, salesYape, salesPlin, salesRappi, salesPedidosYa, salesDiDiFood, salesByCustomMethod, closingByCustomMethod, totalIncome, totalExpense, totalIncomeYape, totalExpenseYape, expectedAmount, difference, expectedAmountYape, differenceYape, totalIncomePlin, totalExpensePlin, expectedAmountPlin, differencePlin, invoiceCount, deferredPayments, deferredTotal, usd, salesByRuc } = closingData
     // Los metodos propios contados suman al total del arqueo: si quedaran
     // fuera, el cierre cuadraria corto por el monto cobrado con ellos.
     const customCounted = Object.values(closingByCustomMethod || {}).reduce((sum, v) => sum + (Number(v) || 0), 0)
@@ -2754,6 +2754,8 @@ export const closeCashRegister = async (userId, sessionId, closingData, userUid 
       // (sesiones sin métodos propios no cargan un mapa vacío en el doc).
       ...(salesByCustomMethod && Object.keys(salesByCustomMethod).length > 0 && { salesByCustomMethod }),
       ...(closingByCustomMethod && Object.keys(closingByCustomMethod).length > 0 && { closingByCustomMethod }),
+      // Varios RUC: solo si en el turno se vendió con más de un RUC.
+      ...(Array.isArray(salesByRuc) && salesByRuc.length > 1 && { salesByRuc }),
       totalIncome: totalIncome || 0,
       totalExpense: totalExpense || 0,
       expectedAmount: expectedAmount || 0,

@@ -11,7 +11,8 @@
  *  - Ticket, PDF y WhatsApp salen con los datos del RUC del comprobante.
  *  - Configuración > Series muestra las series de cada RUC (solo lectura).
  *  - Guías, cotizaciones, comprobante manual, emisión masiva y chat: principal.
- *  - Reportes y Registro de Ventas todavía suman los dos RUC (fase 4).
+ *  - Fase 4: Ventas (lista y Excel), Contabilidad, Reportes y el cierre de
+ *    caja separan por RUC. Contabilidad no tiene "todos": un RUC a la vez.
  */
 export default {
   id: 'dos-rucs',
@@ -111,6 +112,29 @@ export default {
     },
 
     {
+      id: 'reportes',
+      title: 'Lo de cada RUC, para su contador',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'En **Ventas** eliges el RUC en el desplegable "Todos los RUC": la lista y los totales de arriba muestran solo lo de ese RUC. Al exportar a Excel también eliges el RUC, y el **Registro de Ventas** sale con su RUC y su razón social en la cabecera. Si exportas todos juntos, cada fila lleva su RUC en una columna.',
+        },
+        {
+          type: 'texto',
+          text: 'En **Contabilidad** se trabaja siempre con un RUC a la vez: los XML, los CDR y el Excel que le entregas al contador son solo de ese RUC, y los archivos llevan el RUC en el nombre.',
+        },
+        {
+          type: 'texto',
+          text: 'En **Reportes** el mismo desplegable filtra todas las pestañas, y el Excel sale con los datos del RUC elegido. En Rentabilidad, las ventas son del RUC elegido, pero los gastos y las compras son de toda la cuenta.',
+        },
+        {
+          type: 'texto',
+          text: 'El **cierre de caja** es uno solo, porque la caja es la misma. Debajo del total vendido dice cuánto se vendió con cada RUC, en la pantalla y en el ticket.',
+        },
+      ],
+    },
+
+    {
       id: 'limites',
       title: 'Lo que tienes que saber',
       blocks: [
@@ -118,7 +142,6 @@ export default {
           type: 'pasos',
           items: [
             'Las **guías de remisión**, las **cotizaciones**, el comprobante manual y la emisión masiva salen con el RUC principal.',
-            'Por ahora, **Reportes** y el **Registro de Ventas** suman los dos RUC juntos.',
             'El cupo mensual de comprobantes de tu plan es **uno para todos los RUC**.',
           ],
         },

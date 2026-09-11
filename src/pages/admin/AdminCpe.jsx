@@ -363,6 +363,8 @@ export default function AdminCpe() {
         inv.number,
         inv.customer?.businessName, inv.customer?.name, inv.customer?.documentNumber,
         emp?.nombre, emp?.ruc,
+        // Varios RUC: el RUC y la razón social del comprobante.
+        inv.emisor?.ruc, inv.emisor?.razonSocial,
       )
       if (!matchesPrebuilt(busqueda, hay)) return false
     }
@@ -854,7 +856,11 @@ export default function AdminCpe() {
                       </Td>
                       <Td className="max-w-[220px]">
                         <p className="truncate font-medium">{emp?.nombre || inv.bizId}</p>
-                        <p className="text-[11px] text-gray-400">{emp?.ruc}</p>
+                        {/* Varios RUC: el RUC del comprobante, que puede ser otro de la cuenta. */}
+                        <p className="text-[11px] text-gray-400">{inv.emisor?.ruc || emp?.ruc}</p>
+                        {inv.emisor?.ruc && (
+                          <p className="truncate text-[11px] text-gray-500">{inv.emisor.razonSocial || 'Otro RUC de la cuenta'}</p>
+                        )}
                       </Td>
                       <Td><BadgeTipo inv={inv} /></Td>
                       <Td className="font-medium">{inv.number || '-'}</Td>
@@ -1136,7 +1142,10 @@ export default function AdminCpe() {
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white">
                 <div>
                   <h3 className="font-semibold text-gray-900">{detalle.number || detalle.id}</h3>
-                  <p className="text-xs text-gray-500">{emp?.nombre} {emp?.ruc ? `· ${emp.ruc}` : ''}</p>
+                  <p className="text-xs text-gray-500">
+                    {emp?.nombre} {(detalle.emisor?.ruc || emp?.ruc) ? `· ${detalle.emisor?.ruc || emp.ruc}` : ''}
+                    {detalle.emisor?.razonSocial ? ` · ${detalle.emisor.razonSocial}` : ''}
+                  </p>
                 </div>
                 <button onClick={() => setDetalle(null)} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded">
                   <X className="w-5 h-5" />

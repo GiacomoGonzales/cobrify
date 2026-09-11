@@ -1,3 +1,4 @@
+import { lineasDeVentasPorRuc } from '@/utils/filtroDeRuc'
 import { CapacitorThermalPrinter } from 'capacitor-thermal-printer';
 import { bloqueDeIgvEnPrecuenta } from '@/utils/igvDePrecuenta';
 import { rucDeEmpresa, lineaRuc } from '@/utils/rucDeEmpresa';
@@ -3744,6 +3745,13 @@ export const printCashClosureTicket = async (sessionData, movements = [], busine
       .bold(false)
       .text(format.separator + '\n');
 
+    // Varios RUC: lo vendido con cada RUC (las mismas líneas que el ticket web).
+    const ventasPorRuc = lineasDeVentasPorRuc(sessionData?.salesByRuc);
+    if (ventasPorRuc.length > 0) {
+      ventasPorRuc.forEach(l => { printer = printer.text(createLine(l.etiquetaCorta + ':', formatCurrency(l.total)) + '\n'); });
+      printer = printer.text(format.separator + '\n');
+    }
+
     // ========== OTROS MOVIMIENTOS ==========
     if (totalIncome > 0 || totalExpense > 0) {
       printer = printer
@@ -4017,6 +4025,12 @@ const printWifiCashClosure = async (sessionData, movements, business, paperWidth
     builder.text(format.halfSeparator).newLine()
       .bold(true).text(createLine('Total Ventas:', formatCurrency(totalSales))).newLine().bold(false)
       .text(format.separator).newLine();
+    // Varios RUC: lo vendido con cada RUC (las mismas líneas que el ticket web).
+    const ventasPorRucWifi = lineasDeVentasPorRuc(sessionData?.salesByRuc);
+    if (ventasPorRucWifi.length > 0) {
+      ventasPorRucWifi.forEach(l => builder.text(createLine(l.etiquetaCorta + ':', formatCurrency(l.total))).newLine());
+      builder.text(format.separator).newLine();
+    }
 
     // Otros movimientos
     if (totalIncome > 0 || totalExpense > 0) {
@@ -4230,6 +4244,12 @@ const printBLECashClosure = async (sessionData, movements, business, paperWidth,
     ticketText += format.halfSeparator + '\n';
     ticketText += createLine('Total Ventas:', formatCurrency(totalSales)) + '\n';
     ticketText += format.separator + '\n';
+    // Varios RUC: lo vendido con cada RUC (las mismas líneas que el ticket web).
+    const ventasPorRucBle = lineasDeVentasPorRuc(sessionData?.salesByRuc);
+    if (ventasPorRucBle.length > 0) {
+      ventasPorRucBle.forEach(l => { ticketText += createLine(l.etiquetaCorta + ':', formatCurrency(l.total)) + '\n'; });
+      ticketText += format.separator + '\n';
+    }
 
     // Otros movimientos
     if (totalIncome > 0 || totalExpense > 0) {

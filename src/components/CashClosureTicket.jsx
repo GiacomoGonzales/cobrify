@@ -1,6 +1,7 @@
 import { forwardRef } from 'react'
 import { rucDeEmpresa } from '@/utils/rucDeEmpresa'
 import { resumirProductosVendidos } from '@/utils/cashClosureProducts'
+import { lineasDeVentasPorRuc } from '@/utils/filtroDeRuc'
 import React from 'react'
 import { getSessionMoneyTotals } from '@/utils/cashTotals'
 
@@ -512,6 +513,13 @@ const CashClosureTicket = forwardRef(({
           <span>Total Ventas:</span>
           <span>{formatCurrency(totalSales)}</span>
         </div>
+        {/* Varios RUC: lo vendido con cada RUC, lo mismo que dice la pantalla. */}
+        {lineasDeVentasPorRuc(sessionData?.salesByRuc).map(l => (
+          <div className="info-row" key={l.etiqueta}>
+            <span className="info-label">{l.etiquetaCorta}:</span>
+            <span>{formatCurrency(l.total)}</span>
+          </div>
+        ))}
       </div>
 
       {/* Que se vendio. Sale de los mismos comprobantes que los totales de

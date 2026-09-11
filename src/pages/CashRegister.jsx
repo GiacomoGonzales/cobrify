@@ -1,3 +1,4 @@
+import { acumuladorPorRuc, lineasDeVentasPorRuc } from '@/utils/filtroDeRuc'
 import { useState, useEffect, useRef } from 'react'
 import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store, Clock, Printer, Loader2, User, FileText, AlertTriangle, ChevronDown } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -104,7 +105,7 @@ function CountRow({ label, hint, value, onChange, expected, currency = 'PEN', re
 }
 
 export default function CashRegister() {
-  const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, allowedBranches, userPermissions, independentCashRegister, isAdmin, isBusinessOwner, businessSettings, businessMode } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, filterBranchesByAccess, allowedBranches, userPermissions, independentCashRegister, isAdmin, isBusinessOwner, businessSettings, businessMode, emisores } = useAppContext()
   // Si está activado el toggle "ocultar efectivo esperado a cajeros" y el usuario actual
   // no es dueño/admin, escondemos el monto esperado y la diferencia para que el cajero
   // no lo vea — solo cuente y reporte. El dueño podrá comparar después.
@@ -1113,6 +1114,7 @@ export default function CashRegister() {
         salesStoreCredit: totalsClose.salesStoreCredit || 0,
         salesGiftCert: totalsClose.salesGiftCert || 0,
         salesByCustomMethod: totalsClose.salesByCustomMethod || {},
+        salesByRuc: totalsClose.salesByRuc || [],
         totalIncome: totalsClose.income,
         totalExpense: totalsClose.expense,
         totalIncomeYape: totalsClose.incomeYape || 0,
@@ -1164,6 +1166,8 @@ export default function CashRegister() {
         // Desglose de métodos propios (etiqueta → monto). Persistirlo permite
         // que el historial y las impresiones lo muestren sin recalcular.
         salesByCustomMethod: totalsClose.salesByCustomMethod || {},
+        // Varios RUC: lo vendido con cada RUC, para el historial y las reimpresiones.
+        salesByRuc: totalsClose.salesByRuc || [],
         // Lo CONTADO en cada método propio al cerrar (arqueo)
         closingByCustomMethod,
         totalIncome: totalsClose.income,
@@ -2081,6 +2085,10 @@ export default function CashRegister() {
     }
 
     // Recorrer cada factura válida y sumar por método de pago.
+    // Varios RUC: lo vendido con cada RUC, sumando los MISMOS pagos que los
+    // métodos de abajo (vacío en la práctica si la cuenta tiene un solo RUC).
+    const porRuc = acumuladorPorRuc(businessSettings, emisores || [])
+
     // Multi-divisa: cada pago se enruta al bucket PEN o USD según la moneda
     // del invoice padre. invoiceCurrency() devuelve 'PEN' para legacy.
     validInvoices.forEach(invoice => {
@@ -2089,6 +2097,11 @@ export default function CashRegister() {
         return // No contar ventas al crédito sin pagar
       }
       const invCcy = invoiceCurrency(invoice)
+      // Cada pago va a su método y al RUC de su comprobante.
+      const aporte = (metodo, monto, moneda) => {
+        addToMethod(metodo, monto, moneda)
+        porRuc.sumar(invoice, monto, moneda)
+      }
 
       // Verificar si tiene historial de pagos (ventas al crédito o parciales que fueron pagadas)
       // Si tiene paymentHistory, usar eso para obtener los métodos de pago reales
@@ -2107,7 +2120,7 @@ export default function CashRegister() {
           const paymentDate = toDate(payment.date) || invoiceCreatedAt
           const inSession = !sessionOpenedAt || (paymentDate && paymentDate >= sessionOpenedAt)
           if (!inSession) return
-          addToMethod(payment.method, amount, invCcy)
+          aporte(payment.method, amount, invCcy)
           if (isOldInvoice) {
             deferredPayments.push({
               invoiceId: invoice.id,
@@ -2128,12 +2141,12 @@ export default function CashRegister() {
 
         // Si hay un solo método de pago, usar el TOTAL DE LA FACTURA
         if (invoice.payments.length === 1) {
-          addToMethod(invoice.payments[0].method, invoiceTotal, invCcy)
+          aporte(invoice.payments[0].method, invoiceTotal, invCcy)
         } else {
           // Múltiples métodos de pago: usar los montos reales de cada pago
           invoice.payments.forEach(payment => {
             const amount = parseFloat(payment.amount) || 0
-            addToMethod(payment.method, amount, invCcy)
+            aporte(payment.method, amount, invCcy)
           })
         }
       } else {
@@ -2141,7 +2154,7 @@ export default function CashRegister() {
         // Para pagos parciales, solo sumar amountPaid
         const isPartialPayment = invoice.paymentStatus === 'partial'
         const total = isPartialPayment ? (parseFloat(invoice.amountPaid) || 0) : (invoice.total || 0)
-        addToMethod(invoice.paymentMethod, total, invCcy)
+        aporte(invoice.paymentMethod, total, invCcy)
       }
     })
 
@@ -2354,6 +2367,8 @@ export default function CashRegister() {
       // Métodos propios: etiqueta → monto. La UI, el cierre y las impresiones
       // leen este mapa; los campos fijos de arriba quedan para los de siempre.
       salesByCustomMethod: customSales,
+      // Varios RUC: lo vendido con cada RUC (las líneas salen si hay más de uno).
+      salesByRuc: porRuc.filas(),
       usd: usdBlock,
       yape: yapeBlock,
       plin: plinBlock,
@@ -2782,6 +2797,17 @@ export default function CashRegister() {
                             <span className="font-medium">{formatCurrency(totals.deferredCash)}</span>
                           </div>
                         )}
+                      </div>
+                    )}
+                    {/* Varios RUC: lo vendido con cada RUC */}
+                    {lineasDeVentasPorRuc(totals.salesByRuc).length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-dashed border-gray-200 pl-3 text-xs space-y-0.5">
+                        {lineasDeVentasPorRuc(totals.salesByRuc).map(l => (
+                          <div key={l.etiqueta} className="flex justify-between text-gray-600">
+                            <span className="truncate pr-2">{l.etiqueta}</span>
+                            <span className="font-medium tabular-nums">{formatCurrency(l.total)}</span>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -4532,6 +4558,13 @@ export default function CashRegister() {
                 <span className="text-sm font-semibold text-gray-900">Total vendido en el día</span>
                 <span className="text-lg font-bold text-gray-900">{formatCurrency(totals.sales)}</span>
               </div>
+              {/* Varios RUC: cuánto se vendió con cada RUC (suma lo mismo que el total). */}
+              {lineasDeVentasPorRuc(totals.salesByRuc).map(l => (
+                <div key={l.etiqueta} className="flex justify-between items-center mt-1 text-xs text-gray-600">
+                  <span className="truncate pr-2">{l.etiqueta}</span>
+                  <span className="tabular-nums">{formatCurrency(l.total)}{l.totalUSD > 0 ? ` + US$ ${l.totalUSD.toFixed(2)}` : ''}</span>
+                </div>
+              ))}
             </div>
 
             {!hideExpectedForCashier && (

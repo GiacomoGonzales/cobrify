@@ -1,4 +1,5 @@
-import { empresaDelComprobante } from '../../functions/src/utils/emisorDelComprobante.js'
+import { EMISOR_PRINCIPAL, empresaDelComprobante } from '../../functions/src/utils/emisorDelComprobante.js'
+import { pasaFiltroDeRuc, opcionesDeRuc, etiquetaDeRuc, empresaDelFiltro } from '@/utils/filtroDeRuc'
 import { useState, useEffect, useRef } from 'react'
 import { FileText, FileDown, Download, CheckCircle, XCircle, Clock, AlertTriangle, Search, Filter, Code, Loader2, Calendar, Archive, FileSpreadsheet, FileCode, FileCheck, ChevronDown } from 'lucide-react'
 import Card, { CardContent } from '@/components/ui/Card'
@@ -41,7 +42,7 @@ const MONTHS = [
 ]
 
 export default function Accounting() {
-  const { user, getBusinessId, isDemoMode, emisores } = useAppContext()
+  const { user, getBusinessId, isDemoMode, emisores, businessSettings } = useAppContext()
   // Varios RUC: el PDF y el XML de cada comprobante van con los datos de SU RUC.
   const empresaDe = (inv, negocio) => empresaDelComprobante(inv, negocio, emisores || [])
   const toast = useToast()
@@ -51,6 +52,16 @@ export default function Accounting() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterType, setFilterType] = useState('all') // all, factura, boleta
+  // Varios RUC: el contador de cada RUC recibe lo SUYO. Con más de un RUC no
+  // hay "todos": un registro que mezcla dos RUC hace que uno declare las ventas
+  // del otro. En una cuenta de un solo RUC, el principal es todo.
+  const [filterRuc, setFilterRuc] = useState(EMISOR_PRINCIPAL)
+  const conVariosRuc = (emisores || []).length > 0
+  const rucDelFiltro = conVariosRuc
+    ? (opcionesDeRuc(businessSettings, emisores).find(o => o.value === filterRuc)?.ruc || '')
+    : ''
+  // Los ZIP llevan el RUC en el nombre cuando la cuenta tiene más de uno.
+  const prefijoRuc = rucDelFiltro ? `${rucDelFiltro}_` : ''
   const [filterSunat, setFilterSunat] = useState('all') // all, accepted, pending, rejected
   const [filterCdr, setFilterCdr] = useState('all') // all, with, without
   // Por defecto mostramos el ÚLTIMO MES COMPLETO (el mes anterior al actual): los
@@ -393,7 +404,7 @@ export default function Accounting() {
 
       const content = await zip.generateAsync({ type: 'blob' })
       const monthLabel = selectedMonth ? MONTHS.find(m => m.value === parseInt(selectedMonth))?.label : 'Todos'
-      const filename = `XMLs_${monthLabel}_${selectedYear}.zip`
+      const filename = `XMLs_${prefijoRuc}${monthLabel}_${selectedYear}.zip`
 
       if (Capacitor.isNativePlatform()) {
         const reader = new FileReader()
@@ -466,7 +477,7 @@ export default function Accounting() {
 
       const content = await zip.generateAsync({ type: 'blob' })
       const monthLabel = selectedMonth ? MONTHS.find(m => m.value === parseInt(selectedMonth))?.label : 'Todos'
-      const filename = `CDRs_${monthLabel}_${selectedYear}.zip`
+      const filename = `CDRs_${prefijoRuc}${monthLabel}_${selectedYear}.zip`
 
       if (Capacitor.isNativePlatform()) {
         const reader = new FileReader()
@@ -596,13 +607,13 @@ export default function Accounting() {
       const periodLabelForExcel = monthLabelForExcel ? `${monthLabelForExcel} ${selectedYear}` : `Año ${selectedYear}`
       const settingsResultForExcel = await getCompanySettings(getBusinessId())
       const businessDataForExcel = settingsResultForExcel?.success ? settingsResultForExcel.data : null
-      const excelBuffer = generateAccountingExcelBuffer(filtered, businessDataForExcel, periodLabelForExcel)
+      const excelBuffer = generateAccountingExcelBuffer(filtered, empresaDelFiltro(businessDataForExcel, emisores || [], filterRuc), periodLabelForExcel)
       zip.file('Reporte_Contable.xlsx', excelBuffer)
 
       setDownloadProgress('Comprimiendo archivos...')
       const content = await zip.generateAsync({ type: 'blob' })
       const monthLabel = selectedMonth ? MONTHS.find(m => m.value === parseInt(selectedMonth))?.label : 'Todos'
-      const filename = `Contabilidad_${monthLabel}_${selectedYear}.zip`
+      const filename = `Contabilidad_${prefijoRuc}${monthLabel}_${selectedYear}.zip`
 
       // Check if running on native platform (iOS/Android)
       if (Capacitor.isNativePlatform()) {
@@ -651,6 +662,7 @@ export default function Accounting() {
   // Filtrado
   const filtered = invoices.filter(inv => {
     if (filterType !== 'all' && inv.documentType !== filterType) return false
+    if (!pasaFiltroDeRuc(inv, filterRuc)) return false
     const status = getSunatStatus(inv)
     if (filterSunat !== 'all' && status !== filterSunat) return false
     if (filterCdr === 'with' && !hasCdr(inv)) return false
@@ -705,7 +717,7 @@ export default function Accounting() {
         : null
       const periodLabel = monthLabel ? `${monthLabel} ${selectedYear}` : `Año ${selectedYear}`
 
-      await generateAccountingExcel(filtered, businessData, periodLabel)
+      await generateAccountingExcel(filtered, empresaDelFiltro(businessData, emisores || [], filterRuc), periodLabel)
       toast.success('Excel exportado')
     } catch (error) {
       console.error('Error al exportar Excel:', error)
@@ -931,6 +943,15 @@ export default function Accounting() {
                 className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
               />
             </div>
+            {/* Varios RUC: un RUC a la vez, el de su contador */}
+            {conVariosRuc && (
+              <select value={filterRuc} onChange={e => setFilterRuc(e.target.value)}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg">
+                {opcionesDeRuc(businessSettings, emisores).map(o => (
+                  <option key={o.value} value={o.value}>{etiquetaDeRuc(o)}</option>
+                ))}
+              </select>
+            )}
             <select value={filterType} onChange={e => setFilterType(e.target.value)}
               className="px-3 py-2 text-sm border border-gray-300 rounded-lg">
               <option value="all">Todos</option>

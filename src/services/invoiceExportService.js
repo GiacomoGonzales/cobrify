@@ -75,14 +75,18 @@ const formatPaymentMethods = (invoice) => {
 /**
  * Generar reporte de facturas en Excel con estilos.
  */
-export const generateInvoicesExcel = async (invoices, filters, businessData, branchLabel = null) => {
+export const generateInvoicesExcel = async (invoices, filters, businessData, branchLabel = null, { rucDe = null } = {}) => {
   const workbook = XLSX.utils.book_new()
+  // Varios RUC: con los comprobantes de TODOS los RUC la cabecera no puede
+  // decir uno solo; cada fila lleva el suyo en la columna "RUC emisor".
+  const cabecera = rucDe ? { ...businessData, ruc: 'Varios (ver la columna RUC emisor)' } : businessData
 
   // ============== HOJA 1: COMPROBANTES ==============
   const headers1 = [
     'Fecha', 'Hora de registro', 'Tipo', 'Número', 'Cliente', 'RUC/DNI', 'Alumno', 'Productos',
     'Op. Gravada', 'Op. Exonerada', 'Op. Inafecta', 'Subtotal', 'Descuento',
     'IGV', 'Total', 'Moneda', 'T.C.', 'Estado', 'Estado SUNAT', 'Método de Pago', 'Vendedor',
+    ...(rucDe ? ['RUC emisor'] : []),
   ]
   const totalCols1 = headers1.length
 
@@ -107,7 +111,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   if (filters?.sunatStatusLabel) extra.push(['Estado SUNAT:', filters.sunatStatusLabel])
 
   const metaStart = aoa1.length
-  const metadataRows = buildBusinessMetadataRows(businessData, {
+  const metadataRows = buildBusinessMetadataRows(cabecera, {
     branchLabel: branchLabel || 'Todas',
     extra,
   })
@@ -196,6 +200,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
       sunatStatus,
       formatPaymentMethods(invoice),
       sellerName,
+      ...(rucDe ? [rucDe(invoice)] : []),
     ])
   })
 
@@ -282,6 +287,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
     'Base Imponible', 'Descuento Base Imp.', 'IGV', 'Importe Exonerado', 'Importe Inafecto',
     'ISC', 'Otros Tributos', 'Importe Total', 'Tipo Cambio',
     'Tipo Comp. Ref.', 'Serie Comp. Ref.', 'Número Comp. Ref.', 'Estado',
+    ...(rucDe ? ['RUC emisor'] : []),
   ]
   const totalCols2 = headers2.length
 
@@ -290,8 +296,9 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   aoa2.push([])
 
   const meta2Start = aoa2.length
-  aoa2.push(['RUC:', businessData?.ruc || 'N/A'])
-  aoa2.push(['Razón Social:', businessData?.name || 'N/A'])
+  aoa2.push(['RUC:', cabecera?.ruc || 'N/A'])
+  // La razón social, no el nombre comercial (antes leía `name`).
+  aoa2.push(['Razón Social:', rucDe ? 'Varios RUC' : (businessData?.businessName || businessData?.name || 'N/A')])
   aoa2.push(['Período:', filters?.startDate && filters?.endDate
     ? `${fmtFilterDate(filters.startDate)} - ${fmtFilterDate(filters.endDate)}`
     : format(new Date(), 'MM/yyyy', { locale: es })])
@@ -362,6 +369,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
       Number(getDocumentTotalInBase(invoice).toFixed(2)),
       Number(sunatRate.toFixed(3)),
       refDocType, refSerie, refNumero, estado,
+      ...(rucDe ? [rucDe(invoice)] : []),
     ])
   })
 
@@ -392,10 +400,10 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   XLSX.utils.book_append_sheet(workbook, ws2, 'Registro de Ventas')
 
   // ============== HOJAS EXTRA DE ANALÍTICA ==============
-  appendItemsDetailSheet(workbook, invoices, businessData, branchLabel)
-  appendTopProductsSheet(workbook, invoices, businessData, branchLabel)
-  appendPaymentMethodsSheet(workbook, invoices, businessData, branchLabel)
-  appendSellersSheet(workbook, invoices, businessData, branchLabel)
+  appendItemsDetailSheet(workbook, invoices, cabecera, branchLabel)
+  appendTopProductsSheet(workbook, invoices, cabecera, branchLabel)
+  appendPaymentMethodsSheet(workbook, invoices, cabecera, branchLabel)
+  appendSellersSheet(workbook, invoices, cabecera, branchLabel)
 
   // Nombre del archivo
   const filterInfo = filters?.type && filters.type !== 'all' ? filters.type : ''

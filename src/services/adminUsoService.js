@@ -95,3 +95,29 @@ export async function resumenDeUso(businessId) {
     products: { total: productos },
   }
 }
+
+/**
+ * VARIOS RUC: cuántas firmas consumió cada RUC adicional de la cuenta. QPse
+ * cobra por RUC, así que la ficha las separa.
+ *
+ * Solo se cuentan los emisores: los documentos del principal no llevan
+ * `emisorId`, y un `where` no encuentra un campo que no existe. El principal
+ * es el total de `resumenDeUso` menos lo de los emisores (las guías siempre
+ * son suyas).
+ *
+ * @returns {Promise<Record<string, number>>}  emisorId -> firmas
+ */
+export async function firmasPorEmisor(businessId, emisores = []) {
+  const comprobantes = collection(db, 'businesses', businessId, 'invoices')
+  const bajas = collection(db, 'businesses', businessId, 'voidedDocuments')
+  const resumenes = collection(db, 'businesses', businessId, 'summaryDocuments')
+  const filas = await Promise.all((emisores || []).map(async (e) => {
+    const [documentos, comunicaciones, diarios] = await Promise.all([
+      contar(query(comprobantes, where('emisorId', '==', e.id), where('documentType', 'in', TIPOS_QUE_FIRMAN))),
+      contar(query(bajas, where('emisorId', '==', e.id))),
+      contar(query(resumenes, where('emisorId', '==', e.id), where('status', 'in', ESTADOS_DE_RESUMEN))),
+    ])
+    return [e.id, documentos + comunicaciones + diarios]
+  }))
+  return Object.fromEntries(filas)
+}

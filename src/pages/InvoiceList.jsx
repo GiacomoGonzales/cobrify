@@ -1,4 +1,5 @@
 import { empresaDelComprobante, emisorIdDe } from '../../functions/src/utils/emisorDelComprobante.js'
+import { TODOS_LOS_RUC, pasaFiltroDeRuc, opcionesDeRuc, etiquetaDeRuc, empresaDelFiltro } from '@/utils/filtroDeRuc'
 import { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react'
 import { createPortal } from 'react-dom'
 import { useAppNavigate, useAppPath } from '@/hooks/useAppNavigate'
@@ -207,6 +208,8 @@ export default function InvoiceList() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterType, setFilterType] = useState('all')
+  // Varios RUC: los comprobantes de un RUC ('all' = todos).
+  const [filterRuc, setFilterRuc] = useState(TODOS_LOS_RUC)
   // Cuando false (default): se ocultan los comprobantes archivados y no suman a los totales/resúmenes.
   // Cuando true: se muestran SOLO los archivados (para revisarlos o desarchivarlos).
   const [showArchived, setShowArchived] = useState(false)
@@ -313,6 +316,7 @@ export default function InvoiceList() {
     paymentMethods: [], // [] = todos; ej: ['Efectivo', 'Yape', ...]
     branch: 'all', // 'all' | 'main' | branchId. El desplegable solo ofrece sucursales
     // a las que el usuario tiene acceso; los datos ya vienen saneados por canAccessInvoice.
+    ruc: 'all', // Varios RUC: 'all' | 'principal' | emisorId
     startDate: '',
     endDate: '',
     excludeConverted: true, // Por defecto excluir boletas convertidas desde notas
@@ -2501,6 +2505,11 @@ Gracias por tu preferencia.`
       if (exportBranch !== 'all') {
         filteredInvoices = filteredInvoices.filter(inv => esDeSucursal(inv, exportBranch))
       }
+      // Varios RUC: el registro de UN RUC lleva su cabecera; con todos, una columna.
+      const exportRuc = exportFilters.ruc || TODOS_LOS_RUC
+      if (exportRuc !== TODOS_LOS_RUC) {
+        filteredInvoices = filteredInvoices.filter(inv => pasaFiltroDeRuc(inv, exportRuc))
+      }
 
       if (filteredInvoices.length === 0) {
         toast.error('No hay comprobantes que coincidan con los filtros seleccionados');
@@ -2531,7 +2540,9 @@ Gracias por tu preferencia.`
       }
 
       // Generar Excel
-      await generateInvoicesExcel(filteredInvoices, exportFiltersWithLabels, companySettings, branchLabel);
+      await generateInvoicesExcel(filteredInvoices, exportFiltersWithLabels, empresaDelFiltro(companySettings, emisores || [], exportRuc), branchLabel, {
+        rucDe: conVariosRuc && exportRuc === TODOS_LOS_RUC ? (inv) => empresaDe(inv)?.ruc || '' : null,
+      });
       toast.success(`${filteredInvoices.length} comprobante(s) exportado(s) exitosamente`);
       setShowExportModal(false);
     } catch (error) {
@@ -2858,6 +2869,7 @@ Gracias por tu preferencia.`
     .filter(canSeeSale) // Vendedor asignado y/o "solo mis ventas" (defensa adicional)
     .filter(inv => showArchived ? inv.archived === true : inv.archived !== true)
     .filter(filterByDateRange) // Primero filtrar por período
+    .filter(inv => pasaFiltroDeRuc(inv, filterRuc)) // Varios RUC: el mismo criterio que las tarjetas
     .filter(invoice => {
       // Búsqueda insensible a acentos/tildes y mayúsculas (multi-campo, multi-palabra)
       const matchesSearch = matchesPrebuilt(deferredSearchTerm, invoiceSearchIndex.get(invoice.id) || '')
@@ -2916,7 +2928,7 @@ Gracias por tu preferencia.`
   useEffect(() => {
     setVisibleInvoicesCount(20)
     setSelectedInvoiceIds(new Set())
-  }, [searchTerm, filterStatus, filterType, filterSeller, filterPaymentMethod, filterConversion, dateFilter, filterStartDate, filterEndDate])
+  }, [searchTerm, filterStatus, filterType, filterSeller, filterPaymentMethod, filterConversion, dateFilter, filterStartDate, filterEndDate, filterRuc])
 
   const getStatusBadge = (status, documentType) => {
     // Para Notas de Crédito y Notas de Débito, usar estados específicos
@@ -3060,8 +3072,10 @@ Gracias por tu preferencia.`
       // arriba sumaban TODOS los locales mientras la lista de abajo sí
       // cambiaba al saltar de sucursal, y los dos números no coincidían.
       .filter(inv => esDeSucursal(inv, filterBranch))
+      // Varios RUC: las tarjetas cuentan lo mismo que la lista.
+      .filter(inv => pasaFiltroDeRuc(inv, filterRuc))
       .filter(filterByDateRange)
-  }, [invoices, dateFilter, filterStartDate, filterEndDate, showArchived, filterBranch])
+  }, [invoices, dateFilter, filterStartDate, filterEndDate, showArchived, filterBranch, filterRuc])
 
   // Estadísticas (basadas en el período seleccionado)
   // Solo contar ventas reales: boletas, facturas, notas de venta (no convertidas)
@@ -3091,6 +3105,7 @@ Gracias por tu preferencia.`
     totalAll: invoices
       .filter(i => i.archived !== true)
       .filter(i => esDeSucursal(i, filterBranch))
+      .filter(i => pasaFiltroDeRuc(i, filterRuc))
       .filter(isValidSale).length,
   }
 
@@ -3313,6 +3328,19 @@ Gracias por tu preferencia.`
 
           {/* Filtros de tipo, estado y vendedor */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t">
+            {/* Varios RUC: los comprobantes de un solo RUC */}
+            {conVariosRuc && (
+              <select
+                value={filterRuc}
+                onChange={e => setFilterRuc(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900 text-sm"
+              >
+                <option value={TODOS_LOS_RUC}>Todos los RUC</option>
+                {opcionesDeRuc(companySettings, emisores).map(o => (
+                  <option key={o.value} value={o.value}>{etiquetaDeRuc(o)}</option>
+                ))}
+              </select>
+            )}
             <select
               value={filterType}
               onChange={e => setFilterType(e.target.value)}
@@ -3394,7 +3422,7 @@ Gracias por tu preferencia.`
           </div>
 
           {/* Botón limpiar filtros */}
-          {(filterType !== 'all' || filterStatus !== 'all' || filterSeller !== 'all' || filterBranch !== 'all' || filterPaymentMethod !== 'all' || filterConversion !== 'all' || dateFilter !== 'all') && (
+          {(filterType !== 'all' || filterStatus !== 'all' || filterSeller !== 'all' || filterBranch !== 'all' || filterPaymentMethod !== 'all' || filterConversion !== 'all' || dateFilter !== 'all' || filterRuc !== TODOS_LOS_RUC) && (
             <div className="flex justify-end">
               <button
                 onClick={() => {
@@ -3406,6 +3434,7 @@ Gracias por tu preferencia.`
                   setFilterSeller('all')
                   setFilterPaymentMethod('all')
                   setFilterConversion('all')
+                  setFilterRuc(TODOS_LOS_RUC)
                 }}
                 className="text-sm text-gray-600 hover:text-primary-600 transition-colors"
               >
@@ -6007,6 +6036,23 @@ Gracias por tu preferencia.`
                 )}
                 {branches.map(branch => (
                   <option key={branch.id} value={branch.id}>{branch.name}</option>
+                ))}
+              </Select>
+            </div>
+          )}
+
+          {/* Varios RUC: el Registro de Ventas de un solo RUC sale con su RUC y
+              razón social en la cabecera. Con todos, cada fila dice el suyo. */}
+          {conVariosRuc && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">RUC</label>
+              <Select
+                value={exportFilters.ruc || TODOS_LOS_RUC}
+                onChange={(e) => setExportFilters({ ...exportFilters, ruc: e.target.value })}
+              >
+                <option value={TODOS_LOS_RUC}>Todos los RUC (una columna dice el de cada fila)</option>
+                {opcionesDeRuc(companySettings, emisores).map(o => (
+                  <option key={o.value} value={o.value}>{etiquetaDeRuc(o)}</option>
                 ))}
               </Select>
             </div>

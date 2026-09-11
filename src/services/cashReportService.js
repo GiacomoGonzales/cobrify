@@ -1,3 +1,4 @@
+import { lineasDeVentasPorRuc } from '@/utils/filtroDeRuc'
 import * as XLSX from 'xlsx-js-style';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -346,6 +347,8 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
     'TOTAL CONTADO', Number((sessionData.closingAmount || 0).toFixed(2)),
   ])
   const totalsRow = aoa.length - 1
+  // Varios RUC: lo vendido con cada RUC (vacío con uno solo).
+  lineasDeVentasPorRuc(sessionData.salesByRuc).forEach(l => aoa.push([l.etiqueta, Number(l.total.toFixed(2))]))
   aoa.push([])
 
   // Efectivo esperado + diferencia (ocultos en el cierre "a ciegas")
@@ -1167,6 +1170,13 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
   doc.text('TOTAL VENTAS', colL + 2, yL + 3.8);
   doc.text(fmt(sessionData.totalSales), colL + colW - 2, yL + 3.8, { align: 'right' });
   yL += 5.5;
+  // Varios RUC: lo vendido con cada RUC (vacío con uno solo).
+  lineasDeVentasPorRuc(sessionData.salesByRuc).forEach(l => {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...DARK);
+    doc.text(l.etiquetaCorta, colL + 2, yL + 3.5);
+    doc.text(fmt(l.total), colL + colW - 2, yL + 3.5, { align: 'right' });
+    yL += 5;
+  });
 
   // -- Columna derecha: Arqueo de cierre --
   let yR = startY;
