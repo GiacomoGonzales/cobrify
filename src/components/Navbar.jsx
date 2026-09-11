@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, memo } from 'react'
-import { Bell, User, LogOut, Menu, Download, ChevronDown, Check, Store, UtensilsCrossed, Pill, BedDouble, PawPrint, Truck, HardHat, Home, LayoutGrid, HelpCircle, HandCoins, Stethoscope } from 'lucide-react'
+import { Bell, User, Menu, Download, ChevronDown, Check, Store, UtensilsCrossed, Pill, BedDouble, PawPrint, Truck, HardHat, Home, LayoutGrid, HelpCircle, HandCoins, Stethoscope } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
@@ -31,7 +31,7 @@ const MODE_META = {
 }
 
 function Navbar() {
-  const { user, logout, subscription, isDemoMode, isBusinessOwner, businessMode, businessSettings, branches, filterBranchesByAccess, hasMainBranchAccess, branchScope, setBranchScope, baseBusinessMode } = useAppContext()
+  const { user, subscription, isDemoMode, isBusinessOwner, businessMode, businessSettings, branches, filterBranchesByAccess, hasMainBranchAccess, branchScope, setBranchScope, baseBusinessMode } = useAppContext()
   const { branding } = useBranding()
   const { toggleMobileMenu } = useStore()
   // En móvil el menú lateral es un cajón cerrado: el aviso de versión nueva
@@ -341,13 +341,7 @@ function Navbar() {
               </div>
             )}
 
-            <button
-              onClick={logout}
-              className="p-2 rounded-lg hover:bg-red-50 text-gray-600 hover:text-red-600 transition-colors"
-              title="Cerrar sesión"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
+            {/* Cerrar sesión se mudó al pie fijo del menú lateral (10-set-2026). */}
           </div>
         </div>
       </div>

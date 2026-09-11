@@ -1,7 +1,7 @@
 import { memo, useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
-import {
+import { LogOut,
   LayoutDashboard,
   FileText,
   Users,
@@ -93,7 +93,7 @@ import AvisoDeActualizacion from '@/components/AvisoDeActualizacion'
 
 function Sidebar() {
   const { mobileMenuOpen, setMobileMenuOpen, sidebarCollapsed, toggleSidebar, orderAlertCount } = useStore()
-  const { isAdmin, isBusinessOwner, isReseller, isDemoMode, hasPageAccess, businessMode, businessSettings, hasFeature, puedeCambiarSuClave } = useAppContext()
+  const { isAdmin, isBusinessOwner, isReseller, isDemoMode, hasPageAccess, businessMode, businessSettings, hasFeature, puedeCambiarSuClave, logout } = useAppContext()
   const { branding } = useBranding()
   const location = useLocation()
 
@@ -2507,6 +2507,59 @@ function Sidebar() {
     return hasPageAccess && hasPageAccess(item.pageId)
   })
 
+  // Pie FIJO del menú: Manual de uso y Mi Suscripción. El resto de los
+  // adicionales (Gestión de Usuarios, cambiar contraseña, paneles de admin y
+  // reseller) va al final del menú, debajo de Configuración, sin repetir lo
+  // que el menú de un rubro ya trae.
+  const PIE_FIJO = ['/manual', '/mi-suscripcion']
+  const rutasDelMenu = new Set(filteredMenuItems.flatMap(i => (i.children ? i.children.map(c => c.path) : [i.path])))
+  const itemsFijos = filteredAdditionalItems.filter(i => PIE_FIJO.includes(i.path))
+  const itemsDelMenu = filteredAdditionalItems.filter(i => !PIE_FIJO.includes(i.path) && !rutasDelMenu.has(i.path))
+
+  // Un adicional del menú, igual arriba que en el pie.
+  const renderItemAdicional = (item) => {
+    const itemPath = item.isExternalPath ? item.path : getPath(item.path)
+    return (
+      <NavLink
+        key={item.path}
+        to={itemPath}
+        onClick={() => setMobileMenuOpen(false)}
+        title={item.label}
+        className={({ isActive }) =>
+          `flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors group ${sidebarCollapsed ? 'md:justify-center md:px-2' : ''} ${
+            isActive
+              ? ''
+              : 'text-gray-700 hover:bg-gray-100'
+          }`
+        }
+        style={({ isActive }) => isActive ? {
+          backgroundColor: `${branding.primaryColor}15`,
+          color: branding.primaryColor
+        } : {}}
+      >
+        {({ isActive }) => (
+          <>
+            <item.icon
+              className="w-5 h-5 flex-shrink-0"
+              style={isActive ? { color: branding.primaryColor } : { color: '#6B7280' }}
+            />
+            <span className={`font-medium text-sm ${sidebarCollapsed ? 'md:hidden' : ''}`}>{item.label}</span>
+            {item.adminOnly && (
+              <span className={`ml-auto text-xs chip-aviso px-2 py-0.5 rounded-full ${sidebarCollapsed ? 'md:hidden' : ''}`}>
+                Admin
+              </span>
+            )}
+            {item.resellerOnly && (
+              <span className={`ml-auto text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full ${sidebarCollapsed ? 'md:hidden' : ''}`}>
+                Reseller
+              </span>
+            )}
+          </>
+        )}
+      </NavLink>
+    )
+  }
+
   return (
     <>
       {/* Overlay para móvil */}
@@ -2752,68 +2805,42 @@ function Sidebar() {
           )
         })}
 
-        {/* Separador */}
-        <div className="pt-2 border-t border-gray-200 mt-2 space-y-1">
-          {filteredAdditionalItems.map(item => {
-            const itemPath = item.isExternalPath ? item.path : getPath(item.path)
-            return (
-              <NavLink
-                key={item.path}
-                to={itemPath}
-                onClick={() => setMobileMenuOpen(false)}
-                title={item.label}
-                className={({ isActive }) =>
-                  `flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors group ${sidebarCollapsed ? 'md:justify-center md:px-2' : ''} ${
-                    isActive
-                      ? ''
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`
-                }
-                style={({ isActive }) => isActive ? {
-                  backgroundColor: `${branding.primaryColor}15`,
-                  color: branding.primaryColor
-                } : {}}
-              >
-                {({ isActive }) => (
-                  <>
-                    <item.icon
-                      className="w-5 h-5 flex-shrink-0"
-                      style={isActive ? { color: branding.primaryColor } : { color: '#6B7280' }}
-                    />
-                    <span className={`font-medium text-sm ${sidebarCollapsed ? 'md:hidden' : ''}`}>{item.label}</span>
-                    {item.adminOnly && (
-                      <span className={`ml-auto text-xs chip-aviso px-2 py-0.5 rounded-full ${sidebarCollapsed ? 'md:hidden' : ''}`}>
-                        Admin
-                      </span>
-                    )}
-                    {item.resellerOnly && (
-                      <span className={`ml-auto text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full ${sidebarCollapsed ? 'md:hidden' : ''}`}>
-                        Reseller
-                      </span>
-                    )}
-                  </>
-                )}
-              </NavLink>
-            )
-          })}
-        </div>
-
-        {/* Hay una versión nueva. Va pegado al número de versión a propósito:
-            es donde uno mira para saber qué copia tiene corriendo, así que es
-            donde espera enterarse de que hay otra. Antes era una franja debajo
-            del Navbar que, con varios deploys por día, aparecía todo el rato y
-            empujaba el contenido. */}
-        <AvisoDeActualizacion className={`mx-3 mt-3 ${sidebarCollapsed ? 'md:hidden' : ''}`} />
-        <AvisoDeActualizacion soloIcono className={sidebarCollapsed ? 'hidden md:flex mt-3' : 'hidden'} />
-
-        {/* Versión de la copia que está corriendo. Sirve para soporte: si un
-            cliente reporta algo raro, lo primero es saber si su navegador se
-            quedó con una compilación vieja en caché. */}
-        <VersionApp compacta className={`px-4 pt-2 ${sidebarCollapsed ? 'md:hidden' : ''}`} />
-
-        {/* Espaciador inferior para iOS - permite que el scroll muestre la última opción */}
-        <div style={{ height: '34px', flexShrink: 0 }} />
+        {/* Al final del menú, y se desplaza con él: Gestión de Usuarios queda
+            debajo de Configuración (y los paneles de admin y reseller). */}
+        {itemsDelMenu.map(renderItemAdicional)}
       </nav>
+
+      {/* Pie FIJO (10-set-2026): lo de la cuenta queda siempre a la vista
+          aunque el menú de arriba se desplace. El aviso de actualizar ya no
+          se pierde al fondo del menú, y cerrar sesión salió del encabezado. */}
+      <div
+        className="flex-shrink-0 border-t border-gray-200 px-3 pt-2 space-y-1"
+        style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}
+      >
+        {itemsFijos.map(renderItemAdicional)}
+
+        {/* Hay una versión nueva: junto a la versión, que es donde uno mira
+            qué copia tiene corriendo. */}
+        <AvisoDeActualizacion className={sidebarCollapsed ? 'md:hidden' : ''} />
+        <AvisoDeActualizacion soloIcono className={sidebarCollapsed ? 'hidden md:flex' : 'hidden'} />
+
+        {/* En los demos no hay sesión que cerrar. */}
+        {!isDemoMode && (
+          <button
+            type="button"
+            onClick={() => { setMobileMenuOpen(false); logout() }}
+            title="Cerrar sesión"
+            className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors group ${sidebarCollapsed ? 'md:justify-center md:px-2' : ''}`}
+          >
+            <LogOut className="w-5 h-5 flex-shrink-0 text-gray-500 group-hover:text-red-600" />
+            <span className={`font-medium text-sm ${sidebarCollapsed ? 'md:hidden' : ''}`}>Cerrar sesión</span>
+          </button>
+        )}
+
+        {/* Versión de la copia que está corriendo: si un cliente reporta algo
+            raro, lo primero es saber si se quedó con una compilación vieja. */}
+        <VersionApp compacta className={`px-3 pt-1 ${sidebarCollapsed ? 'md:hidden' : ''}`} />
+      </div>
 
     </aside>
     </>
