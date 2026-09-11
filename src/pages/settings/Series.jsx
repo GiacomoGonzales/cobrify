@@ -28,6 +28,7 @@ import Card, { CardContent, CardHeader } from '@/components/ui/Card'
 import { getAllBranchSeriesFS, updateBranchSeriesFS } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
 import RenumberInvoicesModal from '@/components/RenumberInvoicesModal'
+import { duenoDeLaSerie } from '../../../functions/src/utils/emisorDelComprobante.js'
 
 // Series de un negocio nuevo. También son el piso de lectura: un tipo que no
 // exista todavía en Firestore se muestra con esta serie y el contador en 0.
@@ -96,7 +97,7 @@ const COLUMNAS = 'md:grid-cols-[minmax(0,1fr)_6rem_8rem_11rem]'
  * en el celular. `onChange(docType, campo, valor)` es el contrato de los
  * dos handlers de cambio, que siguen siendo los de siempre.
  */
-function GrillaDeSeries({ series, editando, onChange }) {
+function GrillaDeSeries({ series, editando, onChange, soloLasQueTiene = false }) {
   const claseInput = editando ? '' : 'bg-gray-50'
   return (
     <div>
@@ -106,12 +107,16 @@ function GrillaDeSeries({ series, editando, onChange }) {
         <span>Último número</span>
         <span>Siguiente</span>
       </div>
-      {GRUPOS_DE_DOCUMENTOS.map((grupo) => (
+      {GRUPOS_DE_DOCUMENTOS.map((grupo) => {
+        // Las de otro RUC se muestran tal cual: sin proponerle las que no tiene.
+        const tipos = soloLasQueTiene ? grupo.tipos.filter(({ key }) => series[key]?.serie) : grupo.tipos
+        if (tipos.length === 0) return null
+        return (
         <Fragment key={grupo.titulo || 'principales'}>
           {grupo.titulo && (
             <p className="px-3 pt-4 pb-1 text-xs font-semibold text-gray-500">{grupo.titulo}</p>
           )}
-          {grupo.tipos.map(({ key, label }) => {
+          {tipos.map(({ key, label }) => {
             const serie = series[key]?.serie || defaultSeries[key].serie
             const lastNumber = series[key]?.lastNumber ?? 0
             return (
@@ -151,7 +156,8 @@ function GrillaDeSeries({ series, editando, onChange }) {
             )
           })}
         </Fragment>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -189,7 +195,7 @@ function BotonesDeEdicion({ editando, guardando, onEditar, onCancelar, onGuardar
 }
 
 export default function Series() {
-  const { user, getBusinessId, isDemoMode, businessSettings, isBusinessOwner, isAdmin } = useAppContext()
+  const { user, getBusinessId, isDemoMode, businessSettings, isBusinessOwner, isAdmin, emisores } = useAppContext()
   const toast = useToast()
   const { guardar, guardando } = useGuardado()
 
@@ -213,6 +219,25 @@ export default function Series() {
   const [isSaving, setIsSaving] = useState(false)
 
   const [showRenumberModal, setShowRenumberModal] = useState(false)
+
+  // Varios RUC: las series de los otros RUC de la cuenta. Las configura el
+  // administrador en la ficha; aquí se consultan y se cuidan.
+  const [emisorSeries, setEmisorSeries] = useState(() => businessSettings?.emisorSeries || {})
+
+  // Una serie es de UN solo RUC en toda la cuenta: si la del negocio o la de
+  // una sede ya la usa otro RUC, sus correlativos se pisarían y el servidor
+  // no dejaría firmar esos comprobantes.
+  const serieDeOtroRuc = (mapa) => {
+    for (const datos of Object.values(mapa || {})) {
+      const dueno = duenoDeLaSerie(datos?.serie, { emisorSeries })
+      if (dueno) {
+        const emisor = (emisores || []).find(e => e.id === dueno.emisorId)
+        const quien = emisor ? `${emisor.businessName} (RUC ${emisor.ruc})` : 'otro RUC de la cuenta'
+        return `La serie ${String(datos.serie).toUpperCase()} ya la usa ${quien}. Elige otra.`
+      }
+    }
+    return null
+  }
 
   // Cargar sucursales y sus series
   const loadBranchesAndSeries = async () => {
@@ -251,6 +276,7 @@ export default function Series() {
       const snap = await getDoc(doc(db, 'businesses', getBusinessId()))
       const guardadas = snap.exists() ? snap.data()?.series : null
       if (guardadas) setSeries(prev => ({ ...prev, ...guardadas }))
+      if (snap.exists()) setEmisorSeries(snap.data()?.emisorSeries || {})
     } catch (error) {
       console.error('Error al recargar series:', error)
     }
@@ -289,6 +315,12 @@ export default function Series() {
   // Guardar series de una sucursal
   const handleSaveBranchSeries = async (branchId) => {
     if (!user?.uid) return
+
+    const choque = serieDeOtroRuc(branchSeries[branchId] || defaultSeries)
+    if (choque) {
+      toast.error(choque)
+      return
+    }
 
     setIsSaving(true)
     try {
@@ -338,6 +370,11 @@ export default function Series() {
   // modo demo, refresca el contexto y avisa con el toast.
   const handleSaveSeries = async () => {
     if (!user?.uid) return
+    const choque = serieDeOtroRuc(series)
+    if (choque) {
+      toast.error(choque)
+      return
+    }
     const ok = await guardar({ series }, 'Series actualizadas')
     if (ok) setEditingSeries(false)
   }
@@ -437,6 +474,42 @@ export default function Series() {
                           </Nota>
                         </div>
                       )}
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          </Seccion>
+        </>
+      )}
+
+      {/* Varios RUC: las series de los otros RUC, de solo lectura. Las
+          configura el administrador en la ficha de la cuenta. */}
+      {Object.keys(emisorSeries).length > 0 && (
+        <>
+          <Separador />
+          <Seccion
+            id="opcion-emisorSeries"
+            titulo="Otros RUC de la cuenta"
+            descripcion="Cada RUC numera con sus propias series. Las configura tu proveedor del sistema; aquí solo se consultan."
+          >
+            <div className="space-y-4">
+              {Object.entries(emisorSeries).map(([eid, susSeries]) => {
+                const emisor = (emisores || []).find(e => e.id === eid)
+                return (
+                  <Card key={eid}>
+                    <CardHeader>
+                      <div className="min-w-0">
+                        <p className="text-base font-semibold text-gray-900 truncate">{emisor?.businessName || 'RUC adicional'}</p>
+                        {emisor?.ruc && (
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            RUC {emisor.ruc}{emisor.activo === false ? ' · desactivado' : ''}
+                          </p>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent className="px-1 sm:px-3">
+                      <GrillaDeSeries series={susSeries || {}} editando={false} onChange={() => {}} soloLasQueTiene />
                     </CardContent>
                   </Card>
                 )

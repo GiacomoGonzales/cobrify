@@ -28,6 +28,7 @@ const enIframe = () => {
 import { isUserAdmin, isBusinessAdmin, setAsBusinessOwner } from '@/services/adminService'
 import { getSubscription, hasActiveAccess } from '@/services/subscriptionService'
 import { getUserData } from '@/services/userManagementService'
+import { getEmisores } from '@/services/emisoresService'
 import { MODOS_NEGOCIO } from '@/utils/businessModes'
 import { getActiveBranches } from '@/services/branchService'
 import { initializePushNotifications, cleanupPushNotifications } from '@/services/notificationService'
@@ -116,6 +117,10 @@ export const AuthProvider = ({ children }) => {
   // `activeBranchId` (operativo, deriva del scope) se calcula más abajo y conserva su semántica anterior.
   const [branchScope, setBranchScopeState] = useState('all')
   const [userFeatures, setUserFeatures] = useState({ productImages: false }) // Features especiales habilitadas
+  // Varios RUC: los RUC adicionales de la cuenta, activos e inactivos (los
+  // inactivos siguen reimprimiendo lo que emitieron). Vacío en las cuentas de
+  // un solo RUC, que no pagan ni una lectura por esto.
+  const [emisores, setEmisores] = useState([])
   const [subscriptionOwnerId, setSubscriptionOwnerId] = useState(null) // ID del owner para escuchar cambios en suscripción
   const navigate = useNavigate()
   const location = useLocation()
@@ -994,6 +999,33 @@ export const AuthProvider = ({ children }) => {
     return userFeatures?.[featureName] === true
   }
 
+  // Varios RUC: los emisores se leen solo si la cuenta los tiene — la función
+  // encendida, o series de emisor en el negocio (una cuenta que la apagó igual
+  // tiene que reimprimir lo que emitió con ellos). Se vuelven a leer si cambia
+  // el negocio, se enciende la función o el admin toca las series.
+  const negocioDeLosEmisores = user ? getBusinessId() : null
+  const seriesDeEmisores = Object.keys(businessSettings?.emisorSeries || {}).sort().join(',')
+  const cuentaConEmisores = userFeatures?.multiRuc === true || seriesDeEmisores !== ''
+  useEffect(() => {
+    if (!negocioDeLosEmisores || !cuentaConEmisores) {
+      setEmisores([])
+      return
+    }
+    let vigente = true
+    getEmisores(negocioDeLosEmisores).then(r => {
+      if (vigente) setEmisores(r.success ? r.data : [])
+    })
+    return () => { vigente = false }
+  }, [negocioDeLosEmisores, cuentaConEmisores, seriesDeEmisores])
+
+  // Para la pantalla que necesita la lista fresca (el POS, al abrirse).
+  const refreshEmisores = async () => {
+    const id = getBusinessId()
+    if (!id || !cuentaConEmisores) return
+    const r = await getEmisores(id)
+    if (r.success) setEmisores(r.data)
+  }
+
   // Actualizar el nombre para mostrar (displayName de Firebase Auth). Es el nombre
   // que aparece en la cabecera. Actualiza Auth y el estado local para reflejarlo al instante.
   const updateDisplayName = async (newName) => {
@@ -1065,6 +1097,8 @@ export const AuthProvider = ({ children }) => {
     businessSettings, // Configuración completa del negocio (incluye dispatchGuidesEnabled)
     userFeatures, // Features especiales habilitadas
     hasFeature, // Función helper para verificar features
+    emisores, // Varios RUC: RUC adicionales de la cuenta (activos e inactivos)
+    refreshEmisores, // Varios RUC: releer los emisores
     login,
     logout,
     updateDisplayName, // Actualizar el nombre para mostrar (Firebase Auth displayName)

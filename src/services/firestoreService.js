@@ -25,6 +25,7 @@ import { buscarLoteEnAlmacen, cantidadDeLote, idDeLote } from '@/utils/batchLook
 import { calcularStockPorAlmacen } from '@/utils/warehouseStockMath'
 import { esDeSucursal } from '@/utils/branchScope'
 import { revisarAntesDeEmitir, textoDeErrores } from '@/utils/sunatPreflight'
+import { emisorIdDe, esPrincipal } from '../../functions/src/utils/emisorDelComprobante.js'
 
 /**
  * Servicio para interactuar con Firestore
@@ -172,9 +173,22 @@ export const createInvoiceWithNumber = async (userId, invoiceData, documentType,
       let typeData = null
       let seriesPath = ''
 
+      // 0. Varios RUC: un comprobante de otro RUC numera SOLO con las series
+      //    de ese RUC. Nunca cae a las del negocio ni a las de una sede: dos
+      //    RUC no pueden compartir correlativo (ver emisorDelComprobante.js).
+      const emisorDelComprobante = emisorIdDe(invoiceData)
+      if (!esPrincipal(emisorDelComprobante)) {
+        typeData = data.emisorSeries?.[emisorDelComprobante]?.[documentType] || null
+        seriesPath = `emisorSeries.${emisorDelComprobante}.${documentType}`
+        if (!typeData?.serie) {
+          const quien = invoiceData?.emisor?.razonSocial || 'El RUC elegido'
+          throw new Error(`${quien} no tiene serie de ${String(documentType).replace(/_/g, ' ')}. Pide que la configuren en su ficha.`)
+        }
+      }
+
       // Buscar la serie correcta (misma lógica que getNextDocumentNumber)
       // 1. Primero intentar con branchSeries (sucursales - nuevo sistema)
-      if (branchId && data.branchSeries && data.branchSeries[branchId]) {
+      if (!typeData && branchId && data.branchSeries && data.branchSeries[branchId]) {
         const branchSeries = data.branchSeries[branchId]
         if (branchSeries[documentType]) {
           typeData = branchSeries[documentType]
@@ -285,9 +299,15 @@ export const createNoteWithNumber = async (userId, noteData, seriesKey) => {
       if (!businessSnap.exists()) throw new Error('Negocio no encontrado')
 
       const data = businessSnap.data()
-      const typeData = data.series?.[seriesKey]
+      // Varios RUC: la nota de otro RUC numera con las series de ese RUC (la
+      // hereda de la factura o boleta que modifica).
+      const emisorDeLaNota = emisorIdDe(noteData)
+      const deOtroRuc = !esPrincipal(emisorDeLaNota)
+      const typeData = deOtroRuc ? data.emisorSeries?.[emisorDeLaNota]?.[seriesKey] : data.series?.[seriesKey]
       if (!typeData || !typeData.serie) {
-        throw new Error(`No se ha configurado la serie para ${seriesKey}. Ve a Configuración.`)
+        throw new Error(deOtroRuc
+          ? `${noteData?.emisor?.razonSocial || 'El RUC de este comprobante'} no tiene serie de ${seriesKey.replace(/_/g, ' ')}. Pide que la configuren en su ficha.`
+          : `No se ha configurado la serie para ${seriesKey}. Ve a Configuración.`)
       }
 
       const nextNumber = (typeData.lastNumber || 0) + 1
@@ -305,7 +325,7 @@ export const createNoteWithNumber = async (userId, noteData, seriesKey) => {
       // El contador sube en la MISMA transacción: si el documento no se crea, el
       // número tampoco se consume (no quedan saltos en la numeración).
       transaction.update(businessRef, {
-        [`series.${seriesKey}.lastNumber`]: nextNumber,
+        [deOtroRuc ? `emisorSeries.${emisorDeLaNota}.${seriesKey}.lastNumber` : `series.${seriesKey}.lastNumber`]: nextNumber,
       })
 
       return { number: formattedNumber, series: typeData.serie, correlativeNumber: nextNumber }

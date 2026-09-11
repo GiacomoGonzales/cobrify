@@ -78,6 +78,16 @@ export const GUIDES = [
     load: () => import('./varias-sucursales.js'),
   },
   {
+    id: 'dos-rucs',
+    route: null, // recorrido: POS, Ventas, notas y Configuración > Series
+    title: 'Vender con dos RUC en el mismo local',
+    category: 'Cómo hacer',
+    description: 'Elegir con qué RUC sale cada comprobante, sus series, sus notas y lo que imprime cada uno.',
+    keywords: 'dos ruc varios ruc otro ruc segundo ruc emisor emitir con otra empresa persona natural nuevo rus nrus razon social series numeracion boleta factura nota de credito nota de venta cuentas bancarias detraccion',
+    modos: null,
+    load: () => import('./dos-rucs.js'),
+  },
+  {
     id: 'cuanto-gano',
     route: null, // recorrido: costos + gastos -> Ganancia Final
     title: 'Saber cuánto ganas de verdad',

@@ -1,3 +1,4 @@
+import { EMISOR_PRINCIPAL, esPrincipal, emisorIdDe, empresaEfectiva, empresaDelComprobante, snapshotDeEmisor } from '../../functions/src/utils/emisorDelComprobante.js'
 import React, { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react'
 import { isPharmaLikeMode } from '@/utils/businessModes'
 import { estadoInicialSunat } from '@/utils/estadoInicialSunat'
@@ -5,7 +6,7 @@ import { comprobanteYaEnviado, motivoParaNoEditar } from '@/utils/edicionDeCompr
 import { cupoDeComprobantes, avisoDeCupo } from '@/utils/cupoDeComprobantes'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
-import {
+import { Building2,
   Search,
   Plus,
   Minus,
@@ -323,8 +324,23 @@ const inferDocumentType = (docType, docNumber) => {
   return ID_TYPES.DNI
 }
 
+/**
+ * El régimen con el que vende el POS, desde el `taxConfig` guardado. Lo usan la
+ * carga del negocio y el cambio de RUC (Varios RUC): una sola forma de leerlo.
+ */
+function regimenDeVenta(tc) {
+  if (!tc) return null
+  return {
+    igvRate: tc.igvRate === 10 ? 10.5 : (tc.igvRate ?? 18),
+    igvExempt: tc.igvExempt ?? false,
+    exemptionReason: tc.exemptionReason ?? '',
+    exemptionCode: tc.exemptionCode ?? '10',
+    taxType: tc.taxType || (tc.igvExempt ? 'exempt' : 'standard'),
+  }
+}
+
 export default function POS() {
-  const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasFeature } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasFeature, emisores, refreshEmisores } = useAppContext()
   const { filterWarehousesByAccess, filterBranchesByAccess, allowedBranches, activeBranchId, setActiveBranch, allowedDocumentTypes, allowedPaymentMethods, assignedSellerId, independentCashRegister, hideStockInPOS, hideDiscountInPOS, userPermissions, subscription, isAdmin } = useAuth()
   const { branding } = useBranding()
   // Editar un comprobante ya emitido puede estar apagado para este usuario.
@@ -566,12 +582,54 @@ export default function POS() {
     }
     return 'boleta'
   })
+  // === VARIOS RUC: con qué RUC se emite ===
+  // Una cuenta con la función "Varios RUC" elige en cada venta con qué RUC sale
+  // el comprobante. El equipo recuerda la última elección; lo que viene de un
+  // documento (editarlo, convertir una nota de venta) lo fija ese documento.
+  // Sin emisores, `empresaDeVenta` ES `companySettings`: nada cambia.
+  const todosLosEmisores = emisores || []
+  const emisoresParaVender = hasFeature?.('multiRuc') ? todosLosEmisores.filter(e => e.activo !== false) : []
+  const puedeElegirRuc = emisoresParaVender.length > 0
+  const [emisorId, setEmisorId] = useState(EMISOR_PRINCIPAL)
+  const [emisorFijo, setEmisorFijo] = useState(false)
+  const emisorElegido = esPrincipal(emisorId)
+    ? null
+    : ((emisorFijo ? todosLosEmisores : emisoresParaVender).find(e => e.id === emisorId) || null)
+  const empresaDeVenta = useMemo(
+    () => (emisorElegido ? empresaEfectiva(companySettings, emisorElegido) : companySettings),
+    [companySettings, emisorElegido]
+  )
+  const claveEmisorDelEquipo = () => `pos_emisor_${getBusinessId()}`
+  const emisorDelEquipo = () => {
+    try { return localStorage.getItem(claveEmisorDelEquipo()) || EMISOR_PRINCIPAL } catch { return EMISOR_PRINCIPAL }
+  }
+  const elegirEmisor = (id) => {
+    setEmisorId(id)
+    try { localStorage.setItem(claveEmisorDelEquipo(), id) } catch { /* equipo sin almacenamiento */ }
+  }
+  // La elección de este equipo, en cuanto se sabe de qué negocio es.
+  const negocioDelEquipo = getBusinessId()
+  useEffect(() => {
+    if (!negocioDelEquipo || isDemoMode) return
+    setEmisorId(prev => (emisorFijo ? prev : emisorDelEquipo()))
+    // La lista fresca: el admin pudo agregar un RUC con esta sesión abierta.
+    refreshEmisores?.()
+    // Solo al conocer el negocio: la elección posterior la guarda elegirEmisor.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [negocioDelEquipo])
+  // El régimen es el del RUC con que se vende (un NRUS vende a precio final).
+  // Con el principal es el del negocio: el mismo que deja la carga inicial.
+  useEffect(() => {
+    if (!companySettings) return
+    setTaxConfig(regimenDeVenta(empresaDeVenta?.emissionConfig?.taxConfig) || { igvRate: 18, igvExempt: false, taxType: 'standard' })
+  }, [empresaDeVenta, companySettings])
+
   // ¿El negocio puede emitir comprobantes FISCALES (boleta/factura)?
   // Requiere conexión SUNAT (método 'qpse' o 'sunat_direct') O que el admin lo haya
   // habilitado manualmente (allowInvoicingWithoutSunat). Sin eso, solo Nota de Venta.
   // Mientras companySettings carga (null) asumimos true (optimista) para no parpadear el
   // selector ni forzar Nota de Venta antes de tiempo; al cargar queda el valor real.
-  const hasSunatConnection = ['qpse', 'sunat_direct'].includes(companySettings?.emissionMethod)
+  const hasSunatConnection = ['qpse', 'sunat_direct'].includes(empresaDeVenta?.emissionMethod)
   const canEmitFiscal = isDemoMode || !companySettings || hasSunatConnection || companySettings.allowInvoicingWithoutSunat === true
 
   // Comprobantes realmente disponibles: cruza lo que emite el negocio
@@ -595,14 +653,14 @@ export default function POS() {
   const avisoCupo = useMemo(() => avisoDeCupo(cupo), [cupo])
 
   const docTypeOpts = useMemo(() => ({
-    enabledForBusiness: companySettings?.enabledDocumentTypes || null,
+    enabledForBusiness: empresaDeVenta?.enabledDocumentTypes || null,
     allowedForUser: allowedDocumentTypes || null,
     canEmitFiscal,
     cupoAgotado: cupo.agotado,
     // Al convertir una nota, la Nota de Venta sale del selector: se convierte
     // en un comprobante, no en otra nota.
     convirtiendoNota: !!(pendingNotaVentaIds && pendingNotaVentaIds.length > 0),
-  }), [companySettings?.enabledDocumentTypes, allowedDocumentTypes, canEmitFiscal, cupo.agotado, pendingNotaVentaIds])
+  }), [empresaDeVenta?.enabledDocumentTypes, allowedDocumentTypes, canEmitFiscal, cupo.agotado, pendingNotaVentaIds])
 
   const availableDocTypes = useMemo(() => getAvailableDocumentTypes(docTypeOpts), [docTypeOpts])
 
@@ -1211,6 +1269,17 @@ export default function POS() {
   const [detractionType, setDetractionType] = useState('') // Código SUNAT del tipo de bien/servicio
   const [hasRetencion, setHasRetencion] = useState(false) // Régimen de Retención IGV (cliente agente de retención)
   const [detractionBankAccount, setDetractionBankAccount] = useState('') // Cuenta del Banco de la Nación
+  // Varios RUC: la cuenta de detracciones es de la persona jurídica. Al cambiar
+  // de RUC con la detracción puesta, se toma la del nuevo RUC.
+  const rucDeLaDetraccionRef = useRef(EMISOR_PRINCIPAL)
+  useEffect(() => {
+    const actual = emisorElegido?.id || EMISOR_PRINCIPAL
+    if (rucDeLaDetraccionRef.current === actual) return
+    rucDeLaDetraccionRef.current = actual
+    if (!hasDetraction) return
+    const cuenta = (empresaDeVenta?.bankAccountsList || []).find(acc => acc.accountType === 'detracciones')
+    setDetractionBankAccount(cuenta?.accountNumber || '')
+  }, [emisorElegido, empresaDeVenta, hasDetraction])
 
   // Mostrar campos de transporte de carga solo para códigos 021 y 027
   const showTransportFields = hasDetraction && ['021', '027'].includes(detractionType)
@@ -1731,6 +1800,7 @@ export default function POS() {
       customerData,
       selectedCustomer,
       documentType,
+      emisorId,
       payments,
       discountAmount,
       discountPercentage,
@@ -1760,6 +1830,7 @@ export default function POS() {
     setCustomerData(sale.customerData || { documentType: ID_TYPES.DNI, documentNumber: '', name: '', businessName: '', address: '', email: '', phone: '', studentName: '', studentSchedule: '', petName: '', vehiclePlate: '', vehicleModel: '', vehicleYear: '', licenseNumber: '', propertyCard: '', originAddress: '', destinationAddress: '', tripDetail: '', serviceReferenceValue: '', effectiveLoadValue: '', usefulLoadValue: '', bankAccount: '', detractionPercentage: '', detractionAmount: '', goodsServiceCode: '' })
     setSelectedCustomer(sale.selectedCustomer || null)
     setDocumentType(sale.documentType || companySettings?.defaultDocumentType || 'boleta')
+    if (sale.emisorId) setEmisorId(sale.emisorId)
     setPayments(sale.payments || [{ method: getDefaultPaymentMethod(), amount: '' }])
     setDiscountAmount(sale.discountAmount || '')
     setDiscountPercentage(sale.discountPercentage || '')
@@ -2370,6 +2441,10 @@ export default function POS() {
         setPendingNotaVentaIds([notaVentaInfo.notaVentaId])
       }
 
+      // Varios RUC: la boleta o factura sale con el RUC de la nota de venta.
+      setEmisorId(emisorIdDe({ emisorId: notaVentaInfo.emisorId }))
+      setEmisorFijo(true)
+
       // Cargar items de la nota de venta al carrito
       if (notaVentaInfo.items && notaVentaInfo.items.length > 0) {
         const cartItems = notaVentaInfo.items.map(item => ({
@@ -2680,6 +2755,9 @@ export default function POS() {
 
       // Cargar datos en el formulario
       setDocumentType(invoice.documentType)
+      // El RUC queda fijo, como el tipo: el número es de su serie.
+      setEmisorId(emisorIdDe(invoice))
+      setEmisorFijo(true)
       // Si el comprobante se emitió POR CONSUMO, la casilla vuelve marcada: al
       // reeditarlo tiene que seguir saliendo igual, no destaparle el detalle de
       // platos a un cliente que pidió una sola línea.
@@ -2850,6 +2928,9 @@ export default function POS() {
 
       // Cargar tipo de documento
       setDocumentType(invoice.documentType)
+      // Varios RUC: el duplicado sale con el mismo RUC, si sigue disponible.
+      if (esPrincipal(invoice.emisorId)) setEmisorId(EMISOR_PRINCIPAL)
+      else if (emisoresParaVender.some(e => e.id === invoice.emisorId)) setEmisorId(invoice.emisorId)
       // Si el comprobante se emitió POR CONSUMO, la casilla vuelve marcada: al
       // reeditarlo tiene que seguir saliendo igual, no destaparle el detalle de
       // platos a un cliente que pidió una sola línea.
@@ -3104,13 +3185,7 @@ export default function POS() {
         const tc = businessData.emissionConfig?.taxConfig
         console.log('💰 taxConfig desde emissionConfig:', tc)
         if (tc) {
-          const newTaxConfig = {
-            igvRate: tc.igvRate === 10 ? 10.5 : (tc.igvRate ?? 18),
-            igvExempt: tc.igvExempt ?? false,
-            exemptionReason: tc.exemptionReason ?? '',
-            exemptionCode: tc.exemptionCode ?? '10',
-            taxType: tc.taxType || (tc.igvExempt ? 'exempt' : 'standard')
-          }
+          const newTaxConfig = regimenDeVenta(tc)
           console.log('✅ TaxConfig a aplicar:', newTaxConfig)
           setTaxConfig(newTaxConfig)
         } else {
@@ -5498,6 +5573,9 @@ export default function POS() {
     } else {
       setDocumentType(resolveDocumentType(def, docTypeOpts))
     }
+    // Varios RUC: la próxima venta vuelve al RUC que recuerda el equipo.
+    setEmisorFijo(false)
+    setEmisorId(emisorDelEquipo())
     setOrderType('takeaway')
     setSendToKitchen(true)
     setCustomerData({
@@ -6750,11 +6828,17 @@ ${textoDeErrores(revision.errores)}`, 9000)
       }
     }
 
+    // Varios RUC: el RUC del documento de origen tiene que seguir en la cuenta.
+    if (emisorFijo && !esPrincipal(emisorId) && !emisorElegido) {
+      abortCheckout('El RUC con el que se emitió el documento de origen ya no está configurado en la cuenta. Comunícate con soporte.')
+      return
+    }
+
     // Si tiene detracción, validar que exista cuenta del Banco de la Nación
     if (hasDetraction && detractionType) {
       let bnAccount = detractionBankAccount
-      if (!bnAccount && companySettings?.bankAccountsList && Array.isArray(companySettings.bankAccountsList)) {
-        bnAccount = companySettings.bankAccountsList.find(acc => acc.accountType === 'detracciones')?.accountNumber
+      if (!bnAccount && empresaDeVenta?.bankAccountsList && Array.isArray(empresaDeVenta.bankAccountsList)) {
+        bnAccount = empresaDeVenta.bankAccountsList.find(acc => acc.accountType === 'detracciones')?.accountNumber
       }
       if (!bnAccount) {
         abortCheckout('Para emitir con detraccion debes configurar tu cuenta del Banco de la Nacion en Ajustes > Cuentas bancarias (tipo "detracciones")')
@@ -7282,6 +7366,8 @@ ${textoDeErrores(revision.errores)}`, 9000)
         console.warn('No se pudo releer companySettings, usando valor en memoria:', settingsErr)
         shouldAutoSendToSunat = companySettings?.autoSendToSunat === true
       }
+      // Varios RUC: si hay con qué emitir lo dice el RUC del comprobante.
+      if (emisorElegido) negocioParaSunat = empresaEfectiva(negocioParaSunat, emisorElegido)
 
       // Calcular datos de pago parcial y ventas al crédito
       const partialAmount = parseFloat(partialPaymentAmount) || 0
@@ -7560,6 +7646,9 @@ ${textoDeErrores(revision.errores)}`, 9000)
         branchLogoUrl: selectedBranch?.logoUrl || null,
         branchAddress: selectedBranch?.address || null,
         branchPhone: selectedBranch?.phone || null,
+        // Varios RUC: con qué RUC sale. Sin campo = el principal, como siempre;
+        // el snapshot es lo que imprime el documento aunque el emisor cambie.
+        ...(emisorElegido ? { emisorId: emisorElegido.id, emisor: snapshotDeEmisor(emisorElegido) } : {}),
         // Nota de venta al crédito con términos (opcional, Config > Ventas):
         // vencimiento + cuotas del SALDO. Usa los mismos campos que la factura,
         // así el PDF/ticket y el reporte de Pagos Pendientes los leen igual.
@@ -7762,6 +7851,8 @@ ${textoDeErrores(revision.errores)}`, 9000)
           // Cambiarlo dejaría p.ej. una "factura" con correlativo de boleta (BA02-xxx),
           // que SUNAT rechaza. Para cambiar de tipo: anular y emitir de nuevo.
           documentType: editingInvoiceData.documentType,
+          // Y el RUC con que se emitió: el número es de SU serie.
+          ...(editingInvoiceData.emisorId ? { emisorId: editingInvoiceData.emisorId, emisor: editingInvoiceData.emisor || null } : {}),
           // Mantener fecha de creación original
           createdAt: editingInvoiceData.createdAt,
           // Actualizar fecha de modificación
@@ -9121,7 +9212,7 @@ ${textoDeErrores(revision.errores)}`, 9000)
               toast.info('Usando impresión estándar...')
             } else {
               // Imprimir en impresora térmica (80mm por defecto)
-              const result = await printInvoiceTicket(invoiceToprint, companySettings, printerConfigResult.config.paperWidth || 80, printerConfigResult.config.showItemUnit || false, printerConfigResult.config.ticketFontSize || (printerConfigResult.config.webPrintLegible ? 'medium' : 'small'))
+              const result = await printInvoiceTicket(invoiceToprint, empresaDelComprobante(invoiceToprint, companySettings, todosLosEmisores), printerConfigResult.config.paperWidth || 80, printerConfigResult.config.showItemUnit || false, printerConfigResult.config.ticketFontSize || (printerConfigResult.config.webPrintLegible ? 'medium' : 'small'))
 
               if (result.success) {
                 toast.success('Comprobante impreso en ticketera')
@@ -9199,7 +9290,7 @@ ${textoDeErrores(revision.errores)}`, 9000)
       toast.info('Generando comprobante...')
 
       // Generar el PDF como blob
-      const pdfBlob = await getInvoicePDFBlob(lastInvoiceData, companySettings, branding, branches)
+      const pdfBlob = await getInvoicePDFBlob(lastInvoiceData, empresaDelComprobante(lastInvoiceData, companySettings, todosLosEmisores), branding, branches)
 
       // Preparar nombre del archivo
       const docTypeFile = lastInvoiceData.documentType === 'factura' ? 'Factura' :
@@ -9241,7 +9332,7 @@ ${textoDeErrores(revision.errores)}`, 9000)
       // Crear mensaje con link de descarga
       const message = `Hola ${customerName},
 
-Gracias por tu compra en *${companySettings?.tradeName || companySettings?.name || 'nuestra tienda'}*.
+Gracias por tu compra en *${empresaDelComprobante(lastInvoiceData, companySettings, todosLosEmisores)?.tradeName || companySettings?.name || 'nuestra tienda'}*.
 
 *${docTypeName}:* ${lastInvoiceData.number}
 *Total:* ${total}
@@ -10544,6 +10635,37 @@ Gracias por tu preferencia.`
                 )
               })()}
 
+              {/* 3b. Emitir con (Varios RUC): solo en cuentas con más de un RUC */}
+              {puedeElegirRuc && (
+                <div>
+                  <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+                    <Building2 className="w-3.5 h-3.5" />
+                    Emitir con
+                  </label>
+                  <select
+                    value={emisorElegido ? emisorElegido.id : EMISOR_PRINCIPAL}
+                    // Al editar o convertir una nota de venta lo fija el documento:
+                    // el comprobante sale con el RUC del documento de origen.
+                    disabled={emisorFijo}
+                    onChange={e => elegirEmisor(e.target.value)}
+                    className="w-full px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
+                  >
+                    <option value={EMISOR_PRINCIPAL}>
+                      {companySettings?.businessName || companySettings?.name || 'RUC principal'}{companySettings?.ruc ? ` · ${companySettings.ruc}` : ''}
+                    </option>
+                    {emisoresParaVender.map(e => (
+                      <option key={e.id} value={e.id}>{e.businessName || e.tradeName} · {e.ruc}</option>
+                    ))}
+                    {emisorFijo && emisorElegido && !emisoresParaVender.some(e => e.id === emisorElegido.id) && (
+                      <option value={emisorElegido.id}>{emisorElegido.businessName} · {emisorElegido.ruc}</option>
+                    )}
+                  </select>
+                  {emisorFijo && (
+                    <p className="text-xs text-gray-500 mt-1">Sale con el RUC del documento de origen.</p>
+                  )}
+                </div>
+              )}
+
               {/* 4. Tipo de Comprobante */}
               <div>
                 <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
@@ -11196,8 +11318,8 @@ Gracias por tu preferencia.`
                                 setDetractionBankAccount('')
                               } else {
                                 // Auto-rellenar cuenta BN desde configuración del negocio
-                                if (!detractionBankAccount && companySettings?.bankAccountsList && Array.isArray(companySettings.bankAccountsList)) {
-                                  const bnAccount = companySettings.bankAccountsList.find(acc => acc.accountType === 'detracciones')
+                                if (!detractionBankAccount && empresaDeVenta?.bankAccountsList && Array.isArray(empresaDeVenta.bankAccountsList)) {
+                                  const bnAccount = empresaDeVenta.bankAccountsList.find(acc => acc.accountType === 'detracciones')
                                   if (bnAccount?.accountNumber) {
                                     setDetractionBankAccount(bnAccount.accountNumber)
                                   }
@@ -13346,6 +13468,13 @@ Gracias por tu preferencia.`
                 </div>
               )}
 
+              {/* Varios RUC: con qué RUC sale, a la vista antes de cobrar. Un
+                  comprobante con el RUC equivocado no se corrige: se anula. */}
+              {puedeElegirRuc && (
+                <p className="mt-4 text-center text-xs text-gray-500">
+                  Se emite con <span className="font-semibold text-gray-800">{empresaDeVenta?.businessName}</span> · RUC {empresaDeVenta?.ruc}
+                </p>
+              )}
               {/* Checkout Button */}
               <button
                 ref={checkoutButtonRef}
@@ -13796,7 +13925,7 @@ Gracias por tu preferencia.`
         onPreview={async () => {
           setIsLoadingPreview(true)
           try {
-            await previewInvoicePDF(lastInvoiceData, companySettings, branding, branches)
+            await previewInvoicePDF(lastInvoiceData, empresaDelComprobante(lastInvoiceData, companySettings, todosLosEmisores), branding, branches)
             if (companySettings?.autoResetPOS) setTimeout(() => clearCart(), 1000)
           } catch (error) {
             console.error('Error al generar vista previa:', error)
@@ -13807,7 +13936,7 @@ Gracias por tu preferencia.`
         }}
         onPdf={() => {
           try {
-            generateInvoicePDF(lastInvoiceData, companySettings, true, branding, branches)
+            generateInvoicePDF(lastInvoiceData, empresaDelComprobante(lastInvoiceData, companySettings, todosLosEmisores), true, branding, branches)
             if (companySettings?.autoResetPOS) setTimeout(() => clearCart(), 1000)
           } catch (error) {
             console.error('Error al generar PDF:', error)
@@ -14610,7 +14739,7 @@ Gracias por tu preferencia.`
               total: lastInvoiceData.total,
               createdAt: new Date(),
             }}
-            companySettings={companySettings}
+            companySettings={lastInvoiceData ? empresaDelComprobante(lastInvoiceData, companySettings, todosLosEmisores) : companySettings}
             paperWidth={ticketPaperWidth}
             webPrintLegible={webPrintLegible}
             ticketFontSize={ticketFontSize}

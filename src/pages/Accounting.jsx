@@ -1,3 +1,4 @@
+import { empresaDelComprobante } from '../../functions/src/utils/emisorDelComprobante.js'
 import { useState, useEffect, useRef } from 'react'
 import { FileText, FileDown, Download, CheckCircle, XCircle, Clock, AlertTriangle, Search, Filter, Code, Loader2, Calendar, Archive, FileSpreadsheet, FileCode, FileCheck, ChevronDown } from 'lucide-react'
 import Card, { CardContent } from '@/components/ui/Card'
@@ -40,7 +41,9 @@ const MONTHS = [
 ]
 
 export default function Accounting() {
-  const { user, getBusinessId, isDemoMode } = useAppContext()
+  const { user, getBusinessId, isDemoMode, emisores } = useAppContext()
+  // Varios RUC: el PDF y el XML de cada comprobante van con los datos de SU RUC.
+  const empresaDe = (inv, negocio) => empresaDelComprobante(inv, negocio, emisores || [])
   const toast = useToast()
   const { branding } = useBranding()
 
@@ -275,7 +278,7 @@ export default function Accounting() {
         return
       }
 
-      const result = await prepareInvoiceXML(inv, settingsResult.data)
+      const result = await prepareInvoiceXML(inv, empresaDe(inv, settingsResult.data))
       if (!result.success) {
         toast.error('Error al generar XML: ' + result.error)
         return
@@ -303,7 +306,7 @@ export default function Accounting() {
         toast.error('Error al cargar datos de la empresa')
         return
       }
-      const result = await generateInvoicePDF(inv, settingsResult.data, true, branding, branches)
+      const result = await generateInvoicePDF(inv, empresaDe(inv, settingsResult.data), true, branding, branches)
       if (result?.fileName) {
         toast.success(`PDF guardado: ${result.fileName}`)
       } else {
@@ -376,7 +379,7 @@ export default function Accounting() {
         } else if (companySettingsData) {
           // Sin URL guardada: generar XML on-the-fly (p.ej. notas de crédito sin xmlStorageUrl)
           try {
-            const result = await prepareInvoiceXML(inv, companySettingsData)
+            const result = await prepareInvoiceXML(inv, empresaDe(inv, companySettingsData))
             if (result.success) {
               zip.file(result.fileName || `${inv.number || inv.id}.xml`, result.xml)
               downloaded++
@@ -539,7 +542,7 @@ export default function Accounting() {
         } else if (companySettingsForXml) {
           try {
             setDownloadProgress(`Generando XML: ${inv.number}`)
-            const result = await prepareInvoiceXML(inv, companySettingsForXml)
+            const result = await prepareInvoiceXML(inv, empresaDe(inv, companySettingsForXml))
             if (result.success) {
               xmlFolder.file(result.fileName || `${inv.number || inv.id}.xml`, result.xml)
               xmlCount++
@@ -576,7 +579,7 @@ export default function Accounting() {
         for (const inv of filtered) {
           try {
             setDownloadProgress(`Generando PDF: ${inv.number}`)
-            const pdfBlob = await getInvoicePDFBlob(inv, companySettingsForXml, branding, branches)
+            const pdfBlob = await getInvoicePDFBlob(inv, empresaDe(inv, companySettingsForXml), branding, branches)
             pdfFolder.file(`${(inv.number || inv.id).replace(/\//g, '-')}.pdf`, pdfBlob)
             pdfCount++
           } catch (e) {

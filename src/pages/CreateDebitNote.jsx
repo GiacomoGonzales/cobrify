@@ -1,3 +1,4 @@
+import { esPrincipal, emisorIdDe, empresaDelComprobante } from '../../functions/src/utils/emisorDelComprobante.js'
 import { useState, useEffect } from 'react'
 import { DEBIT_NOTE_REASONS } from '@/data/noteReasons'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -25,7 +26,7 @@ const SEND_DEBIT_NOTE_URL = import.meta.env.VITE_FIREBASE_FUNCTIONS_URL
 // El catálogo vive en src/data/noteReasons.js (lo comparte la lista de Ventas).
 
 export default function CreateDebitNote() {
-  const { user, getBusinessId } = useAuth()
+  const { user, getBusinessId, emisores } = useAuth()
   // Sanear por sucursal/almacén permitido: el sub-usuario solo puede referenciar
   // comprobantes de sus ubicaciones (mismo criterio que la página Ventas).
   const canAccessInvoice = useLocationAccess()
@@ -150,8 +151,9 @@ export default function CreateDebitNote() {
     const seriesKey = isFactura ? 'nota_debito_factura' : 'nota_debito_boleta'
     const seriesName = isFactura ? 'Notas de Débito de Facturas' : 'Notas de Débito de Boletas'
 
-    // Verificar que existe la serie para notas de débito
-    if (!series || !series[seriesKey]) {
+    // Verificar que existe la serie para notas de débito. La de otro RUC
+    // (Varios RUC) la revisa la transacción que numera, contra SUS series.
+    if (esPrincipal(selectedInvoice.emisorId) && (!series || !series[seriesKey])) {
       setMessage({
         type: 'error',
         text: `No se ha configurado la serie para ${seriesName}. Ve a Configuración.`
@@ -180,6 +182,8 @@ export default function CreateDebitNote() {
         console.warn('No se pudo releer companySettings:', settingsErr)
         shouldAutoSendToSunat = companySettings?.autoSendToSunat === true
       }
+      // Varios RUC: si hay con qué emitir lo dice el RUC del comprobante.
+      negocioParaSunat = empresaDelComprobante(selectedInvoice, negocioParaSunat, emisores || [])
 
       // Crear item con el cargo adicional
       // unitPrice debe ser el precio CON IGV (el XML generator espera priceWithIGV)
@@ -198,6 +202,8 @@ export default function CreateDebitNote() {
         referencedDocumentId: selectedInvoice.number,
         referencedDocumentType: selectedInvoice.documentType === 'factura' ? '01' : '03',
         referencedInvoiceFirestoreId: selectedInvoice.id, // ID de Firestore para actualizar
+        // Varios RUC: el mismo RUC del comprobante que modifica (y sus series).
+        ...(esPrincipal(selectedInvoice.emisorId) ? {} : { emisorId: emisorIdDe(selectedInvoice), emisor: selectedInvoice.emisor || null }),
 
         // Motivo
         discrepancyCode: formData.discrepancyCode,

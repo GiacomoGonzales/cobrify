@@ -1,3 +1,4 @@
+import { EMISOR_PRINCIPAL, esPrincipal, emisorIdDe, empresaEfectiva, empresaDelComprobante, snapshotDeEmisor } from '../../functions/src/utils/emisorDelComprobante.js'
 import { useState, useEffect, useRef } from 'react'
 import { CREDIT_NOTE_REASONS } from '@/data/noteReasons'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -51,7 +52,12 @@ const GLOBAL_DISCOUNT_CODES = ['04', '05', '09']
 const BOLETA_DISALLOWED_CODES = ['04', '05', '08']
 
 export default function CreateCreditNote() {
-  const { user, getBusinessId } = useAuth()
+  const { user, getBusinessId, emisores, hasFeature } = useAuth()
+  // Varios RUC: la nota de un comprobante del sistema sale con el RUC de ese
+  // comprobante. La de un documento externo elige el RUC acá.
+  const emisoresActivos = hasFeature?.('multiRuc') ? (emisores || []).filter(e => e.activo !== false) : []
+  const [emisorExternoId, setEmisorExternoId] = useState(EMISOR_PRINCIPAL)
+  const emisorExterno = esPrincipal(emisorExternoId) ? null : (emisoresActivos.find(e => e.id === emisorExternoId) || null)
   // Sanear por sucursal/almacén permitido: el sub-usuario solo puede referenciar
   // comprobantes de sus ubicaciones (mismo criterio que la página Ventas).
   const canAccessInvoice = useLocationAccess()
@@ -757,7 +763,7 @@ export default function CreateCreditNote() {
     const seriesKey = isFactura ? 'nota_credito_factura' : 'nota_credito_boleta'
     const seriesName = isFactura ? 'Notas de Crédito de Facturas' : 'Notas de Crédito de Boletas'
 
-    if (!series || !series[seriesKey]) {
+    if (!emisorExterno && (!series || !series[seriesKey])) {
       setMessage({
         type: 'error',
         text: `No se ha configurado la serie para ${seriesName}. Ve a Configuración.`
@@ -789,6 +795,9 @@ export default function CreateCreditNote() {
         shouldAutoSendToSunat = companySettings?.autoSendToSunat === true
       }
 
+      // Varios RUC: la nota externa sale con el RUC elegido en el formulario.
+      if (emisorExterno) negocioParaSunat = empresaEfectiva(negocioParaSunat, emisorExterno)
+
       const creditNoteData = {
         documentType: 'nota_credito',
 
@@ -797,6 +806,7 @@ export default function CreateCreditNote() {
         referencedDocumentType: externalData.documentType,
         referencedInvoiceFirestoreId: null, // No hay ID de Firestore
         isExternalReference: true, // Marcar como referencia externa
+        ...(emisorExterno ? { emisorId: emisorExterno.id, emisor: snapshotDeEmisor(emisorExterno) } : {}),
 
         // Motivo
         discrepancyCode: externalData.discrepancyCode,
@@ -1150,8 +1160,9 @@ export default function CreateCreditNote() {
     const seriesKey = isFactura ? 'nota_credito_factura' : 'nota_credito_boleta'
     const seriesName = isFactura ? 'Notas de Crédito de Facturas' : 'Notas de Crédito de Boletas'
 
-    // Verificar que existe la serie para notas de crédito
-    if (!series || !series[seriesKey]) {
+    // Verificar que existe la serie para notas de crédito. La de otro RUC
+    // (Varios RUC) la revisa la transacción que numera, contra SUS series.
+    if (esPrincipal(selectedInvoice.emisorId) && (!series || !series[seriesKey])) {
       setMessage({
         type: 'error',
         text: `No se ha configurado la serie para ${seriesName}. Ve a Configuración.`
@@ -1179,6 +1190,9 @@ export default function CreateCreditNote() {
         shouldAutoSendToSunat = companySettings?.autoSendToSunat === true
       }
 
+      // Varios RUC: si hay con qué emitir lo dice el RUC del comprobante.
+      negocioParaSunat = empresaDelComprobante(selectedInvoice, negocioParaSunat, emisores || [])
+
       const creditNoteData = {
         documentType: 'nota_credito',
 
@@ -1186,6 +1200,8 @@ export default function CreateCreditNote() {
         referencedDocumentId: selectedInvoice.number,
         referencedDocumentType: selectedInvoice.documentType === 'factura' ? '01' : '03',
         referencedInvoiceFirestoreId: selectedInvoice.id, // ID de Firestore para referencia
+        // Varios RUC: el mismo RUC del comprobante que modifica (y sus series).
+        ...(esPrincipal(selectedInvoice.emisorId) ? {} : { emisorId: emisorIdDe(selectedInvoice), emisor: selectedInvoice.emisor || null }),
 
         // Motivo
         discrepancyCode: formData.discrepancyCode,
@@ -2037,6 +2053,26 @@ export default function CreateCreditNote() {
             Usa esta opción para crear una nota de crédito que haga referencia a una factura o boleta
             emitida en otro sistema (Efact, SUNAT, etc.). Ingresa los datos del documento original manualmente.
           </Alert>
+
+          {/* Varios RUC: el RUC que emitió el documento original */}
+          {emisoresActivos.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Emitir con</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Select value={emisorExterno ? emisorExterno.id : EMISOR_PRINCIPAL} onChange={e => setEmisorExternoId(e.target.value)}>
+                  <option value={EMISOR_PRINCIPAL}>
+                    {companySettings?.businessName || 'RUC principal'}{companySettings?.ruc ? ` · ${companySettings.ruc}` : ''}
+                  </option>
+                  {emisoresActivos.map(e => (
+                    <option key={e.id} value={e.id}>{e.businessName} · {e.ruc}</option>
+                  ))}
+                </Select>
+                <p className="text-xs text-gray-500 mt-2">Elige el mismo RUC que emitió el documento original.</p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Documento Original */}
           <Card>

@@ -464,3 +464,38 @@ export function idDelContadorDelDia(fecha, emisorId) {
 export function campoDeEmisor(emisorId) {
   return esPrincipal(emisorId) ? {} : { emisorId: limpio(emisorId) }
 }
+
+// ---------------------------------------------------------------------------
+// El cliente: con qué datos se imprime cada comprobante.
+// ---------------------------------------------------------------------------
+
+/**
+ * La empresa que va impresa en un comprobante: la de SU RUC.
+ *
+ * - Sin `emisorId`: el negocio tal cual, el MISMO objeto. El ticket, el PDF y
+ *   el XML de las cuentas de un solo RUC no cambian.
+ * - Con su emisor a mano (activo o no): el negocio con el emisor encima, con
+ *   sus cuentas bancarias y su dirección.
+ * - Con el emisor fuera de alcance (se borró, o la función se apagó y ya no se
+ *   carga): lo que el comprobante congeló al emitirse (`emisor`). Nunca el RUC
+ *   ni las cuentas del principal: una factura del segundo RUC con las cuentas
+ *   del primero hace que el cliente le pague a la empresa equivocada.
+ *
+ * @param {object} comprobante
+ * @param {object} negocio  la empresa que se imprimiría hoy, con la sede ya resuelta
+ * @param {Array<object>} [emisores]  los emisores de la cuenta, cada uno con `id`
+ */
+export function empresaDelComprobante(comprobante, negocio, emisores = []) {
+  const id = emisorIdDe(comprobante)
+  if (id === EMISOR_PRINCIPAL) return negocio
+  const emisor = (emisores || []).find((e) => limpio(e?.id) === id)
+  if (emisor) return empresaEfectiva(negocio, emisor)
+  const congelado = comprobante?.emisor || {}
+  return empresaEfectiva(negocio, {
+    id,
+    ruc: limpio(congelado.ruc),
+    businessName: limpio(congelado.razonSocial),
+    tradeName: limpio(congelado.nombreComercial),
+    address: limpio(congelado.direccion),
+  })
+}

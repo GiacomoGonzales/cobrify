@@ -1,3 +1,4 @@
+import { empresaDelComprobante, emisorIdDe } from '../../functions/src/utils/emisorDelComprobante.js'
 import { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react'
 import { createPortal } from 'react-dom'
 import { useAppNavigate, useAppPath } from '@/hooks/useAppNavigate'
@@ -109,7 +110,7 @@ const ORDER_TYPE_LABELS = {
 const TIPOS_EXPORTABLES = ['factura', 'boleta', 'nota_venta', 'nota_credito', 'nota_debito']
 
 export default function InvoiceList() {
-  const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode, filterBranchesByAccess, hasMainBranchAccess, isBusinessOwner, isAdmin, allowedBranches, allowedWarehouses, assignedSellerId , branchScope } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessSettings, businessMode, filterBranchesByAccess, hasMainBranchAccess, isBusinessOwner, isAdmin, allowedBranches, allowedWarehouses, assignedSellerId , branchScope, emisores } = useAppContext()
   const permisos = useDataPermissions()
   // Editar y anular comprobantes ya emitidos. El dueño puede apagárselo a un
   // sub-usuario en su ficha; para él y para el admin siempre viene en true.
@@ -120,6 +121,10 @@ export default function InvoiceList() {
   const toast = useToast()
   const [invoices, setInvoices] = useState([])
   const [companySettings, setCompanySettings] = useState(null)
+  // Varios RUC: cada comprobante sale con los datos de SU RUC. En una cuenta de
+  // un solo RUC es `companySettings` tal cual.
+  const empresaDe = (inv) => empresaDelComprobante(inv, companySettings, emisores || [])
+  const conVariosRuc = (emisores || []).length > 0
 
   // Etiquetas de métodos de pago para selects y filtros: los de siempre
   // visibles + los PROPIOS del negocio. Antes estas listas estaban escritas a
@@ -496,7 +501,7 @@ export default function InvoiceList() {
             toast.info('Usando impresión estándar...')
           } else {
             // Imprimir en impresora térmica (80mm por defecto)
-            const result = await printInvoiceTicket(invoice, companySettings, printerConfigResult.config.paperWidth || 80, printerConfigResult.config.showItemUnit || false, printerConfigResult.config.ticketFontSize || (printerConfigResult.config.webPrintLegible ? 'medium' : 'small'))
+            const result = await printInvoiceTicket(invoice, empresaDe(invoice), printerConfigResult.config.paperWidth || 80, printerConfigResult.config.showItemUnit || false, printerConfigResult.config.ticketFontSize || (printerConfigResult.config.webPrintLegible ? 'medium' : 'small'))
 
             if (result.success) {
               toast.success('Comprobante impreso en ticketera')
@@ -588,7 +593,7 @@ export default function InvoiceList() {
 
           const result = await printInvoiceTicket(
             selectedInvoices[i],
-            companySettings,
+            empresaDe(selectedInvoices[i]),
             printerConfigResult.config.paperWidth || 80,
             printerConfigResult.config.showItemUnit || false,
             printerConfigResult.config.ticketFontSize || (printerConfigResult.config.webPrintLegible ? 'medium' : 'small')
@@ -646,7 +651,7 @@ export default function InvoiceList() {
         setBulkPDFProgress({ current: i + 1, total: selectedInvoices.length })
 
         try {
-          await generateInvoicePDF(selectedInvoices[i], companySettings, true, branding, branches)
+          await generateInvoicePDF(selectedInvoices[i], empresaDe(selectedInvoices[i]), true, branding, branches)
           downloaded++
         } catch (error) {
           console.error('Error generando PDF:', error)
@@ -691,7 +696,7 @@ export default function InvoiceList() {
       toast.info('Generando comprobante...')
 
       // Generar el PDF como blob
-      const pdfBlob = await getInvoicePDFBlob(invoice, companySettings, branding, branches)
+      const pdfBlob = await getInvoicePDFBlob(invoice, empresaDe(invoice), branding, branches)
 
       // Preparar nombre del archivo
       const docTypeFile = invoice.documentType === 'factura' ? 'Factura' :
@@ -734,7 +739,7 @@ export default function InvoiceList() {
       // Crear mensaje con link de descarga
       const message = `Hola ${customerName},
 
-Gracias por tu compra en *${companySettings?.tradeName || companySettings?.name || 'nuestra tienda'}*.
+Gracias por tu compra en *${empresaDe(invoice)?.tradeName || companySettings?.name || 'nuestra tienda'}*.
 
 *${docTypeName}:* ${invoice.number}
 *Total:* ${total}
@@ -2093,6 +2098,7 @@ Gracias por tu preferencia.`
       state: {
         fromNotaVenta: true,
         notaVentaId: invoice.id,
+        emisorId: invoice.emisorId || null,
         notaVentaNumber: invoice.number,
         items: invoice.items || [],
         customer: invoice.customer || null,
@@ -2267,12 +2273,20 @@ Gracias por tu preferencia.`
     // Números de las notas para referencia
     const notaNumbers = validNotas.map(n => n.number).join(', ')
 
+    // Varios RUC: una boleta o factura sale con UN RUC. Notas de RUC distintos
+    // no se juntan en un mismo comprobante.
+    if (new Set(validNotas.map(n => emisorIdDe(n))).size > 1) {
+      toast.error('Las notas de venta elegidas son de RUC distintos: conviértelas por separado.')
+      return
+    }
+
     clearSelection()
 
     appNavigate('pos', {
       state: {
         fromNotaVenta: true,
         notaVentaIds: validNotas.map(n => n.id),
+        emisorId: validNotas[0]?.emisorId || null,
         notaVentaNumber: notaNumbers,
         items: allItems,
         customer: firstCustomer,
@@ -3512,6 +3526,9 @@ Gracias por tu preferencia.`
                       </button>
                       <span className="font-medium text-primary-600 text-sm">{invoice.number}</span>
                       <span className="text-xs text-gray-500">{getDocumentTypeName(invoice.documentType)}</span>
+                      {conVariosRuc && (
+                        <span className="text-[11px] text-gray-400">RUC {empresaDe(invoice)?.ruc}</span>
+                      )}
                     </div>
                     <button
                       onClick={(e) => toggleActionsMenu(invoice.id, e.currentTarget)}
@@ -3661,6 +3678,10 @@ Gracias por tu preferencia.`
                       <span className="font-medium text-primary-600 text-sm whitespace-nowrap">
                         {invoice.number}
                       </span>
+                      {/* Varios RUC: de qué RUC es cada comprobante. */}
+                      {conVariosRuc && (
+                        <span className="block text-[11px] text-gray-500 whitespace-nowrap">RUC {empresaDe(invoice)?.ruc}</span>
+                      )}
                       {/* A que documento afecta la nota. Sin esto hay que abrir el
                           detalle una por una para saber cual es cual — y con dos
                           notas del mismo monto es imposible distinguirlas. */}
@@ -4209,7 +4230,7 @@ Gracias por tu preferencia.`
                       onClick={async () => {
                         setOpenMenuId(null)
                         try {
-                          await generateExitNotePDF(invoice, companySettings)
+                          await generateExitNotePDF(invoice, empresaDe(invoice))
                         } catch (e) {
                           toast.error('Error al generar nota de salida')
                         }
@@ -4242,7 +4263,7 @@ Gracias por tu preferencia.`
                   <button
                     onClick={() => {
                       setOpenMenuId(null)
-                      if (!companySettings?.ruc) {
+                      if (!empresaDe(invoice)?.ruc) {
                         toast.error('Configura los datos de tu empresa primero')
                         return
                       }
@@ -4258,12 +4279,12 @@ Gracias por tu preferencia.`
                   <button
                     onClick={async () => {
                       setOpenMenuId(null)
-                      if (!companySettings?.ruc) {
+                      if (!empresaDe(invoice)?.ruc) {
                         toast.error('Configura los datos de tu empresa primero')
                         return
                       }
                       try {
-                        await previewInvoicePDF(invoice, companySettings, branding, branches)
+                        await previewInvoicePDF(invoice, empresaDe(invoice), branding, branches)
                       } catch (e) {
                         toast.error('Error al generar vista previa')
                       }
@@ -4279,7 +4300,7 @@ Gracias por tu preferencia.`
                     onClick={async () => {
                       setOpenMenuId(null)
                       try {
-                        const result = await generateInvoicePDF(invoice, companySettings, true, branding, branches)
+                        const result = await generateInvoicePDF(invoice, empresaDe(invoice), true, branding, branches)
                         if (result?.fileName) {
                           toast.success(`PDF guardado: ${result.fileName}`)
                         } else {
@@ -4311,7 +4332,7 @@ Gracias por tu preferencia.`
                             return
                           }
                           // Fallback: generar XML desde datos del documento (no firmado, para previsualización)
-                          const result = await prepareInvoiceXML(invoice, companySettings)
+                          const result = await prepareInvoiceXML(invoice, empresaDe(invoice))
                           if (result.success) {
                             await downloadCompressedXML(result.xml, result.fileName)
                             toast.success('XML generado (no enviado a SUNAT aún)')
@@ -4817,8 +4838,8 @@ Gracias por tu preferencia.`
                 )}
                 {/* La base imponible, sin IGV: `opGravadas` guarda el total gravado
                     CON IGV, que no es lo que ese rótulo promete (ver peruUtils). */}
-                {montosPorAfectacion(viewingInvoice, companySettings).gravada > 0 && (
-                  <div className="flex justify-between"><span className="text-gray-600">Op. Gravadas</span><span>{formatCurrency(montosPorAfectacion(viewingInvoice, companySettings).gravada, viewingInvoice.currency)}</span></div>
+                {montosPorAfectacion(viewingInvoice, empresaDe(viewingInvoice)).gravada > 0 && (
+                  <div className="flex justify-between"><span className="text-gray-600">Op. Gravadas</span><span>{formatCurrency(montosPorAfectacion(viewingInvoice, empresaDe(viewingInvoice)).gravada, viewingInvoice.currency)}</span></div>
                 )}
                 {viewingInvoice.opExoneradas > 0 && (
                   <div className="flex justify-between text-amber-600"><span>Op. Exoneradas</span><span>{formatCurrency(viewingInvoice.opExoneradas, viewingInvoice.currency)}</span></div>
@@ -5183,22 +5204,22 @@ Gracias por tu preferencia.`
                   WhatsApp
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => {
-                  if (!companySettings?.ruc) { toast.error('Configura los datos de tu empresa primero'); return; }
+                  if (!empresaDe(viewingInvoice)?.ruc) { toast.error('Configura los datos de tu empresa primero'); return; }
                   handlePrintTicket()
                 }}>
                   <Printer className="w-4 h-4 mr-1" />
                   Ticket
                 </Button>
                 <Button size="sm" variant="outline" onClick={async () => {
-                  if (!companySettings?.ruc) { toast.error('Configura los datos de tu empresa primero'); return; }
-                  try { await previewInvoicePDF(viewingInvoice, companySettings, branding, branches) } catch (e) { toast.error('Error al generar vista previa') }
+                  if (!empresaDe(viewingInvoice)?.ruc) { toast.error('Configura los datos de tu empresa primero'); return; }
+                  try { await previewInvoicePDF(viewingInvoice, empresaDe(viewingInvoice), branding, branches) } catch (e) { toast.error('Error al generar vista previa') }
                 }}>
                   <Eye className="w-4 h-4 mr-1" />
                   Vista Previa
                 </Button>
                 <Button size="sm" onClick={async () => {
-                  if (!companySettings?.ruc) { toast.error('Configura los datos de tu empresa primero'); return; }
-                  try { await generateInvoicePDF(viewingInvoice, companySettings, true, branding, branches); toast.success('PDF descargado') } catch (e) { toast.error('Error') }
+                  if (!empresaDe(viewingInvoice)?.ruc) { toast.error('Configura los datos de tu empresa primero'); return; }
+                  try { await generateInvoicePDF(viewingInvoice, empresaDe(viewingInvoice), true, branding, branches); toast.success('PDF descargado') } catch (e) { toast.error('Error') }
                 }}>
                   <Download className="w-4 h-4 mr-1" />
                   PDF
@@ -6086,7 +6107,7 @@ Gracias por tu preferencia.`
       {/* Hidden Ticket Component for Printing - Individual (modal o fila) */}
       {(viewingInvoice || rowPrintInvoice) && (
         <div className="hidden print:block">
-          <InvoiceTicket ref={ticketRef} invoice={viewingInvoice || rowPrintInvoice} companySettings={companySettings} paperWidth={ticketPaperWidth} webPrintLegible={webPrintLegible} ticketFontSize={ticketFontSize} compactPrint={compactPrint} printMargins={printMargins} simplePrint={simplePrint} basicPrint={basicPrint} a4SheetPrint={a4SheetPrint} showItemUnit={showItemUnit} />
+          <InvoiceTicket ref={ticketRef} invoice={viewingInvoice || rowPrintInvoice} companySettings={empresaDe(viewingInvoice || rowPrintInvoice)} paperWidth={ticketPaperWidth} webPrintLegible={webPrintLegible} ticketFontSize={ticketFontSize} compactPrint={compactPrint} printMargins={printMargins} simplePrint={simplePrint} basicPrint={basicPrint} a4SheetPrint={a4SheetPrint} showItemUnit={showItemUnit} />
         </div>
       )}
 
@@ -6114,7 +6135,7 @@ Gracias por tu preferencia.`
             }
           `}</style>
           {invoices.filter(inv => selectedInvoiceIds.has(inv.id)).map(inv => (
-            <InvoiceTicket key={inv.id} invoice={inv} companySettings={companySettings} paperWidth={ticketPaperWidth} webPrintLegible={webPrintLegible} ticketFontSize={ticketFontSize} compactPrint={compactPrint} printMargins={printMargins} simplePrint={simplePrint} basicPrint={basicPrint} a4SheetPrint={a4SheetPrint} showItemUnit={showItemUnit} />
+            <InvoiceTicket key={inv.id} invoice={inv} companySettings={empresaDe(inv)} paperWidth={ticketPaperWidth} webPrintLegible={webPrintLegible} ticketFontSize={ticketFontSize} compactPrint={compactPrint} printMargins={printMargins} simplePrint={simplePrint} basicPrint={basicPrint} a4SheetPrint={a4SheetPrint} showItemUnit={showItemUnit} />
           ))}
         </div>,
         document.body
