@@ -30,6 +30,7 @@ import { db, storage } from '@/lib/firebase'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useGuardado } from '@/components/settings/useGuardado'
+import { soloDelante } from '@/utils/unidadEnElTicket'
 import { Seccion, Ajuste, Campo, Fila, Nota, BarraGuardar, Regulador, Separador } from '@/components/settings/kit'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -114,6 +115,7 @@ function desdeNegocio(b = {}) {
     invoiceImageScale: Number(b.invoiceImageScale) || 100,
     showBrandInInvoices: b.showBrandInInvoices === true,
     hideBatchAndExpiryInDocuments: b.hideBatchAndExpiryInDocuments === true,
+    ticketUnidadSoloDelante: soloDelante(b),
     invoiceFooterTerms: b.invoiceFooterTerms || '',
     showTermsOnTicket: b.showTermsOnTicket === true,
     notaVentaLegend: b.notaVentaLegend || '',
@@ -189,6 +191,19 @@ export default function Impresion() {
     setNegocio(desdeNegocio(businessSettings))
   }, [businessSettings])
   const cambiar = (patch) => setNegocio((prev) => ({ ...prev, ...patch }))
+
+  // "Solo delante del producto" es del NEGOCIO, no del equipo: depende de cómo
+  // se llaman sus presentaciones. Se guarda al tocarla, como sus vecinas de
+  // Impresión, pero en el negocio: vale para todas sus PCs y no se pierde si
+  // el navegador borra los datos del sitio.
+  const ponerSoloDelante = async (valor) => {
+    cambiar({ ticketUnidadSoloDelante: valor })
+    const ok = await guardar(
+      { ticketUnidadSoloDelante: valor },
+      valor ? 'La unidad sale solo delante del producto' : 'La unidad también sale junto a la cantidad'
+    )
+    if (!ok) cambiar({ ticketUnidadSoloDelante: !valor })
+  }
 
   const [ticketQrImageFile, setTicketQrImageFile] = useState(null)
   const [uploadingQrImage, setUploadingQrImage] = useState(false)
@@ -1800,8 +1815,23 @@ export default function Impresion() {
                 )
               }
               titulo="Unidad de medida en el ticket"
-              descripcion="Antepone la cantidad y la unidad o presentación a cada producto: 1 UNIDAD Producto, 3 CAJA Producto. Así la unidad no se repite en la línea del precio."
+              descripcion="Antepone la cantidad y la unidad o presentación a cada producto: 1 UNIDAD Producto, 3 CAJA Producto."
             />
+
+            {/* Sub-opción del NEGOCIO (ver ponerSoloDelante). Sin la opción de
+                arriba la unidad solo puede ir junto a la cantidad: no aplica. */}
+            {printerConfig.showItemUnit && (
+              <div className="ml-8">
+                <Ajuste
+                  id="opcion-ticketUnidadSoloDelante"
+                  checked={negocio?.ticketUnidadSoloDelante === true}
+                  onChange={(e) => ponerSoloDelante(e.target.checked)}
+                  disabled={guardando}
+                  titulo="Solo delante del producto"
+                  descripcion="No repite la unidad junto a la cantidad en la línea del precio. Para cuando el nombre de tus presentaciones ya dice la unidad (SACO, CAJA, PAQUETE). Vale para todos los equipos del negocio."
+                />
+              </div>
+            )}
 
             <Ajuste
               id="opcion-simplePrint"

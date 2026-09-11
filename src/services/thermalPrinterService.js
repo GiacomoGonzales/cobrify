@@ -1019,8 +1019,8 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
         // Línea 2: "cantidad X precio unitario" (izq) y "total" (der) - CON ESPACIOS PARA ALINEAR
         // Formatear cantidad: con decimales si tiene, sino entero
         const qtyFormatted = formatQuantity(item.quantity);
-        // Sin unidad si ya va delante del nombre (utils/unidadEnElTicket).
-        const unitSuffix = unidadJuntoALaCantidad(item, showItemUnit);
+        // Junto a la cantidad, salvo "Solo delante del producto" (utils/unidadEnElTicket).
+        const unitSuffix = unidadJuntoALaCantidad(item, { showItemUnit, empresa: business });
         // Precio de LISTA y cada adicional como una línea que suma. Antes se
         // mostraba el precio ya con adicionales y debajo "+ Grande (+S/2.00)":
         // el cliente sumaba los dos números, no le cuadraba con el total y
@@ -1090,8 +1090,8 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
         // Línea 2: "cantidad x precio unitario" (izq) y "total" (der) - CON ESPACIOS PARA ALINEAR
         // Formatear cantidad: con decimales si tiene, sino entero
         const qtyFormatted = formatQuantity(item.quantity);
-        // Sin unidad si ya va delante del nombre (utils/unidadEnElTicket).
-        const unitSuffix = unidadJuntoALaCantidad(item, showItemUnit);
+        // Junto a la cantidad, salvo "Solo delante del producto" (utils/unidadEnElTicket).
+        const unitSuffix = unidadJuntoALaCantidad(item, { showItemUnit, empresa: business });
         const desglose58 = getItemPriceBreakdown(item, unitPrice, item.quantity);
         const qtyAndPrice = `${qtyFormatted}${unitSuffix}x ${currencySymbol} ${desglose58.baseUnit.toFixed(2)}`;
         const totalStr = `${currencySymbol} ${desglose58.baseTotal.toFixed(2)}`;
@@ -2869,7 +2869,7 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
       // Formatear cantidad: con decimales si tiene, sino entero
       const qtyFormatted = formatQuantity(item.quantity);
       // Este camino no pone la unidad delante del nombre: va junto a la cantidad.
-      const unitSuffix = unidadJuntoALaCantidad(item, false);
+      const unitSuffix = unidadJuntoALaCantidad(item);
 
       // Precio de LISTA; los adicionales van debajo, cada uno con su monto.
       // Ver getItemPriceBreakdown: el precio guardado ya los incluye, y

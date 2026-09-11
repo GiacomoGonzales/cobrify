@@ -980,7 +980,7 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
         const qtyFormatted = formatQuantity(item.quantity);
         // La Bluetooth no pone la unidad delante del nombre: va junto a la
         // cantidad (utils/unidadEnElTicket).
-        const unitSuffix = unidadJuntoALaCantidad(item, false);
+        const unitSuffix = unidadJuntoALaCantidad(item);
         // Precio de LISTA; los adicionales bajan como líneas que suman.
         // El guardado ya los incluye, y mostrarlo junto a un "(+S/2.00)"
         // hacía que el cliente sumara de más. Ver getItemPriceBreakdown.

@@ -1007,9 +1007,9 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           {lineasDelComprobante(invoice).map((item, index) => {
             // Formatear cantidad: con decimales si tiene, sino entero
             const qtyFormatted = formatQuantity(item.quantity);
-            // La unidad va UNA vez (utils/unidadEnElTicket): delante del nombre
-            // con "Unidad de medida en el ticket", o junto a la cantidad sin ella.
-            const unidadPegada = unidadJuntoALaCantidad(item, showItemUnit);
+            // La unidad junto a la cantidad (utils/unidadEnElTicket): sale salvo que
+            // vaya delante del nombre y el negocio pida "Solo delante del producto".
+            const unidadPegada = unidadJuntoALaCantidad(item, { showItemUnit, empresa: companySettings });
             const unitSuffix = unidadPegada ? ` ${unidadPegada}` : '';
 
             // Usar 'name' como nombre principal, o 'description' si 'name' no existe (compatibilidad con datos antiguos)
