@@ -23,6 +23,7 @@ import { metodoDeEmision } from '@/services/adminCuentasService'
 import { nuncaVence } from '@/services/subscriptionService'
 import { nombreRubro } from '@/data/rubros'
 import { nombreModo } from '@/utils/businessModes'
+import { esCuenta } from '@/data/cuentas'
 
 /**
  * Chat de WhatsApp — lectura en vivo y envío.
@@ -530,46 +531,82 @@ const REST_DOCS = `https://firestore.googleapis.com/v1/projects/${import.meta.en
 
 const texto = (campo) => campo?.stringValue || (campo?.integerValue != null ? String(campo.integerValue) : '')
 
+/**
+ * Una colección entera por la API REST, solo con los campos pedidos, en
+ * páginas de 300. Devuelve [{ id, f }], con `f` los campos crudos de la API.
+ */
+const descargarColeccion = async (nombre, campos, idToken) => {
+  const mascara = campos.map((c) => `mask.fieldPaths=${c}`).join('&')
+  const docs = []
+  let pagina = ''
+  // El tope de vueltas evita un bucle infinito si el cursor viniera repetido.
+  for (let i = 0; i < 50; i++) {
+    const url = `${REST_DOCS}/${nombre}?pageSize=300&${mascara}${pagina ? `&pageToken=${encodeURIComponent(pagina)}` : ''}`
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${idToken}` } })
+    if (!res.ok) throw new Error(`No se pudo leer ${nombre} (${res.status})`)
+    const data = await res.json()
+    for (const d of data.documents || []) docs.push({ id: d.name.split('/').pop(), f: d.fields || {} })
+    pagina = data.nextPageToken
+    if (!pagina) break
+  }
+  return docs
+}
+
 const descargarCatalogoNegocios = async () => {
   const idToken = await auth.currentUser?.getIdToken()
   if (!idToken) return []
-  const mascara = CAMPOS_BUSCABLES.map((c) => `mask.fieldPaths=${c}`).join('&')
+  // Solo las fichas que son CUENTA, las mismas que lista Usuarios. Sin esto
+  // salían también las sueltas —de cuentas eliminadas, sub-usuarios,
+  // pruebas— y se podía vincular una conversación a una empresa que ya no
+  // existe (ver src/data/cuentas.js). Para saberlo hacen falta el plan y el
+  // usuario de cada una: dos descargas más, igual de livianas.
+  const [negocios, planes, usuarios] = await Promise.all([
+    descargarColeccion('businesses', CAMPOS_BUSCABLES, idToken),
+    descargarColeccion('subscriptions', ['ownerId'], idToken).catch(() => null),
+    descargarColeccion('users', ['ownerId', 'isBusinessOwner'], idToken).catch(() => null),
+  ])
+  // Si no se pudieron leer, se muestra todo como antes: mejor una ficha de
+  // más que no poder vincular a nadie.
+  let esDeUnaCuenta = () => true
+  if (planes && usuarios) {
+    const plan = new Map(planes.map(({ id, f }) => [id, { ownerId: texto(f.ownerId) || null }]))
+    const usuario = new Map(usuarios.map(({ id, f }) => [id, {
+      ownerId: texto(f.ownerId) || null,
+      isBusinessOwner: f.isBusinessOwner?.booleanValue === true,
+    }]))
+    esDeUnaCuenta = (id) => esCuenta({ plan: plan.get(id) || null, usuario: usuario.get(id) || null })
+  } else {
+    console.warn('[Chat] No se pudieron leer planes o usuarios: el buscador muestra todas las fichas')
+  }
+
   const lista = []
-  let pagina = ''
-  // El tope de vueltas evita un bucle infinito si el cursor viniera repetido.
-  for (let i = 0; i < 20; i++) {
-    const url = `${REST_DOCS}/businesses?pageSize=300&${mascara}${pagina ? `&pageToken=${encodeURIComponent(pagina)}` : ''}`
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${idToken}` } })
-    if (!res.ok) throw new Error(`No se pudo leer el catálogo de negocios (${res.status})`)
-    const data = await res.json()
-    for (const d of data.documents || []) {
-      const f = d.fields || {}
-      // La razon social manda sobre businessName, igual que en la ficha del panel.
-      const nombre = texto(f.razonSocial) || texto(f.businessName)
-      if (!nombre) continue
-      const comercial = texto(f.tradeName) || texto(f.nombreComercial) || texto(f.name)
-      const ruc = texto(f.ruc)
-      const email = texto(f.email)
-      lista.push({
-        businessId: d.name.split('/').pop(),
-        nombre,
-        comercial: comercial && comercial !== nombre ? comercial : null,
-        ruc: ruc || null,
-        email: email || null,
-        // El mismo criterio que la tabla de Usuarios del panel: se arma una vez
-        // por descarga y despues cada tecla solo compara texto.
-        buscable: buildAccountHaystack({
-          businessName: nombre,
-          contactName: comercial,
-          ruc,
-          email,
-          phone: texto(f.phone),
-          codigoCliente: texto(f.codigoCliente),
-        }),
-      })
-    }
-    pagina = data.nextPageToken
-    if (!pagina) break
+  for (const { id, f } of negocios) {
+    if (!esDeUnaCuenta(id)) continue
+    // La razon social manda sobre businessName, igual que en la ficha del panel.
+    const nombre = texto(f.razonSocial) || texto(f.businessName)
+    if (!nombre) continue
+    const comercial = texto(f.tradeName) || texto(f.nombreComercial) || texto(f.name)
+    const ruc = texto(f.ruc)
+    const email = texto(f.email)
+    const codigoCliente = texto(f.codigoCliente)
+    lista.push({
+      businessId: id,
+      nombre,
+      comercial: comercial && comercial !== nombre ? comercial : null,
+      ruc: ruc || null,
+      email: email || null,
+      codigoCliente: codigoCliente || null,
+      // El mismo criterio que la tabla de Usuarios del panel: se arma una vez
+      // por descarga y despues cada tecla solo compara texto.
+      buscable: buildAccountHaystack({
+        businessName: nombre,
+        contactName: comercial,
+        ruc,
+        email,
+        phone: texto(f.phone),
+        codigoCliente,
+      }),
+    })
   }
   return lista
 }
@@ -616,7 +653,7 @@ export const buscarNegocios = async (consulta) => {
       return pesoA - pesoB || a.nombre.localeCompare(b.nombre, 'es')
     })
     .slice(0, 10)
-    .map(({ businessId, nombre, comercial, ruc, email }) => ({ businessId, nombre, comercial, ruc, email }))
+    .map(({ businessId, nombre, comercial, ruc, email, codigoCliente }) => ({ businessId, nombre, comercial, ruc, email, codigoCliente }))
 }
 
 export const vincularConversacion = (conversationId, businessId, businessName) =>

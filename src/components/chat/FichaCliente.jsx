@@ -38,10 +38,11 @@ import ModalEmitirComprobante from '@/components/chat/EmitirComprobante'
 
 /**
  * La segunda línea de un resultado de búsqueda: lo que permite distinguir dos
- * negocios de nombre parecido sin abrir ninguno.
+ * negocios de nombre parecido sin abrir ninguno. El código de cliente va
+ * primero: es el mismo número de la columna Código en Usuarios.
  */
 const detalleDelNegocio = (n) =>
-  [n.comercial, n.ruc && `RUC ${n.ruc}`, n.email].filter(Boolean).join(' · ')
+  [n.codigoCliente, n.comercial, n.ruc && `RUC ${n.ruc}`, n.email].filter(Boolean).join(' · ')
 
 /** Por donde emite la cuenta. Es la primera pregunta cuando "no puede facturar". */
 const ETIQUETA_EMISION = {
