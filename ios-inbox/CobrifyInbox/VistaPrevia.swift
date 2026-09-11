@@ -29,12 +29,25 @@ enum VistaPrevia {
             // para Ajustes (apariencia, respuestas rapidas).
             MainTabView()
                 .environmentObject(SessionStore())
+                .task { await avisoSimulado() }
         } else {
             NavigationStack {
                 ConversationView(conv: conversacion, alAbrir: {})
             }
             .onAppear { CatalogoStore.shared.respuestasRapidas = atajos }
         }
+    }
+
+    /// `-avisoDe <id>`: arranca en Clientes y a los 4 s hace lo mismo que
+    /// tocar un aviso de esa conversación — el caso que dejaba la app sin
+    /// barra de pestañas y sin atrás. Existe porque en el simulador el centro
+    /// de notificaciones no responde a toques simulados.
+    @MainActor static func avisoSimulado() async {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-avisoDe"), i + 1 < args.count else { return }
+        Navegacion.shared.pestana = .clientes
+        try? await Task.sleep(for: .seconds(4))
+        Navegacion.shared.abrirConversacion = args[i + 1]
     }
 
     /// Con `-sinCarpetas` la bandeja arranca sin ninguna, para ver el

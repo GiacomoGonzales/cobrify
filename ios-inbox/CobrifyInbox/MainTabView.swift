@@ -3,16 +3,24 @@ import SwiftUI
 /// La estructura de la app: 4 pestañas sobre la tab bar flotante de vidrio
 /// del sistema (Liquid Glass en iOS 26).
 struct MainTabView: View {
+    @ObservedObject private var navegacion = Navegacion.shared
+
     var body: some View {
-        TabView {
+        // Con `selection`: un aviso tocado desde otra pestaña tiene que poder
+        // traerte a Chats (ver `Navegacion.pestana`).
+        TabView(selection: $navegacion.pestana) {
             ConversationListView()
                 .tabItem { Label("Chats", systemImage: "bubble.left.and.bubble.right.fill") }
+                .tag(Navegacion.Pestana.chats)
             ClientesRealesView()
                 .tabItem { Label("Clientes", systemImage: "person.2.fill") }
+                .tag(Navegacion.Pestana.clientes)
             CampanasRealesView()
                 .tabItem { Label("Campañas", systemImage: "megaphone.fill") }
+                .tag(Navegacion.Pestana.campanas)
             AjustesView()
                 .tabItem { Label("Ajustes", systemImage: "gearshape.fill") }
+                .tag(Navegacion.Pestana.ajustes)
         }
         .tabBarQueSeEncoge()
     }

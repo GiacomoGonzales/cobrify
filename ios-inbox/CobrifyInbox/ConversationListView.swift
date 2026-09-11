@@ -41,6 +41,17 @@ struct ConversationListView: View {
         confirmarMasivo = nil
     }
 
+    /// El aviso tocado trae la conversación: se abre encima de todo, y en la
+    /// pestaña Chats. Cambiar de pestaña va en el MISMO paso que abrir: antes
+    /// la conversación se abría en Chats sin verse, escondía la barra de
+    /// pestañas y dejaba la pestaña que estabas mirando sin barra y sin atrás.
+    private func abrirPendiente() {
+        guard let id = navegacion.abrirConversacion else { return }
+        navegacion.pestana = .chats
+        ruta = [id]
+        navegacion.abrirConversacion = nil
+    }
+
     var body: some View {
         NavigationStack(path: $ruta) {
             Group {
@@ -166,14 +177,12 @@ struct ConversationListView: View {
             inbox.empezar()
             catalogo.empezar()
             AppDelegate.activarNotificaciones()
+            // Abierta desde un aviso con la app cerrada: el aviso llega antes
+            // de que exista esta pantalla, y `onChange` no avisa de lo que ya
+            // estaba puesto.
+            abrirPendiente()
         }
-        .onChange(of: navegacion.abrirConversacion) {
-            // El aviso tocado trae la conversación: se abre encima de todo.
-            if let id = navegacion.abrirConversacion {
-                ruta = [id]
-                navegacion.abrirConversacion = nil
-            }
-        }
+        .onChange(of: navegacion.abrirConversacion) { abrirPendiente() }
     }
 
     /// Primero el filtro elegido, después la búsqueda.

@@ -12,6 +12,14 @@ final class Navegacion: ObservableObject {
     static let shared = Navegacion()
     @Published var abrirConversacion: String?
     var conversacionVisible: String?
+
+    /// La pestaña visible. Vive aquí, junto al aviso, porque abrir una
+    /// conversación tiene que poder cambiar de pestaña: antes el aviso la
+    /// abría dentro de Chats aunque estuvieras mirando Clientes, y como la
+    /// conversación esconde la barra de pestañas, quedabas en Clientes sin
+    /// barra y sin botón de atrás (10-set-2026).
+    enum Pestana: Hashable { case chats, clientes, campanas, ajustes }
+    @Published var pestana: Pestana = .chats
 }
 
 /// Todo el circuito de notificaciones:
