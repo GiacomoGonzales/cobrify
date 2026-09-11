@@ -5,12 +5,11 @@ import { getNotaVentaLegend, LEYENDA_PRUEBA, esComprobanteDePrueba } from '@/uti
 import React from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { getItemPriceBreakdown } from '@/utils/modifierHelpers'
-import { unitDisplayName } from '@/data/sunatUnits'
 import { getComprobanteBreakdown } from '@/utils/peruUtils'
 import { formatQuantity } from '@/lib/utils'
 import { getTicketFooterParts } from '@/utils/ticketFooter'
 import { vinculoDe } from '@/utils/documentLinks'
-import { getUnitShortLabel } from '@/utils/units'
+import { presentacionDeLaLinea, unidadDelante, unidadJuntoALaCantidad } from '@/utils/unidadEnElTicket'
 import { lineasDelComprobante } from '@/utils/comprobantePorConsumo'
 import { clienteDelComprobante, lineasDelCliente } from '@/utils/datosDelClienteEnComprobante'
 
@@ -1008,26 +1007,17 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           {lineasDelComprobante(invoice).map((item, index) => {
             // Formatear cantidad: con decimales si tiene, sino entero
             const qtyFormatted = formatQuantity(item.quantity);
-            const unitSuffix = item.unit && item.allowDecimalQuantity ? ` ${getUnitShortLabel(item.unit)}` : '';
+            // La unidad va UNA vez (utils/unidadEnElTicket): delante del nombre
+            // con "Unidad de medida en el ticket", o junto a la cantidad sin ella.
+            const unidadPegada = unidadJuntoALaCantidad(item, showItemUnit);
+            const unitSuffix = unidadPegada ? ` ${unidadPegada}` : '';
 
             // Usar 'name' como nombre principal, o 'description' si 'name' no existe (compatibilidad con datos antiguos)
             const itemName = item.name || item.description || '';
             // Opcion "mostrar unidad en el ticket": la presentacion (CAJA X24, PACK, ...)
             // REEMPLAZA a la unidad despues de la cantidad y NO se repite al final del nombre.
-            // Prioridad: presentationName del item; si no lo trae pero el nombre termina en
-            // un sufijo "(...)", se usa ese como presentacion y se limpia el nombre.
-            let unitName = item.presentationName ? item.presentationName.toString() : '';
-            let cleanName = itemName;
-            if (unitName) {
-              const presSuffix = ` (${unitName})`;
-              if (cleanName.toLowerCase().endsWith(presSuffix.toLowerCase())) {
-                cleanName = cleanName.slice(0, cleanName.length - presSuffix.length);
-              }
-            } else {
-              const presMatch = cleanName.match(/^(.*\S)\s+\(([^()]+)\)\s*$/);
-              if (presMatch) { cleanName = presMatch[1]; unitName = presMatch[2]; }
-            }
-            const measureUnit = unitName ? unitName.toUpperCase() : unitDisplayName(item.unit);
+            const { presentacion, nombre: cleanName } = presentacionDeLaLinea(item, itemName);
+            const measureUnit = unidadDelante(item, presentacion);
             // Observaciones adicionales (IMEI, placa, serie, etc.)
             const itemObservations = item.observations || null;
             // Descuento por ítem

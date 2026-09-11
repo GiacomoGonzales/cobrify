@@ -13,7 +13,6 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 import { prepareLogoForPrinting, prepareLogoRasterForEscPos } from './imageProcessingService';
 import * as BLEPrinter from './blePrinterService';
 import { getItemPriceBreakdown } from '@/utils/modifierHelpers';
-import { unitDisplayName } from '@/data/sunatUnits';
 import { getComprobanteBreakdown } from '@/utils/peruUtils';
 import { buildKitchenLines, stationsForOrder } from '@/utils/kitchenComandaFormat';
 import { getSessionMoneyTotals } from '@/utils/cashTotals';
@@ -21,7 +20,7 @@ import { getTicketFooterParts, justifyTicketText } from '@/utils/ticketFooter';
 import { formatQuantity } from '@/lib/utils'
 import { nibbleDeTamano } from '@/utils/escposCharSize';
 import { vinculoDe } from '@/utils/documentLinks';
-import { getUnitShortLabel } from '@/utils/units'
+import { presentacionDeLaLinea, unidadDelante, unidadJuntoALaCantidad } from '@/utils/unidadEnElTicket'
 import { lineasDeProductosParaTicket } from '@/utils/cashClosureProducts'
 import { lineasDelComprobante } from '@/utils/comprobantePorConsumo'
 import { etiquetaTermicaRemitente } from '@/utils/senderTransferReasons'
@@ -977,23 +976,12 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
     for (const item of lineasDelComprobante(invoice)) {
       // Nombre y unidad/presentacion para la columna opcional "{cantidad} {UNIDAD/CAJA}".
       // La presentacion (CAJA X24, PACK, ...) REEMPLAZA la unidad y NO se repite al final
-      // del nombre. Prioridad: presentationName; si no lo trae pero el nombre termina en un
-      // sufijo "(...)", se usa ese como presentacion y se limpia el nombre.
+      // del nombre: el mismo criterio del ticket del navegador (utils/unidadEnElTicket).
       const rawName = item.name || item.description || '';
-      let unitName = item.presentationName ? item.presentationName.toString() : '';
-      let cleanName = rawName;
-      if (unitName) {
-        const presSuffix = ` (${unitName})`;
-        if (cleanName.toLowerCase().endsWith(presSuffix.toLowerCase())) {
-          cleanName = cleanName.slice(0, cleanName.length - presSuffix.length);
-        }
-      } else {
-        const presMatch = cleanName.match(/^(.*\S)\s+\(([^()]+)\)\s*$/);
-        if (presMatch) { cleanName = presMatch[1]; unitName = presMatch[2]; }
-      }
+      const { presentacion, nombre: cleanName } = presentacionDeLaLinea(item, rawName);
       // Si la opcion esta activa se imprime el nombre limpio (el sufijo pasa a ser la unidad).
       const itemName = convertSpanishText(showItemUnit ? cleanName : rawName);
-      const measureUnit = convertSpanishText(unitName ? unitName.toUpperCase() : unitDisplayName(item.unit));
+      const measureUnit = convertSpanishText(unidadDelante(item, presentacion));
       const qtyForUnit = Number.isInteger(item.quantity) ? item.quantity.toString() : (item.quantity || 0).toFixed(3).replace(/\.?0+$/, '');
       const namePrefix = showItemUnit ? `${qtyForUnit} ${measureUnit}  ` : '';
       // Observaciones adicionales (IMEI, placa, serie, etc.)
@@ -1031,7 +1019,8 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
         // Línea 2: "cantidad X precio unitario" (izq) y "total" (der) - CON ESPACIOS PARA ALINEAR
         // Formatear cantidad: con decimales si tiene, sino entero
         const qtyFormatted = formatQuantity(item.quantity);
-        const unitSuffix = item.unit && item.allowDecimalQuantity ? getUnitShortLabel(item.unit) : '';
+        // Sin unidad si ya va delante del nombre (utils/unidadEnElTicket).
+        const unitSuffix = unidadJuntoALaCantidad(item, showItemUnit);
         // Precio de LISTA y cada adicional como una línea que suma. Antes se
         // mostraba el precio ya con adicionales y debajo "+ Grande (+S/2.00)":
         // el cliente sumaba los dos números, no le cuadraba con el total y
@@ -1101,7 +1090,8 @@ export const printInvoiceTicket = async (invoice, business, paperWidth = 58, sho
         // Línea 2: "cantidad x precio unitario" (izq) y "total" (der) - CON ESPACIOS PARA ALINEAR
         // Formatear cantidad: con decimales si tiene, sino entero
         const qtyFormatted = formatQuantity(item.quantity);
-        const unitSuffix = item.unit && item.allowDecimalQuantity ? getUnitShortLabel(item.unit) : '';
+        // Sin unidad si ya va delante del nombre (utils/unidadEnElTicket).
+        const unitSuffix = unidadJuntoALaCantidad(item, showItemUnit);
         const desglose58 = getItemPriceBreakdown(item, unitPrice, item.quantity);
         const qtyAndPrice = `${qtyFormatted}${unitSuffix}x ${currencySymbol} ${desglose58.baseUnit.toFixed(2)}`;
         const totalStr = `${currencySymbol} ${desglose58.baseTotal.toFixed(2)}`;
@@ -2878,7 +2868,8 @@ const buildTicketEscPos = async (invoice, business, paperWidth = 58) => {
 
       // Formatear cantidad: con decimales si tiene, sino entero
       const qtyFormatted = formatQuantity(item.quantity);
-      const unitSuffix = item.unit && item.allowDecimalQuantity ? getUnitShortLabel(item.unit) : '';
+      // Este camino no pone la unidad delante del nombre: va junto a la cantidad.
+      const unitSuffix = unidadJuntoALaCantidad(item, false);
 
       // Precio de LISTA; los adicionales van debajo, cada uno con su monto.
       // Ver getItemPriceBreakdown: el precio guardado ya los incluye, y

@@ -1800,7 +1800,7 @@ export default function Impresion() {
                 )
               }
               titulo="Unidad de medida en el ticket"
-              descripcion="Antepone la cantidad y la unidad o presentación a cada producto: 1 UNIDAD Producto, 3 CAJA Producto."
+              descripcion="Antepone la cantidad y la unidad o presentación a cada producto: 1 UNIDAD Producto, 3 CAJA Producto. Así la unidad no se repite en la línea del precio."
             />
 
             <Ajuste

@@ -19,7 +19,7 @@ import {
   mostrarContactoDelNegocio, lineasDeItem,
 } from '@/utils/ticketCompacto';
 import { getItemPriceBreakdown } from '@/utils/modifierHelpers';
-import { getUnitShortLabel } from '@/utils/units'
+import { unidadJuntoALaCantidad } from '@/utils/unidadEnElTicket'
 
 // Estado de conexión
 let connectedDeviceId = null;
@@ -978,7 +978,9 @@ export const printBLEReceipt = async (receiptData, paperWidth = 58) => {
         // Nombre y "cantidad x precio -> total". En compacto van en UNA sola
         // linea cuando el nombre entra (ver utils/ticketCompacto).
         const qtyFormatted = formatQuantity(item.quantity);
-        const unitSuffix = item.unit && item.allowDecimalQuantity ? getUnitShortLabel(item.unit) : '';
+        // La Bluetooth no pone la unidad delante del nombre: va junto a la
+        // cantidad (utils/unidadEnElTicket).
+        const unitSuffix = unidadJuntoALaCantidad(item, false);
         // Precio de LISTA; los adicionales bajan como líneas que suman.
         // El guardado ya los incluye, y mostrarlo junto a un "(+S/2.00)"
         // hacía que el cliente sumara de más. Ver getItemPriceBreakdown.
