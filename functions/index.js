@@ -56,6 +56,7 @@ import { sembrarCuenta } from './src/services/semillaService.js'
 import { origenDesdeLanding, origenDesdeAnuncio, origenDesdeReferido } from './src/data/origen.js'
 import { guionDeVentas } from './src/data/ventas.js'
 import { esPrueba, DIAS_DE_PRUEBA } from './src/data/prueba.js'
+import { esCuenta, motivoDeFichaSuelta } from './src/data/cuentas.js'
 import { responder as responderAsistente } from './src/services/asistenteService.js'
 import rubrosCatalogo from './src/data/rubros.json' with { type: 'json' }
 import { nuevoCodigoDeAlta, ESTADOS_ALTA, altaParaElFormulario, mensajeDeAlta } from './src/services/altasService.js'
@@ -4019,13 +4020,15 @@ export const createReseller = onRequest(
 /**
  * Cloud Function: Eliminar usuario completamente
  * Solo puede ser llamada por administradores
- * Elimina: Auth, documento de usuario, y subcollecciones
+ * Elimina: Auth, documento de usuario, plan y ficha del negocio; con
+ * deleteData, tambien todo lo que cuelga del negocio (facturas, productos...).
  */
 export const deleteUser = onRequest(
   {
     region: 'us-central1',
-    timeoutSeconds: 60,
-    memory: '256MiB',
+    // Borrar un negocio con todos sus datos puede tardar minutos.
+    timeoutSeconds: 540,
+    memory: '512MiB',
     invoker: 'public',
     cors: true,
   },
@@ -4128,6 +4131,28 @@ export const deleteUser = onRequest(
         }
       } catch (subError) {
         console.error(`⚠️ Error eliminando suscripción: ${subError.message}`)
+      }
+
+      // 3b. La ficha del negocio. Antes se quedaba: la cuenta desaparecía de
+      //     Usuarios, pero su ficha seguía en el buscador del chat como una
+      //     empresa más a la que vincular conversaciones (11-set-2026).
+      //     Con "también los datos" se va con todo lo que cuelga de ella
+      //     —facturas, productos, clientes, almacenes—, que vive en
+      //     businesses/{uid} y no en users/{uid} como supone el paso 2: esa
+      //     casilla, en la práctica, no borraba nada del negocio.
+      try {
+        const negocioRef = db.collection('businesses').doc(userIdToDelete)
+        if (deleteData) {
+          await db.recursiveDelete(negocioRef)
+          deletedItems.push('Negocio con todos sus datos')
+          console.log(`✅ Negocio y sus datos eliminados`)
+        } else if ((await negocioRef.get()).exists) {
+          await negocioRef.delete()
+          deletedItems.push('Ficha del negocio')
+          console.log(`✅ Ficha del negocio eliminada`)
+        }
+      } catch (negocioError) {
+        console.error(`⚠️ Error eliminando el negocio: ${negocioError.message}`)
       }
 
       // 4. Marcar su alta, si vino de un formulario.
@@ -16766,5 +16791,142 @@ export const asistenteVentas = onRequest(
       console.error('[Asistente] Error:', error.message)
       res.status(500).json({ success: false, error: error.message })
     }
+  }
+)
+
+// ========================================
+// FICHAS DE NEGOCIO SUELTAS - Admin Only
+// ========================================
+
+/**
+ * Fichas de `businesses` que no son una cuenta (ver `esCuenta` en
+ * src/data/cuentas.js): sobran de cuentas eliminadas —hasta el 11-set-2026
+ * "Eliminar cuenta" no borraba la ficha—, de sub-usuarios y de pruebas. El
+ * buscador del chat las ofrecía para vincular conversaciones y la página de
+ * Usuarios no las mostraba: buscando "quantio" salían tres en el chat y dos
+ * en el panel.
+ *
+ * Mirar es lo que pasa si no se dice otra cosa. Borrar quita SOLO la ficha:
+ * lo que cuelgue de ella (facturas, productos) se queda donde está, igual que
+ * al eliminar una cuenta sin "también los datos". Las conversaciones que la
+ * apuntaban quedan desvinculadas, para que el chat no muestre una empresa que
+ * ya no existe.
+ *
+ * Se conservan aunque parezcan sueltas las de admins, resellers y vendedores,
+ * y las creadas en las últimas 24 horas (una cuenta que está naciendo).
+ */
+export const fichasSueltas = onCall(
+  { region: 'us-central1', cors: true, timeoutSeconds: 540, memory: '512MiB' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Debe estar autenticado')
+    if (!(await esAdministrador(request.auth.uid))) throw new HttpsError('permission-denied', 'Solo administradores')
+
+    const soloMirar = request.data?.dryRun !== false // por seguridad, mirar es lo que pasa si no se dice nada
+
+    /** Los uids que un documento pueda guardar en un campo, además de su id. */
+    const uidsEn = (snap) => {
+      const out = new Set()
+      snap.docs.forEach((d) => {
+        out.add(d.id)
+        for (const c of ['uid', 'userId', 'authUid', 'ownerUid']) {
+          const v = d.get(c)
+          if (typeof v === 'string' && v) out.add(v)
+        }
+      })
+      return out
+    }
+
+    const [negociosSnap, planesSnap, usuariosSnap, adminsSnap, resellersSnap, vendedoresSnap] = await Promise.all([
+      db.collection('businesses')
+        .select('razonSocial', 'businessName', 'tradeName', 'nombreComercial', 'ruc', 'email', 'createdAt')
+        .get(),
+      db.collection('subscriptions').select('ownerId').get(),
+      db.collection('users').select('ownerId', 'isBusinessOwner').get(),
+      db.collection('admins').select().get(),
+      db.collection('resellers').get(),
+      db.collection('vendedores').get(),
+    ])
+    const planes = new Map(planesSnap.docs.map((d) => [d.id, d.data()]))
+    const usuarios = new Map(usuariosSnap.docs.map((d) => [d.id, d.data()]))
+    const protegidos = new Set([
+      ...adminsSnap.docs.map((d) => d.id),
+      ...uidsEn(resellersSnap),
+      ...uidsEn(vendedoresSnap),
+    ])
+
+    const AYER = Date.now() - 24 * 60 * 60 * 1000
+    const sueltas = []
+    for (const d of negociosSnap.docs) {
+      const plan = planes.get(d.id) || null
+      const usuario = usuarios.get(d.id) || null
+      if (esCuenta({ plan, usuario })) continue
+      if (protegidos.has(d.id)) continue
+      const creada = d.get('createdAt')?.toDate?.() || null
+      if (creada && creada.getTime() > AYER) continue
+      sueltas.push({
+        id: d.id,
+        nombre: d.get('razonSocial') || d.get('businessName') || '(sin nombre)',
+        comercial: d.get('tradeName') || d.get('nombreComercial') || null,
+        ruc: d.get('ruc') || null,
+        email: d.get('email') || null,
+        motivo: motivoDeFichaSuelta({ plan, usuario }),
+        creada: creada ? creada.toISOString() : null,
+      })
+    }
+
+    /** Las conversaciones vinculadas a una ficha, por los dos campos del vínculo. */
+    const conversacionesDe = async (id) => {
+      const col = db.collection('whatsappConversations')
+      const [principales, secundarias] = await Promise.all([
+        col.where('linkedBusinessId', '==', id).get(),
+        col.where('linkedBusinessIds', 'array-contains', id).get(),
+      ])
+      const porId = new Map()
+      principales.docs.forEach((c) => porId.set(c.id, { ref: c.ref, principal: true, secundaria: false }))
+      secundarias.docs.forEach((c) => {
+        const x = porId.get(c.id) || { ref: c.ref, principal: false, secundaria: false }
+        x.secundaria = true
+        porId.set(c.id, x)
+      })
+      return [...porId.values()]
+    }
+
+    if (soloMirar) {
+      // Si tiene facturas y cuántas conversaciones la apuntan: lo que hay que
+      // saber antes de decidir. Unas pocas lecturas por ficha.
+      for (const s of sueltas) {
+        const [facturas, vinculadas] = await Promise.all([
+          db.collection('businesses').doc(s.id).collection('invoices').limit(1).get(),
+          conversacionesDe(s.id),
+        ])
+        s.conFacturas = !facturas.empty
+        s.conversaciones = vinculadas.length
+      }
+      return { dryRun: true, revisadas: negociosSnap.size, sueltas: sueltas.length, muestra: sueltas.slice(0, 300) }
+    }
+
+    let borradas = 0
+    let desvinculadas = 0
+    const fallos = []
+    for (const s of sueltas) {
+      try {
+        const vinculadas = await conversacionesDe(s.id)
+        const lote = db.batch()
+        for (const v of vinculadas) {
+          const cambios = { updatedAt: FieldValue.serverTimestamp() }
+          if (v.principal) Object.assign(cambios, { linkedBusinessId: null, linkedBusinessName: null, linkedBy: null })
+          if (v.secundaria) cambios.linkedBusinessIds = FieldValue.arrayRemove(s.id)
+          lote.update(v.ref, cambios)
+        }
+        lote.delete(db.collection('businesses').doc(s.id))
+        await lote.commit()
+        borradas++
+        desvinculadas += vinculadas.length
+      } catch (e) {
+        fallos.push({ id: s.id, nombre: s.nombre, error: e.message })
+      }
+    }
+    console.log(`🧹 [fichasSueltas] ${request.auth.uid} borró ${borradas} de ${sueltas.length} fichas sueltas (${desvinculadas} conversaciones desvinculadas)`)
+    return { dryRun: false, sueltas: sueltas.length, borradas, desvinculadas, fallos }
   }
 )

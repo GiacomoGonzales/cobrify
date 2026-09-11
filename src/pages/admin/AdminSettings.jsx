@@ -372,6 +372,7 @@ function MaintenanceSection() {
 
           {/* Accesos huérfanos: cuentas de Firebase que no son de nadie. */}
           <AccesosHuerfanosCard />
+          <FichasSueltasCard />
           <CorreosDeSoporteCard />
 
           {/* Info */}
@@ -601,6 +602,125 @@ function AccesosHuerfanosCard() {
               {!!hecho.fallos?.length && (
                 <ul className="mt-1 text-xs text-red-700 list-disc pl-4">
                   {hecho.fallos.map((f, i) => <li key={i}>{f.correo}: {f.error}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Fichas de negocio sueltas: las que no son una cuenta (ver src/data/cuentas.js).
+ * Salían en el buscador del chat para vincular conversaciones y no en
+ * Usuarios. Mirar primero; borrar quita solo la ficha y desvincula las
+ * conversaciones que la apuntaban.
+ */
+function FichasSueltasCard() {
+  const [mirando, setMirando] = useState(false)
+  const [borrando, setBorrando] = useState(false)
+  const [visto, setVisto] = useState(null)
+  const [hecho, setHecho] = useState(null)
+  const [error, setError] = useState(null)
+
+  async function correr(dryRun) {
+    dryRun ? setMirando(true) : setBorrando(true)
+    setError(null)
+    if (dryRun) { setVisto(null); setHecho(null) }
+    try {
+      const fn = httpsCallable(functions, 'fichasSueltas', { timeout: 540000 })
+      const r = await fn({ dryRun })
+      dryRun ? setVisto(r.data) : setHecho(r.data)
+    } catch (e) {
+      console.error(e)
+      setError(e.message || String(e))
+    } finally {
+      dryRun ? setMirando(false) : setBorrando(false)
+    }
+  }
+
+  async function borrar() {
+    const vinculadas = (visto?.muestra || []).reduce((t, s) => t + (s.conversaciones || 0), 0)
+    if (!confirm(
+      `Esto va a BORRAR ${visto?.sueltas ?? 0} fichas de negocio. Es irreversible.\n\n` +
+      'Se borra solo la ficha: sus facturas y productos, si tiene, se quedan guardados.\n' +
+      (vinculadas ? `${vinculadas} conversaciones del chat quedan desvinculadas.\n` : '') +
+      '\n¿Confirmar?'
+    )) return
+    await correr(false)
+  }
+
+  const detalle = (s) => [
+    s.comercial,
+    s.ruc && `RUC ${s.ruc}`,
+    s.email,
+    s.conFacturas && 'con facturas',
+    s.conversaciones && (s.conversaciones === 1 ? '1 conversación vinculada' : `${s.conversaciones} conversaciones vinculadas`),
+  ].filter(Boolean).join(' · ')
+
+  return (
+    <div className="bg-red-50 rounded-lg p-5 border border-red-200">
+      <div className="flex items-start gap-3">
+        <Trash2 className="w-6 h-6 text-red-600 flex-shrink-0 mt-1" />
+        <div className="flex-1 min-w-0">
+          <h4 className="font-medium text-gray-900">Fichas de negocio sueltas · sin cuenta</h4>
+          <p className="text-sm text-gray-600 mt-1">
+            Quedaron de cuentas eliminadas, de sub-usuarios o de pruebas. No salen en Usuarios, pero sí
+            salían en el buscador del chat para vincular conversaciones. Mira primero: el borrado solo se
+            habilita después.
+          </p>
+
+          <div className="flex gap-2 mt-3">
+            <button
+              type="button"
+              onClick={() => correr(true)}
+              disabled={mirando || borrando}
+              className="px-3 py-1.5 text-sm rounded-md border border-gray-300 bg-white text-gray-700 hover:border-gray-400 disabled:opacity-50"
+            >
+              {mirando ? 'Buscando…' : 'Buscar'}
+            </button>
+            <button
+              type="button"
+              onClick={borrar}
+              disabled={!visto?.sueltas || mirando || borrando}
+              className="px-3 py-1.5 text-sm rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {borrando ? 'Borrando…' : `Borrar ${visto?.sueltas ?? 0}`}
+            </button>
+          </div>
+
+          {visto && !hecho && (
+            <div className="mt-3 text-sm text-gray-700">
+              <p><strong>{visto.sueltas}</strong> fichas sueltas de {visto.revisadas} revisadas.</p>
+              {!!visto.muestra?.length && (
+                <ul className="mt-2 max-h-64 overflow-y-auto rounded-md border border-gray-200 bg-white divide-y divide-gray-100">
+                  {visto.muestra.map(s => (
+                    <li key={s.id} className="px-3 py-1.5 text-xs">
+                      <div className="flex justify-between gap-3">
+                        <span className="truncate font-medium text-gray-800">{s.nombre}</span>
+                        <span className="text-gray-400 whitespace-nowrap">{s.motivo}</span>
+                      </div>
+                      {detalle(s) && <div className="text-gray-500 truncate">{detalle(s)}</div>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {hecho && (
+            <div className="mt-3 text-sm text-gray-700">
+              <p>
+                Borradas <strong>{hecho.borradas}</strong> de {hecho.sueltas}
+                {hecho.desvinculadas ? ` · ${hecho.desvinculadas} conversaciones desvinculadas` : ''}.
+              </p>
+              {!!hecho.fallos?.length && (
+                <ul className="mt-1 text-xs text-red-700 list-disc pl-4">
+                  {hecho.fallos.map((f, i) => <li key={i}>{f.nombre}: {f.error}</li>)}
                 </ul>
               )}
             </div>

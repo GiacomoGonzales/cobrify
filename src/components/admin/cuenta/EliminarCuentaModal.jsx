@@ -55,7 +55,7 @@ export default function EliminarCuentaModal({ cuenta, onClose, onEliminada }) {
     >
       <div className="space-y-3">
         <Aviso tono="rojo" titulo="No se puede deshacer">
-          Se elimina la cuenta de acceso (Firebase Auth) y el documento del usuario.
+          Se eliminan el acceso, el usuario, el plan y la ficha del negocio.
         </Aviso>
         <p className="text-[12.5px] text-gray-700">
           {cuenta.businessName} · {cuenta.email}{cuenta.ruc ? ` · RUC ${cuenta.ruc}` : ''}
