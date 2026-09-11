@@ -26,6 +26,7 @@ import { calcularStockPorAlmacen } from '@/utils/warehouseStockMath'
 import { esDeSucursal } from '@/utils/branchScope'
 import { revisarAntesDeEmitir, textoDeErrores } from '@/utils/sunatPreflight'
 import { emisorIdDe, esPrincipal } from '../../functions/src/utils/emisorDelComprobante.js'
+import { serieParaNumerar, correlativoSiguiente, numeroSiguiente } from '@/utils/serieParaNumerar'
 
 /**
  * Servicio para interactuar con Firestore
@@ -170,54 +171,25 @@ export const createInvoiceWithNumber = async (userId, invoiceData, documentType,
       }
 
       const data = businessSnap.data()
-      let typeData = null
-      let seriesPath = ''
 
-      // 0. Varios RUC: un comprobante de otro RUC numera SOLO con las series
-      //    de ese RUC. Nunca cae a las del negocio ni a las de una sede: dos
-      //    RUC no pueden compartir correlativo (ver emisorDelComprobante.js).
+      // La serie: la MISMA regla con la que el POS anuncia el "Siguiente:"
+      // (utils/serieParaNumerar.js). Un comprobante de otro RUC numera SOLO
+      // con las series de ese RUC: dos RUC no pueden compartir correlativo.
       const emisorDelComprobante = emisorIdDe(invoiceData)
-      if (!esPrincipal(emisorDelComprobante)) {
-        typeData = data.emisorSeries?.[emisorDelComprobante]?.[documentType] || null
-        seriesPath = `emisorSeries.${emisorDelComprobante}.${documentType}`
-        if (!typeData?.serie) {
+      const elegida = serieParaNumerar(data, { documentType, emisorId: emisorDelComprobante, branchId, warehouseId })
+      if (!elegida) {
+        if (!esPrincipal(emisorDelComprobante)) {
           const quien = invoiceData?.emisor?.razonSocial || 'El RUC elegido'
           throw new Error(`${quien} no tiene serie de ${String(documentType).replace(/_/g, ' ')}. Pide que la configuren en su ficha.`)
         }
-      }
-
-      // Buscar la serie correcta (misma lógica que getNextDocumentNumber)
-      // 1. Primero intentar con branchSeries (sucursales - nuevo sistema)
-      if (!typeData && branchId && data.branchSeries && data.branchSeries[branchId]) {
-        const branchSeries = data.branchSeries[branchId]
-        if (branchSeries[documentType]) {
-          typeData = branchSeries[documentType]
-          seriesPath = `branchSeries.${branchId}.${documentType}`
-        }
-      }
-
-      // 2. Fallback a warehouseSeries (compatibilidad hacia atrás)
-      if (!typeData && warehouseId && data.warehouseSeries && data.warehouseSeries[warehouseId]) {
-        const warehouseSeries = data.warehouseSeries[warehouseId]
-        if (warehouseSeries[documentType]) {
-          typeData = warehouseSeries[documentType]
-          seriesPath = `warehouseSeries.${warehouseId}.${documentType}`
-        }
-      }
-
-      // 3. Fallback a series globales si no hay series específicas
-      if (!typeData && data.series && data.series[documentType]) {
-        typeData = data.series[documentType]
-        seriesPath = `series.${documentType}`
-      }
-
-      if (!typeData) {
         throw new Error(`Series no configuradas para ${documentType}`)
       }
+      const typeData = elegida.datos
+      const seriesPath = elegida.ruta
 
       // 2. Calcular siguiente número
-      const nextNumber = (typeData.lastNumber || 0) + 1
-      const formattedNumber = `${typeData.serie}-${String(nextNumber).padStart(8, '0')}`
+      const nextNumber = correlativoSiguiente(typeData)
+      const formattedNumber = numeroSiguiente(typeData)
 
       // 3. Crear la factura con el número generado. `conFechaDeEmision`
       //    garantiza la fecha fiscal (ver su comentario).
@@ -1869,39 +1841,18 @@ export const getNextDocumentNumber = async (userId, documentType, warehouseId = 
       }
 
       const data = docSnap.data()
-      let typeData = null
-      let seriesPath = ''
 
-      // 1. Primero intentar con branchSeries (sucursales - nuevo sistema)
-      if (branchId && data.branchSeries && data.branchSeries[branchId]) {
-        const branchSeries = data.branchSeries[branchId]
-        if (branchSeries[documentType]) {
-          typeData = branchSeries[documentType]
-          seriesPath = `branchSeries.${branchId}.${documentType}`
-        }
-      }
-
-      // 2. Fallback a warehouseSeries (compatibilidad hacia atrás)
-      if (!typeData && warehouseId && data.warehouseSeries && data.warehouseSeries[warehouseId]) {
-        const warehouseSeries = data.warehouseSeries[warehouseId]
-        if (warehouseSeries[documentType]) {
-          typeData = warehouseSeries[documentType]
-          seriesPath = `warehouseSeries.${warehouseId}.${documentType}`
-        }
-      }
-
-      // 3. Fallback a series globales si no hay series específicas
-      if (!typeData && data.series && data.series[documentType]) {
-        typeData = data.series[documentType]
-        seriesPath = `series.${documentType}`
-      }
-
-      if (!typeData) {
+      // La serie: la misma regla que createInvoiceWithNumber y que el
+      // "Siguiente:" del POS (utils/serieParaNumerar.js).
+      const elegida = serieParaNumerar(data, { documentType, branchId, warehouseId })
+      if (!elegida) {
         throw new Error(`Series no configuradas para ${documentType}`)
       }
+      const typeData = elegida.datos
+      const seriesPath = elegida.ruta
 
-      const nextNumber = (typeData.lastNumber || 0) + 1
-      const formattedNumber = `${typeData.serie}-${String(nextNumber).padStart(8, '0')}`
+      const nextNumber = correlativoSiguiente(typeData)
+      const formattedNumber = numeroSiguiente(typeData)
 
       // Actualizar el último número de forma atómica
       transaction.update(docRef, {

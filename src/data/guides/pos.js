@@ -17,7 +17,7 @@
  */
 export default {
   id: 'pos',
-  actualizado: '08/09/2026',
+  actualizado: '10/09/2026',
   intro:
     'El Punto de Venta es la pantalla para cobrar en el día a día. A la izquierda están tus productos; a la derecha, el **Carrito de Compras** y los datos de la venta. Esta guía recorre el flujo completo y las dudas más comunes.',
 
@@ -224,6 +224,10 @@ export default {
         {
           type: 'texto',
           text: '**Factura**: para clientes con RUC que necesitan sustentar el gasto. Va a SUNAT. **Boleta**: para consumidores finales. También va a SUNAT. **Nota de Venta**: documento interno, no viaja a SUNAT; sirve para ventas simples y luego puede convertirse en boleta o factura desde la página de Ventas.',
+        },
+        {
+          type: 'texto',
+          text: 'Debajo del tipo, en letra chica, ves el número que le tocaría a la venta, por ejemplo **Siguiente: B001-00000124**. Es una referencia: el número se asigna recién al cobrar. Si trabajas con varias cajas y otra emite antes, el aviso se corre solo al que sigue, y ningún número se repite. Si en su lugar dice **Sin serie configurada para este comprobante**, configura la serie antes de cobrar: sin ella la venta no se puede emitir.',
         },
         {
           type: 'texto',

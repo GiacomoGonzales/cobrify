@@ -4,6 +4,7 @@ import { isPharmaLikeMode } from '@/utils/businessModes'
 import { estadoInicialSunat } from '@/utils/estadoInicialSunat'
 import { comprobanteYaEnviado, motivoParaNoEditar } from '@/utils/edicionDeComprobante'
 import { cupoDeComprobantes, avisoDeCupo } from '@/utils/cupoDeComprobantes'
+import { serieParaNumerar, numeroSiguiente } from '@/utils/serieParaNumerar'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { Building2,
@@ -45,6 +46,7 @@ import { Building2,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useInvoicePermissions } from '@/hooks/useInvoicePermissions'
+import { useSeriesEnVivo } from '@/hooks/useSeriesEnVivo'
 import { useAuth } from '@/contexts/AuthContext'
 import { useBranding } from '@/contexts/BrandingContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -772,6 +774,25 @@ export default function POS() {
   const [selectedBranch, setSelectedBranch] = useState(null)
   // Sede pendiente de aplicar al cobrar una mesa/orden (se resuelve cuando cargan sucursales/almacenes)
   const [pendingBranchSelection, setPendingBranchSelection] = useState(null)
+
+  // "Siguiente: B001-00000124" bajo el tipo de comprobante (10-set-2026). Es
+  // un aviso, no una reserva: el número se asigna al cobrar, en la
+  // transacción, con la MISMA regla (`serieParaNumerar`) y la misma sucursal,
+  // almacén y RUC que manda el cobro. Las series se leen en vivo: si otra
+  // caja emite antes, el aviso se corre solo al que sigue. El demo no lee
+  // series (su venta sale con un número fijo).
+  const seriesEnVivo = useSeriesEnVivo(isDemoMode ? null : getBusinessId(), !isDemoMode)
+  const serieDeLaVenta = useMemo(
+    () => (seriesEnVivo && documentType
+      ? serieParaNumerar(seriesEnVivo, {
+          documentType,
+          emisorId: emisorElegido?.id,
+          branchId: selectedBranch?.id,
+          warehouseId: selectedWarehouse?.id,
+        })
+      : null),
+    [seriesEnVivo, documentType, emisorElegido?.id, selectedBranch?.id, selectedWarehouse?.id]
+  )
 
   // Precios por sucursal (businessSettings.branchPricingEnabled): `products` es la
   // vista EFECTIVA con price/price2/3/4 reemplazados por el override de la sucursal
@@ -10732,6 +10753,19 @@ Gracias por tu preferencia.`
                     </p>
                   )}
                 </div>
+                {/* El número que le tocaría a esta venta, en letra chica. El
+                    definitivo se asigna al cobrar (ver `serieDeLaVenta`). */}
+                {!editingInvoiceId && !isLoading && seriesEnVivo && documentType && (
+                  serieDeLaVenta ? (
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      Siguiente: <span className="tabular-nums">{numeroSiguiente(serieDeLaVenta.datos)}</span>
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-amber-600 mt-1">
+                      {emisorElegido ? 'Este RUC no tiene serie para este comprobante.' : 'Sin serie configurada para este comprobante.'}
+                    </p>
+                  )
+                )}
                 {!canEmitFiscal && (
                   <p className="text-xs text-amber-600 mt-1">
                     Sin conexión SUNAT: solo Nota de Venta. Contactá al administrador para habilitar comprobantes.

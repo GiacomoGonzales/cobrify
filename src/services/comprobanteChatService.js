@@ -1,4 +1,5 @@
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { serieParaNumerar, numeroSiguiente } from '@/utils/serieParaNumerar'
 import { db } from '@/lib/firebase'
 import {
   conFechaDeEmision,
@@ -219,13 +220,13 @@ export const leerComprobante = async (uid, invoiceId) => {
 
 /**
  * El número que va a salir, para mostrarlo antes de emitir. Es el siguiente
- * de la serie global (el emisor no numera por sucursal); si alguien emite
- * desde el POS en ese mismo instante, el real será el siguiente.
+ * de la serie global (el emisor no numera por sucursal), con la misma regla
+ * que el cobro (utils/serieParaNumerar.js); si alguien emite desde el POS en
+ * ese mismo instante, el real será el siguiente.
  */
 export const numeroProbable = (ajustes, tipo) => {
-  const serie = ajustes?.series?.[tipo]
-  if (!serie?.serie) return '—'
-  return `${serie.serie}-${String((Number(serie.lastNumber) || 0) + 1).padStart(8, '0')}`
+  const elegida = serieParaNumerar(ajustes, { documentType: tipo })
+  return elegida ? numeroSiguiente(elegida.datos) : '—'
 }
 
 /** El texto que acompaña al PDF en la conversación. */

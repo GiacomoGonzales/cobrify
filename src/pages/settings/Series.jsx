@@ -29,6 +29,7 @@ import { getAllBranchSeriesFS, updateBranchSeriesFS } from '@/services/firestore
 import { getActiveBranches } from '@/services/branchService'
 import RenumberInvoicesModal from '@/components/RenumberInvoicesModal'
 import { duenoDeLaSerie } from '../../../functions/src/utils/emisorDelComprobante.js'
+import { numeroSiguiente } from '@/utils/serieParaNumerar'
 
 // Series de un negocio nuevo. También son el piso de lectura: un tipo que no
 // exista todavía en Firestore se muestra con esta serie y el contador en 0.
@@ -81,10 +82,9 @@ const GRUPOS_DE_DOCUMENTOS = [
   },
 ]
 
-// "F001-00000013": el correlativo que llevará el próximo comprobante.
-const getNextNumber = (serie, lastNumber) => {
-  return `${serie}-${String(lastNumber + 1).padStart(8, '0')}`
-}
+// "F001-00000013": el correlativo que llevará el próximo comprobante. El
+// mismo cálculo que el cobro y que el "Siguiente:" del POS.
+const getNextNumber = (serie, lastNumber) => numeroSiguiente({ serie, lastNumber })
 
 // Columnas de la grilla en escritorio: documento (lo que sobre), serie,
 // último número, siguiente. En el celular cada fila se apila en 3 columnas
