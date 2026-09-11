@@ -10,7 +10,7 @@
  * podía distinguir "500 porque es el default del plan" de "500 porque lo
  * decidí yo", así que tres caminos lo pisaban sin culpa al renovar o cambiar
  * de plan: `registerPayment`, la renovación de clientes de intermediarios y el
- * webhook de Flow en los upgrades.
+ * webhook de Flow en los upgrades (Flow se quitó el 11-set-2026).
  *
  * `topeFijadoPorAdmin` es esa marca. Con ella puesta, el tope solo lo cambia
  * el admin desde la ficha.
@@ -64,7 +64,7 @@ export function limitesAlRegistrarPago({ suscripcion, limitesDelPlan, esMismoPla
 
 /**
  * El tope que debe quedar cuando un proceso automático (la renovación de un
- * cliente de intermediario, el upgrade que llega por el webhook de Flow) va a
+ * cliente de intermediario) va a
  * aplicar el del plan.
  *
  * @returns {number|null} el tope a escribir, o `null` para NO tocar el campo.

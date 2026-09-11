@@ -1,27 +1,19 @@
 import { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBranding } from '@/contexts/BrandingContext';
-import { useToast } from '@/contexts/ToastContext';
 import { DEFAULT_BRANDING } from '@/services/brandingService';
 import {
   PLANS,
-  createFlowRenewalPayment,
-  createCardRegistration,
-  confirmCardRegistration,
-  cancelAutoRenew,
   PLAN_TIERS,
   resolvePlanTier,
   getTierPrice,
   getAnnualSavings,
-  canPayOnline,
 } from '@/services/subscriptionService';
 import { getVendedorByLinkedUser, getVendedorClients } from '@/services/vendedorService';
 import { puedeVerHistorialDePagos } from '@/utils/subscriptionOwnership';
 import { MESES_DE_REGALO, MESES_PARA_QUIEN_REFIERE, mesesDeRegalo } from '@/data/referidos';
 import { useSubscriptionPaymentInfo } from '@/hooks/useSubscriptionPaymentInfo';
 import {
-  CreditCard,
   Calendar,
   DollarSign,
   Package,
@@ -30,12 +22,9 @@ import {
   FileText,
   Users,
   Box,
-  Clock,
   Loader2,
   Store,
   Phone,
-  X,
-  ShieldCheck,
   Gift,
   Copy,
   Check
@@ -86,45 +75,11 @@ function BotonCopiar({ texto, etiqueta = 'Copiar', className = '' }) {
 }
 
 export default function MySubscription() {
-  const { subscription, user, getBusinessId, businessSettings } = useAuth();
+  const { subscription, user, businessSettings } = useAuth();
   const { branding } = useBranding();
-  const toast = useToast();
-  // Qué botón está iniciando el pago (id del plan de esa tarjeta, o 'legacy').
-  // Es por-botón y no un booleano global: si no, al pulsar uno TODAS las tarjetas
-  // mostraban "Abriendo…". `paying` sigue sirviendo para bloquear el resto.
-  const [payingPlan, setPayingPlan] = useState(null);
-  const paying = payingPlan !== null;
   // Ciclo de cobro elegido en el selector de planes ('monthly' | 'annual').
   // Arranca en el ciclo que el cliente ya tiene (ver efecto de sincronización).
   const [billingCycle, setBillingCycle] = useState('monthly');
-
-  // Checkout de Flow embebido en un MODAL dentro de la app (verificado: pay.php
-  // no envía X-Frame-Options ni frame-ancestors, así que permite iframe).
-  const [flowUrl, setFlowUrl] = useState(null);
-
-  // Renovación automática: el modal de Flow se reusa para el REGISTRO de la
-  // tarjeta, así que hay que distinguir a qué volvió el cliente (?flow=1 es un
-  // pago; ?flowcard=1 es un registro de tarjeta).
-  const [registeringCard, setRegisteringCard] = useState(false);
-  const [cancelingAutoRenew, setCancelingAutoRenew] = useState(false);
-
-  // Si esta vista se cargó DENTRO del iframe/popup de retorno de Flow
-  // (urlReturn=...?flow=1), avisar a la ventana principal y no renderizar de más:
-  // el pago ya quedó registrado por el webhook y la vista principal se actualiza
-  // en tiempo real (onSnapshot de la suscripción).
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const esPago = params.get('flow') === '1';
-    const esTarjeta = params.get('flowcard') === '1';
-    if (!esPago && !esTarjeta) return;
-    const mensaje = { type: esTarjeta ? 'flow-card-return' : 'flow-return' };
-    if (window.opener) {
-      try { window.opener.postMessage(mensaje, window.location.origin); } catch { /* noop */ }
-      window.close();
-    } else if (window.parent && window.parent !== window) {
-      try { window.parent.postMessage(mensaje, window.location.origin); } catch { /* noop */ }
-    }
-  }, []);
 
   // El selector arranca mostrando el ciclo que el cliente ya paga (si tiene anual,
   // abre en anual). Los planes legacy (semestral, qpse_*) caen en mensual.
@@ -133,112 +88,6 @@ export default function MySubscription() {
     const { cycle } = resolvePlanTier(subscription.plan);
     if (cycle) setBillingCycle(cycle);
   }, [subscription?.plan]);
-
-  // La ventana principal escucha el aviso de retorno y cierra el modal
-  useEffect(() => {
-    const onMsg = async (e) => {
-      if (e.origin !== window.location.origin) return;
-      if (e.data?.type === 'flow-return') {
-        setFlowUrl(null);
-        setPayingPlan(null);
-        toast.success('Pago procesado. Tu suscripción se actualizará en unos segundos.');
-        return;
-      }
-      // Registro de tarjeta: se CONFIRMA contra Flow antes de dar nada por
-      // hecho — el retorno del navegador se puede falsificar.
-      if (e.data?.type === 'flow-card-return') {
-        setFlowUrl(null);
-        try {
-          const businessId = getBusinessId();
-          const { getAuth } = await import('firebase/auth');
-          const idToken = await getAuth().currentUser?.getIdToken();
-          const res = await confirmCardRegistration(businessId, idToken);
-          if (res.success && res.registered) {
-            toast.success(`Tarjeta registrada. Tu plan se renovará solo.`);
-          } else {
-            toast.error(res.error || 'No se pudo confirmar el registro de la tarjeta');
-          }
-        } catch (err) {
-          toast.error('No se pudo confirmar el registro de la tarjeta');
-        } finally {
-          setRegisteringCard(false);
-        }
-      }
-    };
-    window.addEventListener('message', onMsg);
-    return () => window.removeEventListener('message', onMsg);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Renovación / cambio de plan con pasarela (Flow) — solo clientes directos.
-  // targetPlan = null → renueva el plan actual; targetPlan = 'anual' etc → upgrade.
-  // buttonKey identifica la tarjeta pulsada para mostrar "Abriendo…" solo en ella.
-  // Los de reseller/vendedor pagan por su intermediario (el server lo re-valida).
-  const handlePayWithFlow = async (targetPlan = null, buttonKey = null) => {
-    if (paying) return;
-    setPayingPlan(buttonKey || targetPlan || 'current');
-    try {
-      const businessId = getBusinessId();
-      const { getAuth } = await import('firebase/auth');
-      const idToken = await getAuth().currentUser?.getIdToken();
-      if (!idToken) throw new Error('No se pudo obtener el token de autenticación');
-      const result = await createFlowRenewalPayment(businessId, idToken, window.location.origin, targetPlan);
-      if (!result.success || !result.url) {
-        toast.error(result.error || 'No se pudo iniciar el pago');
-        setPayingPlan(null);
-        return;
-      }
-      setFlowUrl(result.url); // abre el modal embebido
-    } catch (e) {
-      toast.error(e.message || 'Error al iniciar el pago');
-      setPayingPlan(null);
-    }
-  };
-
-  // Activar renovación automática: abre el registro de tarjeta de Flow en el
-  // mismo modal embebido del pago. Cobrify nunca ve el número de tarjeta.
-  const handleRegisterCard = async () => {
-    if (registeringCard) return;
-    setRegisteringCard(true);
-    try {
-      const businessId = getBusinessId();
-      const { getAuth } = await import('firebase/auth');
-      const idToken = await getAuth().currentUser?.getIdToken();
-      if (!idToken) throw new Error('No se pudo obtener el token de autenticación');
-      const result = await createCardRegistration(businessId, idToken, window.location.origin);
-      if (!result.success || !result.url) {
-        toast.error(result.error || 'No se pudo iniciar el registro');
-        setRegisteringCard(false);
-        return;
-      }
-      setFlowUrl(result.url);
-    } catch (e) {
-      toast.error(e.message || 'Error al iniciar el registro');
-      setRegisteringCard(false);
-    }
-  };
-
-  const handleCancelAutoRenew = async () => {
-    if (cancelingAutoRenew) return;
-    if (!window.confirm('¿Desactivar la renovación automática? Tendrás que renovar manualmente antes de que venza tu plan.')) return;
-    setCancelingAutoRenew(true);
-    try {
-      const businessId = getBusinessId();
-      const { getAuth } = await import('firebase/auth');
-      const idToken = await getAuth().currentUser?.getIdToken();
-      const res = await cancelAutoRenew(businessId, idToken);
-      if (res.success) toast.success('Renovación automática desactivada');
-      else toast.error(res.error || 'No se pudo desactivar');
-    } finally {
-      setCancelingAutoRenew(false);
-    }
-  };
-
-  const closeFlowModal = () => {
-    setFlowUrl(null);
-    setPayingPlan(null);
-    toast.info('Si completaste el pago, tu suscripción se actualizará en unos segundos.');
-  };
 
   // Vendedor asignado a ESTA cuenta (no confundir con `vendedorInfo` de más abajo,
   // que responde a "el usuario logueado ES un vendedor"). Mismo hook que usa la
@@ -319,15 +168,17 @@ export default function MySubscription() {
 
   // Datos para renovación / cambio de plan (solo clientes directos de Cobrify)
   const isDirectClient = !isResellerAccount && !vendedorInfo && !subscription.resellerId && !subscription.vendedorId;
-  // Cobro en línea disponible para ESTA cuenta. Durante el piloto solo lo ven
-  // las marcadas con `allowSelfCheckout`; el resto sigue viendo "Próximamente",
-  // igual que hasta ahora. Mismo criterio que la Cloud Function.
-  const pagoEnLinea = canPayOnline(subscription);
   // Monto de renovación del plan ACTUAL: el precio pactado congelado manda sobre
   // el catálogo (así un cliente viejo renueva a su precio, no al de la lista).
   const renewAmount = subscription.renewalPrice != null ? subscription.renewalPrice : planInfo.totalPrice;
   // Dónde está parado hoy dentro de la grilla nivel × ciclo (null si es legacy).
   const { tier: currentTier, cycle: currentCycle } = resolvePlanTier(subscription.plan);
+  const cicloTexto = billingCycle === 'annual' ? 'anual' : 'mensual';
+  // Renovar o cambiar de plan: por WhatsApp con el pedido ya escrito (Flow se
+  // quitó el 11-set-2026). La grilla solo la ven los clientes directos, así que
+  // el contacto es el de Cobrify. Va el correo para ubicar la cuenta sin preguntar.
+  const pedirPorWhatsApp = (texto) =>
+    `https://wa.me/${supportWaDigits}?text=${encodeURIComponent(`${texto}${user?.email ? ` Mi correo es ${user.email}.` : ''}`)}`;
 
   // ---- Programa de referidos ----------------------------------------------
   // El código NO se genera acá ni en ningún lado: es el número de cliente que
@@ -395,130 +246,25 @@ export default function MySubscription() {
         </div>
       </div>
 
-      {/* RENOVACIÓN AUTOMÁTICA — solo clientes directos y con el cobro en línea
-          activo. La tarjeta se registra en Flow: Cobrify nunca ve el número,
-          solo la marca y los últimos dígitos que Flow devuelve. El cobro lo
-          dispara nuestro programador diario con el precio PACTADO de cada
-          cliente (renewalPrice congelado), no con el de catálogo. */}
-      {isDirectClient && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-lg font-bold text-gray-900">Renovación automática</h3>
-                {!pagoEnLinea && (
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">
-                    PRÓXIMAMENTE
-                  </span>
-                )}
-                {pagoEnLinea && subscription.autoRenew && (
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-700">
-                    ACTIVA
-                  </span>
-                )}
-              </div>
-
-              {!pagoEnLinea ? (
-                <p className="text-gray-500 text-sm mt-1">
-                  Pronto podrás registrar tu tarjeta una vez y tu plan se renovará solo cada
-                  período, sin que tengas que hacer nada. Por ahora la renovación sigue siendo
-                  manual.
-                </p>
-              ) : subscription.autoRenew ? (
-                <>
-                  <p className="text-gray-500 text-sm mt-1">
-                    Tu plan se renueva solo el día que vence. No tienes que hacer nada.
-                  </p>
-                  {subscription.flowCard?.last4 && (
-                    <div className="flex items-center gap-2 mt-3 text-sm text-gray-700">
-                      <CreditCard className="w-4 h-4 text-gray-400" />
-                      <span>
-                        {subscription.flowCard.brand || 'Tarjeta'} terminada en{' '}
-                        <strong>{subscription.flowCard.last4}</strong>
-                      </span>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  <p className="text-gray-500 text-sm mt-1">
-                    Registra tu tarjeta una vez y tu plan se renovará solo cada período.
-                    Puedes desactivarla cuando quieras.
-                  </p>
-                  <p className="text-xs text-gray-400 mt-2">
-                    Los datos de tu tarjeta los guarda Flow, nuestra pasarela de pago. Cobrify no los almacena.
-                  </p>
-                </>
-              )}
-            </div>
-
-            <div className="flex-shrink-0">
-              {!pagoEnLinea ? (
-                <button
-                  disabled
-                  className="px-5 py-2.5 rounded-xl bg-gray-100 text-gray-400 text-sm font-semibold cursor-not-allowed inline-flex items-center gap-2"
-                >
-                  <CreditCard className="w-4 h-4" />
-                  Activar renovación automática
-                </button>
-              ) : subscription.autoRenew ? (
-                <button
-                  onClick={handleCancelAutoRenew}
-                  disabled={cancelingAutoRenew}
-                  className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
-                >
-                  {cancelingAutoRenew ? 'Desactivando…' : 'Desactivar'}
-                </button>
-              ) : (
-                <button
-                  onClick={handleRegisterCard}
-                  disabled={registeringCard}
-                  className="px-5 py-2.5 rounded-xl bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 disabled:opacity-50 inline-flex items-center gap-2"
-                >
-                  <CreditCard className="w-4 h-4" />
-                  {registeringCard ? 'Abriendo…' : 'Activar renovación automática'}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {pagoEnLinea && subscription.autoRenewDisabledReason && !subscription.autoRenew && (
-            <div className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-900">
-              Desactivamos la renovación automática: {subscription.autoRenewDisabledReason.toLowerCase()}.
-              Puedes volver a activarla con otra tarjeta.
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Renovar o cambiar de plan — solo clientes directos.
           Grilla nivel × ciclo: 3 planes y un interruptor mensual/anual. El plan que
-          ya tiene el cliente se marca "Tu plan" y su botón renueva al precio pactado
-          (renewalPrice congelado); los demás cobran precio de catálogo y cambian
-          el plan al confirmarse el pago. */}
+          ya tiene el cliente se marca "Tu plan" y muestra su precio pactado
+          (renewalPrice congelado). Los botones abren WhatsApp con el pedido ya
+          escrito: la renovación la registra el admin al confirmar el pago. */}
       {isDirectClient && (
         <div className="rounded-2xl border border-gray-200 bg-white p-6">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-lg font-bold text-gray-900">Renueva o cambia tu plan</h3>
-                {!pagoEnLinea && (
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">
-                    PRÓXIMAMENTE
-                  </span>
-                )}
               </div>
               <p className="text-gray-500 text-sm mt-0.5">
-                {pagoEnLinea
-                  ? 'Paga en segundos y extiende tu suscripción al instante.'
-                  : 'Estos son los planes disponibles. El pago en línea se activará muy pronto.'}
+                Elige el plan y escríbenos por WhatsApp: te pasamos los datos para pagar.
               </p>
               <div className="flex items-center gap-2.5 mt-3">
                 <img src={yapeLogo} alt="Yape" className="h-6 w-auto rounded" />
-                <span className="inline-flex items-center gap-1 text-xs text-gray-600 bg-gray-100 rounded-full px-2.5 py-1">
-                  <CreditCard className="w-3.5 h-3.5" /> Tarjeta
-                </span>
-                <span className="text-xs text-gray-600 bg-gray-100 rounded-full px-2.5 py-1">QR · Billeteras</span>
+                <span className="text-xs text-gray-600 bg-gray-100 rounded-full px-2.5 py-1">Plin</span>
+                <span className="text-xs text-gray-600 bg-gray-100 rounded-full px-2.5 py-1">Transferencia</span>
               </div>
             </div>
 
@@ -545,34 +291,6 @@ export default function MySubscription() {
               </button>
             </div>
           </div>
-
-          {/* Aviso mientras el cobro en línea no está disponible para esta cuenta */}
-          {!pagoEnLinea && (
-            <div className="mt-4 rounded-xl bg-amber-50 border border-amber-200 p-4 flex items-start gap-3">
-              <Clock className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-semibold text-amber-900">El pago en línea estará disponible muy pronto</p>
-                <p className="text-sm text-amber-800 mt-0.5">
-                  Estamos terminando de habilitar el pago con Yape, tarjeta y billeteras desde esta página.
-                  Mientras tanto, para renovar o cambiar de plan escríbenos por WhatsApp
-                  {supportWhatsapp && (
-                    <>
-                      {' '}al{' '}
-                      <a
-                        href={`https://wa.me/${supportWaDigits}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-semibold underline"
-                      >
-                        {supportWhatsapp}
-                      </a>
-                    </>
-                  )}
-                  .
-                </p>
-              </div>
-            </div>
-          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-5">
             {PLAN_TIERS.map((tier) => {
@@ -645,21 +363,20 @@ export default function MySubscription() {
                   </ul>
 
                   <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-2">
-                    <button
-                      onClick={() => handlePayWithFlow(isCurrent ? null : planId, planId)}
-                      disabled={paying || !pagoEnLinea}
-                      className={`w-full px-4 py-2.5 rounded-xl font-semibold text-sm transition-colors ${
-                        !pagoEnLinea
-                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                          : isCurrent
-                          ? 'bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60'
-                          : 'border border-primary-600 text-primary-700 hover:bg-primary-50 disabled:opacity-60'
+                    <a
+                      href={pedirPorWhatsApp(isCurrent
+                        ? `Hola, quiero renovar mi plan ${tier.name} ${cicloTexto} (S/ ${Number(shownPrice).toFixed(2)}).`
+                        : `Hola, quiero cambiar al plan ${tier.name} ${cicloTexto} (S/ ${Number(catalogPrice).toFixed(2)}).`)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`w-full px-4 py-2.5 rounded-xl font-semibold text-sm text-center transition-colors ${
+                        isCurrent
+                          ? 'bg-primary-600 text-white hover:bg-primary-700'
+                          : 'border border-primary-600 text-primary-700 hover:bg-primary-50'
                       }`}
                     >
-                      {!pagoEnLinea ? 'Próximamente'
-                        : payingPlan === planId ? 'Abriendo…'
-                        : isCurrent ? 'Renovar ahora' : 'Cambiar a este plan'}
-                    </button>
+                      {isCurrent ? 'Renovar por WhatsApp' : 'Cambiar a este plan'}
+                    </a>
                   </div>
                 </div>
               );
@@ -673,72 +390,17 @@ export default function MySubscription() {
                 Tu plan actual es <span className="font-semibold text-gray-900">{subscription.planName || planInfo.name || subscription.plan}</span>
                 {renewAmount != null && <> — renovación S/ {Number(renewAmount).toFixed(2)}</>}
               </p>
-              <button
-                onClick={() => handlePayWithFlow(null, 'legacy')}
-                disabled={paying || !pagoEnLinea}
-                className={`px-5 py-2.5 rounded-xl font-semibold text-sm whitespace-nowrap transition-colors ${
-                  !pagoEnLinea
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : 'bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60'
-                }`}
+              <a
+                href={pedirPorWhatsApp(`Hola, quiero renovar mi plan actual (${subscription.planName || planInfo.name || subscription.plan}${renewAmount != null ? `, S/ ${Number(renewAmount).toFixed(2)}` : ''}).`)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-5 py-2.5 rounded-xl font-semibold text-sm whitespace-nowrap text-center transition-colors bg-primary-600 text-white hover:bg-primary-700"
               >
-                {!pagoEnLinea ? 'Próximamente'
-                  : payingPlan === 'legacy' ? 'Abriendo…' : 'Renovar mi plan actual'}
-              </button>
+                Renovar por WhatsApp
+              </a>
             </div>
           )}
         </div>
-      )}
-
-      {/* Modal de pago embebido (checkout de Flow en iframe, escalado al 67%).
-          Portal a document.body + z-[9999], igual que ui/Modal.jsx: si se renderiza
-          dentro del layout, el header queda por encima del overlay (hueco arriba). */}
-      {flowUrl && createPortal(
-        <div className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[540px] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-green-600" />
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">Pago seguro</p>
-                  <p className="text-xs text-gray-500">Procesado por Flow</p>
-                </div>
-              </div>
-              <button
-                onClick={closeFlowModal}
-                className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-                aria-label="Cerrar"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="relative bg-gray-50" style={{ height: '72vh', overflow: 'hidden' }}>
-              {/* Escala 67%: el iframe se renderiza a ~150% del tamaño visible y se
-                  reduce con transform, así el checkout se ve ordenado (layout amplio). */}
-              <iframe
-                src={flowUrl}
-                title="Pago seguro con Flow"
-                style={{
-                  width: '149.25%',
-                  height: '149.25%',
-                  transform: 'scale(0.67)',
-                  transformOrigin: 'top left',
-                  border: '0',
-                }}
-                allow="payment"
-              />
-            </div>
-            <div className="px-5 py-2.5 border-t border-gray-100 text-center">
-              <p className="text-xs text-gray-400">
-                Tus datos se procesan en los servidores seguros de Flow.{' '}
-                <a href={flowUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                  Abrir en ventana nueva
-                </a>
-              </p>
-            </div>
-          </div>
-        </div>,
-        document.body
       )}
 
       {/* Información del plan actual */}
