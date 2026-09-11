@@ -584,20 +584,38 @@ function Editor({
             ))}
           </ul>
         )}
-        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
-          <Selector aria-label="Banco" value={cuentaNueva.bank} onChange={e => setCuentaNueva({ ...cuentaNueva, bank: e.target.value })}>
-            <option value="">Banco</option>
-            {BANCOS.map(b => <option key={b} value={b}>{b}</option>)}
-          </Selector>
-          <Selector aria-label="Tipo de cuenta" value={cuentaNueva.accountType} onChange={e => setCuentaNueva({ ...cuentaNueva, accountType: e.target.value })}>
-            {TIPOS_CUENTA.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-          </Selector>
-          <Selector aria-label="Moneda" value={cuentaNueva.currency} onChange={e => setCuentaNueva({ ...cuentaNueva, currency: e.target.value })}>
-            {MONEDAS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-          </Selector>
-          <Entrada aria-label="Número de cuenta" placeholder="N° de cuenta" value={cuentaNueva.accountNumber} onChange={e => setCuentaNueva({ ...cuentaNueva, accountNumber: e.target.value })} className="font-mono" />
-          <Entrada aria-label="CCI" placeholder="CCI" value={cuentaNueva.cci} onChange={e => setCuentaNueva({ ...cuentaNueva, cci: e.target.value })} className="font-mono" />
-          <Boton onClick={agregarCuenta}>Agregar</Boton>
+        {/* Cuenta nueva: en tres filas y con sus etiquetas. En una sola fila de
+            seis los desplegables quedaban cortados ("Ban", "Cor", "Sol"). */}
+        <div className="space-y-3 rounded-md border border-gray-200 p-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Campo etiqueta="Banco">
+              <Selector value={cuentaNueva.bank} onChange={e => setCuentaNueva({ ...cuentaNueva, bank: e.target.value })}>
+                <option value="">Elige el banco</option>
+                {BANCOS.map(b => <option key={b} value={b}>{b}</option>)}
+              </Selector>
+            </Campo>
+            <Campo etiqueta="Tipo de cuenta">
+              <Selector value={cuentaNueva.accountType} onChange={e => setCuentaNueva({ ...cuentaNueva, accountType: e.target.value })}>
+                {TIPOS_CUENTA.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </Selector>
+            </Campo>
+            <Campo etiqueta="Moneda">
+              <Selector value={cuentaNueva.currency} onChange={e => setCuentaNueva({ ...cuentaNueva, currency: e.target.value })}>
+                {MONEDAS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+              </Selector>
+            </Campo>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Campo etiqueta="N° de cuenta">
+              <Entrada value={cuentaNueva.accountNumber} onChange={e => setCuentaNueva({ ...cuentaNueva, accountNumber: e.target.value })} className="font-mono" />
+            </Campo>
+            <Campo etiqueta="CCI (opcional)">
+              <Entrada value={cuentaNueva.cci} onChange={e => setCuentaNueva({ ...cuentaNueva, cci: e.target.value })} className="font-mono" />
+            </Campo>
+          </div>
+          <div className="flex justify-end">
+            <Boton onClick={agregarCuenta}>Agregar cuenta</Boton>
+          </div>
         </div>
       </div>
 
