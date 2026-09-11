@@ -514,6 +514,7 @@ export default function AdminCuenta() {
             <Dato etiqueta="Clientes permitidos">{limite(c.limits?.maxCustomers)}</Dato>
             <Dato etiqueta="Productos permitidos">{limite(c.limits?.maxProducts)}</Dato>
             <Dato etiqueta="Sucursales permitidas">{limite(c.limits?.maxBranches ?? 1)}</Dato>
+            <Dato etiqueta="Sub-usuarios permitidos">{limite(c.limits?.maxSubUsers)}</Dato>
             <Dato etiqueta="Último pago">{c.lastPayment ? fecha(c.lastPayment) : null}</Dato>
             <Dato etiqueta="Último reinicio del contador">{c.lastCounterReset ? fechaHora(c.lastCounterReset) : null}</Dato>
           </ListaDatos>

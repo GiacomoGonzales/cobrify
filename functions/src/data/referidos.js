@@ -26,7 +26,7 @@ export const MESES_DE_REGALO = {
   basico_mensual: 1,   // S/ 19.90 → paga 1 mes y usa 2
   mensual: 1,          // S/ 29.90 → paga 1 mes y usa 2
   semestral: 1,        // S/ 149.90 → 7 meses
-  anual: 2,            // S/ 199.90 → 14 meses
+  anual: 2,            // S/ 249.90 → 14 meses
 }
 
 /** Lo que gana el que refiere, una vez por cada referido que paga. */

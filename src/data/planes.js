@@ -5,5 +5,6 @@
  * referidos: un solo sitio donde cambiar un precio.
  */
 export {
-  PLANES_VENDIBLES, ORDEN_DE_VENTA, comoSeExplica, planQueLeCalza,
+  PLANES_VENDIBLES, ORDEN_DE_VENTA, comoSeExplica, planQueLeCalza, textoDeSucursales,
+  textoDeSubUsuarios,
 } from '../../functions/src/data/planes.js'

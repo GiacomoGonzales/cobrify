@@ -80,6 +80,8 @@ export default function AdminSettings() {
 
 const numeroOIlimitado = v => (v === -1 || v === 0 || v == null ? 'Ilimitados' : new Intl.NumberFormat('es-PE').format(v))
 const sucursales = v => (v === -1 ? 'Ilimitadas' : v ?? 1)
+// Sin el campo (planes antiguos) o -1: sin tope.
+const subUsuarios = v => (typeof v === 'number' && v >= 0 ? v : 'Ilimitados')
 const duracion = m => (m >= 999 ? 'Sin vencimiento' : m === 1 ? '1 mes' : `${m} meses`)
 const soles = v => `S/ ${Number(v || 0).toFixed(2)}`
 
@@ -155,6 +157,7 @@ function TablaDePlanes({ filas, vacio = 'Sin planes' }) {
     precio: plan.totalPrice > 0 ? soles(plan.totalPrice) : 'Sin costo',
     comprobantes: numeroOIlimitado(plan.limits?.maxInvoicesPerMonth),
     sucursales: sucursales(plan.limits?.maxBranches),
+    subUsuarios: subUsuarios(plan.limits?.maxSubUsers),
   })
 
   return (
@@ -173,7 +176,7 @@ function TablaDePlanes({ filas, vacio = 'Sin planes' }) {
                 <span className="shrink-0 text-[12.5px] font-medium text-gray-900">{d.precio}</span>
               </div>
               <dl className="mt-1 space-y-0.5">
-                {[['Duración', d.duracion], ['Comprobantes', d.comprobantes], ['Sucursales', d.sucursales]].map(([k, v]) => (
+                {[['Duración', d.duracion], ['Comprobantes', d.comprobantes], ['Sucursales', d.sucursales], ['Sub-usuarios', d.subUsuarios]].map(([k, v]) => (
                   <div key={k} className="flex gap-2 text-[11.5px]">
                     <dt className="w-24 shrink-0 text-gray-500">{k}</dt>
                     <dd className="min-w-0 flex-1 text-gray-700">{v}</dd>
@@ -194,10 +197,11 @@ function TablaDePlanes({ filas, vacio = 'Sin planes' }) {
               <Th alinear="der">Precio</Th>
               <Th alinear="der">Comprobantes/mes</Th>
               <Th alinear="der">Sucursales</Th>
+              <Th alinear="der">Sub-usuarios</Th>
             </tr>
           </thead>
           <tbody>
-            {filas.length === 0 && <FilaVacia colSpan={5}>{vacio}</FilaVacia>}
+            {filas.length === 0 && <FilaVacia colSpan={6}>{vacio}</FilaVacia>}
             {filas.map(([id, plan]) => {
               const d = dato(plan)
               return (
@@ -210,6 +214,7 @@ function TablaDePlanes({ filas, vacio = 'Sin planes' }) {
                   <Td numero className="font-medium">{d.precio}</Td>
                   <Td numero apagado>{d.comprobantes}</Td>
                   <Td numero apagado>{d.sucursales}</Td>
+                  <Td numero apagado>{d.subUsuarios}</Td>
                 </Fila>
               )
             })}

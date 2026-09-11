@@ -2,6 +2,7 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Check } from 'lucide-react'
 import { useBranding } from '@/contexts/BrandingContext'
+import { PLANES_VENDIBLES } from '@/data/planes'
 
 export default function TermsAndConditions() {
   const { branding } = useBranding()
@@ -14,12 +15,16 @@ export default function TermsAndConditions() {
   const contactWebsite = branding.websiteUrl || (window.location.hostname !== 'localhost' ? window.location.hostname : 'cobrifyperu.com')
 
   // Planes de suscripción. Precio base en Soles (sin IGV) + precio con IGV (18%).
+  // Los montos salen del catálogo (functions/src/data/planes.js): el mismo con
+  // el que se cobra y el que muestra /precios.
+  const precio = (id) => PLANES_VENDIBLES[id].totalPrice.toFixed(2)
+  const conIgv = (id) => PLANES_VENDIBLES[id].precioConIgv.toFixed(2)
   const plans = [
     {
       name: 'Plan Básico',
       period: '/mes',
-      price: '19.90',
-      priceIgv: '23.50',
+      price: precio('basico_mensual'),
+      priceIgv: conIgv('basico_mensual'),
       badge: null,
       highlight: false,
       desc: 'Diseñado para microempresas. Incluye hasta 100 comprobantes electrónicos al mes (boletas y facturas) y notas de venta ilimitadas.',
@@ -27,8 +32,8 @@ export default function TermsAndConditions() {
     {
       name: 'Plan Mensual',
       period: '/mes',
-      price: '29.90',
-      priceIgv: '35.30',
+      price: precio('mensual'),
+      priceIgv: conIgv('mensual'),
       badge: null,
       highlight: false,
       desc: 'Pago mes a mes, sin compromisos largos. Incluye todas las funcionalidades completas.',
@@ -36,8 +41,8 @@ export default function TermsAndConditions() {
     {
       name: 'Plan Semestral',
       period: '/6 meses',
-      price: '149.90',
-      priceIgv: '176.90',
+      price: precio('semestral'),
+      priceIgv: conIgv('semestral'),
       badge: 'MÁS POPULAR',
       highlight: true,
       desc: 'Pago cada 6 meses. Las mismas funcionalidades completas; solo cambia el período de suscripción.',
@@ -45,8 +50,8 @@ export default function TermsAndConditions() {
     {
       name: 'Plan Anual',
       period: '/año',
-      price: '199.90',
-      priceIgv: '235.90',
+      price: precio('anual'),
+      priceIgv: conIgv('anual'),
       badge: 'MEJOR AHORRO',
       highlight: false,
       desc: 'Pago anual. Las mismas funcionalidades completas; solo cambia el período de suscripción.',
@@ -54,8 +59,8 @@ export default function TermsAndConditions() {
     {
       name: 'Plan Todo Ilimitado',
       period: '/año',
-      price: '299.90',
-      priceIgv: '353.90',
+      price: precio('ilimitado_anual'),
+      priceIgv: conIgv('ilimitado_anual'),
       badge: 'SIN CERTIFICADO PROPIO',
       highlight: false,
       desc: 'Facturación ilimitada a SUNAT sin necesidad de contar con tu propio certificado digital tributario (CDT). Pago anual.',

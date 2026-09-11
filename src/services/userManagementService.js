@@ -334,6 +334,24 @@ export const getAvailablePagesByMode = (businessMode, opciones = {}) => {
 }
 
 /**
+ * El tope de sub-usuarios de la cuenta, o null si no tiene.
+ *
+ * Vive en la suscripción, que lo copia del catálogo al darse de alta o al
+ * cambiar de plan: el Básico nuevo trae 1 (11-set-2026). Las cuentas de antes
+ * no tienen el campo y siguen sin tope, como las pactaron; -1 tampoco limita.
+ * Si no se puede leer, no se corta a nadie.
+ */
+const topeDeSubUsuarios = async (ownerId) => {
+  try {
+    const snap = await getDoc(doc(db, 'subscriptions', ownerId))
+    const tope = snap.exists() ? snap.data()?.limits?.maxSubUsers : undefined
+    return typeof tope === 'number' && tope >= 0 ? tope : null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Crear un nuevo usuario con permisos personalizados
  * @param {string} ownerId - ID del usuario dueño/administrador
  * @param {object} userData - Datos del nuevo usuario
@@ -342,6 +360,18 @@ export const getAvailablePagesByMode = (businessMode, opciones = {}) => {
 export const createManagedUser = async (ownerId, userData) => {
   try {
     const { email, password, displayName, allowedPages, allowedWarehouses } = userData
+
+    // El tope del plan va ANTES de crear el acceso: después ya habría una
+    // cuenta de Firebase de más. Cuentan todos los sub-usuarios, activos o no:
+    // reactivar uno no suma, y desactivar no sirve para esquivar el tope.
+    const tope = await topeDeSubUsuarios(ownerId)
+    if (tope !== null) {
+      const actuales = await getManagedUsers(ownerId)
+      if ((actuales.data || []).length >= tope) {
+        const permitidos = tope === 1 ? '1 sub-usuario' : `${tope} sub-usuarios`
+        return { success: false, error: `Tu plan permite ${permitidos}. Para agregar más, cambia a un plan con más usuarios.` }
+      }
+    }
 
     // 1. Crear usuario en Firebase Auth usando secondaryAuth para no desloguear al owner
     const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password)

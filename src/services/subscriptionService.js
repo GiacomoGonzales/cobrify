@@ -17,7 +17,7 @@ import { validarCambioDePlan, registroDeCambioDePlan } from '@/utils/cambioDePla
 import { db } from '../lib/firebase';
 import { notifyPaymentReceived, notifySubscriptionRenewed, notifyPlanChanged, notifyWelcome } from './notificationService';
 import { getCustomPlans } from './customPlanService';
-import { PLANES_VENDIBLES } from '@/data/planes'
+import { PLANES_VENDIBLES, textoDeSucursales, textoDeSubUsuarios } from '@/data/planes'
 
 // Planes disponibles - Nuevos precios 2025
 // Los SEIS que se venden hoy viven en `@/data/planes` (reexporta el archivo de
@@ -57,7 +57,7 @@ export const PLANS = {
   ilimitado_mensual: PLANES_VENDIBLES.ilimitado_mensual,
   // Todo ilimitado por 12 meses, sin CDT propio (emite por QPse). Formaliza el
   // plan "custom" que se venía asignando a mano y coincide con los términos
-  // publicados (299.90 sin IGV / 353.90 con IGV).
+  // publicados (349.90 sin IGV / 412.90 con IGV desde el 11-set-2026).
   ilimitado_anual: PLANES_VENDIBLES.ilimitado_anual,
 
   // ============================================
@@ -480,7 +480,7 @@ export const PLAN_TIERS = [
     id: 'basico',
     name: 'Básico',
     tagline: 'Para empezar a facturar',
-    highlights: ['100 comprobantes al mes', '1 sub-usuario', '1 sucursal'],
+    highlights: ['100 comprobantes al mes', textoDeSubUsuarios(PLANES_VENDIBLES.basico_mensual.limits.maxSubUsers), textoDeSucursales(PLANES_VENDIBLES.basico_mensual.limits.maxBranches)],
     cycles: { monthly: 'basico_mensual', annual: null },
   },
   {
@@ -488,14 +488,14 @@ export const PLAN_TIERS = [
     name: 'Completo',
     tagline: 'El más elegido',
     popular: true,
-    highlights: ['1,000 comprobantes al mes', 'Múltiples usuarios', 'Múltiples sucursales'],
+    highlights: ['1,000 comprobantes al mes', textoDeSubUsuarios(PLANES_VENDIBLES.mensual.limits.maxSubUsers), textoDeSucursales(PLANES_VENDIBLES.mensual.limits.maxBranches)],
     cycles: { monthly: 'mensual', annual: 'anual' },
   },
   {
     id: 'ilimitado',
     name: 'Ilimitado',
     tagline: 'Sin límite de comprobantes',
-    highlights: ['Comprobantes ilimitados', 'Múltiples usuarios', 'Múltiples sucursales'],
+    highlights: ['Comprobantes ilimitados', textoDeSubUsuarios(PLANES_VENDIBLES.ilimitado_mensual.limits.maxSubUsers), textoDeSucursales(PLANES_VENDIBLES.ilimitado_mensual.limits.maxBranches)],
     cycles: { monthly: 'ilimitado_mensual', annual: 'ilimitado_anual' },
   },
 ];
@@ -521,6 +521,13 @@ export const getAnnualSavings = (tier) => {
   const annual = getTierPrice(tier, 'annual');
   if (!monthly || !annual) return 0;
   return Math.round((monthly * 12 - annual) * 100) / 100;
+};
+
+/** El mismo ahorro en porcentaje de lo que costarían los 12 meses (30 = 30%). */
+export const getAnnualSavingsPercent = (tier) => {
+  const monthly = getTierPrice(tier, 'monthly');
+  const savings = getAnnualSavings(tier);
+  return monthly && savings ? Math.round((savings / (monthly * 12)) * 100) : 0;
 };
 
 // Clasifica un id de plan: 'vendible' | 'sistema' | 'legacy' | 'desconocido'
