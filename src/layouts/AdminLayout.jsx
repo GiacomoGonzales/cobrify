@@ -190,10 +190,17 @@ export default function AdminLayout() {
           <BotonTema tema={tema} onCambiar={cambiarTema} className="ml-auto -mr-1" />
         </div>
 
+        {/* Menu movil. El espacio del status bar va UNA sola vez, en el panel:
+            estaba tambien en el fondo oscuro, y sumados bajaban "Cobrify Admin"
+            un status bar entero por debajo de la cabecera de la pagina (reporte
+            de Giacomo en el celular, 10-set-2026). Asi el panel sube hasta
+            arriba del todo, como una hoja, y abajo deja libre la raya de inicio
+            del iPhone. */}
         {menuAbierto && (
-          <div className="lg:hidden fixed inset-0 z-50 bg-gray-900/40 pt-safe" onClick={() => setMenuAbierto(false)}>
+          <div className="lg:hidden fixed inset-0 z-50 bg-gray-900/40" onClick={() => setMenuAbierto(false)}>
             <div
               className="bg-white w-64 h-full pt-safe flex flex-col border-r border-gray-200"
+              style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
               onClick={e => e.stopPropagation()}
             >
               <div className="h-12 flex items-center justify-between px-4 border-b border-gray-200">
