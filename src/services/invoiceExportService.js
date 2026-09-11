@@ -6,6 +6,7 @@
  *
  * Toda la presentación (estilos, layout, descarga) está delegada a excelStyles.
  */
+import { serieYCorrelativo } from '@/utils/numeroDeComprobante'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { getDocumentRate, getDocumentTotalInBase, normalizeCurrency } from '@/utils/currency'
@@ -325,9 +326,8 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   sorted.forEach((invoice, index) => {
     const invoiceDate = getInvoiceDate(invoice)
     const docType = invoice.documentType || 'boleta'
-    const parts = (invoice.number || '').split('-')
-    const serie = parts[0] || ''
-    const numero = parts.slice(1).join('-') || ''
+    // La misma forma de separar serie y número que el Excel contable.
+    const { serie, correlativo: numero } = serieYCorrelativo(invoice)
 
     const customerDocType = invoice.customer?.documentType || '0'
     const customerDocNumber = invoice.customer?.documentNumber || ''

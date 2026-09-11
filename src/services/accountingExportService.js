@@ -12,6 +12,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { normalizeCurrency } from '@/utils/currency'
 import { montosPorAfectacion } from '@/utils/peruUtils'
+import { serieYCorrelativo, correlativoComoNumero } from '@/utils/numeroDeComprobante'
 import {
   XLSX,
   cellStyle, centerStyle, numberStyleCcy, numberStyle, intStyle,
@@ -26,6 +27,18 @@ import {
 } from './excelStyles'
 
 // =================== HELPERS LOCALES ===================
+
+// La serie y el número en DOS columnas (pedido de un contador, 10-set-2026):
+// así los filtra por serie, los ordena y los importa a su sistema. El número
+// va como número con formato 00000000: se ve igual que en el comprobante y
+// Excel lo ordena bien. Si no es solo dígitos, queda como texto, tal cual.
+const celdasDeNumero = (inv) => {
+  const { serie, correlativo } = serieYCorrelativo(inv)
+  return [serie || '-', correlativoComoNumero(correlativo) ?? (correlativo || '-')]
+}
+const estiloDelCorrelativo = (i, valor) => (
+  typeof valor === 'number' ? { ...centerStyle(i), numFmt: '00000000;-00000000' } : centerStyle(i) // en dos secciones: un formato de solo dígitos, xlsx-js-style lo toma como un id (General)
+)
 
 const formatDateAccounting = (d) => {
   if (!d) return '-'
@@ -119,7 +132,7 @@ function buildAccountingWorkbook(filtered, businessData = null, periodLabel = nu
   const hasUsdInvoices = filtered.some(inv => normalizeCurrency(inv.currency) === 'USD')
 
   const headers = [
-    'Número', 'Tipo', 'Cliente', 'RUC/DNI', 'Fecha Emisión',
+    'Serie', 'Número', 'Tipo', 'Cliente', 'RUC/DNI', 'Fecha Emisión',
     'Op. Gravada', 'Op. Exonerada', 'Op. Inafecta',
     'Subtotal', 'Descuento', 'IGV', 'Total',
     ...(hasUsdInvoices ? ['Moneda'] : []),
@@ -127,12 +140,17 @@ function buildAccountingWorkbook(filtered, businessData = null, periodLabel = nu
   ]
   const totalCols = headers.length
 
-  // Índices de columnas específicas (Moneda mueve un slot al resto)
-  const ccyCol = hasUsdInvoices ? 12 : -1
-  const sunatCol = hasUsdInvoices ? 13 : 12
-  const xmlCol = hasUsdInvoices ? 14 : 13
-  const cdrCol = hasUsdInvoices ? 15 : 14
-  const hashCol = hasUsdInvoices ? 16 : 15
+  // Índices por NOMBRE de columna: separar la serie del número (o sumar la
+  // columna Moneda) ya no descuadra los estilos ni la fila de totales.
+  const col = (nombre) => headers.indexOf(nombre)
+  const fechaCol = col('Fecha Emisión')
+  const primerMontoCol = col('Op. Gravada')
+  const ultimoMontoCol = col('Total')
+  const ccyCol = hasUsdInvoices ? col('Moneda') : -1
+  const sunatCol = col('Estado SUNAT')
+  const xmlCol = col('XML')
+  const cdrCol = col('CDR')
+  const hashCol = col('Hash SUNAT')
 
   const aoa = [['REPORTE CONTABLE'], []]
   const metaStart = aoa.length
@@ -172,7 +190,7 @@ function buildAccountingWorkbook(filtered, businessData = null, periodLabel = nu
       : 'Pendiente'
 
     aoa.push([
-      inv.number || '-',
+      ...celdasDeNumero(inv),
       typeNames[docType] || 'Factura',
       inv.customer?.businessName || inv.customer?.name || '-',
       inv.customer?.documentNumber || '-',
@@ -214,7 +232,7 @@ function buildAccountingWorkbook(filtered, businessData = null, periodLabel = nu
     const t = totalsByCurrency[ccy]
     const label = totalsOrder.length === 1 ? 'TOTALES:' : `TOTAL ${ccy}:`
     const baseRow = [
-      '', '', '', '', label,
+      ...Array(fechaCol).fill(''), label,
       Number(t.gravada.toFixed(2)),
       Number(t.exonerada.toFixed(2)),
       Number(t.inafecta.toFixed(2)),
@@ -232,7 +250,7 @@ function buildAccountingWorkbook(filtered, businessData = null, periodLabel = nu
   // Crear sheet con estilos
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   applyColumnWidths(ws, [
-    16, 14, 32, 14, 13,
+    8, 12, 14, 32, 14, 13,
     13, 14, 13, 12, 12, 11, 13,
     ...(hasUsdInvoices ? [10] : []),
     14, 8, 8, 40,
@@ -246,13 +264,14 @@ function buildAccountingWorkbook(filtered, businessData = null, periodLabel = nu
     const r = dataStart + i
     const docType = docTypes[i]
     const invCcy = invoiceCurrencies[i]
-    setStyle(ws, r, 0, centerStyle(i))                  // Número
-    setStyle(ws, r, 1, docTypeBadgeStyle(docType))      // Tipo (badge)
-    setStyle(ws, r, 2, cellStyle(i))                    // Cliente
-    setStyle(ws, r, 3, centerStyle(i))                  // RUC/DNI
-    setStyle(ws, r, 4, centerStyle(i))                  // Fecha
+    setStyle(ws, r, 0, centerStyle(i))                  // Serie
+    setStyle(ws, r, 1, estiloDelCorrelativo(i, aoa[r][1])) // Número
+    setStyle(ws, r, 2, docTypeBadgeStyle(docType))      // Tipo (badge)
+    setStyle(ws, r, 3, cellStyle(i))                    // Cliente
+    setStyle(ws, r, 4, centerStyle(i))                  // RUC/DNI
+    setStyle(ws, r, fechaCol, centerStyle(i))           // Fecha
     // Columnas numéricas (Op. Gravada..Total) — usan formato moneda nativa si hay USD
-    for (let c = 5; c <= 11; c++) {
+    for (let c = primerMontoCol; c <= ultimoMontoCol; c++) {
       setStyle(ws, r, c, hasUsdInvoices ? numberStyleCcy(i, invCcy) : numberStyle(i))
     }
     if (hasUsdInvoices) {
@@ -267,9 +286,9 @@ function buildAccountingWorkbook(filtered, businessData = null, periodLabel = nu
   // Filas de totales (una por moneda activa)
   totalRows.forEach(({ row, ccy }) => {
     for (let c = 0; c < totalCols; c++) {
-      if (c === 4) {
+      if (c === fechaCol) {
         setStyle(ws, row, c, totalLabelStyle)
-      } else if (c >= 5 && c <= 11) {
+      } else if (c >= primerMontoCol && c <= ultimoMontoCol) {
         setStyle(ws, row, c, hasUsdInvoices ? totalNumberStyleCcy(ccy) : totalNumberStyle)
       } else if (c === ccyCol && hasUsdInvoices) {
         const base = currencyTagStyle(0, ccy)
@@ -400,7 +419,7 @@ function appendVoidedRejectedSheet(wb, invoices, businessData, periodLabel) {
   })
   if (filtered.length === 0) return
 
-  const headers = ['Número', 'Tipo', 'Cliente', 'RUC/DNI', 'Fecha', 'Total', 'Estado SUNAT', 'Motivo']
+  const headers = ['Serie', 'Número', 'Tipo', 'Cliente', 'RUC/DNI', 'Fecha', 'Total', 'Estado SUNAT', 'Motivo']
   const totalCols = headers.length
 
   const aoa = [['COMPROBANTES ANULADOS O RECHAZADOS'], []]
@@ -427,7 +446,7 @@ function appendVoidedRejectedSheet(wb, invoices, businessData, periodLabel) {
     const label = status === 'rejected' ? 'Rechazado' : 'Anulado'
     totalSum += (inv.total || 0)
     aoa.push([
-      inv.number || '-',
+      ...celdasDeNumero(inv),
       typeNames[inv.documentType] || 'Factura',
       inv.customer?.name || inv.customer?.businessName || '-',
       inv.customer?.documentNumber || '-',
@@ -439,28 +458,29 @@ function appendVoidedRejectedSheet(wb, invoices, businessData, periodLabel) {
   })
   aoa.push([])
   const totalRowIdx = aoa.length
-  aoa.push(['', '', '', '', 'TOTAL', Number(totalSum.toFixed(2)), '', ''])
+  aoa.push(['', '', '', '', '', 'TOTAL', Number(totalSum.toFixed(2)), '', ''])
 
   const ws = XLSX.utils.aoa_to_sheet(aoa)
-  applyColumnWidths(ws, [16, 14, 30, 14, 13, 14, 14, 40])
+  applyColumnWidths(ws, [8, 12, 14, 30, 14, 13, 14, 14, 40])
   applyTitleRow(ws, 0, totalCols)
   applyMetadataRows(ws, metaStart, metaEnd)
   applyHeaderRow(ws, headerRow, totalCols)
   for (let i = 0; i < filtered.length; i++) {
     const r = dataStart + i
     setStyle(ws, r, 0, centerStyle(i))
-    setStyle(ws, r, 1, centerStyle(i))
-    setStyle(ws, r, 2, cellStyle(i))
-    setStyle(ws, r, 3, centerStyle(i))
+    setStyle(ws, r, 1, estiloDelCorrelativo(i, aoa[r][1]))
+    setStyle(ws, r, 2, centerStyle(i))
+    setStyle(ws, r, 3, cellStyle(i))
     setStyle(ws, r, 4, centerStyle(i))
-    setStyle(ws, r, 5, numberStyle(i))
-    setStyle(ws, r, 6, { ...centerStyle(i), font: { ...centerStyle(i).font, bold: true, color: { rgb: COLORS.dangerText } } })
-    setStyle(ws, r, 7, cellStyle(i))
+    setStyle(ws, r, 5, centerStyle(i))
+    setStyle(ws, r, 6, numberStyle(i))
+    setStyle(ws, r, 7, { ...centerStyle(i), font: { ...centerStyle(i).font, bold: true, color: { rgb: COLORS.dangerText } } })
+    setStyle(ws, r, 8, cellStyle(i))
   }
-  for (let c = 0; c <= 4; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
-  setStyle(ws, totalRowIdx, 5, totalNumberStyle)
-  setStyle(ws, totalRowIdx, 6, totalLabelStyle)
+  for (let c = 0; c <= 5; c++) setStyle(ws, totalRowIdx, c, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 6, totalNumberStyle)
   setStyle(ws, totalRowIdx, 7, totalLabelStyle)
+  setStyle(ws, totalRowIdx, 8, totalLabelStyle)
   applyFreezeBelow(ws, headerRow)
   XLSX.utils.book_append_sheet(wb, ws, 'Anulados-Rechazados')
 }
@@ -468,7 +488,7 @@ function appendVoidedRejectedSheet(wb, invoices, businessData, periodLabel) {
 /** Items facturados con su afectación tributaria (Gravado/Exonerado/Inafecto). */
 function appendItemsAfectacionSheet(wb, invoices, businessData, periodLabel) {
   const headers = [
-    'N° Doc', 'Fecha', 'Cliente', 'Producto', 'SKU',
+    'Serie', 'Número', 'Fecha', 'Cliente', 'Producto', 'SKU',
     'Cantidad', 'Precio Unit.', 'Subtotal', 'Afectación IGV',
   ]
   const totalCols = headers.length
@@ -492,6 +512,7 @@ function appendItemsAfectacionSheet(wb, invoices, businessData, periodLabel) {
     if (!Array.isArray(inv.items)) continue
     const invDate = formatDateAccounting(getInvoiceDate(inv))
     const customerName = inv.customer?.name || inv.customer?.businessName || 'Cliente General'
+    const numeroDoc = celdasDeNumero(inv)
     // La devolución se cuenta como lo que es: unidades que VUELVEN. Con la
     // cantidad en negativo, cantidad x precio da el subtotal negativo solo y
     // la fila sigue cuadrando en la planilla.
@@ -505,7 +526,7 @@ function appendItemsAfectacionSheet(wb, invoices, businessData, periodLabel) {
       totalQty += qty
       totalAmount += sub
       aoa.push([
-        inv.number || 'N/A', invDate, customerName,
+        ...numeroDoc, invDate, customerName,
         item.name || item.description || 'Producto', item.sku || item.code || '',
         Number(qty), Number(price.toFixed(2)),
         Number(sub.toFixed(2)), afect,
@@ -529,21 +550,22 @@ function appendItemsAfectacionSheet(wb, invoices, businessData, periodLabel) {
   const subDataEnd = aoa.length - 1
 
   const ws = XLSX.utils.aoa_to_sheet(aoa)
-  applyColumnWidths(ws, [14, 13, 30, 36, 14, 10, 12, 14, 14])
+  applyColumnWidths(ws, [8, 12, 13, 30, 36, 14, 10, 12, 14, 14])
   applyTitleRow(ws, 0, totalCols)
   applyMetadataRows(ws, metaStart, metaEnd)
   applyHeaderRow(ws, headerRow, totalCols)
   for (let i = 0; i < rowCount; i++) {
     const r = dataStart + i
     setStyle(ws, r, 0, centerStyle(i))
-    setStyle(ws, r, 1, centerStyle(i))
-    setStyle(ws, r, 2, cellStyle(i))
+    setStyle(ws, r, 1, estiloDelCorrelativo(i, aoa[r][1]))
+    setStyle(ws, r, 2, centerStyle(i))
     setStyle(ws, r, 3, cellStyle(i))
-    setStyle(ws, r, 4, centerStyle(i))
-    setStyle(ws, r, 5, numberStyle(i))
+    setStyle(ws, r, 4, cellStyle(i))
+    setStyle(ws, r, 5, centerStyle(i))
     setStyle(ws, r, 6, numberStyle(i))
     setStyle(ws, r, 7, numberStyle(i))
-    setStyle(ws, r, 8, centerStyle(i))
+    setStyle(ws, r, 8, numberStyle(i))
+    setStyle(ws, r, 9, centerStyle(i))
   }
   // Sub-sección totales por afectación
   applySubtitleRow(ws, subSectionRow, totalCols)
