@@ -9,6 +9,10 @@ enum ChatAPI {
     struct ErrorEnvio: LocalizedError {
         let mensaje: String
         let ventanaCerrada: Bool
+        /// El pedido salió pero la respuesta no volvió (señal que se cae, la
+        /// app que se suspende): el servidor pudo haberlo mandado igual. No es
+        /// lo mismo que un rechazo, y no hay que decir "no salió".
+        var incierto = false
         var errorDescription: String? { mensaje }
     }
 
@@ -35,7 +39,16 @@ enum ChatAPI {
         do {
             (data, resp) = try await URLSession.shared.data(for: req)
         } catch {
-            throw ErrorEnvio(mensaje: "Sin conexión. El mensaje no salió.", ventanaCerrada: false)
+            // Sin red desde el principio: el pedido ni salió del iPhone.
+            let nuncaSalio: Set<URLError.Code> = [.notConnectedToInternet, .cannotFindHost,
+                                                   .cannotConnectToHost, .dnsLookupFailed]
+            if let codigo = (error as? URLError)?.code, nuncaSalio.contains(codigo) {
+                throw ErrorEnvio(mensaje: "Sin conexión. El mensaje no salió.", ventanaCerrada: false)
+            }
+            // Lo demás (se cortó, tardó demasiado) pasa con el pedido ya en
+            // camino: el servidor pudo haberlo mandado.
+            throw ErrorEnvio(mensaje: "No se pudo confirmar si el mensaje salió. Míralo en la conversación antes de reenviarlo.",
+                             ventanaCerrada: false, incierto: true)
         }
 
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0

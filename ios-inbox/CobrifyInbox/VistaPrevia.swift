@@ -21,6 +21,26 @@ enum VistaPrevia {
     /// tiempos del arranque real.
     static let soloSplash = ProcessInfo.processInfo.arguments.contains("-splash")
 
+    /// `-envioSimulado`: enviar "sale" (al segundo aparece como mensaje propio)
+    /// en vez de fallar por no haber sesión. Para probar el compositor de
+    /// verdad: que el cuadro quede vacío y no vuelva a llenarse solo.
+    static let envioSimulado = ProcessInfo.processInfo.arguments.contains("-envioSimulado")
+
+    /// `-ecoDelTeclado exacto|letra|corregido`: medio segundo después de un
+    /// envío mete en el cuadro lo que hace el teclado del iPhone: el mensaje
+    /// entero (el compositor lo borra solo), o el mensaje con una palabra
+    /// nueva detrás o con la última cambiada (se queda, pero enviarlo pide
+    /// confirmación).
+    static func ecoDelTeclado(para texto: String) -> String? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-ecoDelTeclado"), i + 1 < args.count else { return nil }
+        switch args[i + 1] {
+        case "letra": return texto + " X"
+        case "corregido": return texto + "s"
+        default: return texto
+        }
+    }
+
     @MainActor @ViewBuilder static var pantalla: some View {
         if soloSplash {
             SplashView()

@@ -1,6 +1,7 @@
 import Foundation
 import FirebaseFirestore
 import UserNotifications
+import UIKit
 
 /// La bandeja en vivo: escucha `whatsappConversations` igual que la web
 /// (más reciente primero). Firestore empuja los cambios y además los deja en
@@ -187,14 +188,55 @@ final class MensajesStore: ObservableObject {
     func enviar(texto: String, conversationId: String, respondeA: String? = nil) async -> String? {
         let eco = Mensaje(pendiente: texto)
         pendientes.append(eco)
+        // Salir de la app justo después de enviar ya no corta el envío a medias:
+        // iOS da unos segundos para terminarlo. Antes el pedido se perdía, la
+        // app decía "no salió" y devolvía el texto al cuadro, pero el servidor
+        // lo mandaba igual, y otro toque lo mandaba dos veces (11-set-2026).
+        let fondo = TareaDeFondo("enviar-mensaje")
+        defer { fondo.terminar() }
+        #if DEBUG
+        if VistaPrevia.activa && VistaPrevia.envioSimulado {
+            try? await Task.sleep(for: .seconds(1))
+            mensajes.append(Mensaje(id: "vp-enviado-\(UUID().uuidString)", data: [
+                "direccion": "saliente", "tipo": "text", "texto": texto,
+                "estado": "sent", "timestamp": Timestamp(date: Date()),
+            ]))
+            retirarEcosConfirmados()
+            return nil
+        }
+        #endif
         do {
             let id = try await ChatAPI.enviarTexto(conversationId: conversationId, texto: texto, respondeA: respondeA)
             confirmar(eco: eco.id, waMessageId: id)
             return nil
         } catch {
+            let e = error as? ChatAPI.ErrorEnvio
+            // Si la respuesta se perdió por el camino, el mensaje pudo haber
+            // salido igual (el servidor tarda 4 a 6 s cuando "despierta"). Antes
+            // de darlo por fallido se espera a verlo llegar a la conversación.
+            if e?.incierto == true, await llegoAlChat(texto, desde: eco.timestamp ?? Date()) {
+                pendientes.removeAll { $0.id == eco.id }
+                return nil
+            }
             pendientes.removeAll { $0.id == eco.id }
-            return (error as? ChatAPI.ErrorEnvio)?.mensaje ?? "No se pudo enviar el mensaje."
+            return e?.mensaje ?? "No se pudo enviar el mensaje."
         }
+    }
+
+    /// Espera hasta 15 s a que el mensaje aparezca en la conversación: el
+    /// servidor lo guarda al mandarlo y la suscripción lo trae. Sirve para no
+    /// dar por fallido un envío cuya respuesta se perdió pero que sí salió.
+    private func llegoAlChat(_ texto: String, desde: Date) async -> Bool {
+        // Un minuto de margen: la hora la pone el servidor, no este iPhone.
+        let desde = desde.addingTimeInterval(-60)
+        let limite = Date().addingTimeInterval(15)
+        while Date() < limite {
+            if mensajes.contains(where: { $0.esSaliente && $0.texto == texto && ($0.timestamp ?? .distantPast) >= desde }) {
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        return false
     }
 
     /// Envía un archivo con eco optimista. Devuelve el error o nil.
@@ -221,5 +263,24 @@ final class MensajesStore: ObservableObject {
     func parar() {
         listener?.remove()
         listener = nil
+    }
+}
+
+/// Pide a iOS unos segundos para terminar un envío aunque la app pase al
+/// fondo. Hay que terminarla siempre con `terminar()`, o iOS la corta solo.
+@MainActor
+final class TareaDeFondo {
+    private var id: UIBackgroundTaskIdentifier = .invalid
+
+    init(_ nombre: String) {
+        id = UIApplication.shared.beginBackgroundTask(withName: nombre) { [weak self] in
+            self?.terminar()
+        }
+    }
+
+    func terminar() {
+        guard id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(id)
+        id = .invalid
     }
 }

@@ -10,11 +10,14 @@ struct ConversationView: View {
     let alAbrir: () -> Void
     @StateObject private var store = MensajesStore()
     @State private var borrador = ""
-    /// Cuándo salió lo último del compositor. Lo usa el `onChange` del cuadro
-    /// para borrar lo que el teclado vuelva a meter justo después de enviar.
-    @State private var momentoDeEnvio: Date?
-    /// El último TEXTO enviado y cuándo: un segundo toque con el mismo texto a
-    /// los pocos segundos no se manda otra vez.
+    /// Lo último que salió del cuadro y cuándo. Lo usa el `onChange` del
+    /// cuadro para borrar el mensaje enviado si el teclado lo vuelve a meter
+    /// enseguida.
+    @State private var recienEnviado: (texto: String, cuando: Date)?
+    /// Un texto que repite lo recién enviado, esperando que se confirme.
+    @State private var repetidoPorConfirmar: String?
+    /// El último TEXTO enviado y cuándo: cuenta como recién enviado aunque el
+    /// servidor todavía no lo haya devuelto (ver `repiteLoRecienEnviado`).
     @State private var ultimoTextoEnviado: (texto: String, cuando: Date)?
     @State private var errorEnvio: String?
     @State private var mostrarGaleria = false
@@ -379,6 +382,7 @@ struct ConversationView: View {
             // El mensaje cae en el compositor, no sale solo: a un cliente que
             // acaba de pagar no conviene mandarle nada a ciegas.
             EnviarAltaSheet(conv: conv) { mensaje in
+                recienEnviado = nil
                 borrador = mensaje
                 cuadroEnfocado = true
             }
@@ -786,23 +790,46 @@ struct ConversationView: View {
                         TextField("Mensaje", text: $borrador, axis: .vertical)
                             .lineLimit(1...5)
                             .focused($cuadroEnfocado)
-                            .onChange(of: borrador) { _, nuevo in
-                                // Escribiendo rápido, el teclado del iPhone (autocorrector
-                                // y predicción) puede volver a meter en el cuadro el mensaje
-                                // que se acaba de enviar: SwiftUI borra el texto, pero el
-                                // cuadro de UIKit todavía no se enteró y le escribe encima lo
-                                // que tenía. Pasó en la primera conversación real (10-set):
-                                // el mensaje salió, el cuadro quedó lleno y otro toque lo
-                                // habría mandado dos veces. En tres décimas de segundo nadie
-                                // empieza un mensaje nuevo, así que lo que aparezca en ese
-                                // hueco es el teclado, y se vuelve a borrar.
+                            .onChange(of: borrador) { viejo, nuevo in
+                                // El teclado del iPhone (autocorrector, predicción,
+                                // dictado) puede volver a meter en el cuadro el mensaje que
+                                // se acaba de enviar: SwiftUI borra el texto, pero el cuadro
+                                // de UIKit lo tenía a medio confirmar y lo escribe de nuevo.
+                                // Si pasa en los 2 s siguientes y es EXACTAMENTE lo enviado,
+                                // se vuelve a borrar. El build 53 miraba solo 0,3 s y
+                                // escribiendo largo se escapaba (11-set).
+                                //
+                                // Más allá no se toca el cuadro: borrar "lo que parece un eco"
+                                // mientras la persona escribe le comía el mensaje nuevo
+                                // (enviar "Ok" y escribir "Ok gracias" dejaba "gracias"). Lo
+                                // que se escape lo frena `enviar()`: repetir lo recién
+                                // enviado pide confirmación.
                                 //
                                 // SALVO si el envío falló: ahí el texto vuelve a propósito
                                 // para no perder lo escrito, y `errorEnvio` se pone ANTES de
                                 // devolverlo, así que esta guarda lo deja en paz.
-                                guard let m = momentoDeEnvio, !nuevo.isEmpty, errorEnvio == nil,
-                                      Date().timeIntervalSince(m) < 0.3 else { return }
+                                guard let enviado = recienEnviado, errorEnvio == nil,
+                                      viejo.isEmpty, !nuevo.isEmpty,
+                                      Date().timeIntervalSince(enviado.cuando) < 2,
+                                      Compositor.esElMismo(nuevo, enviado.texto) else { return }
                                 borrador = ""
+                            }
+                            // Alerta y no hoja de acciones: pegada al cuadro, la hoja se
+                            // abría como globo y escondía el botón de no mandar.
+                            .alert("Este mensaje ya salió hace un momento",
+                                   isPresented: Binding(
+                                       get: { repetidoPorConfirmar != nil },
+                                       set: { if !$0 { repetidoPorConfirmar = nil } })) {
+                                Button("No mandar", role: .cancel) {
+                                    repetidoPorConfirmar = nil
+                                    borrador = ""
+                                }
+                                Button("Mandarlo otra vez") {
+                                    repetidoPorConfirmar = nil
+                                    enviar(forzar: true)
+                                }
+                            } message: {
+                                Text("Puede que el teclado lo haya vuelto a escribir solo. Si ya le llegó al cliente, mandarlo otra vez lo repite.")
                             }
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
@@ -814,7 +841,7 @@ struct ConversationView: View {
                             .vidrioRedondeado(20)
 
                         if puedeEnviar {
-                            Button(action: enviar) {
+                            Button(action: { enviar() }) {
                                 Image(systemName: "arrow.up")
                                     .font(.system(size: 17, weight: .semibold))
                                     .foregroundStyle(.white)
@@ -967,17 +994,36 @@ struct ConversationView: View {
     private func usarRapida(_ r: RespuestaRapida) {
         errorEnvio = nil
         mediaPendiente = r.media
+        recienEnviado = nil
         borrador = r.texto
         cuadroEnfocado = true
     }
 
-    private func enviar() {
+    /// Si `texto` repite algo que acaba de salir en esta conversación: lo que
+    /// salió en los últimos 2 minutos (15 s si era una sola palabra: dos "Ok"
+    /// seguidos suelen ser a propósito), incluido lo que todavía viaja.
+    private func repiteLoRecienEnviado(_ texto: String) -> Bool {
+        let ahora = Date()
+        var recientes: [(texto: String, cuando: Date)] = store.mensajes.compactMap { m in
+            guard m.esSaliente, let t = m.timestamp else { return nil }
+            return (texto: m.texto, cuando: t)
+        }
+        recientes += store.pendientes.map { (texto: $0.texto, cuando: $0.timestamp ?? ahora) }
+        if let u = ultimoTextoEnviado { recientes.append(u) }
+        return recientes.contains { previo in
+            let unaPalabra = !previo.texto.contains(where: \.isWhitespace)
+            return ahora.timeIntervalSince(previo.cuando) < (unaPalabra ? 15 : 120)
+                && Compositor.repite(texto, el: previo.texto)
+        }
+    }
+
+    private func enviar(forzar: Bool = false) {
         let texto = borrador.trimmingCharacters(in: .whitespacesAndNewlines)
         // Con archivo esperando, el texto es opcional (va de pie de foto).
         if let media = mediaPendiente {
             mediaPendiente = nil
+            recienEnviado = texto.isEmpty ? nil : (texto, Date())
             borrador = ""
-            momentoDeEnvio = Date()
             errorEnvio = nil
             let eco = Mensaje(pendienteTipo: media.tipo, texto: texto)
             store.pendientes.append(eco)
@@ -990,24 +1036,27 @@ struct ConversationView: View {
                     store.pendientes.removeAll { $0.id == eco.id }
                     errorEnvio = (error as? ChatAPI.ErrorEnvio)?.mensaje ?? "No se pudo enviar."
                     mediaPendiente = media
+                    recienEnviado = nil
                     if borrador.isEmpty { borrador = texto }
                 }
             }
             return
         }
         guard !texto.isEmpty else { return }
-        // Un segundo toque con EXACTAMENTE el mismo texto a los pocos segundos
-        // no es un mensaje nuevo: es el cuadro que se volvió a llenar solo (ver
-        // el `onChange` de `borrador`) o un dedo que tocó dos veces. Mandarlo
-        // otra vez es el duplicado que el cliente ve como un error nuestro.
-        if let u = ultimoTextoEnviado, u.texto == texto, Date().timeIntervalSince(u.cuando) < 5 {
-            borrador = ""
+        // Repetir lo que acaba de salir casi nunca es a propósito: es el cuadro
+        // que el teclado volvió a llenar solo, o un texto que volvió tras un
+        // envío que parecía fallido y sí salió. Mandarlo otra vez es el
+        // duplicado que el cliente ve como un error nuestro, así que se
+        // pregunta primero. Antes se descartaba en silencio, y solo si era
+        // idéntico y a menos de 5 s: lo demás se escapaba.
+        if !forzar, repiteLoRecienEnviado(texto) {
+            repetidoPorConfirmar = texto
             return
         }
         let cita = respondiendoA?.id
         respondiendoA = nil
+        recienEnviado = (texto, Date())
         borrador = ""
-        momentoDeEnvio = Date()
         ultimoTextoEnviado = (texto, Date())
         errorEnvio = nil
         // Sin bloquear el compositor: el mensaje ya se ve y puedes seguir
@@ -1017,13 +1066,21 @@ struct ConversationView: View {
             if let error {
                 errorEnvio = error
                 // Un envío que FALLÓ no cuenta como enviado. Sin esto, reintentar
-                // con el mismo texto en los 5 s siguientes chocaba con la red
-                // contra duplicados de `enviar()`: borraba el cuadro y no mandaba
-                // nada, justo cuando el usuario intentaba reenviarlo.
+                // con el mismo texto chocaba con la confirmación de repetidos de
+                // `enviar()`, justo cuando el usuario intentaba reenviarlo.
                 ultimoTextoEnviado = nil
+                recienEnviado = nil
                 // El texto vuelve al borrador: nada se pierde por un fallo.
                 if borrador.isEmpty { borrador = texto }
             }
+            #if DEBUG
+            // Vista previa con `-ecoDelTeclado`: hace lo que hace el teclado del
+            // iPhone —volver a meter lo enviado— para probar la guarda sin él.
+            if error == nil, let eco = VistaPrevia.ecoDelTeclado(para: texto) {
+                try? await Task.sleep(for: .seconds(0.5))
+                borrador = eco
+            }
+            #endif
         }
     }
 }
@@ -1509,5 +1566,34 @@ extension View {
         } else {
             self
         }
+    }
+}
+
+/// El cuadro del compositor frente a lo que el teclado vuelve a meter solo.
+/// Mayúsculas, tildes y espacios no cuentan.
+enum Compositor {
+    /// El mismo mensaje.
+    static func esElMismo(_ a: String, _ b: String) -> Bool {
+        let x = palabras(a)
+        return !x.isEmpty && x == palabras(b)
+    }
+
+    /// Si `texto` repite a `previo`: el mismo mensaje; ese mensaje con algo
+    /// más detrás (el teclado lo volvió a meter y se siguió escribiendo); o,
+    /// en mensajes largos, el mismo con la última palabra cambiada (el
+    /// autocorrector la corrigió). Un mensaje que empieza con un "Ok" suelto
+    /// no cuenta: eso es escribir.
+    static func repite(_ texto: String, el previo: String) -> Bool {
+        let t = palabras(texto), p = palabras(previo)
+        guard !t.isEmpty, !p.isEmpty else { return false }
+        if t == p { return true }
+        if p.count >= 2, t.count > p.count, Array(t.prefix(p.count)) == p { return true }
+        if p.count >= 5, t.count == p.count, Array(t.dropLast()) == Array(p.dropLast()) { return true }
+        return false
+    }
+
+    private static func palabras(_ s: String) -> [String] {
+        s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .split(whereSeparator: \.isWhitespace).map(String.init)
     }
 }
