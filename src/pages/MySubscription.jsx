@@ -6,13 +6,15 @@ import {
   PLANS,
   PLAN_TIERS,
   resolvePlanTier,
-  getTierPrice,
+  getTierPrecios,
   getAnnualSavings,
+  desglosarPrecio,
 } from '@/services/subscriptionService';
 import { getVendedorByLinkedUser, getVendedorClients } from '@/services/vendedorService';
 import { puedeVerHistorialDePagos } from '@/utils/subscriptionOwnership';
 import { MESES_DE_REGALO, MESES_PARA_QUIEN_REFIERE, mesesDeRegalo } from '@/data/referidos';
 import { useSubscriptionPaymentInfo } from '@/hooks/useSubscriptionPaymentInfo';
+import PagoDeLaSuscripcion from '@/components/PagoDeLaSuscripcion';
 import {
   Calendar,
   DollarSign,
@@ -31,7 +33,6 @@ import {
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale';
-import yapeLogo from '@/assets/wallets/yape.png';
 import { WHATSAPP_COBRIFY_LEGIBLE, EMAIL_SOPORTE } from '@/data/contacto';
 
 /**
@@ -88,6 +89,13 @@ export default function MySubscription() {
     const { cycle } = resolvePlanTier(subscription.plan);
     if (cycle) setBillingCycle(cycle);
   }, [subscription?.plan]);
+
+  // El "Renovar ahora" de la tira de vencimiento llega con #pagar: se baja
+  // directo a los datos de pago en cuanto la suscripción está cargada.
+  const hayQueIrAPagar = !!subscription && window.location.hash === '#pagar';
+  useEffect(() => {
+    if (hayQueIrAPagar) document.getElementById('pagar')?.scrollIntoView({ block: 'start' });
+  }, [hayQueIrAPagar]);
 
   // Vendedor asignado a ESTA cuenta (no confundir con `vendedorInfo` de más abajo,
   // que responde a "el usuario logueado ES un vendedor"). Mismo hook que usa la
@@ -171,6 +179,13 @@ export default function MySubscription() {
   // Monto de renovación del plan ACTUAL: el precio pactado congelado manda sobre
   // el catálogo (así un cliente viejo renueva a su precio, no al de la lista).
   const renewAmount = subscription.renewalPrice != null ? subscription.renewalPrice : planInfo.totalPrice;
+  // Ese monto sin y con IGV, como en /precios. El pactado a veces quedó
+  // guardado con IGV (ver `desglosarPrecio`).
+  const pactado = renewAmount != null ? desglosarPrecio(renewAmount) : null;
+  // "Paga aquí" muestra el total solo a los directos: al cliente de un reseller
+  // o de un vendedor le cobra su proveedor, a su propio precio.
+  const montoAPagar = isDirectClient ? pactado : null;
+  const nombreDelPlan = subscription.planName || planInfo.name || subscription.plan;
   // Dónde está parado hoy dentro de la grilla nivel × ciclo (null si es legacy).
   const { tier: currentTier, cycle: currentCycle } = resolvePlanTier(subscription.plan);
   const cicloTexto = billingCycle === 'annual' ? 'anual' : 'mensual';
@@ -246,6 +261,25 @@ export default function MySubscription() {
         </div>
       </div>
 
+      {/* PAGA AQUÍ: los datos de pago de quien le cobra a esta cuenta (Cobrify,
+          su reseller o su vendedor; ver useSubscriptionPaymentInfo) y el envío
+          de la captura por WhatsApp. Es adonde lleva el "Renovar ahora" de la
+          tira de vencimiento. La renovación se registra al confirmar el pago. */}
+      <div id="pagar" className="scroll-mt-20 rounded-2xl border border-gray-200 bg-white p-6">
+        <h3 className="text-lg font-bold text-gray-900">Paga aquí</h3>
+        <p className="text-gray-500 text-sm mt-0.5">Elige cómo pagar y envíanos la captura por WhatsApp.</p>
+        <div className="mt-5">
+          <PagoDeLaSuscripcion
+            subscription={subscription}
+            horizontal
+            monto={montoAPagar?.sinIgv ?? null}
+            montoConIgv={montoAPagar?.conIgv ?? null}
+            concepto={`Renovación · ${nombreDelPlan}`}
+            mensaje={`Hola, ya pagué la renovación de mi plan ${nombreDelPlan}. Mi correo es ${user?.email || ''}. Te envío la captura.`}
+          />
+        </div>
+      </div>
+
       {/* Renovar o cambiar de plan — solo clientes directos.
           Grilla nivel × ciclo: 3 planes y un interruptor mensual/anual. El plan que
           ya tiene el cliente se marca "Tu plan" y muestra su precio pactado
@@ -261,8 +295,8 @@ export default function MySubscription() {
               <p className="text-gray-500 text-sm mt-0.5">
                 Elige el plan y escríbenos por WhatsApp: te pasamos los datos para pagar.
               </p>
+              {/* Sin Yape hasta que el de Cobrify esté activo (ver useSubscriptionPaymentInfo). */}
               <div className="flex items-center gap-2.5 mt-3">
-                <img src={yapeLogo} alt="Yape" className="h-6 w-auto rounded" />
                 <span className="text-xs text-gray-600 bg-gray-100 rounded-full px-2.5 py-1">Plin</span>
                 <span className="text-xs text-gray-600 bg-gray-100 rounded-full px-2.5 py-1">Transferencia</span>
               </div>
@@ -295,11 +329,11 @@ export default function MySubscription() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-5">
             {PLAN_TIERS.map((tier) => {
               const planId = tier.cycles[billingCycle];
-              const catalogPrice = getTierPrice(tier, billingCycle);
+              const catalogo = getTierPrecios(tier, billingCycle);
               const savings = getAnnualSavings(tier);
               const isCurrent = currentTier?.id === tier.id && currentCycle === billingCycle;
               // El plan propio renueva al precio pactado; los otros, al de catálogo.
-              const shownPrice = isCurrent && renewAmount != null ? Number(renewAmount) : catalogPrice;
+              const precios = isCurrent && pactado ? pactado : catalogo;
               // Ciclo no disponible para este nivel (ej. Básico no tiene anual)
               if (!planId) {
                 return (
@@ -340,15 +374,22 @@ export default function MySubscription() {
                     ) : null}
                   </div>
 
+                  {/* Sin IGV grande y con IGV debajo, como en /precios. */}
                   <div className="mt-3">
-                    <span className="text-2xl font-bold text-gray-900">S/ {Number(shownPrice).toFixed(2)}</span>
-                    <span className="text-sm text-gray-500"> / {billingCycle === 'annual' ? 'año' : 'mes'}</span>
+                    <p className="flex items-baseline gap-1">
+                      <span className="text-2xl font-bold text-gray-900 tabular-nums">S/ {precios.sinIgv.toFixed(2)}</span>
+                      <span className="text-sm text-gray-500">/ {billingCycle === 'annual' ? 'año' : 'mes'}</span>
+                    </p>
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Sin IGV</p>
+                    <p className="mt-1 text-sm text-gray-500 tabular-nums">
+                      <span className="font-semibold text-gray-700">S/ {precios.conIgv.toFixed(2)}</span> con IGV
+                    </p>
                     {billingCycle === 'annual' && savings > 0 && (
-                      <p className="text-xs font-semibold text-emerald-600 mt-0.5">
+                      <p className="text-xs font-semibold text-emerald-600 mt-1">
                         Ahorras S/ {savings.toFixed(2)} al año
                       </p>
                     )}
-                    {isCurrent && renewAmount != null && catalogPrice != null && Number(renewAmount) !== catalogPrice && (
+                    {isCurrent && pactado && catalogo && pactado.sinIgv !== catalogo.sinIgv && (
                       <p className="text-xs text-gray-500 mt-0.5">Tu precio pactado</p>
                     )}
                   </div>
@@ -365,8 +406,8 @@ export default function MySubscription() {
                   <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-2">
                     <a
                       href={pedirPorWhatsApp(isCurrent
-                        ? `Hola, quiero renovar mi plan ${tier.name} ${cicloTexto} (S/ ${Number(shownPrice).toFixed(2)}).`
-                        : `Hola, quiero cambiar al plan ${tier.name} ${cicloTexto} (S/ ${Number(catalogPrice).toFixed(2)}).`)}
+                        ? `Hola, quiero renovar mi plan ${tier.name} ${cicloTexto} (S/ ${precios.sinIgv.toFixed(2)} sin IGV).`
+                        : `Hola, quiero cambiar al plan ${tier.name} ${cicloTexto} (S/ ${catalogo.sinIgv.toFixed(2)} sin IGV).`)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className={`w-full px-4 py-2.5 rounded-xl font-semibold text-sm text-center transition-colors ${
@@ -388,10 +429,10 @@ export default function MySubscription() {
             <div className="mt-4 rounded-xl bg-gray-50 border border-gray-200 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <p className="text-sm text-gray-600">
                 Tu plan actual es <span className="font-semibold text-gray-900">{subscription.planName || planInfo.name || subscription.plan}</span>
-                {renewAmount != null && <> — renovación S/ {Number(renewAmount).toFixed(2)}</>}
+                {pactado && <> — renovación S/ {pactado.sinIgv.toFixed(2)} sin IGV (S/ {pactado.conIgv.toFixed(2)} con IGV)</>}
               </p>
               <a
-                href={pedirPorWhatsApp(`Hola, quiero renovar mi plan actual (${subscription.planName || planInfo.name || subscription.plan}${renewAmount != null ? `, S/ ${Number(renewAmount).toFixed(2)}` : ''}).`)}
+                href={pedirPorWhatsApp(`Hola, quiero renovar mi plan actual (${subscription.planName || planInfo.name || subscription.plan}${pactado ? `, S/ ${pactado.sinIgv.toFixed(2)} sin IGV` : ''}).`)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-5 py-2.5 rounded-xl font-semibold text-sm whitespace-nowrap text-center transition-colors bg-primary-600 text-white hover:bg-primary-700"

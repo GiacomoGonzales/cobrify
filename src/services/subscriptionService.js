@@ -18,6 +18,7 @@ import { db } from '../lib/firebase';
 import { notifyPaymentReceived, notifySubscriptionRenewed, notifyPlanChanged, notifyWelcome } from './notificationService';
 import { getCustomPlans } from './customPlanService';
 import { PLANES_VENDIBLES, textoDeSucursales, textoDeSubUsuarios } from '@/data/planes'
+import { conIgvPublicado, desglosarIgv } from '@/utils/precioConIgv'
 
 // Planes disponibles - Nuevos precios 2025
 // Los SEIS que se venden hoy viven en `@/data/planes` (reexporta el archivo de
@@ -478,6 +479,30 @@ export const getTierPrice = (tier, cycle) => {
   const planId = tier?.cycles?.[cycle];
   return planId ? (PLANS[planId]?.totalPrice ?? null) : null;
 };
+
+/**
+ * Los dos precios de un nivel en un ciclo: el publicado (sin IGV) y el de
+ * factura, los mismos que muestra /precios. null si ese ciclo no se vende.
+ */
+export const getTierPrecios = (tier, cycle) => {
+  const planId = tier?.cycles?.[cycle];
+  const plan = planId ? PLANS[planId] : null;
+  if (!plan) return null;
+  return { sinIgv: plan.totalPrice, conIgv: plan.precioConIgv ?? conIgvPublicado(plan.totalPrice) };
+};
+
+// Precios sin IGV que siguen congelados en suscripciones aunque ya no se vendan:
+// el Completo anual y el Ilimitado anual de antes del 11-set, y el ilimitado a
+// medida de los primeros. Con ellos y los de PLANS se reconoce un pactado que
+// quedó guardado con IGV (353.88 es 299.90 con IGV).
+const PRECIOS_RETIRADOS = [199.90, 299.90, 260];
+const PRECIOS_BASE = [...new Set([
+  ...Object.values(PLANS).map(p => Number(p.totalPrice)).filter(p => p > 0),
+  ...PRECIOS_RETIRADOS,
+])];
+
+/** Un precio pactado separado en sin y con IGV (ver `desglosarIgv`). */
+export const desglosarPrecio = (monto) => desglosarIgv(monto, PRECIOS_BASE);
 
 /** Ahorro anual vs pagar 12 meses sueltos. 0 si no aplica. */
 export const getAnnualSavings = (tier) => {

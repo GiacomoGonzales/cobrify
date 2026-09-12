@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import DemoAccountBanner from '@/components/DemoAccountBanner'
-import { Outlet, Navigate, useLocation } from 'react-router-dom'
+import { Outlet, Navigate, useLocation, Link } from 'react-router-dom'
+import { useAppPath } from '@/hooks/useAppNavigate'
 import { Capacitor } from '@capacitor/core'
 import SplashMarca from '@/components/SplashMarca'
 import { useAuth } from '@/contexts/AuthContext'
@@ -24,7 +25,7 @@ import { useYapeListener } from '@/hooks/useYapeListener'
 import Mantenimiento from '@/pages/Mantenimiento'
 import { escucharMantenimiento, MANTENIMIENTO_APAGADO } from '@/services/mantenimientoService'
 import { useReactToPrint } from 'react-to-print'
-import { AlertTriangle, MessageCircle, Bell, Smartphone, Plus, Printer, CheckCircle, X } from 'lucide-react'
+import { AlertTriangle, MessageCircle, Bell, Smartphone, Plus, Printer, CheckCircle, X, ArrowRight } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
 import { getAudioContext } from '@/lib/globalAudio'
 import { useToast } from '@/contexts/ToastContext'
@@ -46,6 +47,8 @@ export default function MainLayout() {
   const { branding } = useBranding()
   const [vendedorWhatsApp, setVendedorWhatsApp] = useState(null)
   const location = useLocation()
+  // Rutas dentro de la app con el prefijo del contexto (/app, /demo...).
+  const rutaEnLaApp = useAppPath()
   const sidebarCollapsed = useStore(state => state.sidebarCollapsed)
   const setOrderAlertCount = useStore(state => state.setOrderAlertCount)
   const [sesionSoporte, setSesionSoporte] = useState(null)
@@ -681,15 +684,16 @@ export default function MainLayout() {
               {avisoVencimiento.mensaje}
             </span>
           </div>
-          <a
-            href={`https://wa.me/${contactoWhatsApp}?text=${encodeURIComponent(`Hola, quiero renovar mi suscripción de ${branding?.companyName || 'Cobrify'}. Mi email es ${user?.email || ''}.`)}`}
-            target="_blank"
-            rel="noopener noreferrer"
+          {/* Lleva a Mi Suscripción, a los datos de pago (QR, cuentas y envío
+              de la captura por WhatsApp). Antes abría WhatsApp sin decir
+              dónde pagar (Giacomo, 11-set-2026). */}
+          <Link
+            to={`${rutaEnLaApp('/mi-suscripcion')}#pagar`}
             className="flex items-center gap-1 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-white whitespace-nowrap transition-colors font-medium"
           >
-            <MessageCircle className="w-3.5 h-3.5" />
             Renovar ahora
-          </a>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
           {avisoVencimiento.nivel !== 'vencido' && (
             <button
               type="button"

@@ -1,46 +1,9 @@
-import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSubscriptionPaymentInfo } from '@/hooks/useSubscriptionPaymentInfo';
-import { AlertTriangle, Copy, Check, Smartphone, Building2, MessageCircle, Loader2 } from 'lucide-react';
-
-function CopyButton({ text }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  return (
-    <button
-      onClick={handleCopy}
-      className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-white/60 hover:bg-white/80 rounded transition-colors"
-    >
-      {copied ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3 text-gray-500" />}
-      {copied ? 'Copiado' : 'Copiar'}
-    </button>
-  );
-}
+import { AlertTriangle } from 'lucide-react';
+import PagoDeLaSuscripcion from '@/components/PagoDeLaSuscripcion';
 
 export default function AccountSuspended() {
   const { user, subscription, logout } = useAuth();
-  const { loading, paymentInfo, whatsappNumber, yapeRaw, isResellerWithoutPayment } = useSubscriptionPaymentInfo(subscription);
-
-  const whatsappMessage = encodeURIComponent(
-    `Hola, quiero renovar mi suscripción. Mi email es ${user?.email || ''}. Mi negocio es ${subscription?.businessName || ''}.`
-  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center p-4">
@@ -58,83 +21,18 @@ export default function AccountSuspended() {
           </div>
 
           <div className="p-6 sm:p-8">
-            {/* Datos de pago */}
-            {loading ? (
-              <div className="flex items-center justify-center py-8 mb-6">
-                <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-              </div>
-            ) : isResellerWithoutPayment || !paymentInfo ? (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-center">
-                <p className="text-sm text-amber-800">
-                  Contacta a tu proveedor para reactivar tu cuenta.
-                </p>
-              </div>
-            ) : (
-            <div className="space-y-3 mb-6">
-              {/* Yape */}
-              {paymentInfo.yape.number && (
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Smartphone className="w-4 h-4 text-purple-600" />
-                      <span className="text-sm font-semibold text-purple-800">Yape</span>
-                    </div>
-                    <CopyButton text={yapeRaw} />
-                  </div>
-                  <p className="text-purple-900 font-mono font-medium mt-1">{paymentInfo.yape.number}</p>
-                  <p className="text-xs text-purple-600">{paymentInfo.yape.name}</p>
-                </div>
-              )}
-
-              {/* BCP */}
-              {paymentInfo.bcp.account && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Building2 className="w-4 h-4 text-blue-600" />
-                    <span className="text-sm font-semibold text-blue-800">Cuenta BCP Soles</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-[10px] text-blue-500 uppercase">N. Cuenta</p>
-                        <p className="text-sm font-mono font-medium text-blue-900">{paymentInfo.bcp.account}</p>
-                      </div>
-                      <CopyButton text={paymentInfo.bcp.account} />
-                    </div>
-                    {paymentInfo.bcp.cci && (
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-[10px] text-blue-500 uppercase">CCI</p>
-                          <p className="text-sm font-mono font-medium text-blue-900">{paymentInfo.bcp.cci}</p>
-                        </div>
-                        <CopyButton text={paymentInfo.bcp.cci} />
-                      </div>
-                    )}
-                    <p className="text-xs text-blue-600">Titular: {paymentInfo.titular}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-            )}
-
-            {/* Botones */}
-            <div className="flex flex-col gap-3">
-              <a
-                href={`https://wa.me/${whatsappNumber}?text=${whatsappMessage}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-6 rounded-lg transition-colors"
-              >
-                <MessageCircle className="w-5 h-5" />
-                Enviar captura por WhatsApp
-              </a>
-              <button
-                onClick={logout}
-                className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-3 px-6 rounded-lg transition-colors"
-              >
-                Cerrar Sesión
-              </button>
-            </div>
+            {/* Datos de pago y envío de la captura: el mismo bloque que Mi
+                Suscripción y el aviso de suscripción vencida. */}
+            <PagoDeLaSuscripcion
+              subscription={subscription}
+              mensaje={`Hola, quiero renovar mi suscripción. Mi email es ${user?.email || ''}. Mi negocio es ${subscription?.businessName || ''}.`}
+            />
+            <button
+              onClick={logout}
+              className="w-full mt-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-3 px-6 rounded-lg transition-colors"
+            >
+              Cerrar Sesión
+            </button>
           </div>
         </div>
       </div>

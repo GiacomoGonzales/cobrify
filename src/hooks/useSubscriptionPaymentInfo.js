@@ -6,9 +6,14 @@ import { WHATSAPP_COBRIFY } from '@/data/contacto'
 const DEFAULT_WHATSAPP = WHATSAPP_COBRIFY
 
 // Datos de cobro de Cobrify (solo para clientes DIRECTOS, sin reseller ni vendedor).
+// Sin Yape por ahora: el de Cobrify todavía no está activo (Giacomo, 11-set-2026).
 const DEFAULT_PAYMENT_INFO = {
-  yape: { number: '926 258 059', name: 'Quantio Solutions EIRL' },
-  bcp: { account: '1937311451039', cci: '00219300731145103916' },
+  // El QR (public/pagos/qr-plin.png), el número para copiar y el nombre que
+  // sale al escanearlo.
+  plin: { qr: '/pagos/qr-plin.png', number: '926 258 059', name: 'Giacomo Jeremy Gonzales' },
+  // Agrupados para leerlos (el CCI va 3-3-12-2); PagoDeLaSuscripcion los copia
+  // sin guiones.
+  bcp: { account: '193-7311451-0-39', cci: '002-193-007311451039-16' },
   titular: 'Quantio Solutions EIRL',
 }
 
