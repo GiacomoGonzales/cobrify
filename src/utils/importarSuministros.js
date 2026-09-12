@@ -240,6 +240,19 @@ export function leerLibro(hojas, { direccion = '' } = {}) {
 // el padrón entero (11-set-2026). Ahora el archivo se cruza con lo que ya está
 // y solo entra lo que no estaba.
 
+/** El N° de suministro para comparar: sin espacios ni ceros a la izquierda. */
+export const numeroNormalizado = (s) =>
+  String(s?.numeroSuministro ?? '').replace(/\s/g, '').replace(/^0+/, '')
+
+const contarPor = (lista, clave) => {
+  const cuenta = new Map()
+  for (const x of lista || []) {
+    const k = clave(x)
+    if (k) cuenta.set(k, (cuenta.get(k) || 0) + 1)
+  }
+  return cuenta
+}
+
 /**
  * La identidad de un suministro, para no cargarlo dos veces: tipo, N° y nombre
  * del titular. El N° solo no alcanza —en el padrón real hay uno repetido en dos
@@ -249,7 +262,7 @@ export function leerLibro(hojas, { direccion = '' } = {}) {
  */
 export function claveDeSuministro(s) {
   const tipo = s?.tipo === 'fijo' ? 'fijo' : 'medidor'
-  const numero = String(s?.numeroSuministro ?? '').replace(/\s/g, '').replace(/^0+/, '')
+  const numero = numeroNormalizado(s)
   const nombre = String(s?.nombre ?? '')
     .toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -260,11 +273,21 @@ export function claveDeSuministro(s) {
 /**
  * Cruza lo que trae el archivo con el padrón que ya está cargado.
  *
+ * Cómo se reconoce a uno que ya estaba:
+ * - Por su N°, si ese número está una sola vez en el padrón (entre los activos;
+ *   si no hay activo, entre los dados de baja) y una sola vez en el archivo.
+ *   Así se lo encuentra aunque el nombre venga escrito distinto: entre dos
+ *   Excel del primer negocio cambian 18 nombres ("FLORES VARGA" y "FLORES
+ *   VARGAS", apellidos al revés).
+ * - Si no, por la clave completa (`claveDeSuministro`): los de cuota fija, los
+ *   medidores sin N° y el N° que está en dos personas.
+ *
+ * Qué pasa con cada uno:
  * - Lo que no estaba entra como nuevo.
  * - Lo que ya estaba NO se vuelve a crear. Solo se le pone la lectura del
- *   archivo cuando es más nueva (más alta) y el sistema todavía no le tomó
- *   ninguna: es el que siguió un mes más con el Excel antes de pasarse. Si el
- *   sistema ya le toma lecturas, esas mandan y el archivo no las toca.
+ *   archivo cuando es más nueva (más alta), el sistema todavía no le tomó
+ *   ninguna y el N° lo identifica sin dudas: es el que siguió un mes más con el
+ *   Excel antes de pasarse. Si el sistema ya le toma lecturas, esas mandan.
  * - Los dados de baja cuentan como que están (no reviven), pero no se tocan.
  * - Los marcados `duplicadoDe` (repetidos ya unificados) no cuentan.
  *
@@ -276,28 +299,47 @@ export function claveDeSuministro(s) {
  * @returns {{nuevos: Array, actualizar: Array<{id, nombre, anterior, ultimaLectura}>, yaEstan: number}}
  */
 export function separarNuevos(filas, existentes) {
-  const porClave = new Map()
   const candidatos = (existentes || [])
     .filter(s => !s.duplicadoDe)
     // Los activos primero: con uno activo y uno dado de baja de la misma clave,
     // el archivo se empareja con el que está en uso.
     .sort((a, b) => (b.activo !== false) - (a.activo !== false))
+  const activos = candidatos.filter(s => s.activo !== false)
+  const deBaja = candidatos.filter(s => s.activo === false)
+
+  const enElArchivo = contarPor(filas, numeroNormalizado)
+  const enActivos = contarPor(activos, numeroNormalizado)
+  const enDeBaja = contarPor(deBaja, numeroNormalizado)
+  const elDelNumero = (n) => {
+    if (!n || enElArchivo.get(n) !== 1) return null
+    if (enActivos.get(n) === 1) return activos.find(s => numeroNormalizado(s) === n)
+    if (!enActivos.has(n) && enDeBaja.get(n) === 1) return deBaja.find(s => numeroNormalizado(s) === n)
+    return null
+  }
+
+  const porClave = new Map()
   for (const s of candidatos) {
     const k = claveDeSuministro(s)
     if (!porClave.has(k)) porClave.set(k, [])
     porClave.get(k).push(s)
   }
 
+  const usados = new Set()
   const nuevos = []
   const actualizar = []
   let yaEstan = 0
   for (const fila of filas || []) {
-    const existente = porClave.get(claveDeSuministro(fila))?.shift()
+    const porNumero = elDelNumero(numeroNormalizado(fila))
+    const existente = porNumero && !usados.has(porNumero)
+      ? porNumero
+      : (porClave.get(claveDeSuministro(fila)) || []).find(s => !usados.has(s)) || null
     if (!existente) { nuevos.push(fila); continue }
+    usados.add(existente)
     yaEstan++
     const lectura = Number(fila.ultimaLectura)
     const anterior = Number(existente.ultimaLectura) || 0
     if (
+      existente === porNumero &&
       existente.activo !== false &&
       existente.tipo !== 'fijo' && fila.tipo !== 'fijo' &&
       !existente.ultimoPeriodo &&
