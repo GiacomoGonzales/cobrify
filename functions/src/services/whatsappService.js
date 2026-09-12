@@ -89,19 +89,35 @@ export function parseWhatsappWebhook(body) {
         displayNumber: value.metadata?.display_phone_number || null,
       }
 
-      // Nombre del contacto: Meta lo manda aparte de los mensajes, indexado por
-      // wa_id. Se arma el mapa antes para poder pegarlo a cada mensaje.
-      const nombres = {}
+      // Datos del contacto: Meta los manda aparte de los mensajes. Se indexan
+      // por teléfono (`wa_id`) Y por BSUID (`user_id`): quien usa nombre de
+      // usuario y no nos escribió en 30 días llega SIN teléfono (ver esBsuid).
+      const contactos = {}
       for (const c of value.contacts || []) {
-        if (c?.wa_id) nombres[c.wa_id] = c.profile?.name || null
+        const datos = {
+          nombre: c?.profile?.name || null,
+          telefono: c?.wa_id || null,
+          bsuid: c?.user_id || null,
+          usuario: c?.username || null,
+        }
+        if (datos.telefono) contactos[datos.telefono] = datos
+        if (datos.bsuid) contactos[datos.bsuid] = datos
       }
 
       for (const m of value.messages || []) {
+        const c = contactos[m.from] || contactos[m.from_user_id] || {}
+        const telefono = m.from || c.telefono || null
+        const bsuid = m.from_user_id || c.bsuid || null
         mensajes.push({
           cuenta,
           waMessageId: m.id,
-          waId: m.from,
-          nombre: nombres[m.from] || null,
+          // El teléfono cuando viene; si no, el BSUID. Antes era siempre
+          // `m.from`, y el mensaje que llegaba sin él se descartaba en silencio.
+          waId: telefono || bsuid,
+          telefono,
+          bsuid,
+          usuario: c.usuario || null,
+          nombre: c.nombre || null,
           tipo: m.type || 'unknown',
           // El timestamp de Meta viene en SEGUNDOS.
           timestamp: Number(m.timestamp) * 1000,
@@ -122,7 +138,9 @@ export function parseWhatsappWebhook(body) {
           waMessageId: s.id,
           estado: s.status || null,
           timestamp: Number(s.timestamp) * 1000,
-          waId: s.recipient_id || null,
+          // Al contestarle a un BSUID, Meta no devuelve teléfono: devuelve
+          // recipient_user_id.
+          waId: s.recipient_id || s.recipient_user_id || null,
           error: s.errors?.[0]?.title || null,
         })
       }
@@ -165,6 +183,19 @@ export const VENTANA_24H_MS = 24 * 60 * 60 * 1000
 const GRAPH_VERSION = 'v26.0'
 
 /**
+ * ¿Es un BSUID ("PE.1234…") y no un teléfono?
+ *
+ * Desde 2026 WhatsApp deja usar un nombre de usuario y esconder el número.
+ * Cuando alguien así nos escribe y no hablamos con él en los últimos 30 días,
+ * Meta no manda su teléfono sino su BSUID —un id que vale solo para esta
+ * empresa—, y para contestarle se usa el campo `recipient` en vez de `to`.
+ */
+export const esBsuid = (id) => /^[A-Z]{2}\.[A-Za-z0-9]+$/.test(String(id || ''))
+
+/** A quién va el mensaje: `to` para un teléfono, `recipient` para un BSUID. */
+const destinatario = (id) => (esBsuid(id) ? { recipient: id } : { to: id })
+
+/**
  * Envia un mensaje de texto por la Cloud API.
  *
  * @param {Object} p
@@ -185,7 +216,7 @@ export async function sendWhatsappText({ token, phoneNumberId, to, texto, contex
     body: JSON.stringify({
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
-      to,
+      ...destinatario(to),
       type: 'text',
       // preview_url: que los enlaces se vean con su tarjeta, como en WhatsApp normal.
       text: { preview_url: true, body: texto },
@@ -223,7 +254,7 @@ export async function sendWhatsappReaction({ token, phoneNumberId, to, messageId
     body: JSON.stringify({
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
-      to,
+      ...destinatario(to),
       type: 'reaction',
       reaction: { message_id: messageId, emoji: emoji || '' },
     }),
@@ -324,7 +355,7 @@ export async function sendWhatsappMedia({ token, phoneNumberId, to, tipo, link, 
     body: JSON.stringify({
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
-      to,
+      ...destinatario(to),
       type: tipo,
       [tipo]: cuerpoMedia,
       // Citar tambien al mandar un archivo.
@@ -507,7 +538,7 @@ export async function sendWhatsappTemplate({
     body: JSON.stringify({
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
-      to,
+      ...destinatario(to),
       type: 'template',
       template: {
         name,

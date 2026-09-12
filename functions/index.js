@@ -13724,12 +13724,20 @@ export const whatsappWebhook = onRequest(
     try {
       const { mensajes, estados } = parseWhatsappWebhook(req.body)
 
+      // Cada mensaje por su lado: si uno falla, los demás del mismo envío se
+      // guardan igual. Y el que falla NO se pierde: queda apartado en
+      // whatsappSinProcesar con todo lo que mandó Meta. Como a Meta se le
+      // responde 200 igual (ver abajo), no lo reenvía: esa copia es la única.
       for (const m of mensajes) {
-        if (m.tipo === 'reaction') {
-          await guardarReaccionEntrante(m)
-          continue
+        try {
+          if (m.tipo === 'reaction') {
+            await guardarReaccionEntrante(m)
+            continue
+          }
+          await guardarMensajeEntrante(m)
+        } catch (error) {
+          await apartarMensajeSinProcesar(m, error)
         }
-        await guardarMensajeEntrante(m)
       }
       for (const s of estados) {
         await actualizarEstadoMensaje(s)
@@ -13788,6 +13796,57 @@ async function generarMiniatura({ buffer, key }) {
 const idConversacionWa = (phoneNumberId, waId) => `${phoneNumberId}_${waId}`
 
 /**
+ * La conversación de un contacto, aunque hoy llegue sin teléfono.
+ *
+ * Desde 2026 el mismo cliente puede aparecer con su teléfono o solo con su
+ * BSUID (si usa nombre de usuario y no hablamos en 30 días). Para no partirlo
+ * en dos conversaciones se busca primero por BSUID —se guarda en cada
+ * conversación desde el 12-set-2026—; si no hay, la de su teléfono como
+ * siempre, y si tampoco hay teléfono, una nueva con el BSUID.
+ */
+async function conversacionDelContacto(phoneNumberId, m) {
+  if (m.bsuid) {
+    const porBsuid = await db.collection('whatsappConversations')
+      .where('bsuid', '==', m.bsuid).limit(5).get()
+    const propias = porBsuid.docs.filter((d) => d.data().phoneNumberId === phoneNumberId)
+    const laDelTelefono = m.telefono && propias.find((d) => d.id === idConversacionWa(phoneNumberId, m.telefono))
+    const elegida = laDelTelefono || propias[0]
+    if (elegida) return { convId: elegida.id, waId: elegida.data().waId || m.waId }
+  }
+  const waId = m.telefono || m.waId
+  return { convId: idConversacionWa(phoneNumberId, waId), waId }
+}
+
+/**
+ * Un mensaje que no se pudo guardar: se aparta con TODO lo que mandó Meta.
+ *
+ * Al webhook se le responde 200 siempre y Meta no reenvía lo confirmado, así
+ * que si guardar falla esta copia es la única. Antes el mensaje se perdía sin
+ * rastro: así se perdieron los de quienes usan nombre de usuario de WhatsApp,
+ * que llegaban sin teléfono (12-set-2026).
+ */
+async function apartarMensajeSinProcesar(m, error) {
+  console.error(`[WhatsApp] Mensaje ${m?.waMessageId || '(sin id)'} sin procesar:`, error?.message || error)
+  try {
+    const { crudo, ...resto } = m || {}
+    const ref = m?.waMessageId
+      ? db.collection('whatsappSinProcesar').doc(m.waMessageId)
+      : db.collection('whatsappSinProcesar').doc()
+    await ref.set({
+      ...JSON.parse(JSON.stringify(resto)),
+      // Tal cual vino, en texto: así se puede volver a procesar sin adivinar.
+      crudo: JSON.stringify(crudo ?? null),
+      error: String(error?.message || error).slice(0, 500),
+      procesado: false,
+      apartadoAt: FieldValue.serverTimestamp(),
+    })
+  } catch (e) {
+    // Último recurso: que al menos quede en el log para rescatarlo a mano.
+    console.error('[WhatsApp] Ni siquiera se pudo apartar el mensaje:', e.message, JSON.stringify(m?.crudo ?? m ?? null).slice(0, 3000))
+  }
+}
+
+/**
  * Guarda un mensaje entrante y deja la conversacion al dia.
  *
  * Idempotente: el id del documento es el id que asigna WhatsApp, asi que si
@@ -13796,19 +13855,27 @@ const idConversacionWa = (phoneNumberId, waId) => `${phoneNumberId}_${waId}`
  */
 async function guardarMensajeEntrante(m) {
   const { phoneNumberId } = m.cuenta
-  if (!phoneNumberId || !m.waId || !m.waMessageId) return
+  if (!phoneNumberId || !m.waId || !m.waMessageId) {
+    // Sin a quién atribuirlo no hay conversación donde ponerlo: el webhook lo
+    // aparta en whatsappSinProcesar en vez de tirarlo.
+    throw new Error('El mensaje llegó sin número de la empresa, sin remitente o sin id')
+  }
 
-  const convId = idConversacionWa(phoneNumberId, m.waId)
+  // La conversación de este contacto, aunque hoy escriba sin teléfono.
+  const destino = await conversacionDelContacto(phoneNumberId, m)
+  m = { ...m, waId: destino.waId }
+  const convId = destino.convId
   const convRef = db.collection('whatsappConversations').doc(convId)
 
   // Vinculo con el cliente de Cobrify: UNA vez por conversacion (el resultado
   // queda marcado con linkAttempted; la vinculacion manual de la pantalla lo
   // puede corregir despues). El cruce es una lectura al indice, no un barrido.
+  // Solo con un TELÉFONO de verdad: un BSUID no es un número que buscar.
   let vinculo = {}
   const convPrevia = await convRef.get()
-  if (!convPrevia.exists || convPrevia.data().linkAttempted !== true) {
+  if (m.telefono && (!convPrevia.exists || convPrevia.data().linkAttempted !== true)) {
     try {
-      vinculo = await camposDeVinculo(m.waId)
+      vinculo = await camposDeVinculo(m.telefono)
     } catch (e) {
       console.error('[WhatsApp] Error intentando vincular:', e.message)
     }
@@ -13840,7 +13907,12 @@ async function guardarMensajeEntrante(m) {
     wabaId: m.cuenta.wabaId || null,
     displayNumber: m.cuenta.displayNumber || null,
     waId: m.waId,
-    nombre: m.nombre || null,
+    // Quien escribe con nombre de usuario puede llegar sin teléfono: el BSUID
+    // lo identifica igual, y el teléfono se completa el día que aparezca.
+    ...(m.bsuid ? { bsuid: m.bsuid } : {}),
+    ...(m.usuario ? { usuario: m.usuario } : {}),
+    ...(m.telefono ? { telefono: m.telefono } : {}),
+    nombre: m.nombre || (m.usuario ? `@${m.usuario}` : null),
     ultimoMensaje: m.texto || `[${m.tipo}]`,
     ultimoMensajeAt: Timestamp.fromMillis(m.timestamp),
     ultimaDireccion: 'entrante',
@@ -13955,8 +14027,10 @@ async function guardarReaccionEntrante(m) {
   const r = m.crudo?.reaction
   if (!phoneNumberId || !m.waId || !r?.message_id) return
 
-  const convRef = db.collection('whatsappConversations')
-    .doc(idConversacionWa(phoneNumberId, m.waId))
+  // La misma conversación que sus mensajes, aunque reaccione sin teléfono.
+  const destino = await conversacionDelContacto(phoneNumberId, m)
+  m = { ...m, waId: destino.waId }
+  const convRef = db.collection('whatsappConversations').doc(destino.convId)
   const emoji = r.emoji || null
 
   await convRef.collection('messages').doc(r.message_id)
@@ -14098,7 +14172,7 @@ async function avisarMensajeNuevoWa(phoneNumberId, m) {
     // instalada; sin ella, a todas las apps como siempre.
     await sendPushNotification(
       ownerId,
-      m.nombre || m.waId,
+      m.nombre || (m.usuario ? `@${m.usuario}` : m.waId),
       m.texto || 'Te envio un archivo',
       { type: 'whatsapp', conversationId: idConversacionWa(phoneNumberId, m.waId) },
       { preferPlatform: 'ios-inbox', badge: sinLeer }

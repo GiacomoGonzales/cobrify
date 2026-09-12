@@ -925,6 +925,9 @@ export const formatearRestante = (ms) => {
 export const formatearNumero = (waId) => {
   if (!waId) return ''
   const n = String(waId)
+  // Quien usa nombre de usuario de WhatsApp puede escribirnos sin mostrar su
+  // número: llega con un BSUID ("PE.1234…"), que no es un teléfono.
+  if (/^[A-Z]{2}\./.test(n)) return 'Número oculto'
   if (n.startsWith('51') && n.length === 11) {
     return `+51 ${n.slice(2, 5)} ${n.slice(5, 8)} ${n.slice(8)}`
   }

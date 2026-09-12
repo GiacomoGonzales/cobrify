@@ -143,6 +143,9 @@ enum Formato {
     /// 51955778215 -> +51 955 778 215 (el resto de países, +numero pelado)
     static func numero(_ waId: String) -> String {
         guard !waId.isEmpty else { return "" }
+        // Quien usa nombre de usuario de WhatsApp puede escribir sin mostrar
+        // su número: llega con un BSUID ("PE.1234…"), que no es un teléfono.
+        if waId.range(of: #"^[A-Z]{2}\."#, options: .regularExpression) != nil { return "Número oculto" }
         if waId.hasPrefix("51") && waId.count == 11 {
             let d = Array(waId)
             return "+51 \(String(d[2...4])) \(String(d[5...7])) \(String(d[8...10]))"
