@@ -49,6 +49,8 @@ import {
   filterProductsForBranch, filterCategoriesForBranch, getBranchScopeLabel,
 } from '@/utils/branchCatalog'
 import { needsRestock } from '@/utils/stockAlerts'
+import { stockEnVista, stockDeVariante } from '@/utils/stockDeSucursal'
+import { esDeSucursal } from '@/utils/branchScope'
 import { isPharmaLikeMode, recuerdaServicios, atiendeConCita } from '@/utils/businessModes'
 import { buildProductIndex, findExistingProduct, indexProduct } from '@/utils/productImportMatch'
 import SunatProductCodeField from '@/components/SunatProductCodeField'
@@ -250,7 +252,7 @@ const BulkMenuGroup = ({ title }) => (
 )
 
 export default function Products() {
-  const { user, isDemoMode, demoData, getBusinessId, businessMode, hasFeature, businessSettings, filterWarehousesByAccess, branchScope, refreshBusinessSettings } = useAppContext()
+  const { user, isDemoMode, demoData, getBusinessId, businessMode, hasFeature, businessSettings, filterWarehousesByAccess, branchScope, refreshBusinessSettings, allowedWarehouses } = useAppContext()
   const appNavigate = useAppNavigate()
   const permisos = useDataPermissions()
   const toast = useToast()
@@ -340,6 +342,17 @@ export default function Products() {
     const branchId = branchScope === MAIN_BRANCH_TOKEN ? null : branchScope
     return filterCategoriesForBranch(categories, branchId, true)
   }, [categories, branchScope, branchCatalogOn])
+
+  // El stock que se muestra sigue al selector de sucursal del header, con el
+  // mismo criterio que Inventario (utils/stockDeSucursal). Antes esta página
+  // mostraba siempre el total del negocio aunque arriba se eligiera una sede.
+  const vistaDeStock = React.useMemo(() => ({
+    almacenesVisibles: !branchScope || branchScope === 'all'
+      ? null
+      : new Set(warehouses.filter(w => esDeSucursal(w, branchScope)).map(w => w.id)),
+    permitidos: allowedWarehouses?.length ? new Set(allowedWarehouses) : null,
+  }), [warehouses, branchScope, allowedWarehouses])
+  const stockVisible = React.useCallback((p) => stockEnVista(p, vistaDeStock), [vistaDeStock])
 
   /**
    * Almacenes donde tiene sentido cargarle stock a ESTE producto.
@@ -4940,8 +4953,8 @@ export default function Products() {
           bValue = b.hasVariants ? b.basePrice : b.price || 0
           break
         case 'stock':
-          const aStock = getRealStockValue(a)
-          const bStock = getRealStockValue(b)
+          const aStock = stockVisible(a)
+          const bStock = stockVisible(b)
           aValue = aStock !== null ? aStock : -1
           bValue = bStock !== null ? bStock : -1
           break
@@ -4972,7 +4985,7 @@ export default function Products() {
     })
 
     return sorted
-  }, [scopedProducts, deferredSearchTerm, productSearchIndex, selectedCategoryFilter, selectedBrandFilter, showExpiringOnly, categories, brands, sortField, sortDirection])
+  }, [scopedProducts, deferredSearchTerm, productSearchIndex, selectedCategoryFilter, selectedBrandFilter, showExpiringOnly, categories, brands, sortField, sortDirection, stockVisible])
 
   // Paginación de productos filtrados (optimizado con useMemo)
   const paginationData = React.useMemo(() => {
@@ -5022,9 +5035,9 @@ export default function Products() {
   const statistics = React.useMemo(() => {
     const totalValue = scopedProducts.reduce((sum, product) => {
       if (product.hasVariants && product.variants?.length > 0) {
-        return sum + product.variants.reduce((vs, v) => vs + (v.stock || 0) * (v.price || 0), 0)
+        return sum + product.variants.reduce((vs, v) => vs + stockDeVariante(v, vistaDeStock) * (v.price || 0), 0)
       }
-      const realStock = getRealStockValue(product)
+      const realStock = stockVisible(product)
       if (realStock && product.price) {
         return sum + realStock * product.price
       }
@@ -5035,9 +5048,9 @@ export default function Products() {
       if (product.hasVariants && product.variants?.length > 0) {
         // Para variantes, usar el costo de la variante si existe, si no usar el costo del producto padre
         const parentCost = parseFloat(product.cost) || 0
-        return sum + product.variants.reduce((vs, v) => vs + (v.stock || 0) * (v.cost || parentCost || 0), 0)
+        return sum + product.variants.reduce((vs, v) => vs + stockDeVariante(v, vistaDeStock) * (v.cost || parentCost || 0), 0)
       }
-      const realStock = getRealStockValue(product)
+      const realStock = stockVisible(product)
       const cost = product.itemType === 'ingredient' ? (product.averageCost || 0) : (parseFloat(product.cost) || 0)
       return sum + (realStock * cost)
     }, 0)
@@ -5045,7 +5058,7 @@ export default function Products() {
     // Una sola tarjeta para "conviene reabastecer", asi que agotado tambien
     // cuenta. Los desactivados quedan fuera. Ver src/utils/stockAlerts.js.
     const lowStockCount = scopedProducts.filter(product =>
-      needsRestock(product, getRealStockValue(product))
+      needsRestock(product, stockVisible(product))
     ).length
 
     const expiringProductsCount = scopedProducts.filter(product => {
@@ -5055,7 +5068,7 @@ export default function Products() {
     }).length
 
     return { totalValue, totalCostValue, lowStockCount, expiringProductsCount }
-  }, [scopedProducts])
+  }, [scopedProducts, stockVisible, vistaDeStock])
 
   const { totalValue, totalCostValue, lowStockCount, expiringProductsCount } = statistics
 
@@ -5680,12 +5693,10 @@ export default function Products() {
             {/* Vista de tarjetas para móvil */}
             <div className="lg:hidden p-3 space-y-3 bg-gray-50">
               {paginatedProducts.map((product) => {
-                const realStock = getRealStockValue(product)
+                const realStock = stockVisible(product)
                 const categoryPath = product.category ? getCategoryPath(categories, product.category) : ''
                 const priceDisplay = formatProductPrice(product)
-                const stockDisplay = product.hasVariants
-                  ? product.variants?.reduce((sum, v) => sum + (v.stock || 0), 0) || 0
-                  : realStock
+                const stockDisplay = product.hasVariants ? (realStock || 0) : realStock
                 const isInactive = product.isActive === false
 
                 return (
@@ -6222,7 +6233,7 @@ export default function Products() {
                             {/* Stock total */}
                             <div>
                               {product.hasVariants ? (() => {
-                                const variantStock = product.variants?.reduce((sum, v) => sum + (v.stock || 0), 0) || 0
+                                const variantStock = stockVisible(product) || 0
                                 return (
                                   <span className={`font-medium text-sm ${
                                     variantStock > (product?.minStock ?? 3) ? 'text-green-600' : variantStock > 0 ? 'text-yellow-600' : 'text-red-600'
@@ -6231,7 +6242,7 @@ export default function Products() {
                                   </span>
                                 )
                               })() : (() => {
-                                const realStock = getRealStockValue(product)
+                                const realStock = stockVisible(product)
                                 return realStock !== null ? (
                                   <span
                                     className={`font-medium text-sm ${

@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
 import { getActiveBranches } from '@/services/branchService'
 import { MAIN_BRANCH_TOKEN, buildHiddenFromSelection } from '@/utils/branchCatalog'
+import { esDeSucursal, nombreDeSucursal } from '@/utils/branchScope'
 import { isMultiCurrencyEnabled } from '@/utils/currency'
 import { isPharmaLikeMode } from '@/utils/businessModes'
 import { cleanText } from '@/lib/utils'
@@ -22,7 +23,7 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
   // En el onboarding (crear cuenta) el modo viene por prop (el del negocio que se
   // está creando), no del contexto del admin.
   const businessMode = businessModeOverride || ctx.businessMode
-  const { getBusinessId, businessSettings, filterWarehousesByAccess } = ctx
+  const { getBusinessId, businessSettings, filterWarehousesByAccess, branchScope } = ctx
   const [file, setFile] = useState(null)
   const [importing, setImporting] = useState(false)
   const [previewData, setPreviewData] = useState([])
@@ -30,6 +31,8 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
   const [success, setSuccess] = useState(0)
   const [warehouses, setWarehouses] = useState([])
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('')
+  // Las sucursales, para decir de cuál es cada almacén en el selector.
+  const [sedes, setSedes] = useState([])
   // ----- Disponibilidad por sucursal del LOTE (feature branchCatalogEnabled) -----
   // Aplica solo a los productos NUEVOS del archivo; los que ya existen conservan
   // su configuracion (pisarla desde una importacion seria destructivo).
@@ -78,10 +81,20 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
         // stock a sus almacenes asignados (sin restricción = todos).
         if (filterWarehousesByAccess) activeWarehouses = filterWarehousesByAccess(activeWarehouses)
         setWarehouses(activeWarehouses)
-        // Seleccionar almacén por defecto automáticamente
-        const defaultWarehouse = activeWarehouses.find(w => w.isDefault) || activeWarehouses[0]
-        if (defaultWarehouse) {
-          setSelectedWarehouseId(defaultWarehouse.id)
+        getActiveBranches(businessId)
+          .then((r) => { if (r.success) setSedes(r.data || []) })
+          .catch(() => {})
+        // Viene elegido el almacén de la sede del header. Antes era siempre el
+        // almacén por defecto del negocio: importar parado en una sucursal
+        // mandaba el stock a un almacén de otra sin que se notara (ACEROS
+        // RAMOS, 12-set-2026).
+        const deLaSede = branchScope && branchScope !== 'all'
+          ? activeWarehouses.filter(w => esDeSucursal(w, branchScope))
+          : activeWarehouses
+        const preferido = deLaSede.find(w => w.isDefault) || deLaSede[0]
+          || activeWarehouses.find(w => w.isDefault) || activeWarehouses[0]
+        if (preferido) {
+          setSelectedWarehouseId(preferido.id)
         }
       }
     } catch (error) {
@@ -867,6 +880,11 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
   // duplica productos en vez de actualizarlos. En una cuenta vacía todo es nuevo
   // y preguntar sería ruido.
   const needsConfirmation = existingLoaded && existingProducts.length > 0 && importSummary.toCreate > 0
+
+  // La sucursal elegida arriba no tiene almacén propio, así que lo que se
+  // importe cae en un almacén de otra sede. Se avisa en vez de callarlo.
+  const sedeSinAlmacen = !!branchScope && branchScope !== 'all' && branchScope !== 'main'
+    && warehouses.length > 0 && !warehouses.some(w => esDeSucursal(w, branchScope))
 
   const handleImport = async () => {
     if (previewData.length === 0) {
@@ -1762,12 +1780,20 @@ export default function ImportProductsModal({ isOpen, onClose, onImport, brands 
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-sm"
             >
               {warehouses.map(warehouse => (
-                <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
+                <option key={warehouse.id} value={warehouse.id}>
+                  {warehouse.name}{sedes.length > 0 ? ` · ${nombreDeSucursal(warehouse.branchId, sedes)}` : ''}
+                </option>
               ))}
             </select>
             <p className="text-xs text-gray-500 mt-2">
               El stock de los productos importados se asignará a este almacén.
             </p>
+            {sedeSinAlmacen && (
+              <p className="text-xs text-amber-700 mt-1">
+                {nombreDeSucursal(branchScope, sedes)} no tiene ningún almacén asignado, así que el stock irá al
+                que elijas acá. Se le asigna uno en Almacenes.
+              </p>
+            )}
           </div>
         ) : warehouses.length === 1 ? (
           <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">

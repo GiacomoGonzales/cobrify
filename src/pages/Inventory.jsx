@@ -44,6 +44,7 @@ import {
 import { Capacitor } from '@capacitor/core'
 import { scanBarcode, scannerDisponible } from '@/utils/scanBarcode'
 import { esDeSucursal } from '@/utils/branchScope'
+import { stockEnVista } from '@/utils/stockDeSucursal'
 import { useAppContext } from '@/hooks/useAppContext'
 import { transferirStockDemo, descontarStockDemo } from '@/data/demo/operaciones'
 import { useAuth } from '@/contexts/AuthContext'
@@ -509,51 +510,16 @@ export default function Inventory() {
     return new Set(allowedWarehouses)
   }, [allowedWarehouses])
 
-  // Calcular stock considerando los filtros de sucursal y almacén
-  const getStockForBranch = React.useCallback((item) => {
-    // Productos con variantes: sumar stock de todas las variantes
-    if (item.hasVariants && item.variants?.length > 0) {
-      return item.variants.reduce((sum, v) => sum + (v.stock || 0), 0)
-    }
+  // Calcular stock considerando los filtros de sucursal y almacén. El criterio
+  // es el mismo de Productos y vive en utils/stockDeSucursal: el mismo producto
+  // no puede mostrar un stock acá y otro allá.
+  const vistaDeStock = React.useMemo(() => ({
+    almacenesVisibles: filterBranch === 'all' ? null : new Set(filteredWarehouses.map(w => w.id)),
+    almacenesElegidos: filterWarehouses,
+    permitidos: allowedWarehouseIdSet,
+  }), [filterBranch, filteredWarehouses, filterWarehouses, allowedWarehouseIdSet])
 
-    // Si tiene warehouseStocks, siempre usarlos como fuente de verdad
-    const warehouseStocks = item.warehouseStocks || []
-    if (warehouseStocks.length > 0) {
-      // Continúa abajo con la lógica de filtros
-    } else if (item.stock === null || item.stock === undefined) {
-      // Sin warehouseStocks y sin control de stock
-      return null
-    } else {
-      // Sin warehouseStocks, usar stock general
-      return item.stock || 0
-    }
-
-    // Si hay almacenes específicos seleccionados
-    if (filterWarehouses.length > 0) {
-      // Sumar stock de los almacenes seleccionados
-      const selectedStock = warehouseStocks
-        .filter(ws => filterWarehouses.includes(ws.warehouseId))
-        .reduce((sum, ws) => sum + (ws.stock || 0), 0)
-      return selectedStock
-    }
-
-    // Obtener IDs de almacenes filtrados por sucursal
-    const filteredWarehouseIds = filteredWarehouses.map(w => w.id)
-
-    // Si estamos viendo todas las sucursales, sumar todo (respetando los almacenes permitidos del usuario)
-    if (filterBranch === 'all') {
-      return warehouseStocks
-        .filter(ws => !allowedWarehouseIdSet || allowedWarehouseIdSet.has(ws.warehouseId))
-        .reduce((sum, ws) => sum + (ws.stock || 0), 0)
-    }
-
-    // Filtrar y sumar solo los almacenes de la sucursal seleccionada
-    const branchStock = warehouseStocks
-      .filter(ws => filteredWarehouseIds.includes(ws.warehouseId))
-      .reduce((sum, ws) => sum + (ws.stock || 0), 0)
-
-    return branchStock
-  }, [filterBranch, filterWarehouses, filteredWarehouses, allowedWarehouseIdSet])
+  const getStockForBranch = React.useCallback((item) => stockEnVista(item, vistaDeStock), [vistaDeStock])
 
   const loadProducts = async () => {
     if (!user?.uid) return

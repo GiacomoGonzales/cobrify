@@ -6,7 +6,7 @@
  */
 export default {
   id: 'productos',
-  actualizado: '12/08/2026',
+  actualizado: '12/09/2026',
   intro:
     'Tu catálogo: lo que vendes, a cuánto y cuánto te cuesta. Todo lo que registres acá es lo que aparece en el Punto de Venta, así que vale la pena cargarlo bien una vez.',
 
@@ -512,6 +512,10 @@ export default {
         },
         {
           type: 'texto',
+          text: 'Si tienes varios almacenes, al importar eliges a cuál va el stock. Viene elegido el de la sucursal en la que estás parado arriba, y al lado de cada almacén sale a qué sucursal pertenece. Si esa sucursal no tiene almacén, te avisa: se le asigna uno en **Almacenes**.',
+        },
+        {
+          type: 'texto',
           soloModos: ['pharmacy', 'veterinary'],
           text: 'Tu plantilla es la de **Medicamentos**: además de las columnas normales trae **nombre_generico**, **concentracion**, **presentacion**, **laboratorio**, **principio_activo**, **accion_terapeutica**, **condicion_venta** y **registro_sanitario**, más el lote y su vencimiento.',
         },
@@ -549,6 +553,10 @@ export default {
         {
           type: 'texto',
           text: 'El catálogo es uno solo, pero puede comportarse distinto en cada local.',
+        },
+        {
+          type: 'texto',
+          text: 'El **stock** de la lista sigue al selector de sucursal del encabezado, igual que en Inventario: parado en una sucursal ves solo lo de sus almacenes, y en **Todas**, el total del negocio.',
         },
         {
           type: 'texto',
