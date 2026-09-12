@@ -52,7 +52,7 @@ import { origenDesdeLanding, origenDesdeAnuncio, origenDesdeReferido } from './s
 import { guionDeVentas } from './src/data/ventas.js'
 import { esPrueba, DIAS_DE_PRUEBA } from './src/data/prueba.js'
 import { esCuenta, motivoDeFichaSuelta } from './src/data/cuentas.js'
-import { responder as responderAsistente } from './src/services/asistenteService.js'
+import { responder as responderAsistente, respuestasParaLaIA } from './src/services/asistenteService.js'
 import rubrosCatalogo from './src/data/rubros.json' with { type: 'json' }
 import { nuevoCodigoDeAlta, ESTADOS_ALTA, altaParaElFormulario, mensajeDeAlta } from './src/services/altasService.js'
 import { crearSuscripcion, premiarAQuienRefiere, deshacerCuenta } from './src/services/suscripcionesService.js'
@@ -16144,13 +16144,34 @@ export const asistenteVentas = onRequest(
         contacto: req.body?.contacto || null,
       })
 
+      // Las respuestas rápidas de la bandeja, menos las que Giacomo le apagó a
+      // la IA en la página Asistente: con ellas manda su texto Y su archivo.
+      // Si no se pueden leer, contesta igual, solo con texto.
+      let respuestas = []
+      try {
+        const cfg = (await db.collection('whatsappSettings').doc('automaticos').get()).data() || {}
+        respuestas = respuestasParaLaIA(cfg)
+      } catch (e) {
+        console.error('[Asistente] No se pudieron leer las respuestas rapidas:', e.message)
+      }
+
       const salida = await responderAsistente({
         apiKey: process.env.ANTHROPIC_API_KEY,
         guion,
         mensajes: ultimos,
+        respuestas,
       })
 
-      res.json({ success: true, ...salida })
+      // El modelo solo dice el atajo; a la pantalla va la respuesta entera.
+      const porAtajo = new Map(respuestas.map((r) => [r.atajo, r]))
+      res.json({
+        success: true,
+        ...salida,
+        respuestas: salida.respuestas
+          .map((a) => porAtajo.get(a))
+          .filter(Boolean)
+          .map(({ atajo, texto, media }) => ({ atajo, texto, media })),
+      })
     } catch (error) {
       console.error('[Asistente] Error:', error.message)
       res.status(500).json({ success: false, error: error.message })
