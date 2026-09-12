@@ -232,3 +232,79 @@ export function leerLibro(hojas, { direccion = '' } = {}) {
     },
   }
 }
+
+// ── Volver a subir el padrón ─────────────────────────────────────────────────
+//
+// El padrón se importa una vez, pero nada impide subir después el Excel de otro
+// mes: el primer negocio subió los de varios meses y cada uno volvió a cargar
+// el padrón entero (11-set-2026). Ahora el archivo se cruza con lo que ya está
+// y solo entra lo que no estaba.
+
+/**
+ * La identidad de un suministro, para no cargarlo dos veces: tipo, N° y nombre
+ * del titular. El N° solo no alcanza —en el padrón real hay uno repetido en dos
+ * personas, y los de cuota fija no tienen—, y el nombre se compara sin tildes,
+ * mayúsculas ni signos porque cada mes se tipea un poco distinto. Los sufijos
+ * "(T)", "(P)" quedan: marcan el segundo medidor del mismo titular.
+ */
+export function claveDeSuministro(s) {
+  const tipo = s?.tipo === 'fijo' ? 'fijo' : 'medidor'
+  const numero = String(s?.numeroSuministro ?? '').replace(/\s/g, '').replace(/^0+/, '')
+  const nombre = String(s?.nombre ?? '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]/g, '')
+  return `${tipo}|${numero}|${nombre}`
+}
+
+/**
+ * Cruza lo que trae el archivo con el padrón que ya está cargado.
+ *
+ * - Lo que no estaba entra como nuevo.
+ * - Lo que ya estaba NO se vuelve a crear. Solo se le pone la lectura del
+ *   archivo cuando es más nueva (más alta) y el sistema todavía no le tomó
+ *   ninguna: es el que siguió un mes más con el Excel antes de pasarse. Si el
+ *   sistema ya le toma lecturas, esas mandan y el archivo no las toca.
+ * - Los dados de baja cuentan como que están (no reviven), pero no se tocan.
+ * - Los marcados `duplicadoDe` (repetidos ya unificados) no cuentan.
+ *
+ * Se empareja uno a uno: si el padrón tiene uno y el archivo trae dos iguales,
+ * entra uno.
+ *
+ * @param {Array} filas      Lo leído del archivo (`leerLibro(...).suministros`).
+ * @param {Array} existentes Todo el padrón, con los dados de baja.
+ * @returns {{nuevos: Array, actualizar: Array<{id, nombre, anterior, ultimaLectura}>, yaEstan: number}}
+ */
+export function separarNuevos(filas, existentes) {
+  const porClave = new Map()
+  const candidatos = (existentes || [])
+    .filter(s => !s.duplicadoDe)
+    // Los activos primero: con uno activo y uno dado de baja de la misma clave,
+    // el archivo se empareja con el que está en uso.
+    .sort((a, b) => (b.activo !== false) - (a.activo !== false))
+  for (const s of candidatos) {
+    const k = claveDeSuministro(s)
+    if (!porClave.has(k)) porClave.set(k, [])
+    porClave.get(k).push(s)
+  }
+
+  const nuevos = []
+  const actualizar = []
+  let yaEstan = 0
+  for (const fila of filas || []) {
+    const existente = porClave.get(claveDeSuministro(fila))?.shift()
+    if (!existente) { nuevos.push(fila); continue }
+    yaEstan++
+    const lectura = Number(fila.ultimaLectura)
+    const anterior = Number(existente.ultimaLectura) || 0
+    if (
+      existente.activo !== false &&
+      existente.tipo !== 'fijo' && fila.tipo !== 'fijo' &&
+      !existente.ultimoPeriodo &&
+      Number.isFinite(lectura) && lectura > anterior
+    ) {
+      actualizar.push({ id: existente.id, nombre: existente.nombre, anterior, ultimaLectura: lectura })
+    }
+  }
+  return { nuevos, actualizar, yaEstan }
+}

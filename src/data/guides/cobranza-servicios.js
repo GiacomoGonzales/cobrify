@@ -6,7 +6,7 @@
  */
 export default {
   id: 'cobranza-servicios',
-  actualizado: '03/09/2026',
+  actualizado: '11/09/2026',
   intro:
     'Para el negocio que compra un recibo de luz o agua y lo reparte entre los vecinos. Anotas la lectura de cada medidor, el sistema calcula cuánto paga cada uno, emite los recibos numerados y los vas marcando cobrados. Reemplaza el Excel y el talonario de papel. Se activa en **Configuración → Preferencias → Cobranza de servicios**.',
 
@@ -54,6 +54,10 @@ export default {
         {
           type: 'texto',
           text: 'Si tu archivo trae filas incompletas —sin número de suministro, sin lectura, con un número repetido en dos personas— **se importan igual** y quedan marcadas. Las juntas todas con el filtro **Para revisar** y las vas corrigiendo cuando puedas. Ninguna frena la cobranza.',
+        },
+        {
+          type: 'ojo',
+          text: 'El padrón se importa **una sola vez**. Los meses siguientes no se sube ningún Excel: las lecturas se anotan en **Lecturas del mes**. Si igual vuelves a subir uno, los que ya están **no se repiten**: solo entran los nuevos. Y si el archivo es de un mes más reciente, a quienes todavía no tienen lecturas en el sistema se les pone la última lectura del archivo.',
         },
       ],
     },

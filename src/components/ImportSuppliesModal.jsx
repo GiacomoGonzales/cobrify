@@ -10,17 +10,22 @@
  * el padrón real trae datos incompletos —suministros sin número, un número
  * repetido en dos personas, medidores sin lectura— y el negocio tiene derecho
  * a verlos antes de que entren, no después.
+ *
+ * Volver a subir un Excel (el de otro mes) no duplica el padrón: el archivo se
+ * cruza con lo que ya está y solo entra lo nuevo (ver `separarNuevos`).
  */
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import * as XLSX from 'xlsx'
 import { Upload, FileSpreadsheet, Loader2, CheckCircle, AlertTriangle, Gauge, Coins } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import { createSuppliesBulk } from '@/services/serviceBillingService'
-import { leerLibro, textoDelAviso } from '@/utils/importarSuministros'
+import { createSuppliesBulk, getSupplies, updateSuppliesLastReading } from '@/services/serviceBillingService'
+import { leerLibro, textoDelAviso, separarNuevos } from '@/utils/importarSuministros'
 import { CON_MEDIDOR } from '@/utils/cobranzaServicios'
+
+const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`
 
 export default function ImportSuppliesModal({ isOpen, onClose, onImported, direccionPorDefecto = '' }) {
   const { getBusinessId, isDemoMode } = useAppContext()
@@ -31,6 +36,30 @@ export default function ImportSuppliesModal({ isOpen, onClose, onImported, direc
   const [direccion, setDireccion] = useState(direccionPorDefecto)
   const [importando, setImportando] = useState(false)
   const [resultado, setResultado] = useState(null)
+  // El padrón que ya está cargado, con los dados de baja. null mientras se lee.
+  const [existentes, setExistentes] = useState(null)
+  const [sinPadron, setSinPadron] = useState(false)
+
+  useEffect(() => {
+    if (!isOpen) return
+    const businessId = getBusinessId()
+    if (!businessId || isDemoMode) { setExistentes([]); return }
+    let vigente = true
+    setExistentes(null)
+    setSinPadron(false)
+    getSupplies(businessId, { soloActivos: false }).then((r) => {
+      if (!vigente) return
+      if (r.success) setExistentes(r.data)
+      else setSinPadron(true)
+    })
+    return () => { vigente = false }
+  }, [isOpen, getBusinessId, isDemoMode])
+
+  // Qué del archivo es nuevo, qué ya estaba y a quién se le pone la lectura.
+  const separacion = useMemo(
+    () => (leido && existentes ? separarNuevos(leido.suministros, existentes) : null),
+    [leido, existentes],
+  )
 
   const limpiar = () => { setLeido(null); setArchivo(''); setResultado(null) }
   const cerrar = () => { limpiar(); onClose() }
@@ -65,29 +94,52 @@ export default function ImportSuppliesModal({ isOpen, onClose, onImported, direc
     lector.readAsArrayBuffer(file)
   }
 
-  // Cambiar la dirección después de leer el archivo no obliga a volver a
-  // cargarlo: se le pone a todos en el momento de importar.
-  const conDireccion = () => (leido?.suministros || []).map(s => ({ ...s, direccion }))
+  const aAgregar = separacion?.nuevos.length || 0
+  const aActualizar = separacion?.actualizar.length || 0
 
   const importar = async () => {
     if (isDemoMode) { toast.error('No disponible en modo demo'); return }
     const businessId = getBusinessId()
-    if (!businessId || !leido) return
+    if (!businessId || !separacion) return
 
     setImportando(true)
-    const r = await createSuppliesBulk(businessId, conDireccion())
+    // Cambiar la dirección después de leer el archivo no obliga a volver a
+    // cargarlo: se le pone a los nuevos en el momento de importar.
+    const rc = aAgregar
+      ? await createSuppliesBulk(businessId, separacion.nuevos.map(s => ({ ...s, direccion })))
+      : { success: true, data: { creados: 0 } }
+    const ra = rc.success && aActualizar
+      ? await updateSuppliesLastReading(businessId, separacion.actualizar)
+      : { success: true, data: { actualizados: 0 } }
     setImportando(false)
 
-    if (!r.success) { toast.error('No se pudo importar el padrón'); return }
-    setResultado(r.data)
-    toast.success(`${r.data.creados} suministros importados`)
+    if (!rc.success || !ra.success) {
+      toast.error('No se pudo importar el padrón')
+      onImported?.()
+      return
+    }
+    const hecho = { creados: rc.data.creados, actualizados: ra.data.actualizados }
+    setResultado(hecho)
+    toast.success([
+      hecho.creados > 0 && plural(hecho.creados, 'suministro importado', 'suministros importados'),
+      hecho.actualizados > 0 && plural(hecho.actualizados, 'lectura actualizada', 'lecturas actualizadas'),
+    ].filter(Boolean).join(' y '))
     onImported?.()
   }
 
+  // Lo observado se cuenta sobre lo que va a entrar: los que ya estaban tienen
+  // sus propias marcas en la lista.
   const avisos = {}
-  for (const s of leido?.suministros || []) {
+  for (const s of separacion?.nuevos || []) {
     for (const a of s.avisos) avisos[a] = (avisos[a] || 0) + 1
   }
+  const observados = (separacion?.nuevos || []).filter(s => s.avisos.length > 0).length
+
+  const etiquetaBoton = !separacion ? 'Importar'
+    : aAgregar && aActualizar ? `Agregar ${aAgregar} y actualizar ${aActualizar}`
+    : aActualizar ? `Actualizar ${plural(aActualizar, 'lectura', 'lecturas')}`
+    : aAgregar ? `Importar ${plural(aAgregar, 'suministro', 'suministros')}`
+    : 'Nada que importar'
 
   return (
     <Modal isOpen={isOpen} onClose={cerrar} title="Importar padrón de suministros" size="lg">
@@ -96,7 +148,10 @@ export default function ImportSuppliesModal({ isOpen, onClose, onImported, direc
           <div className="text-center py-8">
             <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
             <p className="text-lg font-semibold text-gray-900">
-              {resultado.creados} suministros importados
+              {[
+                resultado.creados > 0 && plural(resultado.creados, 'suministro importado', 'suministros importados'),
+                resultado.actualizados > 0 && plural(resultado.actualizados, 'lectura actualizada', 'lecturas actualizadas'),
+              ].filter(Boolean).join(' · ')}
             </p>
             <p className="text-sm text-gray-600 mt-1">
               Ya puedes tomar las lecturas del mes.
@@ -115,6 +170,12 @@ export default function ImportSuppliesModal({ isOpen, onClose, onImported, direc
                 De cada medidor se toma la <strong>lectura actual</strong> del mes que
                 subas, que pasa a ser la anterior del mes siguiente.
               </p>
+              {existentes?.length > 0 && (
+                <p className="text-xs text-blue-800 mt-1.5">
+                  Ya tienes {plural(existentes.filter(s => s.activo !== false && !s.duplicadoDe).length, 'suministro', 'suministros')} en
+                  tu padrón. Si subes otro Excel, los que ya están no se repiten: solo entran los nuevos.
+                </p>
+              )}
             </div>
 
             <label className="block">
@@ -141,6 +202,13 @@ export default function ImportSuppliesModal({ isOpen, onClose, onImported, direc
               </span>
               <input type="file" accept=".xlsx,.xls" onChange={elegirArchivo} className="hidden" />
             </label>
+
+            {sinPadron && (
+              <p className="text-sm text-red-600">
+                No se pudo revisar tu padrón actual, y sin eso no se sabe qué ya está cargado.
+                Cierra y vuelve a intentar.
+              </p>
+            )}
 
             {leido && leido.resumen.total > 0 && (
               <>
@@ -173,11 +241,40 @@ export default function ImportSuppliesModal({ isOpen, onClose, onImported, direc
                   ))}
                 </div>
 
+                {/* Lo que ya estaba: no se vuelve a cargar */}
+                {!separacion && !sinPadron && (
+                  <p className="flex items-center gap-2 text-sm text-gray-500">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Revisando tu padrón...
+                  </p>
+                )}
+                {separacion && separacion.yaEstan > 0 && (
+                  <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-md text-sm text-gray-700 space-y-1">
+                    <p>
+                      <strong className="text-gray-900 tabular-nums">{separacion.yaEstan}</strong> ya están en tu
+                      padrón: no se vuelven a cargar.
+                    </p>
+                    {aActualizar > 0 && (
+                      <p>
+                        A <strong className="text-gray-900 tabular-nums">{aActualizar}</strong> se les pone la
+                        lectura de este archivo, que es más nueva.
+                      </p>
+                    )}
+                    <p>
+                      {aAgregar > 0
+                        ? <><strong className="text-gray-900 tabular-nums">{aAgregar}</strong> {aAgregar === 1 ? 'es nuevo y se agrega' : 'son nuevos y se agregan'}.</>
+                        : 'No trae suministros nuevos.'}
+                    </p>
+                    <p className="text-xs text-gray-500 pt-1">
+                      Los meses siguientes no hace falta subir el Excel: las lecturas se anotan en Lecturas del mes.
+                    </p>
+                  </div>
+                )}
+
                 {Object.keys(avisos).length > 0 && (
                   <div className="px-4 py-3 bg-amber-50 border-l-2 border-amber-400 rounded-r-md">
                     <div className="flex items-center gap-2 text-sm font-semibold text-amber-900 mb-1.5">
                       <AlertTriangle className="w-4 h-4" />
-                      {leido.resumen.observados} para revisar después
+                      {observados} para revisar después
                     </div>
                     <ul className="text-sm text-amber-800 space-y-0.5">
                       {Object.entries(avisos).map(([motivo, cuantos]) => (
@@ -220,12 +317,12 @@ export default function ImportSuppliesModal({ isOpen, onClose, onImported, direc
               <Button variant="outline" onClick={cerrar}>Cancelar</Button>
               <Button
                 onClick={importar}
-                disabled={!leido || leido.resumen.total === 0 || importando || isDemoMode}
+                disabled={!separacion || aAgregar + aActualizar === 0 || importando || isDemoMode}
               >
                 {importando
                   ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   : <Upload className="w-4 h-4 mr-2" />}
-                Importar {leido?.resumen.total || ''} suministros
+                {etiquetaBoton}
               </Button>
             </div>
           </>

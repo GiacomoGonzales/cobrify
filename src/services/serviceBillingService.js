@@ -166,6 +166,34 @@ export async function createSuppliesBulk(businessId, filas) {
   }
 }
 
+/**
+ * Pone la lectura de un Excel más nuevo en suministros que ya estaban, al
+ * volver a subir el padrón (quién entra acá lo decide `separarNuevos`). Solo
+ * toca la última lectura: el nombre, el orden y lo demás pueden haberse
+ * corregido a mano después de importar.
+ *
+ * @param {Array} cambios `[{ id, ultimaLectura }]`
+ */
+export async function updateSuppliesLastReading(businessId, cambios) {
+  try {
+    const utiles = (cambios || []).filter(c => c?.id)
+    for (let i = 0; i < utiles.length; i += 400) {
+      const lote = writeBatch(db)
+      for (const c of utiles.slice(i, i + 400)) {
+        lote.update(doc(db, 'businesses', businessId, 'serviceSupplies', c.id), {
+          ultimaLectura: r1(c.ultimaLectura),
+          updatedAt: serverTimestamp(),
+        })
+      }
+      await lote.commit()
+    }
+    return { success: true, data: { actualizados: utiles.length } }
+  } catch (error) {
+    console.error('updateSuppliesLastReading:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 // ───────────────────────────────────────────────────────────────── periodos
 
 /**
