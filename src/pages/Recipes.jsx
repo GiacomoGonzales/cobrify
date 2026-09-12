@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Plus, Search, Edit, Trash2, ChefHat, AlertTriangle, Loader2, Package, MoreVertical, X } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
+import { crearRecetaDemo, actualizarRecetaDemo, eliminarRecetaDemo } from '@/data/demo/operaciones'
 import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
@@ -22,8 +22,7 @@ import GuideLink from '@/components/guide/GuideLink'
 let recipeCostSyncDone = false
 
 export default function Recipes() {
-  const { user, getBusinessId, businessMode, isDemoMode } = useAppContext()
-  const demoContext = useDemoRestaurant()
+  const { user, getBusinessId, businessMode, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
 
   // Textos condicionales según el modo de negocio
@@ -126,19 +125,27 @@ export default function Recipes() {
     loadData()
   }, [user])
 
+  // Demo: la lista sigue al estado vivo. Crear, editar o borrar una receta se
+  // ve al instante (loadData lee los datos de antes del cambio).
+  useEffect(() => {
+    if (!isDemoMode || !Array.isArray(demoData?.recipes)) return
+    setRecipes(demoData.recipes)
+    setIngredients(demoData.ingredients || [])
+    setProducts(demoData.products || [])
+  }, [isDemoMode, demoData])
+
   const loadData = async () => {
-    if (!user?.uid && !demoContext && !isDemoMode) return
+    if (!user?.uid && !isDemoMode) return
 
     setIsLoading(true)
     try {
-      // En modo demo, usar datos del contexto de demo o fallback
-      if (demoContext || isDemoMode) {
-        // Si hay datos del contexto de demo (DemoRestaurant), usarlos
-        if (demoContext?.demoData?.recipes) {
-          setRecipes(demoContext.demoData.recipes)
-          setIngredients(demoContext.demoData.ingredients || [])
-          setProducts(demoContext.demoData.products || [])
-        } else if (isRestaurantMode || demoContext) {
+      // En modo demo, las recetas del demo (las del rubro) o el ejemplo de siempre
+      if (isDemoMode) {
+        if (Array.isArray(demoData?.recipes)) {
+          setRecipes(demoData.recipes)
+          setIngredients(demoData.ingredients || [])
+          setProducts(demoData.products || [])
+        } else if (isRestaurantMode) {
           // Demo Restaurant: Recetas de cocina
           const restaurantRecipes = [
             { id: 'rec1', productId: '1', productName: 'Ceviche de Pescado', portions: 1, totalCost: 14.25, preparationTime: 20, instructions: '1. Cortar el pescado en cubos\n2. Agregar limón y dejar reposar\n3. Añadir cebolla, ají y sal', ingredients: [
@@ -342,12 +349,6 @@ export default function Recipes() {
   }
 
   const handleSaveRecipe = async () => {
-    // Verificar si está en modo demo
-    if (demoContext) {
-      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
-      return
-    }
-
     if (!formData.productId || formData.ingredients.length === 0) {
       toast.error('Selecciona un producto y agrega al menos un ingrediente')
       return
@@ -364,7 +365,9 @@ export default function Recipes() {
       }
 
       let result
-      if (selectedRecipe) {
+      if (isDemoMode) {
+        result = selectedRecipe ? actualizarRecetaDemo(selectedRecipe.id, recipeData) : crearRecetaDemo(recipeData)
+      } else if (selectedRecipe) {
         result = await updateRecipe(businessId, selectedRecipe.id, recipeData)
       } else {
         result = await createRecipe(businessId, recipeData)
@@ -388,18 +391,12 @@ export default function Recipes() {
   }
 
   const handleDeleteRecipe = async () => {
-    // Verificar si está en modo demo
-    if (demoContext) {
-      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
-      return
-    }
-
     if (!selectedRecipe) return
 
     setIsSaving(true)
     try {
       const businessId = getBusinessId()
-      const result = await deleteRecipe(businessId, selectedRecipe.id)
+      const result = isDemoMode ? eliminarRecetaDemo(selectedRecipe.id) : await deleteRecipe(businessId, selectedRecipe.id)
 
       if (result.success) {
         toast.success('Receta eliminada exitosamente')
@@ -430,17 +427,13 @@ export default function Recipes() {
 
   // Eliminación en grupo de las recetas seleccionadas
   const handleBulkDelete = async () => {
-    if (demoContext || isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
-      return
-    }
     const ids = Array.from(selectedRecipeIds)
     if (ids.length === 0) return
 
     setIsBulkDeleting(true)
     try {
       const businessId = getBusinessId()
-      const results = await Promise.allSettled(ids.map(id => deleteRecipe(businessId, id)))
+      const results = await Promise.allSettled(ids.map(id => (isDemoMode ? eliminarRecetaDemo(id) : deleteRecipe(businessId, id))))
       const okCount = results.filter(r => r.status === 'fulfilled' && r.value?.success).length
       const failCount = ids.length - okCount
 

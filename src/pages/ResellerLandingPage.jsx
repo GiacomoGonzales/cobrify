@@ -411,7 +411,7 @@ export default function ResellerLandingPage({ reseller }) {
 
             {/* Demo Restaurante */}
             {showDemoRestaurant && (
-            <Link to="/demorestaurant" className="group">
+            <Link to="/demo/restaurante" className="group">
               <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border-2 border-white/20 hover:bg-white/20 hover:border-white/40 transition-all duration-300 transform hover:-translate-y-1">
                 <div className="flex items-center gap-4 mb-4">
                   <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center">

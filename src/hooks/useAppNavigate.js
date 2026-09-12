@@ -3,7 +3,7 @@ import { useAppContext } from './useAppContext'
 import { rutaDeApp } from '@/utils/appPath'
 
 /**
- * Navegación con el prefijo del contexto (/app, /demo, /demorestaurant…).
+ * Navegación con el prefijo del contexto (/app, /demo, /demo/restaurante…).
  *
  * El cálculo del prefijo vive en utils/appPath, para que quien necesite la URL
  * —abrir en otra pestaña, armar un enlace— no tenga que repetir la lista de

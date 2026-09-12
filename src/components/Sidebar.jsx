@@ -115,7 +115,7 @@ function Sidebar() {
     })
   }
 
-  // Si estamos en modo demo, añadir prefijo /demo, /demorestaurant o /demopharmacy a las rutas
+  // Si estamos en modo demo, añadir el prefijo del demo (/demo, /demo/restaurante, /demopharmacy…)
   // Si no, añadir prefijo /app para rutas protegidas
   const getPath = (path) => `${prefijoDeRuta(location.pathname, isDemoMode)}${path}`
 

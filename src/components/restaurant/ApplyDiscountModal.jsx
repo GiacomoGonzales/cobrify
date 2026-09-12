@@ -4,13 +4,12 @@ import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import { applyOrderDiscount, removeOrderDiscount } from '@/services/orderService'
+import { aplicarDescuentoDemo, quitarDescuentoDemo } from '@/data/demo/operaciones'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 
 export default function ApplyDiscountModal({ isOpen, onClose, table, order, onSuccess }) {
-  const { getBusinessId, user } = useAppContext()
-  const demoContext = useDemoRestaurant()
+  const { getBusinessId, user, isDemoMode } = useAppContext()
   const toast = useToast()
 
   const [type, setType] = useState('percent')
@@ -54,20 +53,19 @@ export default function ApplyDiscountModal({ isOpen, onClose, table, order, onSu
   const isValid = numericValue > 0 && (type === 'percent' ? numericValue <= 100 : numericValue <= billableTotal)
 
   const handleApply = async () => {
-    if (demoContext) {
-      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
-      return
-    }
     if (!isValid) return
 
     setIsProcessing(true)
     try {
-      const result = await applyOrderDiscount(getBusinessId(), order.id, {
+      const datosDescuento = {
         type,
         value: numericValue,
         reason: reason.trim(),
         appliedBy: { uid: user?.uid, name: user?.displayName || user?.email || 'Usuario' },
-      })
+      }
+      const result = isDemoMode
+        ? aplicarDescuentoDemo(order.id, datosDescuento)
+        : await applyOrderDiscount(getBusinessId(), order.id, datosDescuento)
       if (result.success) {
         toast.success(hasExistingDiscount ? 'Descuento actualizado' : 'Descuento aplicado')
         onSuccess?.()
@@ -84,15 +82,11 @@ export default function ApplyDiscountModal({ isOpen, onClose, table, order, onSu
   }
 
   const handleRemove = async () => {
-    if (demoContext) {
-      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
-      return
-    }
     if (!window.confirm('¿Quitar el descuento aplicado?')) return
 
     setIsProcessing(true)
     try {
-      const result = await removeOrderDiscount(getBusinessId(), order.id)
+      const result = isDemoMode ? quitarDescuentoDemo(order.id) : await removeOrderDiscount(getBusinessId(), order.id)
       if (result.success) {
         toast.success('Descuento eliminado')
         onSuccess?.()

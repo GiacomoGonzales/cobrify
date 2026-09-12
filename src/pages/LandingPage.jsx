@@ -139,7 +139,7 @@ export default function LandingPage() {
                     Ver Demo Retail
                   </Button>
                 </Link>
-                <Link to="/demorestaurant">
+                <Link to="/demo/restaurante">
                   <Button size="lg" className="bg-primary-800 text-white hover:bg-primary-900 border-2 border-white/30 w-full sm:w-auto font-semibold">
                     Ver Demo Restaurante
                   </Button>
@@ -743,7 +743,7 @@ export default function LandingPage() {
                   </Button>
                 </div>
               </Link>
-              <Link to="/demorestaurant">
+              <Link to="/demo/restaurante">
                 <div className="bg-gradient-to-br from-primary-600 to-primary-700 p-6 rounded-xl shadow-lg hover:shadow-xl transition-all group cursor-pointer">
                   <div className="flex items-center justify-center mb-4">
                     <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
@@ -912,7 +912,7 @@ export default function LandingPage() {
                 Ver Demo Retail
               </Button>
             </Link>
-            <Link to="/demorestaurant">
+            <Link to="/demo/restaurante">
               <Button size="lg" className="bg-primary-800 text-white hover:bg-primary-900 border-2 border-white/30 w-full sm:w-auto font-semibold">
                 Ver Demo Restaurante
               </Button>

@@ -38,12 +38,93 @@ export default {
 
   salon: {
     mozos: ['Carlos Rodríguez', 'María López', 'Jorge Aliaga'],
+    // "Barra" no va acá: en Mesas es la zona de las CUENTAS de barra (las que
+    // se abren con el nombre del cliente), y mesas numeradas ahí salían
+    // contadas como "cuentas".
     zonas: [
       { nombre: 'Salón Principal', mesas: 8, capacidad: 4 },
       { nombre: 'Terraza', mesas: 4, capacidad: 6 },
-      { nombre: 'Barra', mesas: 3, capacidad: 2 },
+      { nombre: 'Salón VIP', mesas: 3, capacidad: 8 },
     ],
   },
+
+  /**
+   * La guía del demo: lo que un dueño de restaurante tiene que ver funcionando
+   * para convencerse, en el orden en que pasa en su local. Cada paso se marca
+   * solo cuando el visitante lo hace de verdad (los `hito` los anotan las
+   * operaciones del demo).
+   */
+  recorrido: {
+    pasos: [
+      { hito: 'mesa', titulo: 'Abre una mesa', detalle: 'Toca una mesa libre y elige al mozo.', pagina: 'mesas', nombrePagina: 'Mesas' },
+      { hito: 'pedido', titulo: 'Toma el pedido', detalle: 'Agrega un par de platos a la mesa.', pagina: 'mesas', nombrePagina: 'Mesas' },
+      { hito: 'cocina', titulo: 'Pásalo por la cocina', detalle: 'En Cocina, avanza la comanda hasta que esté lista.', pagina: 'cocina', nombrePagina: 'Cocina' },
+      { hito: 'cobro', titulo: 'Cobra la mesa', detalle: 'Abre la mesa, toca "Cerrar Cuenta" y emite la boleta.', pagina: 'mesas', nombrePagina: 'Mesas' },
+    ],
+    final: 'Así se atiende un restaurante con Cobrify: mesas, cocina y boleta en un solo sistema.',
+    mensaje: 'Hola, probé el demo de restaurante de Cobrify y me interesa.',
+  },
+
+  /**
+   * Recetas de los platos que más salen, con los insumos de abajo: son las que
+   * descuentan la cocina al vender. El costo es cantidad × costo promedio.
+   */
+  recetas: [
+    {
+      id: 'rec1', productId: 'r4', productName: 'Ceviche de pescado', portions: 1, preparationTime: 15, deductOnSale: true, totalCost: 7.10,
+      instructions: '1. Cortar el pescado en cubos\n2. Curar con limón, sal y ají\n3. Servir con cebolla, camote y choclo',
+      ingredients: [
+        { ingredientId: 'ing2', ingredientName: 'Pescado (filete)', quantity: 0.25, unit: 'kg', cost: 5.50 },
+        { ingredientId: 'ing8', ingredientName: 'Limón', quantity: 0.12, unit: 'kg', cost: 0.54 },
+        { ingredientId: 'ing7', ingredientName: 'Cebolla roja', quantity: 0.08, unit: 'kg', cost: 0.22 },
+        { ingredientId: 'ing9', ingredientName: 'Ají amarillo', quantity: 0.02, unit: 'kg', cost: 0.16 },
+        { ingredientId: 'ing11', ingredientName: 'Camote', quantity: 0.10, unit: 'kg', cost: 0.26 },
+        { ingredientId: 'ing12', ingredientName: 'Choclo desgranado', quantity: 0.08, unit: 'kg', cost: 0.42 },
+      ],
+    },
+    {
+      id: 'rec2', productId: 'r9', productName: 'Lomo saltado', portions: 1, preparationTime: 20, deductOnSale: true, totalCost: 6.95,
+      instructions: '1. Saltear la carne a fuego alto\n2. Agregar cebolla y tomate\n3. Servir con papas fritas y arroz',
+      ingredients: [
+        { ingredientId: 'ing5', ingredientName: 'Carne de res', quantity: 0.20, unit: 'kg', cost: 4.80 },
+        { ingredientId: 'ing6', ingredientName: 'Papa amarilla', quantity: 0.25, unit: 'kg', cost: 0.85 },
+        { ingredientId: 'ing7', ingredientName: 'Cebolla roja', quantity: 0.10, unit: 'kg', cost: 0.28 },
+        { ingredientId: 'ing1', ingredientName: 'Arroz', quantity: 0.15, unit: 'kg', cost: 0.57 },
+        { ingredientId: 'ing10', ingredientName: 'Aceite vegetal', quantity: 0.05, unit: 'litro', cost: 0.45 },
+      ],
+    },
+    {
+      id: 'rec3', productId: 'r10', productName: 'Ají de gallina', portions: 1, preparationTime: 25, deductOnSale: true, totalCost: 3.32,
+      instructions: '1. Deshilachar el pollo\n2. Preparar la crema de ají amarillo\n3. Servir con papa y arroz',
+      ingredients: [
+        { ingredientId: 'ing4', ingredientName: 'Pollo', quantity: 0.20, unit: 'kg', cost: 1.84 },
+        { ingredientId: 'ing9', ingredientName: 'Ají amarillo', quantity: 0.05, unit: 'kg', cost: 0.40 },
+        { ingredientId: 'ing6', ingredientName: 'Papa amarilla', quantity: 0.15, unit: 'kg', cost: 0.51 },
+        { ingredientId: 'ing1', ingredientName: 'Arroz', quantity: 0.15, unit: 'kg', cost: 0.57 },
+      ],
+    },
+    {
+      id: 'rec4', productId: 'r11', productName: 'Arroz con pollo', portions: 1, preparationTime: 30, deductOnSale: true, totalCost: 3.51,
+      instructions: '1. Dorar el pollo\n2. Cocinar el arroz con culantro y choclo\n3. Servir con sarsa criolla',
+      ingredients: [
+        { ingredientId: 'ing4', ingredientName: 'Pollo', quantity: 0.25, unit: 'kg', cost: 2.30 },
+        { ingredientId: 'ing1', ingredientName: 'Arroz', quantity: 0.18, unit: 'kg', cost: 0.68 },
+        { ingredientId: 'ing12', ingredientName: 'Choclo desgranado', quantity: 0.05, unit: 'kg', cost: 0.26 },
+        { ingredientId: 'ing10', ingredientName: 'Aceite vegetal', quantity: 0.03, unit: 'litro', cost: 0.27 },
+      ],
+    },
+    {
+      id: 'rec5', productId: 'r6', productName: 'Arroz con mariscos', portions: 1, preparationTime: 25, deductOnSale: true, totalCost: 8.46,
+      instructions: '1. Saltear los mariscos con ají y cebolla\n2. Agregar el arroz y el caldo\n3. Terminar con culantro',
+      ingredients: [
+        { ingredientId: 'ing3', ingredientName: 'Mariscos surtidos', quantity: 0.25, unit: 'kg', cost: 7.13 },
+        { ingredientId: 'ing1', ingredientName: 'Arroz', quantity: 0.18, unit: 'kg', cost: 0.68 },
+        { ingredientId: 'ing9', ingredientName: 'Ají amarillo', quantity: 0.03, unit: 'kg', cost: 0.24 },
+        { ingredientId: 'ing7', ingredientName: 'Cebolla roja', quantity: 0.05, unit: 'kg', cost: 0.14 },
+        { ingredientId: 'ing10', ingredientName: 'Aceite vegetal', quantity: 0.03, unit: 'litro', cost: 0.27 },
+      ],
+    },
+  ],
 
   /** Delivery de la carta en la zona. */
   reparto: ['Brayan Mendoza', 'Kelly Ramos'],

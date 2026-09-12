@@ -2,6 +2,7 @@ import { Outlet, useParams } from 'react-router-dom'
 import { DemoProvider } from '@/contexts/DemoContext'
 import Sidebar from '@/components/Sidebar'
 import Navbar from '@/components/Navbar'
+import RecorridoDemo from '@/components/demo/RecorridoDemo'
 import { useEffect } from 'react'
 import { useBranding } from '@/contexts/BrandingContext'
 import { useStore } from '@/stores/useStore'
@@ -52,6 +53,9 @@ export default function DemoLayout() {
           <div className={`flex-1 flex flex-col h-full overflow-hidden ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'}`}>
             {/* Navbar */}
             <Navbar />
+
+            {/* Guía de pasos del demo (solo en los rubros que la definen) */}
+            <RecorridoDemo />
 
             {/* Page Content */}
             <main className="flex-1 overflow-y-auto overscroll-none p-2 sm:p-4 custom-scrollbar" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>

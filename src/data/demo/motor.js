@@ -312,6 +312,7 @@ function generarSalon(rubro, hoy, azar) {
           const montos = desglosarIGV(total)
           const abierta = new Date(hoy.getTime() - (10 + Math.floor(azar() * 70)) * 60000)
           nOrden += 1
+          const estado = azar() < 0.5 ? 'pending' : 'preparing'
           const orden = {
             id: `order${nOrden}`,
             orderNumber: `#${String(nOrden).padStart(3, '0')}`,
@@ -319,8 +320,20 @@ function generarSalon(rubro, hoy, azar) {
             tableNumber: mesa.number,
             waiterName: mozo.name,
             waiterId: mozo.id,
-            status: azar() < 0.5 ? 'pending' : 'preparing',
-            items,
+            orderType: 'dine_in',
+            status: estado,
+            overallStatus: 'active',
+            paid: false,
+            // Cada plato con su id y su estado de cocina, como los guarda la
+            // comanda real: sin `itemId`, marcar un plato como servido desde
+            // la mesa no encontraba qué marcar.
+            items: items.map((it, k) => ({
+              ...it,
+              itemId: `item-${nOrden}-${k + 1}`,
+              status: estado,
+              printedToKitchen: true,
+              firedAt: abierta,
+            })),
             subtotal: montos.subtotal,
             tax: montos.tax,
             total: montos.total,
@@ -554,6 +567,10 @@ export function construirDatosDemo(rubro) {
     tables: salon.tables,
     waiters: salon.waiters,
     orders: salon.orders,
+    // El último número de orden usado: las que abra el visitante siguen desde acá.
+    ultimaOrden: salon.orders.length,
+    // Lo que el visitante va haciendo, para la guía de pasos del demo.
+    hitos: {},
     laboratories: rubro.laboratorios || [],
     motoristas: reparto.motoristas,
     deliveries: reparto.deliveries,

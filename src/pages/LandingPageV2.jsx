@@ -794,7 +794,7 @@ export default function LandingPageV2() {
           <div className="grid md:grid-cols-3 gap-5">
             {[
               { to: '/demo', tag: 'Retail', t: 'Tiendas y comercios', d: 'Bodegas, boutiques, ferreterías, minimarkets y todo negocio que vende productos.' },
-              { to: '/demorestaurant', tag: 'Restaurante', t: 'Restaurantes y bares', d: 'Mesas, comandas a cocina, mozos y precuenta. Hecho para el servicio en salón.' },
+              { to: '/demo/restaurante', tag: 'Restaurante', t: 'Restaurantes y bares', d: 'Mesas, comandas a cocina, mozos y precuenta. Hecho para el servicio en salón.' },
               { to: '/demopharmacy', tag: 'Farmacia', t: 'Farmacias y boticas', d: 'Lotes, vencimientos, laboratorios y registro sanitario bajo control.' },
             ].map((d, i) => (
               <Link key={d.to} to={d.to} className="lp3r lp3-card p-7 block" style={{ transitionDelay: `${i * 0.07}s`, textDecoration: 'none', color: 'var(--navy)' }}>
@@ -976,7 +976,7 @@ export default function LandingPageV2() {
               <h4 className="text-[0.78rem] font-bold uppercase tracking-[0.12em] mb-4" style={{ color: '#8898AA' }}>Demos</h4>
               <ul className="space-y-2.5 text-sm font-medium" style={{ color: 'var(--body)' }}>
                 <li><Link to="/demo" className="hover:text-[var(--blue)] transition-colors">Retail / Tienda</Link></li>
-                <li><Link to="/demorestaurant" className="hover:text-[var(--blue)] transition-colors">Restaurante</Link></li>
+                <li><Link to="/demo/restaurante" className="hover:text-[var(--blue)] transition-colors">Restaurante</Link></li>
                 <li><Link to="/demopharmacy" className="hover:text-[var(--blue)] transition-colors">Farmacia</Link></li>
               </ul>
             </div>

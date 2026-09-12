@@ -45,6 +45,9 @@ export const RUBROS_DEMO = [
     nombre: 'Restaurante',
     descripcion: 'Mesas, comandas a cocina y recetas',
     modo: 'restaurant',
+    // Un restaurante se reconoce en su salón, no en un tablero de ventas: el
+    // demo abre en el mapa de mesas, como abría el demo de restaurante viejo.
+    inicio: 'mesas',
     cargar: () => import('./restaurante'),
   },
   {

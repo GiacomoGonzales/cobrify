@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, memo } from 'react'
-import { Bell, User, Menu, Download, ChevronDown, Check, Store, UtensilsCrossed, Pill, BedDouble, PawPrint, Truck, HardHat, Home, LayoutGrid, HelpCircle, HandCoins, Stethoscope } from 'lucide-react'
+import { Bell, User, Menu, Download, ChevronDown, Check, Store, UtensilsCrossed, Pill, BedDouble, PawPrint, Truck, HardHat, Home, LayoutGrid, HelpCircle, HandCoins, Stethoscope, RotateCcw } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useBranding } from '@/contexts/BrandingContext'
@@ -15,6 +15,7 @@ import NotificationPanel from './NotificationPanel'
 import GuidePanel from './guide/GuidePanel'
 import { ABRIR_GUIA_EVENT } from './guide/GuideLink'
 import { nombreDelVisitante } from '@/utils/nombreDelVisitante'
+import { useDemo } from '@/contexts/DemoContext'
 
 // Modo de negocio → etiqueta + ícono (para el selector de local del Navbar)
 const MODE_META = {
@@ -33,6 +34,8 @@ const MODE_META = {
 function Navbar() {
   const { user, subscription, isDemoMode, isBusinessOwner, businessMode, businessSettings, branches, filterBranchesByAccess, hasMainBranchAccess, branchScope, setBranchScope, baseBusinessMode } = useAppContext()
   const { branding } = useBranding()
+  // El demo en el que estamos (si estamos en uno), para "Empezar de nuevo".
+  const demo = useDemo()
   const { toggleMobileMenu } = useStore()
   // En móvil el menú lateral es un cajón cerrado: el aviso de versión nueva
   // vive adentro, así que el botón lleva un punto para que se note.
@@ -195,6 +198,23 @@ function Navbar() {
             <span className="hidden sm:inline text-gray-400">así se vería para</span>
             <strong className="font-semibold text-gray-800 truncate max-w-[130px] sm:max-w-[220px]">{nombreVisitante}</strong>
           </span>
+        )}
+
+        {/* Lo que el visitante hace en el demo se guarda en su navegador (para
+            que al volver lo encuentre), así que hace falta una forma de volver
+            a cero. Aparece recién cuando ya hizo algo. */}
+        {isDemoMode && demo?.conCambios && (
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm('¿Empezar de nuevo? Se borra lo que hiciste en este demo.')) demo.empezarDeNuevo()
+            }}
+            className="inline-flex items-center gap-1 flex-shrink-0 text-[12px] text-gray-500 hover:text-gray-800 whitespace-nowrap"
+            title="Borrar lo que hiciste y volver al demo como estaba"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Empezar de nuevo</span>
+          </button>
         )}
 
         {/* Selector global de sucursal (único): visible siempre que haya ≥2 locales accesibles */}

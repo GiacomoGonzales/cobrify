@@ -5,7 +5,6 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { crearInsumoDemo, actualizarInsumoDemo, eliminarInsumoDemo } from '@/data/demo/operaciones'
 import { useDataPermissions } from '@/hooks/useDataPermissions'
 import { useToast } from '@/contexts/ToastContext'
-import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import ModifiersPanel from '@/components/ModifiersPanel'
 import Button from '@/components/ui/Button'
@@ -119,7 +118,6 @@ export default function Ingredients() {
     if (!isDemoMode || !demoData) return
     setIngredients(demoData.ingredients ?? [])
   }, [isDemoMode, demoData])
-  const demoContext = useDemoRestaurant()
   const navigate = useNavigate()
   const toast = useToast()
   const permisos = useDataPermissions()
@@ -371,9 +369,9 @@ export default function Ingredients() {
     try {
       // En modo demo, usar insumos del contexto de demo o fallback
       if (isDemoMode) {
-        // Si hay datos del contexto de demo restaurant, usarlos
-        if (demoContext?.demoData?.ingredients) {
-          setIngredients(demoContext.demoData.ingredients)
+        // Los insumos del demo (los del rubro), si los trae
+        if (demoData?.ingredients) {
+          setIngredients(demoData.ingredients)
         } else if (isRestaurantMode) {
           // Demo Restaurant: Ingredientes de cocina
           const restaurantIngredients = [
@@ -495,12 +493,6 @@ export default function Ingredients() {
       return
     }
 
-    // Verificar si está en modo demo
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
-      return
-    }
-
     if (!selectedIngredient) return
 
     setIsSaving(true)
@@ -604,12 +596,6 @@ export default function Ingredients() {
       return
     }
 
-    // Verificar si está en modo demo
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
-      return
-    }
-
     if (!selectedIngredient) return
 
     setIsSaving(true)
@@ -647,7 +633,10 @@ export default function Ingredients() {
   // Eliminación en grupo de los insumos seleccionados
   const handleBulkDelete = async () => {
     if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
+      Array.from(selectedIngredientIds).forEach((id) => eliminarInsumoDemo(id))
+      toast.success('Insumos eliminados')
+      setShowBulkDeleteModal(false)
+      clearSelection()
       return
     }
     const ids = Array.from(selectedIngredientIds)

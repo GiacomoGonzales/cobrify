@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
+import { prefijoDeRuta } from '@/utils/demoRoutes'
 
 export default function CloseTableModal({
   isOpen,
@@ -25,7 +26,6 @@ export default function CloseTableModal({
 
   // Detectar si estamos en demo mode basado en la ruta actual
   const isDemoMode = location.pathname.startsWith('/demo')
-  const isDemoRestaurant = location.pathname.startsWith('/demorestaurant')
 
   if (!table || !order) return null
 
@@ -60,13 +60,10 @@ export default function CloseTableModal({
       return
     }
 
-    // Construir la ruta correcta según el modo
-    let posPath = '/app/pos'
-    if (isDemoRestaurant) {
-      posPath = '/demorestaurant/pos'
-    } else if (isDemoMode) {
-      posPath = '/demo/pos'
-    }
+    // El POS del mismo lugar donde está la mesa: /app o el demo de ESTE rubro.
+    // Con '/demo/pos' a secas, cobrar en el demo de restaurante sacaba al
+    // visitante al demo genérico, con otros productos y otra caja.
+    const posPath = `${prefijoDeRuta(location.pathname, isDemoMode)}/pos`
 
     // Pasamos TODOS los items al POS, incluidas las cortesías: el POS las jala
     // como bonificación (precio 0, inafecto + etiqueta). Los totales de la orden

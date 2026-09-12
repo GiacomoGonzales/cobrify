@@ -27,7 +27,7 @@ import { PLANES_VENDIBLES } from './planes.js'
 
 /** Los demos dedicados, por modo de negocio. Los demás van a `/demo/<rubro>`. */
 export const DEMOS = {
-  restaurant: '/demorestaurant',
+  restaurant: '/demo/restaurante',
   pharmacy: '/demopharmacy',
   hotel: '/demohotel',
   veterinary: '/demoveterinary',

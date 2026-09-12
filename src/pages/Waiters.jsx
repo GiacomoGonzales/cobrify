@@ -10,6 +10,7 @@ import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { getWaiters, deleteWaiter, toggleWaiterStatus } from '@/services/waiterService'
+import { actualizarMozoDemo, eliminarMozoDemo } from '@/data/demo/operaciones'
 import { getActiveBranches } from '@/services/branchService'
 import { getOrdersInRange } from '@/services/orderService'
 import { generateWaitersExcel } from '@/services/waiterExportService'
@@ -198,18 +199,15 @@ export default function Waiters() {
 
   // ---- Handlers CRUD (sin cambios funcionales) ----
   const handleCreate = () => {
-    if (isDemoMode) return toast.info('Esta función no está disponible en modo demo')
     setEditingWaiter(null); setIsFormModalOpen(true)
   }
   const handleEdit = (waiter) => {
-    if (isDemoMode) return toast.info('Esta función no está disponible en modo demo')
     setEditingWaiter(waiter); setIsFormModalOpen(true)
   }
   const handleDelete = async (waiter) => {
-    if (isDemoMode) return toast.info('Esta función no está disponible en modo demo')
     if (!window.confirm(`¿Eliminar al mozo ${waiter.name}?`)) return
     try {
-      const result = await deleteWaiter(getBusinessId(), waiter.id)
+      const result = isDemoMode ? eliminarMozoDemo(waiter.id) : await deleteWaiter(getBusinessId(), waiter.id)
       if (result.success) { toast.success('Mozo eliminado correctamente'); loadWaiters() }
       else toast.error('Error al eliminar mozo: ' + result.error)
     } catch (error) {
@@ -217,10 +215,11 @@ export default function Waiters() {
     }
   }
   const handleToggleStatus = async (waiter) => {
-    if (isDemoMode) return toast.info('Esta función no está disponible en modo demo')
     const newStatus = waiter.status !== 'active'
     try {
-      const result = await toggleWaiterStatus(getBusinessId(), waiter.id, newStatus)
+      const result = isDemoMode
+        ? actualizarMozoDemo(waiter.id, { status: newStatus ? 'active' : 'inactive', isActive: newStatus })
+        : await toggleWaiterStatus(getBusinessId(), waiter.id, newStatus)
       if (result.success) { toast.success(`Mozo ${newStatus ? 'activado' : 'desactivado'} correctamente`); loadWaiters() }
       else toast.error('Error al cambiar estado: ' + result.error)
     } catch (error) {

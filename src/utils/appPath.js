@@ -1,5 +1,5 @@
 /**
- * La ruta con su prefijo — /app, /demo, /demorestaurant…
+ * La ruta con su prefijo — /app, /demo, /demopharmacy…
  *
  * Vivía dentro de `useAppNavigate`, que navega y no devuelve nada. Para abrir
  * algo en OTRA PESTAÑA hace falta la URL, no la navegación: sin esto habría
@@ -9,7 +9,6 @@
 
 /** Prefijos de demo, del más específico al genérico. */
 const DEMOS = [
-  '/demorestaurant',
   '/demopharmacy',
   '/demohotel',
   '/demoveterinary',

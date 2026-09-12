@@ -3,17 +3,16 @@ import { Edit, Plus, Minus, Trash2, Loader2, Gift } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import { removeOrderItem, updateOrderItemQuantity, toggleItemCourtesy } from '@/services/orderService'
+import { cambiarCantidadItemDemo, quitarItemDemo, cortesiaItemDemo } from '@/data/demo/operaciones'
 import OrderItemsModal from './OrderItemsModal'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { montoDeEnvio } from '@/utils/deliveryFee'
 
 export default function EditOrderItemsModal({ isOpen, onClose, table, order, onSuccess, onAfterAddItems = null }) {
-  const { getBusinessId, business, user } = useAppContext()
-  const demoContext = useDemoRestaurant()
+  const { getBusinessId, business, user, isDemoMode } = useAppContext()
   const toast = useToast()
 
   const [isUpdating, setIsUpdating] = useState(false)
@@ -41,7 +40,7 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
       }
 
       // Si no hay datos en el contexto, cargar de Firestore
-      if (!business?.restaurantConfig && !demoContext) {
+      if (!business?.restaurantConfig && !isDemoMode) {
         try {
           const businessId = getBusinessId()
           if (businessId) {
@@ -72,16 +71,22 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
       loadConfig()
       setShowAddItemsModal(false)
     }
-  }, [isOpen, business, getBusinessId, demoContext])
+  }, [isOpen, business, getBusinessId, isDemoMode])
 
   const handleUpdateQuantity = async (itemIndex, currentQuantity, delta) => {
-    if (demoContext) {
-      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
-      return
-    }
-
     const newQuantity = currentQuantity + delta
     if (newQuantity < 1) return
+
+    if (isDemoMode) {
+      const result = cambiarCantidadItemDemo(order.id, itemIndex, newQuantity)
+      if (result.success) {
+        toast.success('Cantidad actualizada')
+        onSuccess()
+      } else {
+        toast.error('Error al actualizar cantidad: ' + result.error)
+      }
+      return
+    }
 
     setUpdatingItemIndex(itemIndex)
     setIsUpdating(true)
@@ -103,11 +108,6 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
   }
 
   const handleToggleCourtesy = async (itemIndex, item) => {
-    if (demoContext) {
-      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
-      return
-    }
-
     const isCurrentlyCourtesy = !!item.isCourtesy
     let reason = item.courtesyReason || ''
 
@@ -124,10 +124,13 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
     setUpdatingItemIndex(itemIndex)
     setIsUpdating(true)
     try {
-      const result = await toggleItemCourtesy(getBusinessId(), order.id, itemIndex, !isCurrentlyCourtesy, {
+      const opciones = {
         reason,
         markedBy: { uid: user?.uid, name: user?.displayName || user?.email || 'Usuario' },
-      })
+      }
+      const result = isDemoMode
+        ? cortesiaItemDemo(order.id, itemIndex, !isCurrentlyCourtesy, opciones)
+        : await toggleItemCourtesy(getBusinessId(), order.id, itemIndex, !isCurrentlyCourtesy, opciones)
       if (result.success) {
         toast.success(isCurrentlyCourtesy ? 'Cortesía quitada' : 'Marcado como cortesía')
         onSuccess()
@@ -144,17 +147,14 @@ export default function EditOrderItemsModal({ isOpen, onClose, table, order, onS
   }
 
   const handleRemoveItem = async (itemIndex) => {
-    if (demoContext) {
-      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
-      return
-    }
-
     if (!confirm('¿Estás seguro de eliminar este item?')) return
 
     setUpdatingItemIndex(itemIndex)
     setIsUpdating(true)
     try {
-      const result = await removeOrderItem(getBusinessId(), order.id, itemIndex, { uid: user?.uid, name: user?.displayName || user?.email || 'Usuario' })
+      const result = isDemoMode
+        ? quitarItemDemo(order.id, itemIndex)
+        : await removeOrderItem(getBusinessId(), order.id, itemIndex, { uid: user?.uid, name: user?.displayName || user?.email || 'Usuario' })
       if (result.success) {
         toast.success('Item eliminado')
         onSuccess()

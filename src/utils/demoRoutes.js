@@ -14,9 +14,11 @@
 
 import { SLUGS_DEMO } from '@/data/demo/rubros'
 
-/** Demos con prefijo propio (los que existían antes de los rubros). */
+/**
+ * Demos con prefijo propio (los que existían antes de los rubros). El de
+ * restaurante ya no está: /demorestaurant redirige a /demo/restaurante.
+ */
 const PREFIJOS_PROPIOS = [
-  '/demorestaurant',
   '/demopharmacy',
   '/demohotel',
   '/demoveterinary',
@@ -28,7 +30,7 @@ const PREFIJOS_PROPIOS = [
  *
  * @param {string} pathname - location.pathname
  * @param {boolean} enDemo  - isDemoMode
- * @returns {string} '/app' | '/demo' | '/demo/{rubro}' | '/demorestaurant' | ...
+ * @returns {string} '/app' | '/demo' | '/demo/{rubro}' | '/demopharmacy' | ...
  */
 export function prefijoDeRuta(pathname, enDemo) {
   if (!enDemo) return '/app'

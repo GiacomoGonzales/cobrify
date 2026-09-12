@@ -16,6 +16,11 @@ import { getWarehouses } from '@/services/warehouseService'
 import ConsumoInternoModal from '@/components/inventory/ConsumoInternoModal'
 import { esOrdenAbierta, ESTADOS_ABIERTOS, etiquetaDeTipoDeOrden } from '@/utils/ordenesAbiertas'
 import { createBarTab, occupyTable } from '@/services/tableService'
+import {
+  crearCuentaDeBarraDemo, ocuparMesaDemo, crearOrdenDemo, completarOrdenDemo, cambiarEstadoOrdenDemo,
+  marcarOrdenPagadaDemo, actualizarOrdenDemo, cambiarEnvioDemo,
+} from '@/data/demo/operaciones'
+import { datosDemo } from '@/data/demo/demoStore'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { useAppContext } from '@/hooks/useAppContext'
 import { Cantidad, ChipDeEstadoItem, Modificadores, NotaDelPlato } from '@/components/restaurant/tarjetaOrden'
@@ -507,11 +512,6 @@ export default function Orders() {
   }
 
   const imprimirComandaDeOrden = async (orderArg, { silent = false } = {}) => {
-    if (isDemoMode) {
-      if (!silent) toast.info('Esta función no está disponible en modo demo')
-      return false
-    }
-
     // Inyectar el ajuste "mostrar datos y cobro en comandas" (Configuración > Preferencias)
     // para que la comanda térmica respete si se imprimen datos del cliente y el cobro.
     const order = { ...orderArg, _showCustomerData: companySettings?.showCustomerDataOnKitchenTicket === true }
@@ -756,6 +756,12 @@ export default function Orders() {
     return () => unsubscribe()
   }, [user, isDemoMode, demoData, selectedBranchId, branchesLoaded, allowedBranches])
 
+  // Demo: los repartidores del demo, para poder asignarle uno a un delivery
+  // (en una cuenta real se cargan junto con la configuración del negocio).
+  useEffect(() => {
+    if (isDemoMode) setDeliveryPersons(demoData?.motoristas || [])
+  }, [isDemoMode, demoData])
+
   const loadOrders = async () => {
     // Esta función ya no es necesaria con listeners en tiempo real
     // Los datos se actualizan automáticamente vía onSnapshot
@@ -803,15 +809,10 @@ export default function Orders() {
    */
   const guardarEnvio = async () => {
     if (!envioEnEdicion) return
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
-      setEnvioEnEdicion(null)
-      return
-    }
     const { id, valor } = envioEnEdicion
     const monto = montoDeEnvio(valor)
     setEnvioEnEdicion(null)
-    const result = await updateOrderDeliveryFee(getBusinessId(), id, monto)
+    const result = isDemoMode ? cambiarEnvioDemo(id, monto) : await updateOrderDeliveryFee(getBusinessId(), id, monto)
     if (result.success) {
       toast.success(monto > 0 ? `Envío: S/ ${monto.toFixed(2)}` : 'Pedido sin costo de envío')
     } else {
@@ -828,23 +829,20 @@ export default function Orders() {
       toast.error('Ingresa el nombre del cliente')
       return
     }
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
-      return
-    }
     setIsCreatingBarTab(true)
     try {
-      const created = await createBarTab(getBusinessId(), { name, branchId: selectedBranchId || null })
+      const created = isDemoMode
+        ? crearCuentaDeBarraDemo(name)
+        : await createBarTab(getBusinessId(), { name, branchId: selectedBranchId || null })
       if (!created.success) {
         toast.error(created.error || 'No se pudo crear la cuenta de barra')
         return
       }
       // Ocupar la cuenta crea la orden a la que se le agregan los productos
-      const occupied = await occupyTable(getBusinessId(), created.id, {
-        waiterId: null,
-        waiterName: null,
-        customerName: name,
-      })
+      const datosDeOcupacion = { waiterId: null, waiterName: null, customerName: name }
+      const occupied = isDemoMode
+        ? ocuparMesaDemo(created.id, datosDeOcupacion)
+        : await occupyTable(getBusinessId(), created.id, datosDeOcupacion)
       if (!occupied.success) {
         toast.error(occupied.error || 'No se pudo abrir la cuenta de barra')
         return
@@ -872,11 +870,6 @@ export default function Orders() {
   }
 
   const handleOrderItemsAdded = async (items) => {
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
-      return
-    }
-
     try {
       // Calcular total. El envío suma aparte: no es un plato, pero el
       // repartidor tiene que cobrarlo y la comanda lo imprime.
@@ -897,7 +890,7 @@ export default function Orders() {
         branchId: selectedBranchId, // orden manual queda en la sede activa (null = Principal)
       }
 
-      const result = await createOrder(getBusinessId(), orderPayload)
+      const result = isDemoMode ? crearOrdenDemo(orderPayload) : await createOrder(getBusinessId(), orderPayload)
 
       if (result.success) {
         toast.success('Orden creada exitosamente')
@@ -907,7 +900,7 @@ export default function Orders() {
         // que Mesas auto-imprime al agregar. Silenciosa: solo app + impresora configurada.
         // Si el dueño apagó la impresión automática, la comanda se manda solo con el
         // botón de impresora de la tarjeta del pedido.
-        if (autoPrintKitchenComanda) {
+        if (autoPrintKitchenComanda && !isDemoMode) {
           const createdOrder = { ...orderPayload, id: result.id, orderNumber: result.orderNumber }
           handlePrintKitchenTicket(createdOrder, { silent: true }).then((printed) => {
             // Marcar como ya impresa para que el auto-print por estación (al pasar a
@@ -954,7 +947,8 @@ export default function Orders() {
     }
 
     if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
+      completarOrdenDemo(orderToClose.id)
+      toast.success(`Orden #${orderToClose.orderNumber} cerrada exitosamente`)
       setShowCloseOrderModal(false)
       setOrderToClose(null)
       setShowCloseWithoutReceipt(false)
@@ -1038,6 +1032,14 @@ export default function Orders() {
     }
   }
 
+  // El negocio que sale en las precuentas del demo (con el nombre del
+  // visitante encima, si llegó por un enlace con su nombre).
+  const negocioDelDemo = () => {
+    const n = demoData?.business || {}
+    const nombre = n.businessName || n.name || 'RESTAURANTE'
+    return { name: nombre, tradeName: nombre, ruc: n.ruc || '', address: n.address || '', phone: n.phone || '', logoUrl: '' }
+  }
+
   // Obtener información del negocio y configuración de impuestos/recargo
   const loadBusinessInfoForPreBill = async () => {
     const businessId = getBusinessId()
@@ -1074,8 +1076,13 @@ export default function Orders() {
       toast.error('No se puede imprimir: orden no encontrada')
       return
     }
+    // En el demo la precuenta sale de verdad, con el negocio del demo. La
+    // orden se lee del estado vivo: un descuento recién aplicado todavía no
+    // llegó a la tarjeta.
     if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
+      const viva = (datosDemo()?.orders || []).find(o => o.id === order.id) || order
+      printPreBill(getPseudoTable(viva), viva, negocioDelDemo(), { igvRate: 18, igvExempt: false }, 80, false, itemFilter, personLabel, { enabled: false, rate: 10 }, false, overrideTotal, 'small')
+      toast.success('Imprimiendo precuenta...')
       return
     }
 
@@ -1143,10 +1150,6 @@ export default function Orders() {
 
   // Abrir modal para dividir cuenta
   const handleSplitBill = (order) => {
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
-      return
-    }
     setSelectedOrderForAction(order)
     setIsSplitBillModalOpen(true)
   }
@@ -1219,6 +1222,11 @@ export default function Orders() {
   // Imprimir todas las precuentas divididas
   const handlePrintAllSplitPreBills = async () => {
     if (!selectedOrderForAction || !splitData) return
+    if (isDemoMode) {
+      printAllSplitPreBills(getPseudoTable(selectedOrderForAction), selectedOrderForAction, splitData, negocioDelDemo(), { igvRate: 18, igvExempt: false }, 80, false, { enabled: false, rate: 10 }, false, 'small')
+      toast.success('Imprimiendo precuentas divididas...')
+      return
+    }
     try {
       const businessId = getBusinessId()
       const pseudoTable = getPseudoTable(selectedOrderForAction)
@@ -1266,11 +1274,6 @@ export default function Orders() {
   }
 
   const handleStatusChange = async (orderId, currentStatus, order) => {
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
-      return
-    }
-
     // Definir el siguiente estado
     const statusFlow = {
       pending: 'preparing',
@@ -1288,6 +1291,12 @@ export default function Orders() {
         toast.error('Esta orden debe estar pagada antes de enviarla a cocina')
         return
       }
+    }
+
+    if (isDemoMode) {
+      cambiarEstadoOrdenDemo(orderId, nextStatus)
+      toast.success(`Orden actualizada a ${getStatusConfig(nextStatus).label}`)
+      return
     }
 
     setUpdatingOrderId(orderId)
@@ -1330,7 +1339,8 @@ export default function Orders() {
 
   const handleMarkAsPaid = async (orderId) => {
     if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
+      marcarOrdenPagadaDemo(orderId)
+      toast.success('Orden marcada como pagada')
       return
     }
 
@@ -1349,13 +1359,18 @@ export default function Orders() {
   }
 
   const handleAssignDeliveryPerson = async (orderId, deliveryPersonId) => {
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
-      return
-    }
-
     const deliveryPerson = deliveryPersons.find(p => p.id === deliveryPersonId)
     const order = orders.find(o => o.id === orderId)
+
+    if (isDemoMode) {
+      actualizarOrdenDemo(orderId, {
+        deliveryPersonId: deliveryPersonId || null,
+        deliveryPersonName: deliveryPerson?.name || null,
+        deliveryPersonPhone: deliveryPerson?.phone || null,
+      })
+      toast.success(deliveryPerson ? `Repartidor ${deliveryPerson.name} asignado` : 'Repartidor removido')
+      return
+    }
 
     try {
       const businessId = getBusinessId()
@@ -1422,8 +1437,9 @@ export default function Orders() {
   // diga si hay que cobrar al entregar— y NO equivale a facturado. Una orden con
   // pago anticipado sigue necesitando su comprobante antes de salir de la lista.
   const handleMarkAsDelivered = async (order) => {
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
+    if (isDemoMode && order.invoiced) {
+      cambiarEstadoOrdenDemo(order.id, 'delivered')
+      toast.success(`Orden #${order.orderNumber} entregada`)
       return
     }
 

@@ -1,6 +1,7 @@
-import { createContext, useContext, useState, useEffect, useSyncExternalStore } from 'react'
-import { iniciarDemo, limpiarDemo, datosDemo, suscribirDemo } from '@/data/demo/demoStore'
-import { conNombreDelVisitante } from '@/utils/nombreDelVisitante'
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, useSyncExternalStore } from 'react'
+import { iniciarDemo, limpiarDemo, datosDemo, suscribirDemo, alCambiarDemo } from '@/data/demo/demoStore'
+import { leerDemoGuardado, guardarDemo, borrarDemoGuardado } from '@/data/demo/guardado'
+import { conNombreDelVisitante, nombreDelVisitante } from '@/utils/nombreDelVisitante'
 
 const DemoContext = createContext(null)
 
@@ -1640,6 +1641,13 @@ const generateDemoData = () => {
 export const DemoProvider = ({ children, rubro = null }) => {
   // El demo genérico se arma de una y sin esperar: es el que más se visita.
   const [demoData, setDemoData] = useState(() => (rubro ? null : generateDemoData()))
+  // La definición del rubro: de ahí sale la guía de pasos del demo.
+  const [definicion, setDefinicion] = useState(null)
+  // ¿El visitante ya hizo algo? Recién ahí tiene sentido ofrecerle empezar
+  // de nuevo.
+  const [conCambios, setConCambios] = useState(false)
+  // Sube con cada "Empezar de nuevo": vuelve a armar el demo desde cero.
+  const [ronda, setRonda] = useState(0)
 
   // Estado VIVO: el visitante puede vender, crear productos y editar, y la
   // pantalla se entera. El almacén vive fuera de React (los servicios, que no
@@ -1653,13 +1661,16 @@ export const DemoProvider = ({ children, rubro = null }) => {
   }, [demoData])
 
   useEffect(() => {
+    setDefinicion(null)
     if (!rubro) {
       setDemoData(generateDemoData())
       return
     }
     let vivo = true
-    // Cambió el rubro: se descarta el estado del anterior.
+    // Cambió el rubro (o se empezó de nuevo): se descarta el estado anterior,
+    // y mientras baja el nuevo se ve el spinner en vez del demo de otro rubro.
     limpiarDemo()
+    setDemoData(null)
     // Import dinámico: el catálogo de cada rubro NO viaja en el bundle
     // principal, solo se baja cuando alguien abre ese demo.
     Promise.all([
@@ -1667,11 +1678,57 @@ export const DemoProvider = ({ children, rubro = null }) => {
       import('@/data/demo/motor'),
     ]).then(([registro, motor]) => registro.cargarRubro(rubro).then((def) => {
       if (!vivo) return
-      // Slug inexistente: se cae al demo de siempre en vez de dejar la
-      // pantalla en blanco.
-      setDemoData(def ? motor.construirDatosDemo(def) : generateDemoData())
+      if (!def) {
+        // Slug inexistente: se cae al demo de siempre en vez de dejar la
+        // pantalla en blanco.
+        setDemoData(generateDemoData())
+        return
+      }
+      // Lo que el visitante dejó la última vez en este demo, si vuelve dentro
+      // de los días que se guarda (ver guardado.js).
+      const guardado = leerDemoGuardado(rubro)
+      setDefinicion(def)
+      setConCambios(!!guardado)
+      setDemoData(guardado || motor.construirDatosDemo(def))
     })).catch(() => { if (vivo) setDemoData(generateDemoData()) })
     return () => { vivo = false }
+  }, [rubro, ronda])
+
+  // Lo que el visitante hace se guarda en SU navegador, en los demos por rubro
+  // (los que se mandan a los leads). Una venta dispara varias escrituras
+  // seguidas: se guarda una sola vez, al terminar.
+  useEffect(() => {
+    if (!rubro) return
+    let pendiente = null
+    const guardarYa = () => {
+      if (!pendiente) return
+      clearTimeout(pendiente)
+      pendiente = null
+      const datos = datosDemo()
+      if (datos) guardarDemo(rubro, datos)
+    }
+    const baja = alCambiarDemo(() => {
+      setConCambios(true)
+      clearTimeout(pendiente)
+      pendiente = setTimeout(guardarYa, 400)
+    })
+    // Cerrar la pestaña justo después de vender no puede perder la venta.
+    window.addEventListener('pagehide', guardarYa)
+    return () => {
+      guardarYa()
+      baja()
+      window.removeEventListener('pagehide', guardarYa)
+    }
+  }, [rubro])
+
+  const empezarDeNuevo = useCallback(() => {
+    borrarDemoGuardado(rubro)
+    limpiarDemo()
+    setConCambios(false)
+    // En null se ve el spinner y se desmontan las pantallas: ninguna queda
+    // mirando una mesa o una orden que ya no existe.
+    setDemoData(null)
+    setRonda((r) => r + 1)
   }, [rubro])
 
   // Inyectar datos de demo en window para que los servicios puedan acceder
@@ -1686,12 +1743,21 @@ export const DemoProvider = ({ children, rubro = null }) => {
     }
   }, [demoData, datosVivos])
 
+  // El vivo manda: es el que trae las ventas y los productos que el visitante
+  // creó. El nombre del visitante va encima, y se memoriza para no entregar
+  // un objeto nuevo en cada render.
+  const nombreVisitante = nombreDelVisitante()
+  const datos = datosVivos || demoData
+  const conNombre = useMemo(() => conNombreDelVisitante(datos, nombreVisitante), [datos, nombreVisitante])
+
   const value = {
     isDemoMode: true,
-    // El vivo manda: es el que trae las ventas y los productos que el
-    // visitante creó en esta sesión.
-    demoData: conNombreDelVisitante(datosVivos || demoData),
+    demoData: conNombre,
     rubroDemo: rubro,
+    // La guía de pasos del rubro (null si no tiene) y el "Empezar de nuevo".
+    recorrido: definicion?.recorrido || null,
+    conCambios,
+    empezarDeNuevo,
   }
 
   // Mientras baja el rubro no se monta nada: media pantalla montada con

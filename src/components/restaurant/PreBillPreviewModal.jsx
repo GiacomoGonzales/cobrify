@@ -4,9 +4,9 @@ import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import { applyOrderDiscount, removeOrderDiscount } from '@/services/orderService'
+import { aplicarDescuentoDemo, quitarDescuentoDemo } from '@/data/demo/operaciones'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 
 export default function PreBillPreviewModal({
   isOpen,
@@ -17,8 +17,7 @@ export default function PreBillPreviewModal({
   printLabel = 'Imprimir',
   title = 'Vista previa precuenta',
 }) {
-  const { getBusinessId, user } = useAppContext()
-  const demoContext = useDemoRestaurant()
+  const { getBusinessId, user, isDemoMode } = useAppContext()
   const toast = useToast()
 
   const [discountType, setDiscountType] = useState('percent')
@@ -92,25 +91,18 @@ export default function PreBillPreviewModal({
       return
     }
 
-    if (discountChanged && demoContext) {
-      toast.info(
-        'No se puede aplicar descuento en modo demo. Regístrate para usar todas las funcionalidades.'
-      )
-      return
-    }
-
     setIsProcessing(true)
     try {
       // Persistir cambio de descuento si corresponde
       if (discountChanged) {
         if (numericValue === 0 && hasExistingDiscount) {
-          const result = await removeOrderDiscount(getBusinessId(), order.id)
+          const result = isDemoMode ? quitarDescuentoDemo(order.id) : await removeOrderDiscount(getBusinessId(), order.id)
           if (!result.success) {
             toast.error('Error al quitar descuento: ' + result.error)
             return
           }
         } else if (numericValue > 0) {
-          const result = await applyOrderDiscount(getBusinessId(), order.id, {
+          const datosDescuento = {
             type: discountType,
             value: numericValue,
             reason: discountReason.trim(),
@@ -118,7 +110,10 @@ export default function PreBillPreviewModal({
               uid: user?.uid,
               name: user?.displayName || user?.email || 'Usuario',
             },
-          })
+          }
+          const result = isDemoMode
+            ? aplicarDescuentoDemo(order.id, datosDescuento)
+            : await applyOrderDiscount(getBusinessId(), order.id, datosDescuento)
           if (!result.success) {
             toast.error('Error al aplicar descuento: ' + result.error)
             return

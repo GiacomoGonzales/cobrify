@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useDeferredValue } from 'react'
 import { Search, Package, Calendar, User, DollarSign, Loader2, Receipt, TrendingUp } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import Badge from '@/components/ui/Badge'
@@ -15,8 +14,7 @@ import { getPurchases as getProductPurchases } from '@/services/firestoreService
 import { getWarehouses } from '@/services/warehouseService'
 
 export default function PurchaseHistory() {
-  const { user, getBusinessId, allowedBranches, allowedWarehouses, hasMainBranchAccess, isBusinessOwner, isAdmin } = useAppContext()
-  const demoContext = useDemoRestaurant()
+  const { user, getBusinessId, allowedBranches, allowedWarehouses, hasMainBranchAccess, isBusinessOwner, isAdmin, isDemoMode, demoData } = useAppContext()
   const toast = useToast()
 
   const [ingredientPurchases, setIngredientPurchases] = useState([])
@@ -45,11 +43,18 @@ export default function PurchaseHistory() {
 
     setIsLoading(true)
     try {
-      if (demoContext) {
-        const demoPurchases = demoContext.demoData?.purchases || []
-        const demoIngredients = demoContext.demoData?.ingredients || []
-        setIngredientPurchases(demoPurchases)
-        setIngredients(demoIngredients)
+      if (isDemoMode) {
+        // Las compras del demo son de mercadería, con la forma que arma el
+        // motor del demo: se pasan a la de la colección `purchases`.
+        setProductPurchases((demoData?.purchases || []).map((c) => ({
+          ...c,
+          supplier: { businessName: c.supplierName || '', documentNumber: c.supplierRuc || '' },
+          invoiceNumber: c.documentNumber || c.number || '',
+          invoiceDate: c.date || c.createdAt,
+          items: (c.items || []).map((it) => ({ ...it, productName: it.productName || it.name })),
+        })))
+        setIngredientPurchases([])
+        setIngredients(demoData?.ingredients || [])
       } else {
         const businessId = getBusinessId()
         const [ingPurchasesResult, ingredientsResult, prodPurchasesResult, warehousesResult] = await Promise.all([

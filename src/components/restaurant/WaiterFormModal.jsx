@@ -5,12 +5,13 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { createWaiter, updateWaiter } from '@/services/waiterService'
+import { crearMozoDemo, actualizarMozoDemo } from '@/data/demo/operaciones'
 import { getActiveBranches } from '@/services/branchService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 
 export default function WaiterFormModal({ isOpen, onClose, waiter, onSuccess }) {
-  const { getBusinessId, filterBranchesByAccess, allowedBranches, hasMainBranchAccess, businessSettings, branchScope } = useAppContext()
+  const { getBusinessId, filterBranchesByAccess, allowedBranches, hasMainBranchAccess, businessSettings, branchScope, isDemoMode } = useAppContext()
   const toast = useToast()
 
   const [isLoading, setIsLoading] = useState(false)
@@ -30,7 +31,8 @@ export default function WaiterFormModal({ isOpen, onClose, waiter, onSuccess }) 
 
   // Cargar sucursales habilitadas para el usuario
   useEffect(() => {
-    if (!isOpen) return
+    // El demo no tiene sucursales que cargar.
+    if (!isOpen || isDemoMode) return
     const loadBranches = async () => {
       try {
         const result = await getActiveBranches(getBusinessId())
@@ -117,9 +119,14 @@ export default function WaiterFormModal({ isOpen, onClose, waiter, onSuccess }) 
     setIsLoading(true)
     try {
       const businessId = getBusinessId()
-      const result = waiter
-        ? await updateWaiter(businessId, waiter.id, formData)
-        : await createWaiter(businessId, formData)
+      let result
+      if (isDemoMode) {
+        result = waiter ? actualizarMozoDemo(waiter.id, formData) : crearMozoDemo(formData)
+      } else {
+        result = waiter
+          ? await updateWaiter(businessId, waiter.id, formData)
+          : await createWaiter(businessId, formData)
+      }
 
       if (result.success) {
         toast.success(waiter ? 'Mozo actualizado correctamente' : 'Mozo creado correctamente')

@@ -1,9 +1,19 @@
 import { Navigate, useLocation } from 'react-router-dom'
 
-// El modo demo restaurante redirige a /demorestaurant/mesas
+/**
+ * EL DEMO DE RESTAURANTE SE MUDÓ a /demo/restaurante.
+ *
+ * El viejo (/demorestaurant) tenía datos fijos: se podía tocar todo, pero nada
+ * quedaba. Se agregaba un plato, decía "agregado" y al cerrar la ventana ya no
+ * estaba. El demo por rubro sí guarda lo que el visitante hace.
+ *
+ * Los enlaces viejos siguen circulando (WhatsApp, respuestas rápidas, la web):
+ * llegan a la misma página del demo nuevo y con la misma query, que `?negocio=`
+ * trae el nombre del visitante. /demorestaurant a secas abre el salón, como
+ * abría el viejo.
+ */
 export default function DemoRestaurant() {
-  // La query se arrastra: `?negocio=` trae el nombre del visitante y un
-  // redirect que la tira deja el demo diciendo "EMPRESA DEMO SAC".
-  const { search } = useLocation()
-  return <Navigate to={`/demorestaurant/mesas${search}`} replace />
+  const { pathname, search } = useLocation()
+  const pagina = pathname.replace(/^\/demorestaurant\/?/, '').replace(/\/+$/, '') || 'mesas'
+  return <Navigate to={`/demo/restaurante/${pagina}${search}`} replace />
 }

@@ -7,7 +7,6 @@ import { getProducts, getProductCategories } from '@/services/firestoreService'
 import { addOrderItems } from '@/services/orderService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import { useDemoRestaurant } from '@/contexts/DemoRestaurantContext'
 import ModifierSelectorModal from '@/components/restaurant/ModifierSelectorModal'
 import VariantSelectorModal from '@/components/product/VariantSelectorModal'
 import PresentationSelectorModal from '@/components/product/PresentationSelectorModal'
@@ -40,15 +39,9 @@ export default function OrderItemsModal({
   // un plato que la cocina de esta sede no prepara. branchId explicito gana;
   // si no, se toma de la mesa o de la orden. null = Sucursal Principal.
   const orderBranchId = branchId !== undefined ? branchId : (table?.branchId ?? order?.branchId ?? null)
-  // Dos demos distintos llegan acá: el de restaurante con ruta propia
-  // (/demorestaurant) y el demo POR RUBRO (/demo/restaurante), que usa el
-  // contexto general. Mirando solo el primero, el modal salía con "No hay
-  // productos disponibles" en el demo por rubro.
-  const demoContextRestaurante = useDemoRestaurant()
+  // En el demo los productos salen de los datos del demo, no de Firestore.
   const contextoGeneral = useAppContext()
-  const demoContext = demoContextRestaurante?.demoData
-    ? demoContextRestaurante
-    : (contextoGeneral?.isDemoMode ? contextoGeneral : null)
+  const demoContext = contextoGeneral?.isDemoMode ? contextoGeneral : null
   const toast = useToast()
 
   const isDemoMode = !!demoContext?.demoData
@@ -659,6 +652,11 @@ export default function OrderItemsModal({
           price: Number(i.price) || 0,
           quantity: Number(i.quantity) || 0,
           total: Math.round((Number(i.price) || 0) * (Number(i.quantity) || 0) * 100) / 100,
+          // Lo que la cocina tiene que ver en la comanda: la nota del plato y
+          // sus modificadores ("sin cebolla", "término medio").
+          ...(i.notes ? { notes: i.notes } : {}),
+          ...(i.modifiers ? { modifiers: i.modifiers } : {}),
+          ...(i.category ? { category: i.category } : {}),
         })))
         toast.success(`${cart.length} items agregados a la orden`)
         setCart([])

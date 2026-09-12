@@ -12,7 +12,13 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import TableActionModal from '@/components/restaurant/TableActionModal'
 import OrderItemsModal from '@/components/restaurant/OrderItemsModal'
-import { ocuparMesaDemo, cerrarMesaDemo, liberarMesaDemo, eliminarMesaDemo, crearMesaDemo, actualizarMesaDemo } from '@/data/demo/operaciones'
+import {
+  ocuparMesaDemo, cerrarMesaDemo, liberarMesaDemo, eliminarMesaDemo, crearMesaDemo, actualizarMesaDemo,
+  crearCuentaDeBarraDemo, transferirMesaDemo, moverOrdenDemo, unirMesasDemo, separarMesaDemo, dividirMesaDemo,
+  reservarMesaDemo, cancelarReservaDemo, cambiarEstadoItemDemo, actualizarOrdenDemo, marcarPrecuentaDemo,
+} from '@/data/demo/operaciones'
+import { prefijoDeRuta } from '@/utils/demoRoutes'
+import { datosDemo } from '@/data/demo/demoStore'
 import EditOrderItemsModal from '@/components/restaurant/EditOrderItemsModal'
 import SplitBillModal from '@/components/restaurant/SplitBillModal'
 import SplitTableModal from '@/components/restaurant/SplitTableModal'
@@ -260,6 +266,12 @@ export default function Tables() {
   useEffect(() => {
     const loadCompanySettings = async () => {
       if (!user?.uid) return
+      // En demo la consulta falla con "permisos insuficientes": la
+      // configuración sale de los datos del demo (como en Órdenes).
+      if (isDemoMode) {
+        setCompanySettings(demoData?.business || null)
+        return
+      }
 
       try {
         const result = await getCompanySettings(getBusinessId())
@@ -320,7 +332,9 @@ export default function Tables() {
 
     // Si estamos en modo demo, usar datos de demo
     if (isDemoMode && demoData?.tables) {
-      const tablesData = demoData.tables
+      // Ordenadas como en una cuenta real: una mesa creada en el demo entra
+      // en su lugar y no al final.
+      const tablesData = [...demoData.tables].sort(compareTableNumber)
       setTables(tablesData)
 
       // Calcular estadísticas
@@ -493,11 +507,6 @@ export default function Tables() {
   }
 
   const openCreateModal = () => {
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
-      return
-    }
-
     setEditingTable(null)
     setFormData({
       number: '',
@@ -509,11 +518,6 @@ export default function Tables() {
   }
 
   const openEditModal = (table) => {
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
-      return
-    }
-
     setEditingTable(table)
     setFormData({
       number: String(table.number),
@@ -612,16 +616,14 @@ export default function Tables() {
       toast.error('Ingresa el nombre del cliente')
       return
     }
-    if (isDemoMode) {
-      toast.info('Función no disponible en modo demo')
-      return
-    }
     setIsCreatingBarTab(true)
     try {
-      const result = await createBarTab(getBusinessId(), {
-        name,
-        branchId: selectedBranchId || null,
-      })
+      const result = isDemoMode
+        ? crearCuentaDeBarraDemo(name)
+        : await createBarTab(getBusinessId(), {
+          name,
+          branchId: selectedBranchId || null,
+        })
       if (!result.success) {
         toast.error(result.error || 'No se pudo crear la cuenta de barra')
         return
@@ -704,7 +706,9 @@ export default function Tables() {
     if (!selectedOrder?.id || !itemId) return
     const newStatus = currentlyServed ? 'ready' : 'delivered'
     try {
-      const result = await updateItemStatus(getBusinessId(), selectedOrder.id, itemId, newStatus)
+      const result = isDemoMode
+        ? cambiarEstadoItemDemo(selectedOrder.id, itemId, newStatus)
+        : await updateItemStatus(getBusinessId(), selectedOrder.id, itemId, newStatus)
       if (!result.success) {
         toast.error(result.error || 'No se pudo actualizar el ítem')
       }
@@ -722,9 +726,9 @@ export default function Tables() {
     if (pending.length === 0) return
     try {
       await Promise.all(
-        pending.map(item =>
-          updateItemStatus(getBusinessId(), selectedOrder.id, item.itemId, 'delivered')
-        )
+        pending.map(item => (isDemoMode
+          ? cambiarEstadoItemDemo(selectedOrder.id, item.itemId, 'delivered')
+          : updateItemStatus(getBusinessId(), selectedOrder.id, item.itemId, 'delivered')))
       )
       toast.success(`${pending.length} ítem(s) marcado(s) como servidos`)
     } catch (err) {
@@ -768,15 +772,10 @@ export default function Tables() {
   }
 
   const handleTransferTable = async (tableId, transferData) => {
-    // Verificar si está en modo demo
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
-      setIsActionModalOpen(false)
-      return
-    }
-
     try {
-      const result = await transferTable(getBusinessId(), tableId, transferData)
+      const result = isDemoMode
+        ? transferirMesaDemo(tableId, transferData)
+        : await transferTable(getBusinessId(), tableId, transferData)
       if (result.success) {
         toast.success(`Mesa transferida a ${transferData.waiterName}`)
         loadTables()
@@ -791,15 +790,10 @@ export default function Tables() {
   }
 
   const handleMoveTable = async (sourceTableId, destinationTableId, destinationTableNumber) => {
-    // Verificar si está en modo demo
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
-      setIsActionModalOpen(false)
-      return
-    }
-
     try {
-      const result = await moveOrderToTable(getBusinessId(), sourceTableId, destinationTableId)
+      const result = isDemoMode
+        ? moverOrdenDemo(sourceTableId, destinationTableId)
+        : await moveOrderToTable(getBusinessId(), sourceTableId, destinationTableId)
       if (result.success) {
         toast.success(`Orden movida a Mesa ${destinationTableNumber}`)
         loadTables()
@@ -821,15 +815,11 @@ export default function Tables() {
   }
 
   const handleMergeTables = async (primaryTableId, sourceTableIds, waiterData = null) => {
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
-      setIsActionModalOpen(false)
-      return
-    }
-
     try {
       const options = waiterData ? { waiterData } : {}
-      const result = await mergeTables(getBusinessId(), primaryTableId, sourceTableIds, options)
+      const result = isDemoMode
+        ? unirMesasDemo(primaryTableId, sourceTableIds, waiterData)
+        : await mergeTables(getBusinessId(), primaryTableId, sourceTableIds, options)
       if (result.success) {
         const total = result.data?.totalTables || (sourceTableIds.length + 1)
         toast.success(`Grupo creado con ${total} mesas`)
@@ -858,14 +848,10 @@ export default function Tables() {
   }
 
   const handleUnmergeTable = async (tableId) => {
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
-      setIsActionModalOpen(false)
-      return
-    }
-
     try {
-      const result = await unmergeTable(getBusinessId(), tableId)
+      const result = isDemoMode
+        ? separarMesaDemo(tableId)
+        : await unmergeTable(getBusinessId(), tableId)
       if (result.success) {
         toast.success(result.data?.dissolved ? 'Grupo disuelto' : 'Mesa separada del grupo')
         loadTables()
@@ -882,13 +868,10 @@ export default function Tables() {
   }
 
   const handleConfirmSplitTable = async (sourceTableId, destTableId, splitItems, destTable) => {
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo. Regístrate para usar todas las funcionalidades.')
-      return
-    }
-
     try {
-      const result = await splitTableItems(getBusinessId(), sourceTableId, destTableId, splitItems)
+      const result = isDemoMode
+        ? dividirMesaDemo(sourceTableId, destTableId, splitItems)
+        : await splitTableItems(getBusinessId(), sourceTableId, destTableId, splitItems)
       if (result.success) {
         const destStatus = destTable?.status === 'occupied' ? 'agregados a' : 'movidos a'
         toast.success(`Items ${destStatus} Mesa ${destTable?.number}`)
@@ -920,15 +903,10 @@ export default function Tables() {
       return
     }
 
-    // Detectar ruta correcta del POS según modo demo
-    const isDemoRestaurant = location.pathname.startsWith('/demorestaurant')
-    const isDemo = location.pathname.startsWith('/demo')
-    let posPath = '/app/pos'
-    if (isDemoRestaurant) {
-      posPath = '/demorestaurant/pos'
-    } else if (isDemo) {
-      posPath = '/demo/pos'
-    }
+    // El POS del mismo lugar donde está la mesa: /app o el demo de ESTE rubro.
+    // Con '/demo/pos' a secas, cobrar en el demo de restaurante sacaba al
+    // visitante al demo genérico, con otros productos y otra caja.
+    const posPath = `${prefijoDeRuta(location.pathname, isDemoMode)}/pos`
 
     // Pasamos los items seleccionados incluyendo cortesías: el POS las jala como
     // bonificación (precio 0, inafecto). No se cobran, pero quedan en el comprobante.
@@ -952,9 +930,33 @@ export default function Tables() {
     setIsIndividualPaymentModalOpen(false)
   }
 
+  // El negocio que sale en las precuentas del demo (con el nombre del
+  // visitante encima, si llegó por un enlace con su nombre).
+  const negocioDelDemo = () => {
+    const n = demoData?.business || {}
+    const nombre = n.businessName || n.name || 'RESTAURANTE'
+    return { name: nombre, tradeName: nombre, ruc: n.ruc || '', address: n.address || '', phone: n.phone || '', logoUrl: '' }
+  }
+
   const handlePrintPreBill = async (itemFilter = null, personLabel = null, overrideTotal = null) => {
     if (!selectedTable) {
       toast.error('No se puede imprimir: datos incompletos')
+      return
+    }
+
+    // En el demo la precuenta sale de verdad (la vista de impresión del
+    // navegador), sin ir a Firestore. La orden se lee del estado vivo: el
+    // descuento que se acaba de aplicar en la vista previa todavía no llegó
+    // a `selectedOrder`.
+    if (isDemoMode) {
+      const orden = (datosDemo()?.orders || []).find(o => o.id === selectedTable.currentOrder) || selectedOrder
+      if (!orden) {
+        toast.error('No se puede imprimir: orden no encontrada')
+        return
+      }
+      printPreBill(selectedTable, orden, negocioDelDemo(), { igvRate: 18, igvExempt: false }, 80, false, itemFilter, personLabel, { enabled: false, rate: 10 }, false, overrideTotal, 'small')
+      if (!itemFilter && !overrideTotal && selectedTable.id) marcarPrecuentaDemo(selectedTable.id)
+      toast.success('Imprimiendo precuenta...')
       return
     }
 
@@ -1142,6 +1144,11 @@ export default function Tables() {
   // Imprimir todas las precuentas divididas en un solo documento
   const handlePrintAllSplitPreBills = async () => {
     if (!selectedTable || !selectedOrder || !splitData) return
+    if (isDemoMode) {
+      printAllSplitPreBills(selectedTable, selectedOrder, splitData, negocioDelDemo(), { igvRate: 18, igvExempt: false }, 80, false, { enabled: false, rate: 10 }, false, 'small')
+      toast.success('Imprimiendo precuentas divididas...')
+      return
+    }
     try {
       const businessId = getBusinessId()
 
@@ -1212,12 +1219,10 @@ export default function Tables() {
    */
   const handleAssignCustomer = async (datos) => {
     if (!selectedOrder?.id) return
-    if (isDemoMode) {
-      toast.error('No disponible en modo demo')
-      return
-    }
     try {
-      const result = await updateOrder(getBusinessId(), selectedOrder.id, datos)
+      const result = isDemoMode
+        ? actualizarOrdenDemo(selectedOrder.id, datos)
+        : await updateOrder(getBusinessId(), selectedOrder.id, datos)
       if (!result.success) {
         toast.error(result.error || 'No se pudo asignar el cliente')
         return
@@ -1258,6 +1263,14 @@ export default function Tables() {
    * y no en cada llamador: no depende de que el próximo se acuerde.
    */
   const markItemsAsPrinted = async (order) => {
+    // En el demo no hay carrera con Firestore: el estado vivo ya tiene los
+    // platos recién agregados.
+    if (isDemoMode) {
+      const viva = (datosDemo()?.orders || []).find(o => o.id === order?.id)
+      const items = (viva?.items || []).map(item => ({ ...item, printedToKitchen: true }))
+      if (items.length > 0) actualizarOrdenDemo(viva.id, { items })
+      return
+    }
     try {
       const businessId = getBusinessId()
       const fresh = await getOrder(businessId, order.id)
@@ -1301,11 +1314,6 @@ export default function Tables() {
   const imprimirComanda = async (printAll = false) => {
     if (!selectedTable || !selectedOrder) {
       toast.error('No se puede imprimir: datos incompletos')
-      return
-    }
-
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
       return
     }
 
@@ -1657,13 +1665,10 @@ export default function Tables() {
   }
 
   const handleReserveTable = async (tableId, reservationData) => {
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
-      return
-    }
-
     try {
-      const result = await reserveTable(getBusinessId(), tableId, reservationData)
+      const result = isDemoMode
+        ? reservarMesaDemo(tableId, reservationData)
+        : await reserveTable(getBusinessId(), tableId, reservationData)
       if (result.success) {
         toast.success('Mesa reservada exitosamente')
         loadTables()
@@ -1677,13 +1682,10 @@ export default function Tables() {
   }
 
   const handleCancelReservation = async (tableId) => {
-    if (isDemoMode) {
-      toast.info('Esta función no está disponible en modo demo')
-      return
-    }
-
     try {
-      const result = await cancelReservation(getBusinessId(), tableId)
+      const result = isDemoMode
+        ? cancelarReservaDemo(tableId)
+        : await cancelReservation(getBusinessId(), tableId)
       if (result.success) {
         toast.success('Reserva cancelada exitosamente')
         loadTables()

@@ -1,8 +1,9 @@
 import { Navigate, useParams, useLocation } from 'react-router-dom'
-import { esRubroDemo } from '@/data/demo/rubros'
+import { esRubroDemo, rubroPorSlug } from '@/data/demo/rubros'
 
 /**
- * Entrada del demo: manda al dashboard.
+ * Entrada del demo: manda a la página de inicio del rubro (el dashboard, o el
+ * salón en un restaurante).
  *
  * Con rubro (`/demo/ferreteria`) mantiene el rubro en la ruta para que el
  * catálogo y los links del menú sigan siendo los de ese negocio. Un slug que
@@ -12,6 +13,8 @@ export default function Demo() {
   const { rubro } = useParams()
   // La query se arrastra: `?negocio=` trae el nombre del visitante.
   const { search } = useLocation()
-  const destino = rubro && esRubroDemo(rubro) ? `/demo/${rubro}/dashboard` : '/demo/dashboard'
+  const destino = rubro && esRubroDemo(rubro)
+    ? `/demo/${rubro}/${rubroPorSlug(rubro)?.inicio || 'dashboard'}`
+    : '/demo/dashboard'
   return <Navigate to={`${destino}${search}`} replace />
 }

@@ -83,7 +83,6 @@ const Demo = lazy(() => import('./pages/Demo'))
 
 import DemoLayout from './layouts/DemoLayout'
 const DemoRestaurant = lazy(() => import('./pages/DemoRestaurant'))
-import DemoRestaurantLayout from './layouts/DemoRestaurantLayout'
 const DemoPharmacy = lazy(() => import('./pages/DemoPharmacy'))
 import DemoPharmacyLayout from './layouts/DemoPharmacyLayout'
 const DemoHotel = lazy(() => import('./pages/DemoHotel'))
@@ -388,50 +387,10 @@ function App() {
               {RUTAS_DEMO}
             </Route>
 
-            {/* Rutas de demo restaurante (sin autenticación, con datos de ejemplo de restaurante) */}
-            <Route path="/demorestaurant" element={<DemoRestaurant />} />
-            <Route path="/demorestaurant" element={<DemoRestaurantLayout />}>
-              <Route path="dashboard" element={<Dashboard />} />
-              <Route path="pos" element={<POS />} />
-              <Route path="mesas" element={<Tables />} />
-              <Route path="mozos" element={<Waiters />} />
-              <Route path="ordenes" element={<Orders />} />
-              <Route path="cocina" element={<Kitchen />} />
-              <Route path="facturas" element={<InvoiceList />} />
-              <Route path="cotizaciones" element={<Quotations />} />
-              <Route path="cotizaciones/nueva" element={<CreateQuotation />} />
-              <Route path="cotizaciones/editar/:id" element={<CreateQuotation />} />
-              <Route path="clientes" element={<Customers />} />
-              <Route path="promociones" element={<Promotions />} />
-              <Route path="control-pagos-alumnos" element={<StudentPaymentControl />} />
-              <Route path="vendedores" element={<Sellers />} />
-              <Route path="flota" element={<Fleet />} />
-              <Route path="productos" element={<Products />} />
-              <Route path="inventario" element={<Inventory />} />
-              <Route path="almacenes" element={<Warehouses />} />
-              <Route path="compras" element={<Purchases />} />
-              <Route path="compras/nueva" element={<CreatePurchase />} />
-              <Route path="proveedores" element={<Suppliers />} />
-              <Route path="caja" element={<CashRegister />} />
-              <Route path="reportes" element={<Reports />} />
-              <Route path="gastos" element={<Expenses />} />
-              <Route path="prestamos" element={<Loans />} />
-              <Route path="prestamos-cartera" element={<LendingPortfolio />} />
-              <Route path="certificados" element={<Certificates />} />
-              <Route path="flujo-caja" element={<CashFlow />} />
-              <Route path="configuracion" element={<Settings />} />
-              <Route path="ingredientes" element={<Ingredients />} />
-              <Route path="ingredientes/compra" element={<RegisterPurchase />} />
-              <Route path="ingredientes/historial" element={<PurchaseHistory />} />
-              <Route path="requerimientos" element={<Requirements />} />
-              <Route path="recetas" element={<Recipes />} />
-              <Route path="produccion" element={<Production />} />
-              <Route path="envios" element={<Envios />} />
-              <Route path="mi-horario" element={<MySchedule />} />
-              <Route path="asistencia" element={<Attendance />} />
-              <Route path="contabilidad" element={<Accounting />} />
-              <Route path="reclamos" element={<ComplaintsList />} />
-            </Route>
+            {/* El demo de restaurante viejo (/demorestaurant) solo se miraba: nada de lo
+                que se hacía quedaba. Se mudó al demo por rubro, que sí guarda, y los
+                enlaces que ya circulan (WhatsApp, respuestas rápidas) llegan allá. */}
+            <Route path="/demorestaurant/*" element={<DemoRestaurant />} />
 
             {/* Rutas de demo farmacia (sin autenticación, con datos de ejemplo de farmacia) */}
             <Route path="/demopharmacy" element={<DemoPharmacy />} />

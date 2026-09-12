@@ -73,7 +73,7 @@ import {
 import { getRateForDate } from '@/services/exchangeRateService'
 import { vendedoresDeSucursal } from '@/utils/sellerBranches'
 import { stockPorSucursal } from '@/utils/branchStockView'
-import { registrarVentaDemo } from '@/data/demo/operaciones'
+import { registrarVentaDemo, liberarMesaDemo, cobroParcialDemo, marcarOrdenPagadaDemo } from '@/data/demo/operaciones'
 import { applyBranchPricing } from '@/utils/branchPricing'
 import { filterProductsForBranch, filterCategoriesForBranch, isProductInBranch } from '@/utils/branchCatalog'
 import { filtrarVendibles, esSoloUsoInterno } from '@/utils/productSale'
@@ -7256,6 +7256,25 @@ ${textoDeErrores(revision.errores)}`, 9000)
         // inventario no se movía, así que el demo se sentía de mentira.
         const registro = registrarVentaDemo(invoiceData, selectedWarehouse?.id || null)
         const numeroReal = registro.success ? registro.number : demoNumber
+
+        // La mesa o el pedido de donde vino la venta se cierra como en una
+        // cuenta real. Sin esto, cobrar una mesa en el demo emitía la boleta y
+        // la mesa seguía ocupada con toda su cuenta.
+        if (registro.success) {
+          if (tableData?.tableId && tableData?.partialClose) {
+            cobroParcialDemo(tableData.orderId, tableData.remainingItems || [])
+          } else if (tableData?.tableId) {
+            // Liberar y no cerrar: el stock ya lo descontó la venta.
+            liberarMesaDemo(tableData.tableId)
+          } else if (pendingOrderId && markOrderPaidOnComplete) {
+            marcarOrdenPagadaDemo(pendingOrderId, { invoiceId: registro.id, invoiceNumber: numeroReal })
+          }
+        }
+        if (tableData) setTableData(null)
+        if (pendingOrderId) {
+          setPendingOrderId(null)
+          setMarkOrderPaidOnComplete(false)
+        }
 
         setLastInvoiceNumber(numeroReal)
         setLastInvoiceData({ ...invoiceData, number: numeroReal, series: registro.series || invoiceData.series })

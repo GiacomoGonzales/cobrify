@@ -6,8 +6,9 @@
  * posible. Un lead que prueba y ve que "no hace nada" se va.
  *
  * Acá vive el estado del demo en memoria, con suscripción para que la pantalla
- * se entere de los cambios. Todo se pierde al recargar, y está bien: es una
- * prueba, no una cuenta.
+ * se entere de los cambios. Lo que el visitante hace se guarda además en SU
+ * navegador (ver guardado.js), para que al recargar o volver otro día lo
+ * encuentre donde lo dejó.
  *
  * Es un almacén EXTERNO a React a propósito: los servicios (que no son
  * componentes) tienen que poder escribir en él sin arrastrar el contexto.
@@ -15,8 +16,12 @@
 
 let datos = null
 const oyentes = new Set()
+// Estos se enteran solo de lo que HACE el visitante, no de que el demo
+// arrancó: guardar en el navegador un demo recién abierto sería escribir
+// 100 KB para nada en cada visita.
+const oyentesDeCambios = new Set()
 
-const avisar = () => oyentes.forEach((fn) => { try { fn() } catch { /* un oyente roto no frena a los demás */ } })
+const avisar = (lista) => lista.forEach((fn) => { try { fn() } catch { /* un oyente roto no frena a los demás */ } })
 
 /** ¿Estamos dentro de un demo con estado vivo? */
 export const enDemo = () => datos !== null
@@ -29,7 +34,7 @@ export const iniciarDemo = (iniciales) => {
   // Enganche de diagnóstico: permite inspeccionar el estado del demo desde la
   // consola sin tener que instrumentar cada vez.
   if (typeof window !== 'undefined') window.__DEMO_STORE__ = { datosDemo, enDemo }
-  avisar()
+  avisar(oyentes)
 }
 
 /**
@@ -42,7 +47,7 @@ export const iniciarDemo = (iniciales) => {
  */
 export const limpiarDemo = () => {
   datos = null
-  avisar()
+  avisar(oyentes)
 }
 
 /**
@@ -54,7 +59,8 @@ export const mutarDemo = (mutador) => {
   const cambios = mutador(datos)
   if (!cambios) return datos
   datos = { ...datos, ...cambios }
-  avisar()
+  avisar(oyentes)
+  avisar(oyentesDeCambios)
   return datos
 }
 
@@ -62,4 +68,10 @@ export const mutarDemo = (mutador) => {
 export const suscribirDemo = (fn) => {
   oyentes.add(fn)
   return () => oyentes.delete(fn)
+}
+
+/** Aviso cuando el visitante cambia algo (no cuando el demo arranca). Devuelve la baja. */
+export const alCambiarDemo = (fn) => {
+  oyentesDeCambios.add(fn)
+  return () => oyentesDeCambios.delete(fn)
 }
