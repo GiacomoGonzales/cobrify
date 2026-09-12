@@ -684,16 +684,32 @@ export default function MainLayout() {
               {avisoVencimiento.mensaje}
             </span>
           </div>
-          {/* Lleva a Mi Suscripción, a los datos de pago (QR, cuentas y envío
-              de la captura por WhatsApp). Antes abría WhatsApp sin decir
-              dónde pagar (Giacomo, 11-set-2026). */}
-          <Link
-            to={`${rutaEnLaApp('/mi-suscripcion')}#pagar`}
-            className="flex items-center gap-1 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-white whitespace-nowrap transition-colors font-medium"
-          >
-            Renovar ahora
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
+          {/* En la web y en Android lleva a Mi Suscripción, a los datos de pago
+              (QR, cuentas y envío de la captura por WhatsApp). Antes abría
+              WhatsApp sin decir dónde pagar (Giacomo, 11-set-2026).
+              En la app de iPhone Mi Suscripción no se muestra —política de
+              Apple, Guideline 3.1.1: nada de pagos por fuera de la App Store
+              dentro de la app (ver `hideOnIOS` en el Sidebar)—, así que ahí el
+              botón sigue abriendo WhatsApp, como en la versión ya aprobada. */}
+          {Capacitor.getPlatform() === 'ios' ? (
+            <a
+              href={`https://wa.me/${contactoWhatsApp}?text=${encodeURIComponent(`Hola, quiero renovar mi suscripción de ${branding?.companyName || 'Cobrify'}. Mi email es ${user?.email || ''}.`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-white whitespace-nowrap transition-colors font-medium"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              Renovar ahora
+            </a>
+          ) : (
+            <Link
+              to={`${rutaEnLaApp('/mi-suscripcion')}#pagar`}
+              className="flex items-center gap-1 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-white whitespace-nowrap transition-colors font-medium"
+            >
+              Renovar ahora
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          )}
           {avisoVencimiento.nivel !== 'vencido' && (
             <button
               type="button"
