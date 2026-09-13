@@ -4,17 +4,22 @@
  * WhatsApp marca el formato con caracteres: *negrita*, _cursiva_, ~tachado~ y
  * ```monoespaciado```. El cliente los escribe así y su app se los muestra
  * formateados; si la bandeja no los interpreta, el admin ve los asteriscos
- * pelados. Además vuelve clicables los enlaces, que era lo más visible que
- * faltaba.
+ * pelados. Además vuelve clicables los enlaces y los correos (mailto): el
+ * clic derecho del navegador ofrece "Copiar dirección de correo".
  *
  * Sin dependencias ni HTML inyectado: el texto se parte en pedazos y cada
  * pedazo se renderiza como elemento de React. Lo que no coincide con nada
  * queda como texto plano tal cual.
  */
 
+const CORREO = '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}'
+
+// Mismo orden que la app del iPhone (TextoWhatsapp.swift): el enlace primero y
+// el correo enseguida, para que un `_` de juan_perez@gmail.com no sea cursiva.
 const PATRON = new RegExp(
   [
     'https?:\\/\\/[^\\s<>"]+',      // enlaces
+    CORREO,                         // correos
     '\\*[^*\\n]+\\*',               // *negrita*
     '_[^_\\n]+_',                   // _cursiva_
     '~[^~\\n]+~',                   // ~tachado~
@@ -22,6 +27,9 @@ const PATRON = new RegExp(
   ].join('|'),
   'g',
 )
+
+/** El tramo ES un correo, y no una _cursiva_ que lo contiene. */
+const CORREO_ENTERO = new RegExp(`^${CORREO}$`)
 
 export default function TextoWhatsapp({ texto, claseEnlace }) {
   if (!texto) return null
@@ -50,6 +58,12 @@ export default function TextoWhatsapp({ texto, claseEnlace }) {
         </a>,
       )
       if (resto) partes.push(resto)
+    } else if (CORREO_ENTERO.test(t)) {
+      partes.push(
+        <a key={clave++} href={`mailto:${t}`} className={claseEnlace || 'underline break-all'}>
+          {t}
+        </a>,
+      )
     } else if (t.startsWith('```')) {
       partes.push(
         <code key={clave++} className="font-mono text-[13px] bg-black/10 rounded px-1">

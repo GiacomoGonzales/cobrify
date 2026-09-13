@@ -180,9 +180,10 @@ enum VistaPrevia {
 
                 Cualquier duda me avisas. 🙌
                 """),
-            m(3, "entrante", "Gracias, lo reviso"),
+            m(3, "entrante", "Gracias, lo reviso. Mándame la cotización a compras@elbuensabor.pe por favor"),
             m(4, "saliente", "El demo es solo visual e informativo. Cuando lo revises, me cuentas qué te pareció.",
               estado: "delivered"),
+            m(5, "entrante", "La factura a contabilidad@elbuensabor.pe y copia a rosa.diaz@gmail.com"),
         ]
     }
 

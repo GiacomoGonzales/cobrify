@@ -6,7 +6,7 @@ import UIKit
 /// WhatsApp marca el formato con caracteres: `*negrita*`, `_cursiva_`,
 /// `~tachado~` y ```` ```monoespaciado``` ````. El cliente los escribe así y su
 /// app se los muestra formateados; hasta ahora la bandeja mostraba los
-/// asteriscos pelados. También vuelve tocables los enlaces.
+/// asteriscos pelados. También vuelve tocables los enlaces y los correos.
 ///
 /// Las reglas son LAS MISMAS que las de la web (src/components/chat/
 /// TextoWhatsapp.jsx): si cambia una, cambiar la otra, o el mismo mensaje se
@@ -21,19 +21,51 @@ enum TextoWhatsapp {
         case tachado(String)
         case mono(String)
         case enlace(String)
+        case correo(String)
     }
 
     // Mismo orden que la web: el enlace primero, para que un `_` dentro de una
-    // dirección no la parta en cursiva.
+    // dirección no la parta en cursiva, y el correo enseguida por lo mismo
+    // (juan_perez@gmail.com no es una cursiva).
     private static let patron: NSRegularExpression? = try? NSRegularExpression(
         pattern: [
             #"https?://[^\s<>"]+"#,
+            #"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"#,
             #"\*[^*\n]+\*"#,
             #"_[^_\n]+_"#,
             #"~[^~\n]+~"#,
             "```[^`]+```",
         ].joined(separator: "|")
     )
+
+    /// Un correo de punta a punta. Distingue el tramo que ES un correo de una
+    /// _cursiva_ que solo lo contiene.
+    private static let correoEntero: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"#
+    )
+
+    private static func esCorreo(_ t: String) -> Bool {
+        correoEntero?.firstMatch(in: t, range: NSRange(location: 0, length: (t as NSString).length)) != nil
+    }
+
+    /// Los correos del mensaje, sin repetir y en orden: el menú de la burbuja
+    /// ofrece copiar cada uno sin el resto del texto.
+    static func correos(en texto: String) -> [String] {
+        var vistos: [String] = []
+        for case .correo(let c) in tramos(de: texto) where !vistos.contains(c) {
+            vistos.append(c)
+        }
+        return vistos
+    }
+
+    /// El correo para MOSTRAR en un menú o un cuadro: con un espacio invisible
+    /// después de la arroba y de cada punto, para que si no cabe se corte ahí
+    /// y no a mitad de palabra con un guion ("elbuensa-bor.pe"), que parece
+    /// parte de la dirección. Lo que se copia es siempre el correo limpio.
+    static func paraMostrar(_ correo: String) -> String {
+        correo.replacingOccurrences(of: "@", with: "@\u{200B}")
+            .replacingOccurrences(of: ".", with: ".\u{200B}")
+    }
 
     /// La puntuación final suele ser de la frase, no del enlace.
     private static func limpiarEnlace(_ t: String) -> (enlace: String, resto: String) {
@@ -62,6 +94,8 @@ enum TextoWhatsapp {
                 let (enlace, resto) = limpiarEnlace(t)
                 salida.append(.enlace(enlace))
                 if !resto.isEmpty { salida.append(.plano(resto)) }
+            } else if esCorreo(t) {
+                salida.append(.correo(t))
             } else if t.hasPrefix("```") {
                 salida.append(.mono(String(t.dropFirst(3).dropLast(3))))
             } else if t.hasPrefix("*") {
@@ -107,6 +141,16 @@ enum TextoWhatsapp {
                 // Sin URL válida se deja como texto: un enlace roto que no
                 // abre nada es peor que un enlace que se ve como texto.
                 if let url = URL(string: t) {
+                    a.link = url
+                    a.underlineStyle = .single
+                    a.foregroundColor = .enlace
+                }
+                salida += a
+            case .correo(let t):
+                var a = AttributedString(t)
+                // Un mailto: para que se pueda tocar. La burbuja intercepta el
+                // toque y ofrece copiarlo o escribirle, como WhatsApp.
+                if let url = URL(string: "mailto:\(t)") {
                     a.link = url
                     a.underlineStyle = .single
                     a.foregroundColor = .enlace

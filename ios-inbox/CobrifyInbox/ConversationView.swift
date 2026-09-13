@@ -1223,6 +1223,9 @@ private struct BurbujaMensaje: View {
     var alAbrirFoto: (() -> Void)? = nil
     var previaLocal: Data? = nil
     @State private var verAdjunto = false
+    /// El correo que se tocó dentro del mensaje: abre la pregunta de copiarlo
+    /// o escribirle.
+    @State private var correoTocado: String?
 
     // Cuatro: los que caben en una sola fila del menú.
     private static let emojis = ["❤️", "👍", "😂", "🙏"]
@@ -1276,6 +1279,28 @@ private struct BurbujaMensaje: View {
             .background(sinBurbuja ? AnyShapeStyle(.clear) : AnyShapeStyle(fondo),
                         in: RoundedRectangle(cornerRadius: 16))
             .contextMenu { menuContextual }
+            // Tocar un correo no abre Mail de golpe: pregunta si copiarlo o
+            // escribirle, como WhatsApp. Los enlaces web se abren como siempre.
+            .environment(\.openURL, OpenURLAction { url in
+                guard url.scheme == "mailto" else { return .systemAction }
+                correoTocado = String(url.absoluteString.dropFirst("mailto:".count))
+                return .handled
+            })
+            // El correo va en el mensaje, en letra chica: de título, el cuadro
+            // lo partía con un guion ("elbuensa-bor.pe") y parecía parte de la
+            // dirección.
+            .confirmationDialog("Correo", isPresented: Binding(
+                get: { correoTocado != nil },
+                set: { if !$0 { correoTocado = nil } }
+            ), titleVisibility: .visible, presenting: correoTocado) { correo in
+                Button("Copiar correo") { UIPasteboard.general.string = correo }
+                Button("Escribir un correo") {
+                    if let url = URL(string: "mailto:\(correo)") { UIApplication.shared.open(url) }
+                }
+                Button("Cancelar", role: .cancel) {}
+            } message: { correo in
+                Text(TextoWhatsapp.paraMostrar(correo))
+            }
             .overlay(alignment: mensaje.esSaliente ? .bottomLeading : .bottomTrailing) {
                 if !chipReacciones.isEmpty {
                     Text(chipReacciones)
@@ -1341,6 +1366,26 @@ private struct BurbujaMensaje: View {
                     UIPasteboard.general.string = mensaje.texto
                 } label: {
                     Label("Copiar", systemImage: "doc.on.doc")
+                }
+            }
+            // Mantener presionado y copiar SOLO el correo, sin el resto del
+            // texto; con varios, un submenú con cada dirección. La dirección no
+            // va en el título: el menú la partía con un guion
+            // ("compras@el-buensabor.pe") y parecía parte del correo.
+            let correos = TextoWhatsapp.correos(en: mensaje.texto)
+            if correos.count == 1, let correo = correos.first {
+                Button {
+                    UIPasteboard.general.string = correo
+                } label: {
+                    Label("Copiar correo", systemImage: "envelope")
+                }
+            } else if correos.count > 1 {
+                Menu {
+                    ForEach(correos.prefix(5), id: \.self) { correo in
+                        Button(TextoWhatsapp.paraMostrar(correo)) { UIPasteboard.general.string = correo }
+                    }
+                } label: {
+                    Label("Copiar correo", systemImage: "envelope")
                 }
             }
             if mensaje.tipo == "image" {
