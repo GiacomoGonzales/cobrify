@@ -1223,9 +1223,24 @@ private struct BurbujaMensaje: View {
     var alAbrirFoto: (() -> Void)? = nil
     var previaLocal: Data? = nil
     @State private var verAdjunto = false
-    /// El correo que se tocó dentro del mensaje: abre la pregunta de copiarlo
-    /// o escribirle.
-    @State private var correoTocado: String?
+    /// Lo que se tocó dentro del mensaje, un correo o un teléfono: abre la
+    /// pregunta de qué hacer con él. No vuelve a nil al cerrar la pregunta
+    /// (la abre `preguntarTocado`): así el título no se queda en blanco
+    /// mientras el cuadro se va.
+    @State private var tocado: Tocado?
+    @State private var preguntarTocado = false
+
+    private enum Tocado {
+        case correo(String)
+        case telefono(String)
+
+        var titulo: String {
+            switch self {
+            case .correo: "Correo"
+            case .telefono: "Número"
+            }
+        }
+    }
 
     // Cuatro: los que caben en una sola fila del menú.
     private static let emojis = ["❤️", "👍", "😂", "🙏"]
@@ -1279,27 +1294,41 @@ private struct BurbujaMensaje: View {
             .background(sinBurbuja ? AnyShapeStyle(.clear) : AnyShapeStyle(fondo),
                         in: RoundedRectangle(cornerRadius: 16))
             .contextMenu { menuContextual }
-            // Tocar un correo no abre Mail de golpe: pregunta si copiarlo o
-            // escribirle, como WhatsApp. Los enlaces web se abren como siempre.
+            // Tocar un correo o un teléfono no abre Mail ni llama de golpe:
+            // pregunta qué hacer, como WhatsApp. Los enlaces web se abren como
+            // siempre.
             .environment(\.openURL, OpenURLAction { url in
-                guard url.scheme == "mailto" else { return .systemAction }
-                correoTocado = String(url.absoluteString.dropFirst("mailto:".count))
+                switch url.scheme {
+                case "mailto": tocado = .correo(String(url.absoluteString.dropFirst("mailto:".count)))
+                case "tel": tocado = .telefono(String(url.absoluteString.dropFirst("tel:".count)))
+                default: return .systemAction
+                }
+                preguntarTocado = true
                 return .handled
             })
-            // El correo va en el mensaje, en letra chica: de título, el cuadro
-            // lo partía con un guion ("elbuensa-bor.pe") y parecía parte de la
-            // dirección.
-            .confirmationDialog("Correo", isPresented: Binding(
-                get: { correoTocado != nil },
-                set: { if !$0 { correoTocado = nil } }
-            ), titleVisibility: .visible, presenting: correoTocado) { correo in
-                Button("Copiar correo") { UIPasteboard.general.string = correo }
-                Button("Escribir un correo") {
-                    if let url = URL(string: "mailto:\(correo)") { UIApplication.shared.open(url) }
+            // El correo o el número va en el mensaje, en letra chica: de
+            // título, el cuadro partía el correo con un guion
+            // ("elbuensa-bor.pe") y parecía parte de la dirección.
+            .confirmationDialog(tocado?.titulo ?? "", isPresented: $preguntarTocado,
+                                titleVisibility: .visible, presenting: tocado) { t in
+                switch t {
+                case .correo(let correo):
+                    Button("Copiar correo") { UIPasteboard.general.string = correo }
+                    Button("Escribir un correo") {
+                        if let url = URL(string: "mailto:\(correo)") { UIApplication.shared.open(url) }
+                    }
+                case .telefono(let numero):
+                    Button("Copiar número") { UIPasteboard.general.string = numero }
+                    Button("Llamar") {
+                        if let url = URL(string: "tel:\(numero)") { UIApplication.shared.open(url) }
+                    }
                 }
                 Button("Cancelar", role: .cancel) {}
-            } message: { correo in
-                Text(TextoWhatsapp.paraMostrar(correo))
+            } message: { t in
+                switch t {
+                case .correo(let correo): Text(TextoWhatsapp.paraMostrar(correo))
+                case .telefono(let numero): Text(TextoWhatsapp.telefonoParaMostrar(numero))
+                }
             }
             .overlay(alignment: mensaje.esSaliente ? .bottomLeading : .bottomTrailing) {
                 if !chipReacciones.isEmpty {
@@ -1386,6 +1415,24 @@ private struct BurbujaMensaje: View {
                     }
                 } label: {
                     Label("Copiar correo", systemImage: "envelope")
+                }
+            }
+            // Igual con los teléfonos: solo el número, limpio (987654321,
+            // +51987654321), aunque venga escrito "987 654 321".
+            let telefonos = TextoWhatsapp.telefonos(en: mensaje.texto)
+            if telefonos.count == 1, let numero = telefonos.first {
+                Button {
+                    UIPasteboard.general.string = numero
+                } label: {
+                    Label("Copiar número", systemImage: "phone")
+                }
+            } else if telefonos.count > 1 {
+                Menu {
+                    ForEach(telefonos.prefix(5), id: \.self) { numero in
+                        Button(TextoWhatsapp.telefonoParaMostrar(numero)) { UIPasteboard.general.string = numero }
+                    }
+                } label: {
+                    Label("Copiar número", systemImage: "phone")
                 }
             }
             if mensaje.tipo == "image" {

@@ -99,6 +99,17 @@ export default function Chat() {
   const { user, isAdmin, isLoading, rolesResolved } = useAuth()
   const toast = useToast()
 
+  // Clic en un número de un mensaje: se copia, como el "Copiar número" del
+  // iPhone. En la computadora un tel: abriría FaceTime, o nada.
+  const copiarNumero = async (numero) => {
+    try {
+      await navigator.clipboard.writeText(numero)
+      toast.success(`Número copiado: ${numero}`)
+    } catch {
+      toast.error('No se pudo copiar el número')
+    }
+  }
+
   const [conversaciones, setConversaciones] = useState([])
   // Copia viva para los oyentes del navegador, que no ven el estado de React.
   const conversacionesRef = useRef([])
@@ -1796,6 +1807,7 @@ export default function Chat() {
                             <TextoWhatsapp
                               texto={m.texto}
                               claseEnlace="underline break-all enlace-chat"
+                              alTocarTelefono={copiarNumero}
                             />
                           )
                           : !['image', 'sticker', 'video', 'audio', 'document'].includes(m.tipo)

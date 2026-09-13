@@ -6,7 +6,8 @@ import UIKit
 /// WhatsApp marca el formato con caracteres: `*negrita*`, `_cursiva_`,
 /// `~tachado~` y ```` ```monoespaciado``` ````. El cliente los escribe así y su
 /// app se los muestra formateados; hasta ahora la bandeja mostraba los
-/// asteriscos pelados. También vuelve tocables los enlaces y los correos.
+/// asteriscos pelados. También vuelve tocables los enlaces, los correos y los
+/// teléfonos.
 ///
 /// Las reglas son LAS MISMAS que las de la web (src/components/chat/
 /// TextoWhatsapp.jsx): si cambia una, cambiar la otra, o el mismo mensaje se
@@ -22,15 +23,27 @@ enum TextoWhatsapp {
         case mono(String)
         case enlace(String)
         case correo(String)
+        /// Tal como vino escrito, y limpio para copiarlo y llamar.
+        case telefono(escrito: String, limpio: String)
     }
+
+    /// Un teléfono: un celular peruano (nueve cifras que empiezan en 9,
+    /// pegadas o de a tres, con o sin +51) o cualquier número con + y código
+    /// de país. `[0-9]` y no `\d`: aquí `\d` acepta también cifras de otros
+    /// alfabetos y en la web no, y las dos tienen que decir lo mismo.
+    private static let telefono =
+        #"(?:\+?51[ -]?)?9[0-9]{2}[ -]?[0-9]{3}[ -]?[0-9]{3}"#
+        + #"|\+[0-9]{1,3}(?:[ -]?\([0-9]{1,4}\))?[ -]?[0-9]{1,4}(?:[ -]?[0-9]{2,4}){1,5}"#
 
     // Mismo orden que la web: el enlace primero, para que un `_` dentro de una
     // dirección no la parta en cursiva, y el correo enseguida por lo mismo
-    // (juan_perez@gmail.com no es una cursiva).
+    // (juan_perez@gmail.com no es una cursiva). El teléfono después del
+    // correo: 987654321@gmail.com es un correo.
     private static let patron: NSRegularExpression? = try? NSRegularExpression(
         pattern: [
             #"https?://[^\s<>"]+"#,
             #"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"#,
+            telefono,
             #"\*[^*\n]+\*"#,
             #"_[^_\n]+_"#,
             #"~[^~\n]+~"#,
@@ -44,8 +57,34 @@ enum TextoWhatsapp {
         pattern: #"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"#
     )
 
+    /// Lo mismo para el teléfono.
+    private static let telefonoEntero: NSRegularExpression? = try? NSRegularExpression(
+        pattern: "^(?:\(telefono))$"
+    )
+
     private static func esCorreo(_ t: String) -> Bool {
         correoEntero?.firstMatch(in: t, range: NSRange(location: 0, length: (t as NSString).length)) != nil
+    }
+
+    private static func esTelefono(_ t: String) -> Bool {
+        telefonoEntero?.firstMatch(in: t, range: NSRange(location: 0, length: (t as NSString).length)) != nil
+    }
+
+    /// ¿Hay una letra o una cifra en esa posición del texto? Fuera de él, no.
+    private static func letraOCifra(_ ns: NSString, _ i: Int) -> Bool {
+        guard i >= 0, i < ns.length, let u = Unicode.Scalar(ns.character(at: i)) else { return false }
+        return CharacterSet.alphanumerics.contains(u)
+    }
+
+    /// El número limpio, para copiarlo y para llamar: 987654321,
+    /// +51987654321, +13055551234. Nil si no da para teléfono: menos de 8
+    /// cifras o más de 15.
+    private static func limpiarTelefono(_ t: String) -> String? {
+        let cifras = String(t.filter { $0.isASCII && $0.isNumber })
+        guard (8...15).contains(cifras.count) else { return nil }
+        // Con código de país, siempre con +: "51987654321" pelado no se puede
+        // marcar desde un celular peruano.
+        return t.hasPrefix("+") || cifras.count == 11 ? "+" + cifras : cifras
     }
 
     /// Los correos del mensaje, sin repetir y en orden: el menú de la burbuja
@@ -58,6 +97,16 @@ enum TextoWhatsapp {
         return vistos
     }
 
+    /// Los teléfonos del mensaje, limpios, sin repetir y en orden: lo mismo
+    /// que con los correos.
+    static func telefonos(en texto: String) -> [String] {
+        var vistos: [String] = []
+        for case .telefono(_, let limpio) in tramos(de: texto) where !vistos.contains(limpio) {
+            vistos.append(limpio)
+        }
+        return vistos
+    }
+
     /// El correo para MOSTRAR en un menú o un cuadro: con un espacio invisible
     /// después de la arroba y de cada punto, para que si no cabe se corte ahí
     /// y no a mitad de palabra con un guion ("elbuensa-bor.pe"), que parece
@@ -65,6 +114,16 @@ enum TextoWhatsapp {
     static func paraMostrar(_ correo: String) -> String {
         correo.replacingOccurrences(of: "@", with: "@\u{200B}")
             .replacingOccurrences(of: ".", with: ".\u{200B}")
+    }
+
+    /// El número para MOSTRAR en un menú o un cuadro, de a tres como se lee:
+    /// "987 654 321", "+51 987 654 321". Uno de afuera, como se copia.
+    static func telefonoParaMostrar(_ numero: String) -> String {
+        if numero.count == 9 {
+            let d = Array(numero)
+            return "\(String(d[0...2])) \(String(d[3...5])) \(String(d[6...8]))"
+        }
+        return numero.hasPrefix("+") ? Formato.numero(String(numero.dropFirst())) : numero
     }
 
     /// La puntuación final suele ser de la frase, no del enlace.
@@ -96,6 +155,16 @@ enum TextoWhatsapp {
                 if !resto.isEmpty { salida.append(.plano(resto)) }
             } else if esCorreo(t) {
                 salida.append(.correo(t))
+            } else if esTelefono(t) {
+                // Pegado a letras o a más cifras no es un teléfono: es parte de
+                // un RUC, una cuenta o un código, y se queda como texto.
+                let pegado = letraOCifra(ns, m.range.location - 1)
+                    || letraOCifra(ns, m.range.location + m.range.length)
+                if !pegado, let limpio = limpiarTelefono(t) {
+                    salida.append(.telefono(escrito: t, limpio: limpio))
+                } else {
+                    salida.append(.plano(t))
+                }
             } else if t.hasPrefix("```") {
                 salida.append(.mono(String(t.dropFirst(3).dropLast(3))))
             } else if t.hasPrefix("*") {
@@ -151,6 +220,20 @@ enum TextoWhatsapp {
                 // Un mailto: para que se pueda tocar. La burbuja intercepta el
                 // toque y ofrece copiarlo o escribirle, como WhatsApp.
                 if let url = URL(string: "mailto:\(t)") {
+                    a.link = url
+                    a.underlineStyle = .single
+                    a.foregroundColor = .enlace
+                }
+                salida += a
+            case .telefono(let escrito, let limpio):
+                // Espacios y guiones que no parten la línea: "987 654" arriba y
+                // "321" abajo parecen dos números.
+                var a = AttributedString(escrito
+                    .replacingOccurrences(of: " ", with: "\u{00A0}")
+                    .replacingOccurrences(of: "-", with: "\u{2011}"))
+                // Un tel: para que se pueda tocar. La burbuja intercepta el
+                // toque y ofrece copiarlo o llamar, como WhatsApp.
+                if let url = URL(string: "tel:\(limpio)") {
                     a.link = url
                     a.underlineStyle = .single
                     a.foregroundColor = .enlace

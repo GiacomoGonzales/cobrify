@@ -184,6 +184,10 @@ enum VistaPrevia {
             m(4, "saliente", "El demo es solo visual e informativo. Cuando lo revises, me cuentas qué te pareció.",
               estado: "delivered"),
             m(5, "entrante", "La factura a contabilidad@elbuensabor.pe y copia a rosa.diaz@gmail.com"),
+            m(6, "entrante", "Mi celular es 987 654 321, llámame después de las 5"),
+            // Tres números de formas distintas, y un RUC y un DNI que NO son
+            // teléfonos: tienen que quedar como texto.
+            m(7, "entrante", "El de mi contador es +51 912-345-678 y el de la tienda 944555666. Mi hermano en Miami: +1 (305) 555-1234. RUC 20512345678, DNI 45678912"),
         ]
     }
 
