@@ -27,22 +27,19 @@
  *   se corta y cada tramo es una línea.
  * - Los montos salen de `montosContables`, los mismos del Excel de esta página:
  *   la nota de crédito resta y lleva el comprobante que modifica.
- * - La anulada va sola, con importes en 0 y "ANULADO", para que la numeración
- *   no tenga huecos. La rechazada por SUNAT no va: no es un comprobante.
+ * - La anulada va sola, con "ANULADO" y en 0 (tampoco suma en el Excel), para
+ *   que la numeración no tenga huecos. La rechazada por SUNAT no va: no es un
+ *   comprobante.
  * - En dólares los importes van en soles con el tipo de cambio del documento,
  *   igual que el 14.1 del Excel de Ventas.
  */
-import { montosContables, getInvoiceDate, getSunatStatus, toReportDate } from '@/utils/contabilidad'
+import {
+  montosContables, getInvoiceDate, getSunatStatus, toReportDate, TIPO_SUNAT, comprobanteQueModifica,
+} from '@/utils/contabilidad'
 import { serieYCorrelativo, correlativoComoNumero } from '@/utils/numeroDeComprobante'
 import { toSunatCode } from '@/utils/documentType'
 import { getDocumentRate, normalizeCurrency } from '@/utils/currency'
 import { rucDeEmpresa } from '@/utils/rucDeEmpresa'
-
-const TIPO_SUNAT = {
-  factura: '01', boleta: '03',
-  nota_credito: '07', 'nota-credito': '07',
-  nota_debito: '08', 'nota-debito': '08',
-}
 
 export const NOMBRE_DEL_RESUMEN = 'VENTAS DEL DIA'
 
@@ -72,12 +69,6 @@ const documentoDelCliente = (cliente) => {
   return { tipo: '0', numero }
 }
 
-const separarNumero = (texto) => {
-  const t = String(texto || '').trim()
-  const guion = t.indexOf('-')
-  return guion > 0 ? { serie: t.slice(0, guion), numero: t.slice(guion + 1) } : { serie: '', numero: t }
-}
-
 /**
  * Los comprobantes como filas del registro, antes de juntar las boletas.
  *
@@ -88,8 +79,6 @@ const separarNumero = (texto) => {
 export function filasDelRegistroTxt(comprobantes, empresa = null, todos = comprobantes) {
   const emisorRuc = rucDeEmpresa(empresa)
   const emisorNombre = sinSaltos(empresa?.businessName || empresa?.name)
-  const porId = new Map((todos || []).map((d) => [d.id, d]))
-  const porNumero = new Map((todos || []).filter((d) => d.number).map((d) => [d.number, d]))
 
   const filas = []
   for (const doc of comprobantes || []) {
@@ -103,23 +92,9 @@ export function filasDelRegistroTxt(comprobantes, empresa = null, todos = compro
     const fecha = getInvoiceDate(doc)
     const enDolares = normalizeCurrency(doc.currency) === 'USD'
     const tc = getDocumentRate(doc)
-    const m = montosContables(doc, empresa)
+    const m = montosContables(doc, empresa) // la anulada ya viene en cero
     const cliente = documentoDelCliente(doc.customer)
-
-    let ref = null
-    if (tipo === '07' || tipo === '08') {
-      const referido = separarNumero(doc.referencedDocumentId || doc.referenceNumber)
-      const original = porId.get(doc.referencedInvoiceFirestoreId)
-        || porNumero.get(String(doc.referencedDocumentId || doc.referenceNumber || '').trim())
-        || null
-      const tipoRef = String(doc.referencedDocumentType || doc.referenceDocumentType || '')
-      ref = {
-        fecha: original ? getInvoiceDate(original) : null,
-        tipo: TIPO_SUNAT[tipoRef] || (/^0[13]$/.test(tipoRef) ? tipoRef : '') || (original ? TIPO_SUNAT[original.documentType] || '' : ''),
-        serie: referido.serie,
-        numero: referido.numero,
-      }
-    }
+    const ref = comprobanteQueModifica(doc, todos)
 
     filas.push({
       fecha,
@@ -131,11 +106,11 @@ export function filasDelRegistroTxt(comprobantes, empresa = null, todos = compro
       docTipo: anulado ? '0' : cliente.tipo,
       docNumero: anulado ? '' : cliente.numero,
       nombre: anulado ? 'ANULADO' : (sinSaltos(doc.customer?.businessName || doc.customer?.name) || 'CLIENTES VARIOS'),
-      gravada: anulado ? 0 : m.gravada * tc,
-      exonerada: anulado ? 0 : m.exonerada * tc,
-      inafecta: anulado ? 0 : m.inafecta * tc,
-      igv: anulado ? 0 : m.igv * tc,
-      total: anulado ? 0 : m.total * tc,
+      gravada: m.gravada * tc,
+      exonerada: m.exonerada * tc,
+      inafecta: m.inafecta * tc,
+      igv: m.igv * tc,
+      total: m.total * tc,
       tipoCambio: enDolares ? tc : 0,
       moneda: enDolares ? 'Dólares' : 'Soles',
       ref,

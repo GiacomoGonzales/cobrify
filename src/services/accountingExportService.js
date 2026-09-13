@@ -11,7 +11,7 @@
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { normalizeCurrency } from '@/utils/currency'
-import { getInvoiceDate, getSunatStatus, esNotaDeCredito, montosContables } from '@/utils/contabilidad'
+import { getInvoiceDate, getSunatStatus, esNotaDeCredito, montosContables, cuentaEnLosTotales } from '@/utils/contabilidad'
 import { filasDelRegistroTxt, textoDelRegistroTxt, bytesAnsi, nombreDelTxt } from '@/utils/registroDeVentasTxt'
 import { downloadBlob } from '@/utils/nativeDownload'
 import { serieYCorrelativo, correlativoComoNumero } from '@/utils/numeroDeComprobante'
@@ -265,6 +265,8 @@ const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Jul
 function appendIgvMonthlySheet(wb, invoices, businessData, periodLabel) {
   const agg = new Map()
   for (const inv of invoices) {
+    // Una anulada o una rechazada por SUNAT no es una venta del mes.
+    if (!cuentaEnLosTotales(inv)) continue
     const d = getInvoiceDate(inv)
     if (!d) continue
     const date = d.toDate ? d.toDate() : new Date(d)
@@ -454,7 +456,8 @@ function appendItemsAfectacionSheet(wb, invoices, businessData, periodLabel) {
   // Subtotales por afectación
   const buckets = { GRAVADO: 0, EXONERADO: 0, INAFECTO: 0 }
   for (const inv of invoices) {
-    if (!Array.isArray(inv.items)) continue
+    // Los ítems de una anulada o una rechazada no se vendieron.
+    if (!Array.isArray(inv.items) || !cuentaEnLosTotales(inv)) continue
     const invDate = formatDateAccounting(getInvoiceDate(inv))
     const customerName = inv.customer?.name || inv.customer?.businessName || 'Cliente General'
     const numeroDoc = celdasDeNumero(inv)

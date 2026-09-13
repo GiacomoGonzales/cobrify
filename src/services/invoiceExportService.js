@@ -11,6 +11,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { getDocumentRate, getDocumentTotalInBase, normalizeCurrency } from '@/utils/currency'
 import { montosPorAfectacion } from '@/utils/peruUtils'
+import { comprobanteQueModifica, TIPO_SUNAT } from '@/utils/contabilidad'
 import { getInvoiceDate, getInvoiceTimeInfo, parseLocalDateString } from '@/utils/invoiceDate'
 
 /** Formatea la fecha de un comprobante (prioriza emissionDate) como dd/MM/yyyy. */
@@ -309,11 +310,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   const header2Row = aoa2.length
   aoa2.push(headers2)
 
-  const sunatDocTypeCodes = {
-    factura: '01', boleta: '03', nota_venta: '00',
-    nota_credito: '07', nota_debito: '08',
-    'nota-credito': '07', 'nota-debito': '08',
-  }
+  const sunatDocTypeCodes = { ...TIPO_SUNAT, nota_venta: '00' }
   const sunatIdTypeCodes = { '1': '1', '6': '6', '0': '0', '4': '4', '7': '7', A: 'A' }
 
   const sorted = [...invoices].sort((a, b) => {
@@ -343,10 +340,10 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
     const importeExonerado = desglose.exonerada * sunatRate
     const importeInafecto = desglose.inafecta * sunatRate
 
-    const refDocType = invoice.referenceDocumentType ? (sunatDocTypeCodes[invoice.referenceDocumentType] || '') : ''
-    const refParts = (invoice.referenceNumber || '').split('-')
-    const refSerie = refParts[0] || ''
-    const refNumero = refParts.slice(1).join('-') || ''
+    // El comprobante que modifica una nota. La nota lo guarda en
+    // `referencedDocumentId`/`referencedDocumentType`; esta hoja leía otros
+    // nombres y la referencia salía siempre vacía (utils/contabilidad).
+    const ref = comprobanteQueModifica(invoice) || {}
 
     let estado = '1'
     if (invoice.status === 'cancelled' || invoice.status === 'voided') estado = '2'
@@ -368,7 +365,7 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
       0, 0,
       Number(getDocumentTotalInBase(invoice).toFixed(2)),
       Number(sunatRate.toFixed(3)),
-      refDocType, refSerie, refNumero, estado,
+      ref.tipo || '', ref.serie || '', ref.numero || '', estado,
       ...(rucDe ? [rucDe(invoice)] : []),
     ])
   })

@@ -46,6 +46,10 @@ export default {
             ['Todo en un ZIP', 'PDFs, XMLs y CDRs juntos.'],
           ],
         },
+        {
+          type: 'texto',
+          text: 'Los comprobantes **anulados** y los **rechazados** por SUNAT aparecen en el Excel con su estado, pero van en cero y no suman en los totales: no son ventas. Su detalle está en la hoja **Anulados-Rechazados**.',
+        },
       ],
     },
 
