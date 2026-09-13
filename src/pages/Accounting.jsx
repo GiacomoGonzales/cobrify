@@ -17,7 +17,7 @@ import { getActiveBranches } from '@/services/branchService'
 import { Capacitor } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
-import { generateAccountingExcel, generateAccountingExcelBuffer } from '@/services/accountingExportService'
+import { generateAccountingExcel, generateAccountingExcelBuffer, generateAccountingTxt } from '@/services/accountingExportService'
 import { generateInvoicePDF, getInvoicePDFBlob } from '@/utils/pdfGenerator'
 import { formatCurrency, matchesSearchQuery } from '@/lib/utils'
 import { useBranding } from '@/contexts/BrandingContext'
@@ -700,6 +700,14 @@ export default function Accounting() {
     withoutCdr: filtered.filter(i => !hasCdr(i)).length,
   }
 
+  // "Agosto 2026" o "Año 2026": el período en el nombre y el encabezado de los archivos.
+  const etiquetaDelPeriodo = () => {
+    const monthLabel = selectedMonth
+      ? MONTHS.find(m => m.value === parseInt(selectedMonth))?.label
+      : null
+    return monthLabel ? `${monthLabel} ${selectedYear}` : `Año ${selectedYear}`
+  }
+
   // Export Excel (con diseño y desglose tributario completo)
   const handleExportExcel = async () => {
     if (filtered.length === 0) {
@@ -711,17 +719,29 @@ export default function Accounting() {
       const settingsResult = await getCompanySettings(getBusinessId())
       const businessData = settingsResult?.success ? settingsResult.data : null
 
-      // Construir etiqueta del período
-      const monthLabel = selectedMonth
-        ? MONTHS.find(m => m.value === parseInt(selectedMonth))?.label
-        : null
-      const periodLabel = monthLabel ? `${monthLabel} ${selectedYear}` : `Año ${selectedYear}`
-
-      await generateAccountingExcel(filtered, empresaDelFiltro(businessData, emisores || [], filterRuc), periodLabel)
+      await generateAccountingExcel(filtered, empresaDelFiltro(businessData, emisores || [], filterRuc), etiquetaDelPeriodo())
       toast.success('Excel exportado')
     } catch (error) {
       console.error('Error al exportar Excel:', error)
       toast.error(error.message || 'Error al generar el Excel')
+    }
+  }
+
+  // TXT del registro de ventas, para el sistema del contador: los mismos
+  // comprobantes y montos que el Excel (utils/registroDeVentasTxt).
+  const handleExportTxt = async () => {
+    if (filtered.length === 0) {
+      toast.error('No hay datos para exportar')
+      return
+    }
+    try {
+      const settingsResult = await getCompanySettings(getBusinessId())
+      const businessData = settingsResult?.success ? settingsResult.data : null
+      await generateAccountingTxt(filtered, empresaDelFiltro(businessData, emisores || [], filterRuc), etiquetaDelPeriodo(), invoices)
+      toast.success('TXT exportado')
+    } catch (error) {
+      console.error('Error al exportar TXT:', error)
+      toast.error(error.message || 'Error al generar el TXT')
     }
   }
 
@@ -822,6 +842,14 @@ export default function Accounting() {
                         titulo: 'Excel de comprobantes',
                         detalle: `${filtered.length} comprobante(s) del período, con sus totales`,
                         onClick: handleExportExcel,
+                        disabled: filtered.length === 0,
+                      },
+                      {
+                        id: 'txt',
+                        icono: FileText,
+                        titulo: 'TXT para el contador',
+                        detalle: 'Registro de ventas en texto, para importarlo a su sistema contable',
+                        onClick: handleExportTxt,
                         disabled: filtered.length === 0,
                       },
                       {

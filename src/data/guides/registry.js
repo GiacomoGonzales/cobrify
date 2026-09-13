@@ -229,6 +229,16 @@ export const GUIDES = [
     load: () => import('./gastos.js'),
   },
   {
+    id: 'contabilidad',
+    route: '/app/contabilidad',
+    title: 'Contabilidad',
+    category: 'Finanzas',
+    description: 'Lo que le entregas a tu contador: el Excel de comprobantes, el TXT del registro de ventas, el formato 13.1 y los XML y CDR del mes.',
+    keywords: 'contabilidad contador contadora reporte contable excel txt texto registro de ventas 14.1 importar sistema contable boletas del dia xml cdr zip sunat formato 13.1 kardex periodo mes ruc anulado nota de credito',
+    modos: null,
+    load: () => import('./contabilidad.js'),
+  },
+  {
     id: 'reportes',
     route: '/app/reportes',
     title: 'Reportes',
