@@ -77,6 +77,7 @@ import { registrarVentaDemo, liberarMesaDemo, cobroParcialDemo, marcarOrdenPagad
 import { applyBranchPricing } from '@/utils/branchPricing'
 import { filterProductsForBranch, filterCategoriesForBranch, isProductInBranch } from '@/utils/branchCatalog'
 import { filtrarVendibles, esSoloUsoInterno } from '@/utils/productSale'
+import { heredadoDelProducto, tasaQueChoca } from '@/utils/lineaDelProducto'
 import { lineaDeEnvio, yaHayEnvioEnElCarrito } from '@/utils/deliveryFee'
 import { idDeFidelizacion } from '@/utils/businessGroup'
 import { getAvailableDocumentTypes, resolveDocumentType } from '@/utils/documentTypes'
@@ -501,6 +502,15 @@ export default function POS() {
     if (effectiveTaxConfig.igvExempt) return 0
     return effectiveTaxConfig.taxType === 'reduced' ? effectiveTaxConfig.igvRate : item?.igvRate
   }, [allowManualTaxAffectation, saleTaxMode, effectiveTaxConfig])
+
+  // SUNAT regla 3462: una sola tasa de IGV por comprobante. El mismo criterio
+  // para el producto suelto, la variante y el personalizado (utils/lineaDelProducto).
+  const chocaLaTasa = (linea) => {
+    const choque = tasaQueChoca(linea, cart, { taxType: effectiveTaxConfig.taxType, tasaDelNegocio: effectiveTaxConfig.igvRate })
+    if (!choque) return false
+    toast.error(`No se puede mezclar productos con IGV ${choque.tasaDelCarrito}% e IGV ${choque.tasaNueva}% en la misma venta. SUNAT requiere una sola tasa por comprobante.`)
+    return true
+  }
   const [recargoConsumoConfig, setRecargoConsumoConfig] = useState({ enabled: false, rate: 10 }) // Recargo al Consumo (restaurantes)
   // POR CONSUMO (restaurantes): el comprobante sale con una sola línea en vez
   // del detalle de platos. Adentro no cambia nada — ver comprobantePorConsumo.js.
@@ -2373,6 +2383,9 @@ export default function POS() {
           // lista filtrada la venta salia sin SKU ni codigo.
           const product = item.productId ? productsRaw.find(p => p.id === item.productId) : null
           return {
+            // Afectación IGV, tasa y demás datos de la ficha: el pedido no los
+            // trae y un exonerado se facturaba gravado. Lo de abajo manda.
+            ...heredadoDelProducto(product),
             id: item.productId || item.id || `temp-${Date.now()}-${Math.random()}`,
             productId: item.productId || '',
             name: item.name || '',
@@ -4158,21 +4171,8 @@ export default function POS() {
       return
     }
 
-    // SUNAT regla 3462: No se permite mezclar tasas de IGV en la misma boleta/factura
-    // Validar que el producto tenga la misma tasa que los items gravados ya en el carrito
-    if (effectiveTaxConfig.taxType === 'standard' && (product.taxAffectation || '10') === '10') {
-      const rawProductRate = product.igvRate || effectiveTaxConfig.igvRate || 18
-      const productRate = rawProductRate === 10 ? 10.5 : rawProductRate
-      const existingGravado = cart.find(item => (item.taxAffectation || '10') === '10')
-      if (existingGravado) {
-        const rawCartRate = existingGravado.igvRate || effectiveTaxConfig.igvRate || 18
-        const cartRate = rawCartRate === 10 ? 10.5 : rawCartRate
-        if (productRate !== cartRate) {
-          toast.error(`No se puede mezclar productos con IGV ${cartRate}% e IGV ${productRate}% en la misma venta. SUNAT requiere una sola tasa por comprobante.`)
-          return
-        }
-      }
-    }
+    // SUNAT regla 3462: una sola tasa de IGV por comprobante.
+    if (chocaLaTasa({ taxAffectation: product.taxAffectation, igvRate: product.igvRate })) return
 
     // Verificar si tiene números de serie
     if (product.trackSerials && product.serials?.length > 0) {
@@ -4798,6 +4798,10 @@ export default function POS() {
       return
     }
 
+    // La variante va con la tasa de IGV de su producto: la misma revisión que
+    // el producto suelto (SUNAT 3462).
+    if (chocaLaTasa(heredadoDelProducto(product))) return
+
     // Verificar si tiene múltiples precios y no viene con precio ya seleccionado
     const hasMultiplePrices = businessSettings?.multiplePricesEnabled && (
       hasPriceLevel(variant, 'price2', product) || hasPriceLevel(variant, 'price3', product) || hasPriceLevel(variant, 'price4', product)
@@ -4865,6 +4869,9 @@ export default function POS() {
     } else {
       // Add new variant to cart with unique cartId and variant info
       const cartItem = {
+        // Lo fiscal y la unidad son del PRODUCTO (afectación IGV, tasa, unidad,
+        // decimales): sin esto la variante de un exonerado salía gravada.
+        ...heredadoDelProducto(product),
         cartId: variantCartId,
         id: product.id,
         code: variant.sku,
@@ -4969,17 +4976,8 @@ export default function POS() {
       }
     }
 
-    // SUNAT regla 3462: No se permite mezclar tasas de IGV en la misma venta
-    if (effectiveTaxConfig.taxType === 'standard' && (customProduct.taxAffectation || '10') === '10') {
-      const existingGravado = cart.find(item => (item.taxAffectation || '10') === '10')
-      if (existingGravado) {
-        const cartRate = existingGravado.igvRate || effectiveTaxConfig.igvRate || 18
-        if (customIgvRate !== cartRate) {
-          toast.error(`No se puede mezclar productos con IGV ${cartRate}% e IGV ${customIgvRate}% en la misma venta. SUNAT requiere una sola tasa por comprobante.`)
-          return
-        }
-      }
-    }
+    // SUNAT regla 3462: una sola tasa de IGV por comprobante.
+    if (chocaLaTasa({ taxAffectation: customProduct.taxAffectation, igvRate: customIgvRate })) return
 
     // Crear producto personalizado con ID único
     const customProductItem = {
