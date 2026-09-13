@@ -11,7 +11,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { getDocumentRate, getDocumentTotalInBase, normalizeCurrency } from '@/utils/currency'
 import { montosPorAfectacion } from '@/utils/peruUtils'
-import { comprobanteQueModifica, TIPO_SUNAT } from '@/utils/contabilidad'
+import { comprobanteQueModifica, TIPO_SUNAT, montosContables, getSunatStatus } from '@/utils/contabilidad'
 import { getInvoiceDate, getInvoiceTimeInfo, parseLocalDateString } from '@/utils/invoiceDate'
 
 /** Formatea la fecha de un comprobante (prioriza emissionDate) como dd/MM/yyyy. */
@@ -313,7 +313,8 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
   const sunatDocTypeCodes = { ...TIPO_SUNAT, nota_venta: '00' }
   const sunatIdTypeCodes = { '1': '1', '6': '6', '0': '0', '4': '4', '7': '7', A: 'A' }
 
-  const sorted = [...invoices].sort((a, b) => {
+  // La rechazada por SUNAT no llegó a ser un comprobante: no va al registro.
+  const sorted = [...invoices].filter(inv => getSunatStatus(inv) !== 'rejected').sort((a, b) => {
     const dA = getInvoiceDate(a) || new Date(0)
     const dB = getInvoiceDate(b) || new Date(0)
     return dA - dB
@@ -333,20 +334,27 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
     // Los documentos en USD se convierten con su TC congelado y el TC se
     // consigna en la columna "Tipo Cambio" (antes iba 1.000 fijo).
     const sunatRate = getDocumentRate(invoice)
-    // Base imponible SIN IGV (es lo que SUNAT llama base imponible en el 14.1;
-    // antes iba con el IGV adentro y el registro no cuadraba con el SIRE).
-    const desglose = montosPorAfectacion(invoice, businessData)
-    const baseImponible = desglose.gravada * sunatRate
-    const importeExonerado = desglose.exonerada * sunatRate
-    const importeInafecto = desglose.inafecta * sunatRate
+    // Los mismos criterios que el Excel de Contabilidad y el TXT del registro
+    // (utils/contabilidad): la base imponible va SIN IGV, la nota de crédito
+    // RESTA y la anulada va con estado 2 y en cero. Antes el estado salía de
+    // `status`: una factura anulada con nota de crédito, que SUNAT tiene
+    // aceptada, figuraba como anulada mientras su nota sumaba en positivo. La
+    // nota de venta no pasa por SUNAT: su anulación es la del sistema.
+    const anulada = docType === 'nota_venta'
+      ? invoice.status === 'cancelled' || invoice.status === 'voided'
+      : getSunatStatus(invoice) === 'voided'
+    const montos = montosContables(invoice, businessData)
+    const factor = anulada ? 0 : sunatRate
+    const baseImponible = montos.gravada * factor
+    const importeExonerado = montos.exonerada * factor
+    const importeInafecto = montos.inafecta * factor
 
     // El comprobante que modifica una nota. La nota lo guarda en
     // `referencedDocumentId`/`referencedDocumentType`; esta hoja leía otros
     // nombres y la referencia salía siempre vacía (utils/contabilidad).
     const ref = comprobanteQueModifica(invoice) || {}
 
-    let estado = '1'
-    if (invoice.status === 'cancelled' || invoice.status === 'voided') estado = '2'
+    const estado = anulada ? '2' : '1'
 
     aoa2.push([
       String(index + 1),
@@ -358,12 +366,12 @@ export const generateInvoicesExcel = async (invoices, filters, businessData, bra
       customerDocNumber,
       invoice.customer?.name || invoice.customer?.businessName || 'Cliente General',
       Number(baseImponible.toFixed(2)),
-      Number(((invoice.discount || 0) * sunatRate).toFixed(2)),
-      Number(((invoice.igv || invoice.tax || 0) * sunatRate).toFixed(2)),
+      Number((montos.descuento * factor).toFixed(2)),
+      Number((montos.igv * factor).toFixed(2)),
       Number(importeExonerado.toFixed(2)),
       Number(importeInafecto.toFixed(2)),
       0, 0,
-      Number(getDocumentTotalInBase(invoice).toFixed(2)),
+      Number((anulada ? 0 : montos.signo * getDocumentTotalInBase(invoice)).toFixed(2)),
       Number(sunatRate.toFixed(3)),
       ref.tipo || '', ref.serie || '', ref.numero || '', estado,
       ...(rucDe ? [rucDe(invoice)] : []),
