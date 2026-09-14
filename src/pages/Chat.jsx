@@ -53,6 +53,7 @@ import { StatusBar, Style } from '@capacitor/status-bar'
 import {
   suscribirConversaciones,
   suscribirMensajes,
+  precargarMensajes,
   enviarMensaje,
   enviarArchivo,
   enviarArchivoGuardado,
@@ -180,6 +181,26 @@ export default function Chat() {
   const [lejosDelFondo, setLejosDelFondo] = useState(false)
   // La primera bajada de una conversacion es un salto, no una animacion.
   const reciénAbierta = useRef(true)
+
+  // Lo último que se vio de cada conversación, para que al volver a ella las
+  // burbujas salgan al instante mientras la suscripción se pone al día.
+  const hilosVistos = useRef(new Map())
+  const [cargandoHilo, setCargandoHilo] = useState(false)
+
+  // Al posar el mouse sobre una fila se trae su hilo a la caché local, así el
+  // clic la abre sin esperar a la red. Una vez por conversación, y solo si el
+  // mouse se queda 200 ms: pasar por encima de la lista no dispara nada.
+  const precalentados = useRef(new Set())
+  const temporizadorPrecalentar = useRef(null)
+  const precalentar = (id) => {
+    clearTimeout(temporizadorPrecalentar.current)
+    if (precalentados.current.has(id) || hilosVistos.current.has(id)) return
+    temporizadorPrecalentar.current = setTimeout(() => {
+      precalentados.current.add(id)
+      precargarMensajes(id)
+    }, 200)
+  }
+  const cancelarPrecalentar = () => clearTimeout(temporizadorPrecalentar.current)
   const selectorArchivo = useRef(null)
   const cuadroTexto = useRef(null)
   // Adjunto elegido, esperando confirmacion (con su vista previa y pie).
@@ -378,8 +399,19 @@ export default function Chat() {
     avisadoLeido.current = null
     pegadoAlFondo.current = true
     reciénAbierta.current = true
-    if (!activaId) { setMensajes([]); return undefined }
-    const parar = suscribirMensajes(activaId, setMensajes)
+    if (!activaId) { setMensajes([]); setCargandoHilo(false); return undefined }
+    // Lo ya visto de esta conversación sale al instante; si nunca se abrió,
+    // el hilo se vacía. Antes se quedaban las burbujas de la anterior hasta
+    // que llegaban las nuevas, y el cambio se veía "a medias": primero el
+    // encabezado y después la conversación.
+    const visto = hilosVistos.current.get(activaId)
+    setMensajes(visto || [])
+    setCargandoHilo(!visto)
+    const parar = suscribirMensajes(activaId, (lista) => {
+      hilosVistos.current.set(activaId, lista)
+      setMensajes(lista)
+      setCargandoHilo(false)
+    })
     return parar
   }, [activaId])
 
@@ -1311,6 +1343,8 @@ export default function Chat() {
               <button
                 key={c.id}
                 onClick={() => setActivaId(c.id)}
+                onMouseEnter={() => precalentar(c.id)}
+                onMouseLeave={cancelarPrecalentar}
                 className={`w-full text-left px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors ${
                   c.id === activaId ? 'bg-gray-100' : ''
                 }`}
@@ -1714,6 +1748,15 @@ export default function Chat() {
               // cabecera y del compositor.
               className="flex-1 overflow-y-auto chat-scrollbar px-4 py-4 space-y-2"
             >
+              {/* Esqueleto mientras llega el hilo por primera vez: tres burbujas
+                  apagadas, para que no parezca una conversación vacía. */}
+              {cargandoHilo && hilo.length === 0 && (
+                <div className="space-y-2 animate-pulse" aria-label="Cargando mensajes">
+                  <div className="h-9 w-48 max-w-[60%] rounded-2xl bg-gray-500/25" />
+                  <div className="h-9 w-64 max-w-[70%] rounded-2xl bg-gray-500/25 ml-auto" />
+                  <div className="h-9 w-40 max-w-[50%] rounded-2xl bg-gray-500/25" />
+                </div>
+              )}
               {elementos.map((el) => {
                 if (el.separador) {
                   return (

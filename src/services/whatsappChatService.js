@@ -90,6 +90,18 @@ export const suscribirMensajes = (conversationId, onChange, onError) => {
 }
 
 /**
+ * Trae el hilo una vez para dejarlo en la caché local de Firestore: la
+ * suscripción que venga después arranca desde ahí, sin esperar a la red. La
+ * bandeja lo llama al posar el mouse sobre una conversación.
+ */
+export const precargarMensajes = (conversationId) =>
+  getDocs(query(
+    collection(db, 'whatsappConversations', conversationId, 'messages'),
+    orderBy('timestamp', 'asc'),
+    limitToLast(VENTANA_MENSAJES),
+  )).then(() => undefined).catch(() => undefined)
+
+/**
  * Envía un mensaje. El texto NO se guarda acá: lo guarda la Cloud Function con
  * el id que devuelve WhatsApp, y la pantalla lo ve llegar por la suscripción.
  * Así no hay dos versiones del mismo mensaje.
