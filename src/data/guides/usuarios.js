@@ -91,7 +91,7 @@ export default {
 
     {
       id: 'editar-anular',
-      title: 'Quién puede editar, anular y reimprimir ventas',
+      title: 'Quién puede editar, anular, reimprimir o cambiar el pago de una venta',
       blocks: [
         {
           type: 'texto',
@@ -99,7 +99,7 @@ export default {
         },
         {
           type: 'texto',
-          text: 'En la ficha del usuario, el bloque **Qué puede hacer en Ventas** tiene tres casillas: **Editar comprobantes emitidos**, **Anular comprobantes emitidos** y **Reimprimir comprobantes**. Al desmarcar una, esa opción simplemente **deja de aparecerle** en la página Ventas.',
+          text: 'En la ficha del usuario, el bloque **Qué puede hacer en Ventas** tiene cuatro casillas: **Editar comprobantes emitidos**, **Anular comprobantes emitidos**, **Reimprimir comprobantes** y **Cambiar el pago de una venta**. Al desmarcar una, esa opción deja de estar a su alcance en la página Ventas.',
         },
         {
           type: 'tabla',
@@ -108,11 +108,12 @@ export default {
             ['Editar comprobantes emitidos', 'Editar documento · Editar fecha y reenviar a SUNAT · Editar y reemitir'],
             ['Anular comprobantes emitidos', 'Anular Nota de Venta · Anular en SUNAT · Eliminar'],
             ['Reimprimir comprobantes', 'Imprimir ticket · Vista previa y PDF · WhatsApp · Imprimir tickets y Descargar PDFs de varios a la vez'],
+            ['Cambiar el pago de una venta', 'Método y estado de pago en Ver detalles: los ve, pero no los cambia'],
           ],
         },
         {
           type: 'consejo',
-          text: 'Son casillas separadas a propósito. Hay negocios donde el encargado corrige notas de venta todo el día pero anular anula solo el dueño, y otros donde nadie más que el dueño saca otra copia de un comprobante.',
+          text: 'Son casillas separadas a propósito. Hay negocios donde el encargado corrige notas de venta todo el día pero anular anula solo el dueño, y otros donde nadie más que el dueño saca otra copia de un comprobante o cambia cómo se pagó una venta.',
         },
         {
           type: 'ojo',

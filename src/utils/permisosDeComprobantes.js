@@ -7,7 +7,7 @@
  * comprobante. Un cliente lo pidió con estas palabras (ACEROS RAMOS,
  * 9-set-2026): "ese acceso de anular quisiera que solo yo pueda tenerlo". Y el
  * 14-set la misma dueña pidió que sus vendedoras no puedan reimprimir tickets
- * ni PDFs.
+ * ni PDFs, ni cambiar cómo se pagó una venta.
  *
  * Son acciones distintas y se manejan por separado, porque no son la misma
  * preocupación:
@@ -16,6 +16,10 @@
  *   - reimprimir: volver a imprimir el ticket, sacar el PDF o mandarlo por
  *     WhatsApp desde Ventas. El ticket de la venta que acaba de hacer en el POS
  *     sale igual: eso es vender, no reimprimir.
+ *   - cambiarPago: cambiar el método (Efectivo, Yape...) o el estado de pago de
+ *     una venta ya hecha, desde Ver detalles. Mueve la caja: pasar un efectivo a
+ *     Yape cambia lo que tiene que haber en el cajón. Cobrar un saldo pendiente
+ *     sigue permitido: eso es cobrar, no cambiar.
  *
  * Hay negocios donde el encargado sí corrige notas de venta todo el día pero
  * nadie más que el dueño anula, y al revés.
@@ -48,6 +52,12 @@ export const ACCIONES_DE_COMPROBANTES = [
     siPuede: 'Puede volver a imprimir el ticket, sacar el PDF o mandarlo por WhatsApp desde Ventas.',
     noPuede: 'No le aparecen "Imprimir ticket", el PDF ni WhatsApp en Ventas. El ticket de la venta que acaba de hacer en el POS sí sale.',
   },
+  {
+    id: 'cambiarPago',
+    label: 'Cambiar el pago de una venta',
+    siPuede: 'Puede cambiar el método de pago (Efectivo, Yape...) y el estado de pago de una venta ya hecha.',
+    noPuede: 'Ve cómo se pagó la venta, pero no lo puede cambiar. Sigue pudiendo vender y cobrar saldos pendientes.',
+  },
 ]
 
 export const IDS_DE_ACCIONES = ACCIONES_DE_COMPROBANTES.map((a) => a.id)
@@ -60,8 +70,8 @@ export const ACCIONES_COMPLETAS = Object.fromEntries(IDS_DE_ACCIONES.map((id) =>
  *
  * @param {object} params
  * @param {boolean} params.esSecundario         - ni admin ni dueño del negocio
- * @param {object}  [params.invoicePermissions] - `{ editar, anular, reimprimir }` del sub-usuario
- * @returns {{editar: boolean, anular: boolean, reimprimir: boolean}}
+ * @param {object}  [params.invoicePermissions] - `{ editar, anular, reimprimir, cambiarPago }` del sub-usuario
+ * @returns {{editar: boolean, anular: boolean, reimprimir: boolean, cambiarPago: boolean}}
  */
 export function resolverPermisosDeComprobantes({ esSecundario, invoicePermissions }) {
   if (!esSecundario) return { ...ACCIONES_COMPLETAS }

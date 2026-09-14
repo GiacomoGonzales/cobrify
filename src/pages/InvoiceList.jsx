@@ -2589,6 +2589,8 @@ Gracias por tu preferencia.`
 
   const handleUpdateStatus = async (invoiceId, newStatus) => {
     if (!user?.uid) return
+    // Sin el permiso de cambiar el pago no se toca, aunque alguien llegue hasta acá.
+    if (!permisosComprobante.cambiarPago) return
 
     const businessId = getBusinessId()
     try {
@@ -2608,6 +2610,7 @@ Gracias por tu preferencia.`
 
   const handleUpdatePaymentMethod = async (invoiceId, newMethod) => {
     if (!user?.uid) return
+    if (!permisosComprobante.cambiarPago) return
 
     const businessId = getBusinessId()
     try {
@@ -4968,16 +4971,25 @@ Gracias por tu preferencia.`
                     {viewingInvoice.paymentType === 'credito' ? 'Crédito' : 'Contado'}
                   </span>
                 </div>
-                <Select
-                  value={viewingInvoice.status}
-                  onChange={e => handleUpdateStatus(viewingInvoice.id, e.target.value)}
-                  className="text-sm w-36"
-                >
-                  <option value="pending">Pendiente</option>
-                  <option value="paid">Pagada</option>
-                  <option value="overdue">Vencida</option>
-                  <option value="cancelled">Anulada</option>
-                </Select>
+                {/* Cambiar el pago de una venta ya hecha: el dueño se lo puede quitar
+                    a un sub-usuario (utils/permisosDeComprobantes). Sin el permiso
+                    lo ve, pero no lo cambia. */}
+                {permisosComprobante.cambiarPago ? (
+                  <Select
+                    value={viewingInvoice.status}
+                    onChange={e => handleUpdateStatus(viewingInvoice.id, e.target.value)}
+                    className="text-sm w-36"
+                  >
+                    <option value="pending">Pendiente</option>
+                    <option value="paid">Pagada</option>
+                    <option value="overdue">Vencida</option>
+                    <option value="cancelled">Anulada</option>
+                  </Select>
+                ) : (
+                  <span className="text-sm font-medium text-gray-700">
+                    {{ pending: 'Pendiente', paid: 'Pagada', overdue: 'Vencida', cancelled: 'Anulada' }[viewingInvoice.status] || viewingInvoice.status}
+                  </span>
+                )}
               </div>
               <div className="p-4 space-y-4">
                 {/* --- Pagos del comprobante (solo CONTADO: en una venta al crédito
@@ -4993,30 +5005,34 @@ Gracias por tu preferencia.`
                     <div className="space-y-2">
                       {pagos.map((pago, i) => (
                         <div key={i} className="bg-gray-50 rounded-lg p-2 flex items-center gap-2 text-sm">
-                          <Select
-                            value={pago.method}
-                            onChange={e => {
-                              const nuevo = e.target.value
-                              if (pago.sintetico || pagos.length === 1) {
-                                // handleUpdatePaymentMethod ya sincroniza payments[0]
-                                // cuando el array tiene un solo pago.
-                                handleUpdatePaymentMethod(viewingInvoice.id, nuevo)
-                                return
-                              }
-                              const updatedPayments = [...viewingInvoice.payments]
-                              updatedPayments[i] = { ...updatedPayments[i], method: nuevo }
-                              // paymentMethod (legacy) sigue al primer pago: es lo
-                              // que leen listas y filtros viejos.
-                              if (i === 0) handleUpdatePaymentMethod(viewingInvoice.id, nuevo)
-                              updateInvoice(getBusinessId(), viewingInvoice.id, { payments: updatedPayments })
-                              setViewingInvoice(prev => prev ? { ...prev, payments: updatedPayments } : prev)
-                            }}
-                            className="text-sm flex-1"
-                          >
-                            {methodOptionsFor(pago.method).map(m => (
-                              <option key={m} value={m}>{m}</option>
-                            ))}
-                          </Select>
+                          {permisosComprobante.cambiarPago ? (
+                            <Select
+                              value={pago.method}
+                              onChange={e => {
+                                const nuevo = e.target.value
+                                if (pago.sintetico || pagos.length === 1) {
+                                  // handleUpdatePaymentMethod ya sincroniza payments[0]
+                                  // cuando el array tiene un solo pago.
+                                  handleUpdatePaymentMethod(viewingInvoice.id, nuevo)
+                                  return
+                                }
+                                const updatedPayments = [...viewingInvoice.payments]
+                                updatedPayments[i] = { ...updatedPayments[i], method: nuevo }
+                                // paymentMethod (legacy) sigue al primer pago: es lo
+                                // que leen listas y filtros viejos.
+                                if (i === 0) handleUpdatePaymentMethod(viewingInvoice.id, nuevo)
+                                updateInvoice(getBusinessId(), viewingInvoice.id, { payments: updatedPayments })
+                                setViewingInvoice(prev => prev ? { ...prev, payments: updatedPayments } : prev)
+                              }}
+                              className="text-sm flex-1"
+                            >
+                              {methodOptionsFor(pago.method).map(m => (
+                                <option key={m} value={m}>{m}</option>
+                              ))}
+                            </Select>
+                          ) : (
+                            <span className="text-sm flex-1">{pago.method}</span>
+                          )}
                           <span className="font-medium whitespace-nowrap">{formatCurrency(pago.amount, viewingInvoice.currency)}</span>
                         </div>
                       ))}
