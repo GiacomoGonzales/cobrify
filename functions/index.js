@@ -14903,6 +14903,195 @@ async function leerPlantilla(name, language) {
   return lista.find(t => t.name === name && (!language || t.language === language)) || null
 }
 
+// ---- Cola de campañas ----
+//
+// El envío NO corre dentro de la petición HTTP. En Cloud Run, apenas la
+// función responde, el procesador se le apaga casi del todo: la primera
+// campaña a clientes (14-set-2026) respondió "en marcha" y después mandó un
+// mensaje cada 18 segundos hasta cortar por tiempo, 28 de 562. Por eso la
+// petición solo deja la campaña y su lista en Firestore, y un disparador
+// sobre `whatsappCampaigns/{id}/lotes/{lote}` hace el envío con el
+// procesador entero. Si no termina dentro de su tiempo, vuelve a poner el
+// lote en 'pendiente' con lo que falta, y esa misma escritura lo despierta.
+const LOTE_CAMPANA_TOPE_MS = 420 * 1000 // el disparador muere a los 540 s
+const CAMPANA_PAUSA_MS = 250
+const CAMPANA_NO_REPETIR_MS = 7 * 24 * 60 * 60 * 1000
+
+/** Deja la campaña y su cola en Firestore. Devuelve el id; el disparador envía. */
+async function encolarCampanaWa({ titulo, plantilla, alcance, destinatarios, parametros, cuenta = null, uid }) {
+  const campRef = db.collection('whatsappCampaigns').doc()
+  await campRef.set({
+    titulo,
+    plantilla: plantilla.name,
+    alcance,
+    total: destinatarios.length,
+    pendientes: destinatarios.length,
+    enviados: 0, fallidos: 0, omitidos: 0, noEntregados: 0,
+    estado: 'en_curso',
+    parametros: {
+      language: plantilla.language,
+      bodyValues: parametros.bodyValues || [],
+      headerText: parametros.headerText || null,
+      headerImageUrl: parametros.headerImageUrl || null,
+    },
+    ...(cuenta ? { cuenta } : {}),
+    creadaPor: uid,
+    createdAt: FieldValue.serverTimestamp(),
+  })
+  await campRef.collection('lotes').doc('1').set({
+    estado: 'pendiente',
+    destinatarios,
+    vueltas: 0,
+    createdAt: FieldValue.serverTimestamp(),
+  })
+  return campRef.id
+}
+
+/**
+ * Un destinatario de la campaña: salta si corresponde, crea la conversación
+ * si hace falta, envía y anota el resultado. No lanza: el fallo de uno no
+ * frena a los demás.
+ */
+async function enviarCampanaADestinatario({ camp, campRef, plantilla, dest, desde }) {
+  const convRef = db.collection('whatsappConversations').doc(dest.convId)
+  const anotar = async (estado, extra = {}) => {
+    const contador = { enviado: 'enviados', fallido: 'fallidos', omitido: 'omitidos' }[estado]
+    try {
+      await Promise.all([
+        campRef.update({
+          [contador]: FieldValue.increment(1),
+          pendientes: FieldValue.increment(-1),
+          updatedAt: FieldValue.serverTimestamp(),
+        }),
+        campRef.collection('destinatarios').doc(dest.convId).set({
+          estado,
+          ...(dest.businessId ? { businessId: dest.businessId } : {}),
+          ...extra,
+          at: FieldValue.serverTimestamp(),
+        }),
+      ])
+    } catch (error) {
+      console.error(`[WhatsApp] Campaña ${campRef.id}: no se pudo anotar ${estado} de ${dest.convId}:`, error.message)
+    }
+  }
+
+  try {
+    const snap = await convRef.get()
+    let conv = snap.exists ? snap.data() : null
+    if (conv?.optOut === true) { await anotar('omitido', { motivo: 'baja' }); return }
+
+    if (camp.alcance === 'clientes') {
+      // Relanzar sin repetir: quien ya recibió ESTA plantilla hace poco se salta.
+      const yaLaRecibio = conv?.ultimaPlantilla === plantilla.name
+        && (conv.ultimaPlantillaAt?.toMillis?.() || 0) > desde
+      if (yaLaRecibio) { await anotar('omitido', { motivo: 'ya_la_recibio' }); return }
+      if (!conv) {
+        // Conversación nueva, ya vinculada al negocio: la respuesta cae en
+        // la bandeja con ficha, como si el cliente hubiera escrito primero.
+        conv = {
+          phoneNumberId: camp.cuenta.id,
+          wabaId: camp.cuenta.wabaId || null,
+          displayNumber: camp.cuenta.displayNumber || null,
+          waId: dest.waId,
+          telefono: dest.waId,
+          nombre: dest.businessName || null,
+          estado: 'abierta',
+          sinLeer: 0,
+          linkAttempted: true,
+          linkedBusinessId: dest.businessId,
+          linkedBusinessName: dest.businessName || null,
+          linkedBy: 'auto',
+          createdAt: FieldValue.serverTimestamp(),
+        }
+        await convRef.set(conv, { merge: true })
+      }
+    } else if (!conv) {
+      await anotar('omitido', { motivo: 'sin_conversacion' }); return
+    }
+
+    const nombre = conv.nombre || dest.businessName || ''
+    const negocio = conv.linkedBusinessName || dest.businessName || ''
+    const valores = (camp.parametros?.bodyValues || []).map(v => String(v ?? '')
+      .replace(/\{nombre\}/gi, nombre).replace(/\{negocio\}/gi, negocio))
+
+    await enviarPlantillaAConversacion({
+      convRef, conv, plantilla, bodyValues: valores,
+      headerText: camp.parametros?.headerText || null,
+      headerImageUrl: camp.parametros?.headerImageUrl || null,
+      uid: camp.creadaPor, campaignId: campRef.id,
+    })
+    await anotar('enviado')
+  } catch (e) {
+    await anotar('fallido', { error: String(e.metaDetails || e.message) })
+  }
+}
+
+/**
+ * Envía un lote de campaña. Se dispara con cada escritura del lote, pero solo
+ * trabaja cuando está 'pendiente' y logra reclamarlo (el mismo evento puede
+ * llegar dos veces, y cada cambio de estado que se escribe acá dispara otro).
+ */
+export const procesarLoteCampanaWa = onDocumentWritten(
+  {
+    document: 'whatsappCampaigns/{campaignId}/lotes/{loteId}',
+    region: 'us-central1', timeoutSeconds: 540, memory: '512MiB',
+    secrets: ['WHATSAPP_TOKEN'],
+  },
+  async (event) => {
+    const despues = event.data?.after
+    if (!despues?.exists || despues.data()?.estado !== 'pendiente') return
+    const inicio = Date.now()
+    const loteRef = despues.ref
+    const campRef = loteRef.parent.parent
+
+    const lote = await db.runTransaction(async (tx) => {
+      const fresco = await tx.get(loteRef)
+      if (!fresco.exists || fresco.data().estado !== 'pendiente') return null
+      tx.update(loteRef, { estado: 'procesando', tomadoAt: FieldValue.serverTimestamp() })
+      return fresco.data()
+    })
+    if (!lote) return
+
+    const cola = [...(lote.destinatarios || [])]
+    let procesados = 0
+    try {
+      const camp = (await campRef.get()).data()
+      if (!camp) throw new Error('La campaña no existe')
+      if (camp.alcance === 'clientes' && !camp.cuenta) throw new Error('La campaña no tiene cuenta de WhatsApp')
+      const plantilla = await leerPlantilla(camp.plantilla, camp.parametros?.language)
+      if (!plantilla) throw new Error(`La plantilla ${camp.plantilla} ya no está en el catálogo`)
+      const desde = inicio - CAMPANA_NO_REPETIR_MS
+
+      while (cola.length && Date.now() - inicio < LOTE_CAMPANA_TOPE_MS) {
+        const dest = cola.shift()
+        procesados++
+        await enviarCampanaADestinatario({ camp, campRef, plantilla, dest, desde })
+        // Pausa entre envíos: amable con el límite de Meta y con la cuenta.
+        await new Promise(r => setTimeout(r, CAMPANA_PAUSA_MS))
+      }
+    } catch (error) {
+      // Algo que no es de un destinatario: la campaña se cierra con el motivo
+      // y lo que faltaba queda en el lote. La bandeja ofrece relanzarla.
+      console.error(`[WhatsApp] Campaña ${campRef.id} lote ${loteRef.id}:`, error.message)
+      await loteRef.update({ estado: 'error', error: error.message, destinatarios: cola })
+      await campRef.set({ estado: 'terminada', error: error.message, finishedAt: FieldValue.serverTimestamp() }, { merge: true })
+      return
+    }
+
+    if (cola.length) {
+      // Se acabó el tiempo de esta vuelta: vuelve a la cola con lo que falta,
+      // y esa escritura dispara la siguiente.
+      await loteRef.update({ estado: 'pendiente', destinatarios: cola, vueltas: FieldValue.increment(1) })
+      console.log(`[WhatsApp] Campaña ${campRef.id}: ${procesados} procesados en esta vuelta, quedan ${cola.length}`)
+      return
+    }
+    await loteRef.update({ estado: 'hecho', destinatarios: [], finAt: FieldValue.serverTimestamp() })
+    await campRef.set({ estado: 'terminada', pendientes: 0, finishedAt: FieldValue.serverTimestamp() }, { merge: true })
+    const final = (await campRef.get()).data() || {}
+    console.log(`[WhatsApp] Campaña ${campRef.id} terminada: ${final.enviados || 0} enviados, ${final.fallidos || 0} fallidos, ${final.omitidos || 0} omitidos`)
+  }
+)
+
 export const sendWhatsappTemplateMessage = onRequest(
   {
     region: 'us-central1', timeoutSeconds: 60, memory: '256MiB', cors: true,
@@ -14977,46 +15166,17 @@ export const sendWhatsappCampaign = onRequest(
         res.status(400).json({ error: 'La plantilla no existe o no esta aprobada' }); return
       }
 
-      const campRef = db.collection('whatsappCampaigns').doc()
-      await campRef.set({
+      const campaignId = await encolarCampanaWa({
         titulo: titulo || plantilla.name,
-        plantilla: plantilla.name,
-        total: ids.length, enviados: 0, fallidos: 0, omitidos: 0,
-        estado: 'en_curso',
-        creadaPor: uid,
-        createdAt: FieldValue.serverTimestamp(),
+        plantilla,
+        alcance: 'conversaciones',
+        destinatarios: ids.map(convId => ({ convId })),
+        parametros: { bodyValues, headerText, headerImageUrl },
+        uid,
       })
-      // Se responde YA con el id: la pantalla sigue el progreso por
-      // suscripcion mientras esta funcion sigue enviando.
-      res.status(202).json({ success: true, campaignId: campRef.id })
-
-      let enviados = 0, fallidos = 0, omitidos = 0
-      for (const convId of ids) {
-        try {
-          const convRef = db.collection('whatsappConversations').doc(convId)
-          const conv = (await convRef.get()).data()
-          if (!conv || conv.optOut === true) { omitidos++; continue }
-
-          const nombre = conv.nombre || ''
-          const negocio = conv.linkedBusinessName || ''
-          const valores = bodyValues.map(v => String(v ?? '')
-            .replace(/\{nombre\}/gi, nombre).replace(/\{negocio\}/gi, negocio))
-
-          await enviarPlantillaAConversacion({
-            convRef, conv, plantilla, bodyValues: valores, headerText, headerImageUrl, uid, campaignId: campRef.id,
-          })
-          enviados++
-          await campRef.collection('destinatarios').doc(convId).set({ estado: 'enviado', at: FieldValue.serverTimestamp() })
-        } catch (e) {
-          fallidos++
-          await campRef.collection('destinatarios').doc(convId).set({ estado: 'fallido', error: e.message, at: FieldValue.serverTimestamp() })
-        }
-        await campRef.set({ enviados, fallidos, omitidos }, { merge: true })
-        // Pausa entre envios: amable con el limite de Meta y con la cuenta.
-        await new Promise(r => setTimeout(r, 350))
-      }
-      await campRef.set({ estado: 'terminada', finishedAt: FieldValue.serverTimestamp() }, { merge: true })
-      console.log(`[WhatsApp] Campaña ${campRef.id}: ${enviados} enviados, ${fallidos} fallidos, ${omitidos} omitidos`)
+      // Se responde con el id apenas queda en cola: la pantalla sigue el
+      // progreso por suscripción mientras el disparador envía.
+      res.status(202).json({ success: true, campaignId })
     } catch (error) {
       console.error('[WhatsApp] Error en campaña:', error.message)
       if (!res.headersSent) res.status(500).json({ error: error.message })
@@ -15047,10 +15207,6 @@ export const sendWhatsappCampaign = onRequest(
  *    corta por el límite diario de la cuenta o si la función se agota.
  *  - `modo: 'contar'` no manda nada: dice cuántos serían.
  */
-const CAMPANA_CLIENTES_MAX_POR_CORRIDA = 400
-const CAMPANA_CLIENTES_TOPE_MS = 500 * 1000 // la función muere a los 540 s
-const CAMPANA_NO_REPETIR_MS = 7 * 24 * 60 * 60 * 1000
-
 async function clientesParaCampana({ incluirResellers = false } = {}) {
   const [negocios, suscripciones] = await Promise.all([
     db.collection('businesses').select('contactPhone', 'whatsapp', 'phone', 'businessName').get(),
@@ -15119,88 +15275,23 @@ export const sendWhatsappCampaignToClients = onRequest(
       if (!cuenta) { res.status(400).json({ error: 'No hay una cuenta de WhatsApp activa' }); return }
       if (!audiencia.lista.length) { res.status(400).json({ error: 'No hay clientes con celular en sus fichas' }); return }
 
-      const lista = audiencia.lista.slice(0, CAMPANA_CLIENTES_MAX_POR_CORRIDA)
-      const campRef = db.collection('whatsappCampaigns').doc()
-      await campRef.set({
+      const campaignId = await encolarCampanaWa({
         titulo: titulo || `${plantilla.name} · todos los clientes`,
-        plantilla: plantilla.name,
+        plantilla,
         alcance: 'clientes',
-        total: lista.length,
-        // Lo que no entra en esta corrida: se relanza y sigue con los que faltan.
-        pendientes: audiencia.lista.length - lista.length,
-        enviados: 0, fallidos: 0, omitidos: 0,
-        estado: 'en_curso',
-        creadaPor: uid,
-        createdAt: FieldValue.serverTimestamp(),
+        destinatarios: audiencia.lista.map(c => ({
+          convId: idConversacionWa(cuenta.id, c.waId),
+          waId: c.waId,
+          businessId: c.businessId,
+          businessName: c.businessName || null,
+        })),
+        parametros: { bodyValues, headerText, headerImageUrl },
+        cuenta: { id: cuenta.id, wabaId: cuenta.wabaId || null, displayNumber: cuenta.displayNumber || null },
+        uid,
       })
-      // Se responde YA con el id: la pantalla sigue el progreso por suscripción
-      // mientras esta función sigue enviando.
-      res.status(202).json({
-        success: true, campaignId: campRef.id, total: lista.length, pendientes: audiencia.lista.length - lista.length,
-      })
-
-      const inicio = Date.now()
-      const desde = inicio - CAMPANA_NO_REPETIR_MS
-      let enviados = 0, fallidos = 0, omitidos = 0, procesados = 0
-      for (const c of lista) {
-        if (Date.now() - inicio > CAMPANA_CLIENTES_TOPE_MS) break
-        procesados++
-        const convId = idConversacionWa(cuenta.id, c.waId)
-        const convRef = db.collection('whatsappConversations').doc(convId)
-        try {
-          const snap = await convRef.get()
-          let conv = snap.exists ? snap.data() : null
-          if (conv?.optOut === true) { omitidos++; continue }
-          const yaLaRecibio = conv?.ultimaPlantilla === plantilla.name
-            && (conv.ultimaPlantillaAt?.toMillis?.() || 0) > desde
-          if (yaLaRecibio) { omitidos++; continue }
-
-          if (!conv) {
-            // Conversación nueva, ya vinculada al negocio: la respuesta cae en
-            // la bandeja con ficha, como si el cliente hubiera escrito primero.
-            conv = {
-              phoneNumberId: cuenta.id,
-              wabaId: cuenta.wabaId || null,
-              displayNumber: cuenta.displayNumber || null,
-              waId: c.waId,
-              telefono: c.waId,
-              nombre: c.businessName || null,
-              estado: 'abierta',
-              sinLeer: 0,
-              linkAttempted: true,
-              linkedBusinessId: c.businessId,
-              linkedBusinessName: c.businessName || null,
-              linkedBy: 'auto',
-              createdAt: FieldValue.serverTimestamp(),
-            }
-            await convRef.set(conv, { merge: true })
-          }
-
-          const nombre = conv.nombre || c.businessName || ''
-          const negocio = conv.linkedBusinessName || c.businessName || ''
-          const valores = bodyValues.map(v => String(v ?? '')
-            .replace(/\{nombre\}/gi, nombre).replace(/\{negocio\}/gi, negocio))
-
-          await enviarPlantillaAConversacion({
-            convRef, conv, plantilla, bodyValues: valores, headerText, headerImageUrl, uid, campaignId: campRef.id,
-          })
-          enviados++
-          await campRef.collection('destinatarios').doc(convId).set({
-            estado: 'enviado', businessId: c.businessId, at: FieldValue.serverTimestamp(),
-          })
-        } catch (e) {
-          fallidos++
-          await campRef.collection('destinatarios').doc(convId).set({
-            estado: 'fallido', businessId: c.businessId, error: String(e.metaDetails || e.message), at: FieldValue.serverTimestamp(),
-          })
-        }
-        await campRef.set({ enviados, fallidos, omitidos }, { merge: true })
-        // Pausa entre envíos: amable con el límite de Meta y con la cuenta.
-        await new Promise(r => setTimeout(r, 300))
-      }
-      const pendientes = audiencia.lista.length - procesados
-      await campRef.set({ estado: 'terminada', pendientes, finishedAt: FieldValue.serverTimestamp() }, { merge: true })
-      console.log(`[WhatsApp] Campaña a clientes ${campRef.id}: ${enviados} enviados, ${fallidos} fallidos, ${omitidos} omitidos, ${pendientes} pendientes`)
+      // Se responde con el id apenas queda en cola: la pantalla sigue el
+      // progreso por suscripción mientras el disparador envía.
+      res.status(202).json({ success: true, campaignId, total: audiencia.lista.length })
     } catch (error) {
       console.error('[WhatsApp] Error en campaña a clientes:', error.message)
       if (!res.headersSent) res.status(500).json({ error: error.message })

@@ -1162,8 +1162,11 @@ export default function Chat() {
                   ? ` · ${campanaEnCurso.omitidos} omitidos ${campanaEnCurso.alcance === 'clientes' ? '(ya la tenían o pidieron baja)' : '(baja)'}`
                   : ''}
                 {' '}de {campanaEnCurso.total}
-                {campanaEnCurso.estado === 'terminada' ? ' · terminada' : ''}
+                {campanaEnCurso.estado === 'terminada' ? ' · terminada' : ' · enviando'}
               </p>
+              {campanaEnCurso.error && (
+                <p className="text-[11px] text-red-700 mt-0.5">Se cortó: {campanaEnCurso.error}</p>
+              )}
               {campanaEnCurso.alcance === 'clientes' && campanaEnCurso.estado === 'terminada'
                 && (campanaEnCurso.pendientes || 0) + (campanaEnCurso.fallidos || 0) + (campanaEnCurso.noEntregados || 0) > 0 && (
                 <p className="text-[11px] text-primary-700 mt-0.5">
@@ -2330,9 +2333,7 @@ export default function Chat() {
             const r = await enviarCampanaAClientes(plantilla, valores, tituloCamp, idToken)
             setCampanaEnCurso({ id: r.campaignId, titulo: tituloCamp, total: r.total || campanaClientes, enviados: 0 })
             setCampanaClientes(null)
-            toast.success(r.pendientes
-              ? `Campaña en marcha: ${r.total} ahora y ${r.pendientes} quedan para una segunda vuelta`
-              : 'Campaña en marcha')
+            toast.success(`Campaña en marcha: ${r.total || campanaClientes} mensajes. La franja de arriba muestra el avance.`)
           }}
         />
       )}
