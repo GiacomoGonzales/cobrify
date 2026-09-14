@@ -625,6 +625,16 @@ const catalogoDeNegocios = () => {
 }
 
 /**
+ * Las fichas por id de negocio, para que el buscador de la lista encuentre
+ * una conversación por el RUC, el correo o el código de cliente del negocio
+ * vinculado. Es el mismo catálogo (y la misma descarga) que el de vincular.
+ */
+export const fichasPorNegocio = async () => {
+  const lista = await catalogoDeNegocios().catch(() => [])
+  return new Map(lista.map((n) => [n.businessId, n]))
+}
+
+/**
  * Busca un negocio para vincularlo a una conversacion.
  *
  * Encuentra por lo mismo que la pagina de Usuarios: razon social, nombre

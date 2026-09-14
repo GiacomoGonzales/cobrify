@@ -84,7 +84,12 @@ import {
   suscribirCampana,
   revertirBaja,
   suscribirAutomaticos,
+  fichasPorNegocio,
 } from '@/services/whatsappChatService'
+import { buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
+
+// Etiqueta de estado en los resultados de búsqueda que caen en otra pestaña.
+const NOMBRE_ESTADO = { abierta: 'Abierta', pendiente: 'Pendiente', completada: 'Completada' }
 
 /**
  * Bandeja de WhatsApp.
@@ -138,6 +143,8 @@ export default function Chat() {
   // foto baja, no antes— pero es la unica forma de que se vean igual.
   const [medidasMedidas, setMedidasMedidas] = useState({})
   const [busqueda, setBusqueda] = useState('')
+  // Fichas de negocio por id (RUC, correo, código de cliente) para el buscador.
+  const [fichas, setFichas] = useState(() => new Map())
   // Organización (Fase 1): pestaña por estado, filtro por etiqueta, catálogo.
   const [tab, setTab] = useState('abierta')
   // Los dos mundos: todos / clientes (vinculados a un negocio) / leads.
@@ -321,6 +328,15 @@ export default function Chat() {
   useEffect(() => {
     if (!user || !isAdmin) return undefined
     return suscribirAutomaticos((c) => setRespuestasRapidas(c.respuestasRapidas || []))
+  }, [user, isAdmin])
+
+  // Las fichas de los negocios, para encontrar una conversación por el RUC o
+  // el correo de la empresa. Misma descarga que usa "vincular a negocio".
+  useEffect(() => {
+    if (!user || !isAdmin) return undefined
+    let vigente = true
+    fichasPorNegocio().then((m) => { if (vigente) setFichas(m) })
+    return () => { vigente = false }
   }, [user, isAdmin])
 
   // Sugerencias de respuestas rapidas: al tipear "/" en el cuadro.
@@ -691,8 +707,31 @@ export default function Chat() {
     return c
   }, [conversaciones])
 
+  // Texto buscable de cada conversación: quien escribe, su número y la ficha
+  // del negocio vinculado (razón social, nombre comercial, RUC, correo, código
+  // de cliente). Se arma una vez por cambio y cada tecla solo compara texto.
+  //
+  // Antes se buscaba solo por nombre y número, y con un defecto: la parte del
+  // número comparaba contra "" cuando lo escrito no tenía dígitos, y "" está
+  // en cualquier número, así que escribir "juan" no filtraba nada.
+  const buscablePorConversacion = useMemo(() => {
+    const m = new Map()
+    for (const c of conversaciones) {
+      const negocios = [c.linkedBusinessId, ...(c.linkedBusinessIds || [])].filter(Boolean)
+      m.set(c.id, buildSearchHaystack(
+        c.nombre, c.waId, c.telefono, c.rolContacto, c.linkedBusinessName,
+        ...negocios.map((id) => fichas.get(id)?.buscable || ''),
+      ))
+    }
+    return m
+  }, [conversaciones, fichas])
+
+  const buscando = busqueda.trim()
+
   const filtradas = useMemo(() => {
-    let lista = conversaciones.filter((c) => estadoDe(c) === tab)
+    // Con algo escrito se busca en TODAS las pestañas: quien busca a un
+    // cliente no sabe si su conversación quedó abierta o completada.
+    let lista = buscando ? conversaciones : conversaciones.filter((c) => estadoDe(c) === tab)
     if (mundo === 'clientes') lista = lista.filter((c) => c.linkedBusinessId)
     if (mundo === 'leads') lista = lista.filter((c) => !c.linkedBusinessId)
     if (filtroEtiqueta) {
@@ -705,15 +744,16 @@ export default function Chat() {
         && (c.ultimoMensajeAt?.toMillis?.() || 0) < hace7,
       )
     }
-    const t = busqueda.trim().toLowerCase()
-    if (t) {
+    if (buscando) {
+      // El número también pegado con espacios o con el +51 por delante.
+      const digitos = buscando.replace(/\D/g, '')
       lista = lista.filter((c) =>
-        (c.nombre || '').toLowerCase().includes(t)
-        || (c.waId || '').includes(t.replace(/\D/g, '')),
+        matchesPrebuilt(buscando, buscablePorConversacion.get(c.id))
+        || (digitos.length >= 4 && (c.waId || '').includes(digitos)),
       )
     }
     return lista
-  }, [conversaciones, tab, mundo, filtroEtiqueta, busqueda, soloSinRespuesta, ahora])
+  }, [conversaciones, tab, mundo, filtroEtiqueta, buscando, buscablePorConversacion, soloSinRespuesta, ahora])
 
   const etiquetaPorId = useMemo(() => {
     const m = new Map()
@@ -1080,7 +1120,7 @@ export default function Chat() {
               type="text"
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Buscar por nombre o número"
+              placeholder="Buscar por nombre, número, RUC o correo"
               className="w-full pl-9 pr-3 py-2 text-[13px] bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
@@ -1208,6 +1248,14 @@ export default function Chat() {
 
           {filtradas.map((c) => {
             const abierta = msRestantesDeVentana(c) > 0
+            // Buscando, se muestra de qué negocio es y su RUC: el nombre de
+            // quien escribe muchas veces no dice nada de la empresa.
+            const ficha = buscando && c.linkedBusinessId ? fichas.get(c.linkedBusinessId) : null
+            const lineaFicha = buscando && c.linkedBusinessId
+              ? [ficha?.nombre || c.linkedBusinessName, ficha?.ruc ? `RUC ${ficha.ruc}` : null, ficha?.email]
+                .filter(Boolean).join(' · ')
+              : ''
+            const otraPestana = buscando && estadoDe(c) !== tab ? NOMBRE_ESTADO[estadoDe(c)] : null
             return (
               <button
                 key={c.id}
@@ -1240,7 +1288,15 @@ export default function Chat() {
                           <Clock className="w-3.5 h-3.5 text-gray-400 flex-none" />
                         </span>
                       )}
+                      {otraPestana && (
+                        <span className="ml-auto text-[10.5px] px-1.5 py-px rounded bg-gray-100 text-gray-500 flex-none">
+                          {otraPestana}
+                        </span>
+                      )}
                     </div>
+                    {lineaFicha && (
+                      <p className="text-[11.5px] text-primary-700 truncate mt-0.5">{lineaFicha}</p>
+                    )}
                     <p className="text-[13px] text-gray-500 truncate mt-0.5">
                       {c.ultimaDireccion === 'saliente' && (
                         <span className="text-gray-400">Tú: </span>
