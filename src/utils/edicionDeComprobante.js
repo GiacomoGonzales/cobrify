@@ -33,3 +33,35 @@ export function motivoParaNoEditar(comprobante) {
   const numero = comprobante?.number ? `La ${comprobante.number}` : 'Este comprobante'
   return `${numero} ya se envió a SUNAT, y SUNAT se queda con lo que recibió: si se edita acá, el sistema y SUNAT dirían montos distintos. Para corregirla emite una nota de crédito o de débito.`
 }
+
+/**
+ * LO QUE UNA EDICIÓN NO CAMBIA.
+ *
+ * Editar una venta corrige sus líneas o sus pagos, pero no cambia QUIÉN la hizo
+ * ni DÓNDE: sigue siendo de quien la registró, de su sucursal y del almacén de
+ * donde salió la mercadería. El POS rearma el comprobante entero al guardar y
+ * esos datos salían de quien estaba editando: la dueña del negocio editaba una
+ * nota de su vendedora y la nota pasaba a ser suya. Con "Cada usuario ve solo
+ * sus ventas" la vendedora dejaba de verla, y se le iba de su caja (ACEROS
+ * RAMOS, NG11-00000034, 12-set-2026). Quién editó queda en `updatedBy`.
+ *
+ * @param {object} original el comprobante como estaba antes de editar
+ * @param {{conVendedor?: boolean}} [opciones] conVendedor: quien edita eligió un
+ *   vendedor en la pantalla; si no eligió, se conserva el de la venta (y su comisión)
+ * @returns {object} los campos del original que se vuelven a escribir tal cual
+ */
+export function loQueNoCambiaAlEditar(original, { conVendedor = false } = {}) {
+  if (!original) return {}
+  const copiar = (nombres) => Object.fromEntries(
+    nombres.filter((n) => n in original).map((n) => [n, original[n] ?? null])
+  )
+  return {
+    ...copiar(['createdBy', 'createdByName', 'createdByEmail']),
+    ...('branchId' in original
+      ? copiar(['branchId', 'branchName', 'branchTradeName', 'branchLogoUrl', 'branchAddress', 'branchPhone'])
+      : {}),
+    // Sin almacén guardado queda el elegido en pantalla: de ahí mueve el stock la edición.
+    ...(original.warehouseId ? copiar(['warehouseId', 'warehouseName', 'warehouseAddress', 'warehousePhone']) : {}),
+    ...(!conVendedor && original.sellerId ? copiar(['sellerId', 'sellerName', 'sellerCode', 'commission']) : {}),
+  }
+}

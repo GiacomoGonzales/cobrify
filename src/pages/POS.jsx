@@ -2,7 +2,7 @@ import { EMISOR_PRINCIPAL, esPrincipal, emisorIdDe, empresaEfectiva, empresaDelC
 import React, { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react'
 import { isPharmaLikeMode } from '@/utils/businessModes'
 import { estadoInicialSunat } from '@/utils/estadoInicialSunat'
-import { comprobanteYaEnviado, motivoParaNoEditar } from '@/utils/edicionDeComprobante'
+import { comprobanteYaEnviado, motivoParaNoEditar, loQueNoCambiaAlEditar } from '@/utils/edicionDeComprobante'
 import { cupoDeComprobantes, avisoDeCupo } from '@/utils/cupoDeComprobantes'
 import { serieParaNumerar, numeroSiguiente } from '@/utils/serieParaNumerar'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -7882,6 +7882,10 @@ ${textoDeErrores(revision.errores)}`, 9000)
         // Mantener datos originales que no deben cambiar
         const updateData = {
           ...invoiceData,
+          // Quién la vendió, en qué sucursal, de qué almacén y con qué vendedor:
+          // editar no los cambia (utils/edicionDeComprobante). Quién editó queda
+          // en updatedBy.
+          ...loQueNoCambiaAlEditar(editingInvoiceData, { conVendedor: !!selectedSeller }),
           // Mantener serie y número original
           series: editingInvoiceData.series,
           number: editingInvoiceData.number,

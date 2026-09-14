@@ -18,7 +18,7 @@
  */
 export default {
   id: 'facturas',
-  actualizado: '08/09/2026',
+  actualizado: '14/09/2026',
   intro:
     'Ventas es el historial de todo lo que emitiste: facturas, boletas, notas de venta, notas de crédito y de débito. Desde acá consultas, cobras lo pendiente, corriges errores, reimprimes y descargas. Es la página a la que vuelves cuando algo de una venta pasada necesita atención.',
 
@@ -176,7 +176,7 @@ export default {
         },
         {
           type: 'texto',
-          text: '**Editar documento** (solo notas de venta): abre la nota en el POS para cambiar productos o cantidades. El inventario se ajusta **por la diferencia** — si la nota decía 5 y ahora dice 3, vuelven 2 al stock — y queda un movimiento de ajuste como rastro. No se pueden editar las ya convertidas ni las anuladas.',
+          text: '**Editar documento** (solo notas de venta): abre la nota en el POS para cambiar productos o cantidades. El inventario se ajusta **por la diferencia** — si la nota decía 5 y ahora dice 3, vuelven 2 al stock — y queda un movimiento de ajuste como rastro. No se pueden editar las ya convertidas ni las anuladas. La nota sigue siendo de quien la vendió, en su sucursal y su almacén: si el dueño edita la nota de una vendedora, ella la sigue viendo en sus ventas y en su caja, y queda registrado quién la editó.',
         },
         {
           type: 'enlace',
