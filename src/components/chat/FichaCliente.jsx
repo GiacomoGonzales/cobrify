@@ -25,6 +25,7 @@ import {
   quitarCuentaDelContacto,
   sugerirCuentasDelContacto,
   buscarNegocios,
+  precargarNegocios,
   vincularConversacion,
   desvincularConversacion,
   guardarRolDelContacto,
@@ -66,6 +67,7 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
   const [cargando, setCargando] = useState(false)
   const [buscando, setBuscando] = useState('')
   const [resultados, setResultados] = useState([])
+  const [buscandoNegocios, setBuscandoNegocios] = useState(false)
   const [renovarAbierto, setRenovarAbierto] = useState(false)
   const [reactivarAbierto, setReactivarAbierto] = useState(false)
   const [comprobantesAbierto, setComprobantesAbierto] = useState(false)
@@ -126,14 +128,24 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId, conversacion?.id])
 
+  // Que el catálogo de fichas ya esté bajado cuando se escriba el primer
+  // carácter: la primera búsqueda tardaba varios segundos sin avisar.
+  useEffect(() => { precargarNegocios() }, [])
+
   // Búsqueda para la vinculación manual, con una pausa para no consultar
-  // en cada tecla.
+  // en cada tecla. "Buscando…" se prende con la tecla, no al consultar, para
+  // que no aparezca "ningún negocio" en el medio.
   useEffect(() => {
-    if (buscando.trim().length < 2) { setResultados([]); return undefined }
+    if (buscando.trim().length < 2) { setResultados([]); setBuscandoNegocios(false); return undefined }
+    let vivo = true
+    setBuscandoNegocios(true)
     const t = setTimeout(() => {
-      buscarNegocios(buscando).then(setResultados).catch(() => setResultados([]))
+      buscarNegocios(buscando)
+        .then((r) => { if (vivo) setResultados(r) })
+        .catch(() => { if (vivo) setResultados([]) })
+        .finally(() => { if (vivo) setBuscandoNegocios(false) })
     }, 350)
-    return () => clearTimeout(t)
+    return () => { vivo = false; clearTimeout(t) }
   }, [buscando])
 
   // Los otros numeros que escriben por esta misma empresa.
@@ -259,6 +271,15 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
                   className="w-full pl-9 pr-3 py-2 text-[13px] bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
+              {buscandoNegocios && (
+                <p className="mt-2 flex items-center gap-2 text-[12px] text-gray-500">
+                  <span className="inline-block h-3.5 w-3.5 flex-none animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />
+                  Buscando…
+                </p>
+              )}
+              {!buscandoNegocios && buscando.trim().length >= 2 && resultados.length === 0 && (
+                <p className="mt-2 text-[12px] text-gray-500">Ningún negocio coincide.</p>
+              )}
               {resultados.length > 0 && (
                 <div className="mt-2 border border-gray-200 rounded-lg divide-y divide-gray-100 overflow-hidden">
                   {resultados.map((r) => (
@@ -945,19 +966,24 @@ function GestorDeCuentas({ conversacion, cuentas, nombres, onCerrar }) {
   const [sugeridas, setSugeridas] = useState([])
   const [busqueda, setBusqueda] = useState('')
   const [resultados, setResultados] = useState([])
+  const [buscandoNegocios, setBuscandoNegocios] = useState(false)
   const [trabajando, setTrabajando] = useState(false)
 
   useEffect(() => {
     sugerirCuentasDelContacto(cuentas).then(setSugeridas).catch(() => setSugeridas([]))
   }, [cuentas])
 
+  useEffect(() => { precargarNegocios() }, [])
+
   useEffect(() => {
-    if (busqueda.trim().length < 2) { setResultados([]); return undefined }
+    if (busqueda.trim().length < 2) { setResultados([]); setBuscandoNegocios(false); return undefined }
     let vivo = true
+    setBuscandoNegocios(true)
     const t = setTimeout(() => {
       buscarNegocios(busqueda)
         .then((r) => { if (vivo) setResultados(r.filter((n) => !cuentas.includes(n.businessId))) })
-        .catch(() => {})
+        .catch(() => { if (vivo) setResultados([]) })
+        .finally(() => { if (vivo) setBuscandoNegocios(false) })
     }, 300)
     return () => { vivo = false; clearTimeout(t) }
   }, [busqueda, cuentas])
@@ -1043,6 +1069,15 @@ function GestorDeCuentas({ conversacion, cuentas, nombres, onCerrar }) {
         <Campo etiqueta="Buscar otra empresa" ayuda="Por nombre, nombre comercial, RUC o correo.">
           <Entrada value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Nombre, RUC o correo" />
         </Campo>
+        {buscandoNegocios && (
+          <p className="flex items-center gap-2 text-[12px] text-gray-500">
+            <span className="inline-block h-3.5 w-3.5 flex-none animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />
+            Buscando…
+          </p>
+        )}
+        {!buscandoNegocios && busqueda.trim().length >= 2 && resultados.length === 0 && (
+          <p className="text-[12px] text-gray-500">Ningún negocio coincide.</p>
+        )}
         {resultados.length > 0 && (
           <div className="rounded-md border border-gray-200 divide-y divide-gray-100 max-h-40 overflow-y-auto">
             {resultados.map((n) => (

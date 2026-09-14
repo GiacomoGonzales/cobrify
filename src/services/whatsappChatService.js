@@ -611,18 +611,37 @@ const descargarCatalogoNegocios = async () => {
   return lista
 }
 
-const catalogoDeNegocios = () => {
-  if (catalogoNegocios && Date.now() - catalogoCargadoEn < CATALOGO_VIGENCIA_MS) {
-    return Promise.resolve(catalogoNegocios)
-  }
+const descargarYGuardarCatalogo = () => {
   // Una sola descarga aunque se llame varias veces seguidas.
   if (!catalogoEnVuelo) {
     catalogoEnVuelo = descargarCatalogoNegocios()
-      .then((lista) => { catalogoNegocios = lista; catalogoCargadoEn = Date.now(); return lista })
+      .then((lista) => {
+        // Una lista vacía no se guarda: casi siempre es que todavía no había
+        // sesión, y guardarla dejaría el buscador ciego hasta que venza.
+        if (lista.length) { catalogoNegocios = lista; catalogoCargadoEn = Date.now() }
+        return lista
+      })
       .finally(() => { catalogoEnVuelo = null })
   }
   return catalogoEnVuelo
 }
+
+/**
+ * El catálogo de fichas. Solo la PRIMERA vez se espera la descarga: después
+ * se responde con lo que hay y, si ya venció, se refresca por detrás. Antes,
+ * cada 10 minutos la siguiente búsqueda volvía a esperar los tres pedidos
+ * enteros, sin ningún aviso: parecía que no buscaba.
+ */
+const catalogoDeNegocios = () => {
+  if (catalogoNegocios) {
+    if (Date.now() - catalogoCargadoEn >= CATALOGO_VIGENCIA_MS) descargarYGuardarCatalogo().catch(() => {})
+    return Promise.resolve(catalogoNegocios)
+  }
+  return descargarYGuardarCatalogo()
+}
+
+/** Adelanta la descarga del catálogo, para que la primera búsqueda no espere. */
+export const precargarNegocios = () => catalogoDeNegocios().catch(() => [])
 
 /**
  * Las fichas por id de negocio, para que el buscador de la lista encuentre

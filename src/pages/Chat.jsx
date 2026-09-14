@@ -761,10 +761,11 @@ export default function Chat() {
     return m
   }, [etiquetas])
 
+  // Sin aviso al cambiar de estado: la conversación ya se mueve de pestaña a
+  // la vista, y el toast solo estorbaba.
   const handleEstado = async (estado) => {
     try {
       await cambiarEstado(activaId, estado)
-      if (estado !== tab) toast.success(estado === 'completada' ? 'Conversación completada' : estado === 'pendiente' ? 'Movida a pendientes' : 'Conversación reabierta')
     } catch {
       toast.error('No se pudo cambiar el estado')
     }
