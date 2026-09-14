@@ -17,13 +17,16 @@ import { cupoDeComprobantes } from '@/utils/cupoDeComprobantes'
 import Sidebar from '@/components/Sidebar'
 import Navbar from '@/components/Navbar'
 import UpdateBanner from '@/components/UpdateBanner'
+import AvisoGlobal from '@/components/AvisoGlobal'
+import ActualizacionObligatoria from '@/components/ActualizacionObligatoria'
 import { ActualizacionProvider } from '@/contexts/ActualizacionContext'
+import { useAppInstalada } from '@/hooks/useAppInstalada'
 import OfflineIndicator from '@/components/OfflineIndicator'
 import ReviewPrompt from '@/components/ReviewPrompt'
 import KitchenTicket from '@/components/KitchenTicket'
 import { useYapeListener } from '@/hooks/useYapeListener'
 import Mantenimiento from '@/pages/Mantenimiento'
-import { escucharMantenimiento, MANTENIMIENTO_APAGADO } from '@/services/mantenimientoService'
+import { escucharMantenimiento, mantenimientoAplica, MANTENIMIENTO_APAGADO } from '@/services/mantenimientoService'
 import { useReactToPrint } from 'react-to-print'
 import { AlertTriangle, MessageCircle, Bell, Smartphone, Plus, Printer, CheckCircle, X, ArrowRight } from 'lucide-react'
 import { useStore } from '@/stores/useStore'
@@ -42,6 +45,9 @@ export default function MainLayout() {
   const { user, isAuthenticated, isLoading, hasAccess, isAdmin, subscription, isBusinessOwner, isReseller, userPermissions, rolesResolved, hasPageAccess, allowedPages, getBusinessId, businessMode, businessSettings } = useAuth()
   const toast = useToast()
   const [mantenimiento, setMantenimiento] = useState(MANTENIMIENTO_APAGADO)
+  // Qué app es esta y qué build: el mantenimiento puede cerrar SOLO a las
+  // apps instaladas que quedaron viejas (ver mantenimientoAplica).
+  const appInstalada = useAppInstalada()
   const [hasBusiness, setHasBusiness] = useState(null)
   const [checkingBusiness, setCheckingBusiness] = useState(false)
   const { branding } = useBranding()
@@ -599,7 +605,7 @@ export default function MainLayout() {
   // Mantenimiento: cierra la app a los clientes. A los admins no, o el que
   // prendió el modo no podría apagarlo. Se espera a `rolesResolved` para no
   // mostrarle la pantalla de cierre a un admin durante el parpadeo inicial.
-  if (mantenimiento.activo && rolesResolved && !isAdmin) {
+  if (mantenimientoAplica(mantenimiento, appInstalada) && rolesResolved && !isAdmin) {
     return <Mantenimiento mensaje={mantenimiento.mensaje} />
   }
 
@@ -759,6 +765,10 @@ export default function MainLayout() {
               al día y una franja por deploy era puro ruido. */}
           <UpdateBanner />
 
+          {/* Aviso para todos, que se prende desde Admin › Configuración. El
+              primero fue "cambiamos de número de WhatsApp" (13-set-2026). */}
+          <AvisoGlobal />
+
           {/* Aviso de pedidos del catálogo digital.
               Antes era una franja naranja con borde de 2px, íconos rebotando y
               cuatro colores de botón compitiendo (verde, azul, naranja,
@@ -883,6 +893,10 @@ export default function MainLayout() {
 
       {/* Indicador de estado offline */}
       <OfflineIndicator />
+
+      {/* El candado: la app instalada quedó por debajo de la versión mínima que
+          fija el admin. Tapa todo hasta que actualicen; en la web nunca sale. */}
+      <ActualizacionObligatoria />
 
       {/* Prompt para calificar en Play Store */}
       <ReviewPrompt />

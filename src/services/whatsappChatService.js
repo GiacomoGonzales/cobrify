@@ -801,6 +801,25 @@ export const enviarCampana = (conversationIds, plantilla, valores, titulo, idTok
     titulo,
   }, idToken)
 
+/**
+ * Campaña a TODOS los clientes de Cobrify, por el teléfono de su ficha —
+ * tengan o no conversación en la bandeja (el servidor la crea, ya vinculada).
+ * Primero se cuenta, para que la pantalla diga "Enviar a N" antes de mandar.
+ */
+export const contarClientesParaCampana = (idToken) =>
+  postConToken(FN('sendWhatsappCampaignToClients'), { modo: 'contar' }, idToken)
+
+export const enviarCampanaAClientes = (plantilla, valores, titulo, idToken) =>
+  postConToken(FN('sendWhatsappCampaignToClients'), {
+    modo: 'enviar',
+    templateName: plantilla.name,
+    language: plantilla.language,
+    bodyValues: valores.body || [],
+    headerText: valores.headerText || null,
+    headerImageUrl: valores.headerImageUrl || null,
+    titulo,
+  }, idToken)
+
 export const suscribirCampana = (campaignId, onChange) =>
   onSnapshot(doc(db, 'whatsappCampaigns', campaignId), (snap) => {
     if (snap.exists()) onChange({ id: snap.id, ...snap.data() })

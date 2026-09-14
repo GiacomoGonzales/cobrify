@@ -14829,6 +14829,9 @@ async function enviarPlantillaAConversacion({ convRef, conv, plantilla, bodyValu
     ultimoMensajeAt: ahora,
     ultimaDireccion: 'saliente',
     ultimaPlantillaAt: ahora,
+    // Cuál fue: la campaña a clientes lo usa para no repetirle la misma
+    // plantilla a quien ya la recibió si se relanza.
+    ultimaPlantilla: plantilla.name,
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true })
   return waMessageId
@@ -14956,6 +14959,190 @@ export const sendWhatsappCampaign = onRequest(
       console.log(`[WhatsApp] Campaña ${campRef.id}: ${enviados} enviados, ${fallidos} fallidos, ${omitidos} omitidos`)
     } catch (error) {
       console.error('[WhatsApp] Error en campaña:', error.message)
+      if (!res.headersSent) res.status(500).json({ error: error.message })
+    }
+  }
+)
+
+/**
+ * Campaña a TODOS los clientes de Cobrify, por el teléfono de su ficha.
+ *
+ * La campaña de arriba solo llega a quien ya tiene conversación en la bandeja.
+ * Esta sale de `businesses` (contactPhone, whatsapp y phone: el primer celular
+ * peruano que haya ahí, con la misma limpieza que el índice de teléfonos) y le
+ * CREA la conversación a quien no la tenía, ya vinculada a su negocio, para
+ * que la respuesta caiga en la bandeja con ficha.
+ *
+ * Nació el 13-set-2026, cuando se bloqueó el número viejo de WhatsApp y había
+ * que avisarle a todos "escríbenos al nuevo": el mensaje les llega DESDE el
+ * número nuevo, así que solo tienen que responder o guardarlo.
+ *
+ * Reglas:
+ *  - Un mensaje por negocio, aunque la ficha tenga dos celulares.
+ *  - Clientes de reseller fuera (subscriptions.resellerId) salvo que se pida:
+ *    tratan con su reseller, no con Cobrify.
+ *  - Se respeta la baja voluntaria (optOut).
+ *  - Se puede relanzar sin repetir: quien ya recibió ESTA plantilla en los
+ *    últimos 7 días se salta (queda como omitido). Así se continúa si Meta
+ *    corta por el límite diario de la cuenta o si la función se agota.
+ *  - `modo: 'contar'` no manda nada: dice cuántos serían.
+ */
+const CAMPANA_CLIENTES_MAX_POR_CORRIDA = 400
+const CAMPANA_CLIENTES_TOPE_MS = 500 * 1000 // la función muere a los 540 s
+const CAMPANA_NO_REPETIR_MS = 7 * 24 * 60 * 60 * 1000
+
+async function clientesParaCampana({ incluirResellers = false } = {}) {
+  const [negocios, suscripciones] = await Promise.all([
+    db.collection('businesses').select('contactPhone', 'whatsapp', 'phone', 'businessName').get(),
+    db.collection('subscriptions').select('resellerId').get(),
+  ])
+  const deReseller = new Set()
+  for (const s of suscripciones.docs) if (s.data().resellerId) deReseller.add(s.id)
+
+  const porCelular = new Map() // cel -> { businessId, businessName }
+  let sinCelular = 0
+  let resellersFuera = 0
+  for (const docSnap of negocios.docs) {
+    if (!incluirResellers && deReseller.has(docSnap.id)) { resellersFuera++; continue }
+    const d = docSnap.data()
+    // El WhatsApp del dueño primero: es el que contesta. Los otros dos son el
+    // teléfono del ticket, que a veces es el mismo y a veces un fijo.
+    const [cel] = [...celularesDe(d.contactPhone), ...celularesDe(d.whatsapp), ...celularesDe(d.phone)]
+    if (!cel) { sinCelular++; continue }
+    // Un número compartido entre dos negocios recibe UN mensaje.
+    if (!porCelular.has(cel)) porCelular.set(cel, { businessId: docSnap.id, businessName: d.businessName || null })
+  }
+  return {
+    lista: [...porCelular.entries()].map(([cel, v]) => ({ cel, waId: `51${cel}`, ...v })),
+    negocios: negocios.size,
+    sinCelular,
+    resellersFuera,
+  }
+}
+
+export const sendWhatsappCampaignToClients = onRequest(
+  {
+    region: 'us-central1', timeoutSeconds: 540, memory: '512MiB', cors: true,
+    secrets: ['WHATSAPP_TOKEN'],
+  },
+  async (req, res) => {
+    setCorsHeaders(res)
+    if (req.method === 'OPTIONS') { res.status(204).send(''); return }
+    if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return }
+    try {
+      const uid = await autorizarAdminWa(req, res)
+      if (!uid) return
+
+      const {
+        modo = 'contar', templateName, language, bodyValues = [], headerText = null, headerImageUrl = null,
+        titulo = '', incluirResellers = false,
+      } = req.body || {}
+
+      const audiencia = await clientesParaCampana({ incluirResellers: incluirResellers === true })
+      if (modo === 'contar') {
+        res.status(200).json({
+          success: true,
+          total: audiencia.lista.length,
+          negocios: audiencia.negocios,
+          sinCelular: audiencia.sinCelular,
+          resellersFuera: audiencia.resellersFuera,
+        })
+        return
+      }
+
+      if (!templateName) { res.status(400).json({ error: 'Falta la plantilla' }); return }
+      const plantilla = await leerPlantilla(templateName, language)
+      if (!plantilla || plantilla.status !== 'APPROVED') {
+        res.status(400).json({ error: 'La plantilla no existe o no esta aprobada' }); return
+      }
+      const cuenta = await cuentaWaActiva()
+      if (!cuenta) { res.status(400).json({ error: 'No hay una cuenta de WhatsApp activa' }); return }
+      if (!audiencia.lista.length) { res.status(400).json({ error: 'No hay clientes con celular en sus fichas' }); return }
+
+      const lista = audiencia.lista.slice(0, CAMPANA_CLIENTES_MAX_POR_CORRIDA)
+      const campRef = db.collection('whatsappCampaigns').doc()
+      await campRef.set({
+        titulo: titulo || `${plantilla.name} · todos los clientes`,
+        plantilla: plantilla.name,
+        alcance: 'clientes',
+        total: lista.length,
+        // Lo que no entra en esta corrida: se relanza y sigue con los que faltan.
+        pendientes: audiencia.lista.length - lista.length,
+        enviados: 0, fallidos: 0, omitidos: 0,
+        estado: 'en_curso',
+        creadaPor: uid,
+        createdAt: FieldValue.serverTimestamp(),
+      })
+      // Se responde YA con el id: la pantalla sigue el progreso por suscripción
+      // mientras esta función sigue enviando.
+      res.status(202).json({
+        success: true, campaignId: campRef.id, total: lista.length, pendientes: audiencia.lista.length - lista.length,
+      })
+
+      const inicio = Date.now()
+      const desde = inicio - CAMPANA_NO_REPETIR_MS
+      let enviados = 0, fallidos = 0, omitidos = 0, procesados = 0
+      for (const c of lista) {
+        if (Date.now() - inicio > CAMPANA_CLIENTES_TOPE_MS) break
+        procesados++
+        const convId = idConversacionWa(cuenta.id, c.waId)
+        const convRef = db.collection('whatsappConversations').doc(convId)
+        try {
+          const snap = await convRef.get()
+          let conv = snap.exists ? snap.data() : null
+          if (conv?.optOut === true) { omitidos++; continue }
+          const yaLaRecibio = conv?.ultimaPlantilla === plantilla.name
+            && (conv.ultimaPlantillaAt?.toMillis?.() || 0) > desde
+          if (yaLaRecibio) { omitidos++; continue }
+
+          if (!conv) {
+            // Conversación nueva, ya vinculada al negocio: la respuesta cae en
+            // la bandeja con ficha, como si el cliente hubiera escrito primero.
+            conv = {
+              phoneNumberId: cuenta.id,
+              wabaId: cuenta.wabaId || null,
+              displayNumber: cuenta.displayNumber || null,
+              waId: c.waId,
+              telefono: c.waId,
+              nombre: c.businessName || null,
+              estado: 'abierta',
+              sinLeer: 0,
+              linkAttempted: true,
+              linkedBusinessId: c.businessId,
+              linkedBusinessName: c.businessName || null,
+              linkedBy: 'auto',
+              createdAt: FieldValue.serverTimestamp(),
+            }
+            await convRef.set(conv, { merge: true })
+          }
+
+          const nombre = conv.nombre || c.businessName || ''
+          const negocio = conv.linkedBusinessName || c.businessName || ''
+          const valores = bodyValues.map(v => String(v ?? '')
+            .replace(/\{nombre\}/gi, nombre).replace(/\{negocio\}/gi, negocio))
+
+          await enviarPlantillaAConversacion({
+            convRef, conv, plantilla, bodyValues: valores, headerText, headerImageUrl, uid, campaignId: campRef.id,
+          })
+          enviados++
+          await campRef.collection('destinatarios').doc(convId).set({
+            estado: 'enviado', businessId: c.businessId, at: FieldValue.serverTimestamp(),
+          })
+        } catch (e) {
+          fallidos++
+          await campRef.collection('destinatarios').doc(convId).set({
+            estado: 'fallido', businessId: c.businessId, error: String(e.metaDetails || e.message), at: FieldValue.serverTimestamp(),
+          })
+        }
+        await campRef.set({ enviados, fallidos, omitidos }, { merge: true })
+        // Pausa entre envíos: amable con el límite de Meta y con la cuenta.
+        await new Promise(r => setTimeout(r, 300))
+      }
+      const pendientes = audiencia.lista.length - procesados
+      await campRef.set({ estado: 'terminada', pendientes, finishedAt: FieldValue.serverTimestamp() }, { merge: true })
+      console.log(`[WhatsApp] Campaña a clientes ${campRef.id}: ${enviados} enviados, ${fallidos} fallidos, ${omitidos} omitidos, ${pendientes} pendientes`)
+    } catch (error) {
+      console.error('[WhatsApp] Error en campaña a clientes:', error.message)
       if (!res.headersSent) res.status(500).json({ error: error.message })
     }
   }

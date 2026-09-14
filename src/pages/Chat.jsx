@@ -78,6 +78,8 @@ import {
   guardarEtiquetas,
   idParaEtiqueta,
   enviarPlantilla,
+  contarClientesParaCampana,
+  enviarCampanaAClientes,
   enviarCampana,
   suscribirCampana,
   revertirBaja,
@@ -152,6 +154,10 @@ export default function Chat() {
   const [selectorAbierto, setSelectorAbierto] = useState(false)
   const [campanaAbierta, setCampanaAbierta] = useState(false)
   const [campanaEnCurso, setCampanaEnCurso] = useState(null)
+  // Campaña a TODOS los clientes, por el teléfono de su cuenta (tengan o no
+  // conversación aquí). null = cerrada; un número = abierta con esa cantidad.
+  const [campanaClientes, setCampanaClientes] = useState(null)
+  const [contandoClientes, setContandoClientes] = useState(false)
   // Filtro rapido: a quienes les escribimos y no contestaron en 7 dias.
   const [soloSinRespuesta, setSoloSinRespuesta] = useState(false)
   // Configuracion del chat (perfil, automaticos, rapidas) en el panel principal.
@@ -501,6 +507,22 @@ export default function Chat() {
     return suscribirCampana(campanaEnCurso.id, setCampanaEnCurso)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campanaEnCurso?.id])
+
+  // Se cuenta antes de abrir el selector: así el botón dice "Enviar a N" con
+  // el número real y no se dispara una campaña a ciegas.
+  const abrirCampanaClientes = async () => {
+    setContandoClientes(true)
+    try {
+      const idToken = await getAuth().currentUser?.getIdToken()
+      const r = await contarClientesParaCampana(idToken)
+      if (!r.total) { toast.error('No hay clientes con celular en sus fichas'); return }
+      setCampanaClientes(r.total)
+    } catch (e) {
+      toast.error(e.message || 'No se pudo contar a los clientes')
+    } finally {
+      setContandoClientes(false)
+    }
+  }
 
   const activa = useMemo(
     () => conversaciones.find((c) => c.id === activaId) || null,
@@ -1107,6 +1129,15 @@ export default function Chat() {
                 Campaña a {filtradas.length}
               </button>
             )}
+            <button
+              onClick={abrirCampanaClientes}
+              disabled={contandoClientes}
+              className={`${filtradas.length > 0 ? '' : 'ml-auto '}inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60`}
+              title="Enviar una plantilla a todos los clientes de Cobrify, por el celular de su ficha, tengan o no conversación aquí"
+            >
+              <Megaphone className="w-3 h-3" />
+              {contandoClientes ? 'Contando…' : 'Todos los clientes'}
+            </button>
           </div>
 
           {campanaEnCurso && (
@@ -2274,6 +2305,25 @@ export default function Chat() {
             setCampanaEnCurso({ id: r.campaignId, titulo: tituloCamp, total: filtradas.length, enviados: 0 })
             setCampanaAbierta(false)
             toast.success('Campaña en marcha')
+          }}
+        />
+      )}
+
+      {campanaClientes != null && (
+        <SelectorPlantilla
+          titulo="Campaña a todos los clientes"
+          modoCampana
+          destinatarios={campanaClientes}
+          onCerrar={() => setCampanaClientes(null)}
+          onEnviar={async (plantilla, valores) => {
+            const idToken = await getAuth().currentUser?.getIdToken()
+            const tituloCamp = `${plantilla.name} · todos los clientes`
+            const r = await enviarCampanaAClientes(plantilla, valores, tituloCamp, idToken)
+            setCampanaEnCurso({ id: r.campaignId, titulo: tituloCamp, total: r.total || campanaClientes, enviados: 0 })
+            setCampanaClientes(null)
+            toast.success(r.pendientes
+              ? `Campaña en marcha: ${r.total} ahora y ${r.pendientes} quedan para una segunda vuelta`
+              : 'Campaña en marcha')
           }}
         />
       )}

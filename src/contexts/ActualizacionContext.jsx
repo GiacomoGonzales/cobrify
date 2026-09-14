@@ -7,6 +7,12 @@ import { db } from '@/lib/firebase'
 
 const isNative = Capacitor.isNativePlatform()
 
+// La ficha de Cobrify en App Store, para cuando appConfig/version no trae
+// iosUrl. Antes un iosUrl vacío apagaba la franja en el iPhone sin que nadie
+// lo notara. (Android no necesita esto: market:// con el id de la app sirve
+// para Cobrify y para cada APK de reseller.)
+const TIENDA_IOS = 'itms-apps://apps.apple.com/pe/app/cobrify-peru/id6756195760'
+
 /**
  * HAY UNA VERSIÓN NUEVA: el estado, sin pantalla.
  *
@@ -38,6 +44,7 @@ const SIN_ACTUALIZACION = {
   hay: false,
   tipo: null,
   actualizando: false,
+  obligatoria: null,
   actualizar: () => {},
   descartarTienda: () => {},
 }
@@ -49,6 +56,9 @@ export function ActualizacionProvider({ children }) {
   const [storeUpdate, setStoreUpdate] = useState(null)
   // La franja de la tienda se puede cerrar; el aviso del menu NO se va por eso.
   const [franjaCerrada, setFranjaCerrada] = useState(false)
+  // El candado (solo app): la instalada quedó por debajo de la mínima que fija
+  // el admin. { build, instalado, url, platform } — lo pinta ActualizacionObligatoria.
+  const [obligatoria, setObligatoria] = useState(null)
 
   const {
     needRefresh: [needRefresh],
@@ -120,16 +130,21 @@ export function ActualizacionProvider({ children }) {
         const cfg = snap.data()
         const platform = Capacitor.getPlatform() // 'android' | 'ios'
         const latest = Number(platform === 'ios' ? cfg.iosBuild : cfg.androidBuild) || 0
+        const minima = Number(platform === 'ios' ? cfg.iosMinBuild : cfg.androidMinBuild) || 0
         const current = Number(info.build) || 0
+        const url = platform === 'ios'
+          ? (cfg.iosUrl || TIENDA_IOS)
+          : (cfg.androidUrl || `market://details?id=${info.id}`)
         if (latest > current) {
-          const url = platform === 'ios'
-            ? (cfg.iosUrl || '')
-            : (cfg.androidUrl || `market://details?id=${info.id}`)
-          if (url) {
-            setStoreUpdate({ build: latest, url, platform })
-            setFranjaCerrada(!!sessionStorage.getItem(`storeUpdateDismissed_${platform}_${latest}`))
-          }
+          setStoreUpdate({ build: latest, url, platform })
+          setFranjaCerrada(!!sessionStorage.getItem(`storeUpdateDismissed_${platform}_${latest}`))
         }
+        // EL CANDADO: por debajo de la mínima la app se cierra hasta actualizar.
+        // Solo si el sistema dijo qué build es: con 0 no se encierra a nadie
+        // por un dato que no llegó.
+        setObligatoria(current > 0 && minima > current
+          ? { build: minima, instalado: current, url, platform }
+          : null)
       } catch (e) {
         console.warn('No se pudo verificar la versión publicada de la app:', e)
       }
@@ -180,10 +195,11 @@ export function ActualizacionProvider({ children }) {
   }, [actualizando, updateServiceWorker])
 
   const abrirTienda = useCallback(() => {
-    if (!storeUpdate?.url) return
+    const url = storeUpdate?.url || obligatoria?.url
+    if (!url) return
     // En Capacitor, navegar a market:// / itms-apps: dispara el intent del sistema
-    window.location.href = storeUpdate.url
-  }, [storeUpdate])
+    window.location.href = url
+  }, [storeUpdate, obligatoria])
 
   // Cerrar la franja de la tienda no la apaga para siempre: la app vieja SÍ es
   // un problema real. Solo se calla hasta la próxima vez que abra la app.
@@ -193,20 +209,21 @@ export function ActualizacionProvider({ children }) {
     setFranjaCerrada(true)
   }, [storeUpdate])
 
-  const hayTienda = isNative && !!storeUpdate
+  const hayTienda = isNative && (!!storeUpdate || !!obligatoria)
   const hayWeb = !isNative && !!needRefresh
 
   const valor = useMemo(() => ({
     hay: hayWeb || hayTienda,
     tipo: hayTienda ? 'tienda' : (hayWeb ? 'web' : null),
     actualizando,
+    obligatoria,
     actualizar: hayTienda ? abrirTienda : actualizarWeb,
     descartarTienda,
     // La franja de la app: si ya la cerró en esta sesión, no vuelve hasta que
     // abra la app de nuevo. El aviso del menú se queda igual.
     franjaDeTienda: hayTienda && !franjaCerrada,
-    plataformaTienda: storeUpdate?.platform || null,
-  }), [hayWeb, hayTienda, actualizando, abrirTienda, actualizarWeb, descartarTienda, franjaCerrada, storeUpdate])
+    plataformaTienda: storeUpdate?.platform || obligatoria?.platform || null,
+  }), [hayWeb, hayTienda, actualizando, obligatoria, abrirTienda, actualizarWeb, descartarTienda, franjaCerrada, storeUpdate])
 
   return (
     <ActualizacionContext.Provider value={valor}>

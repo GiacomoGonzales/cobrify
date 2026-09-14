@@ -21,12 +21,37 @@ import { db } from '@/lib/firebase'
 
 const REF = () => doc(db, 'appConfig', 'mantenimiento')
 
-export const MANTENIMIENTO_APAGADO = { activo: false, mensaje: '' }
+export const MANTENIMIENTO_APAGADO = { activo: false, mensaje: '', soloAppsAnterioresA: null }
 
+/**
+ * `soloAppsAnterioresA: { ios, android }` hace el cierre SELECTIVO: la web
+ * pasa, y la app instalada pasa si su build llega al mínimo. La app vieja que
+ * no conoce este campo se cierra igual — y ese es justamente el uso: sacar de
+ * circulación a las versiones sin actualizar (nació el 13-set-2026, cuando las
+ * apps viejas seguían mostrando un número de WhatsApp que ya no existía).
+ */
 const normalizar = snap => {
   if (!snap.exists()) return MANTENIMIENTO_APAGADO
   const d = snap.data()
-  return { activo: d.activo === true, mensaje: d.mensaje || '' }
+  const s = d.soloAppsAnterioresA
+  const selectivo = s && (Number(s.ios) > 0 || Number(s.android) > 0)
+  return {
+    activo: d.activo === true,
+    mensaje: d.mensaje || '',
+    soloAppsAnterioresA: selectivo ? { ios: Number(s.ios) || 0, android: Number(s.android) || 0 } : null,
+  }
+}
+
+/**
+ * ¿Le toca a ESTA sesión? Con `build` desconocido (null, o el sistema aún no
+ * contestó) no se cierra a nadie: es peor encerrar por un dato que no llegó.
+ */
+export function mantenimientoAplica(m, { plataforma, build } = {}) {
+  if (!m?.activo) return false
+  if (!m.soloAppsAnterioresA) return true
+  if (!plataforma || plataforma === 'web') return false
+  const minimo = m.soloAppsAnterioresA[plataforma] || 0
+  return minimo > 0 && Number(build) > 0 && Number(build) < minimo
 }
 
 /** Estado actual, una sola vez. */
@@ -50,10 +75,17 @@ export function escucharMantenimiento(alCambiar) {
 }
 
 /** Prender o apagar. Solo un admin puede escribir acá (reglas de Firestore). */
-export async function guardarMantenimiento({ activo, mensaje = '' }) {
+export async function guardarMantenimiento({ activo, mensaje = '', soloAppsAnterioresA = null }) {
   await setDoc(
     REF(),
-    { activo: !!activo, mensaje: mensaje.trim(), actualizadoEn: serverTimestamp() },
+    {
+      activo: !!activo,
+      mensaje: mensaje.trim(),
+      soloAppsAnterioresA: soloAppsAnterioresA
+        ? { ios: Number(soloAppsAnterioresA.ios) || 0, android: Number(soloAppsAnterioresA.android) || 0 }
+        : null,
+      actualizadoEn: serverTimestamp(),
+    },
     { merge: true }
   )
 }

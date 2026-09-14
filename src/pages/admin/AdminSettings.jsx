@@ -12,8 +12,11 @@ import {
   Image as ImageIcon, Tag, EyeOff } from 'lucide-react'
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '@/lib/firebase'
-import { Boton, Seccion, Tabla, Th, Td, Fila, FilaVacia } from '@/components/admin/ui'
+import { Boton, Seccion, Tabla, Th, Td, Fila, FilaVacia, Campo, Entrada, AreaTexto, Casilla } from '@/components/admin/ui'
 import { leerMantenimiento, guardarMantenimiento, MANTENIMIENTO_APAGADO } from '@/services/mantenimientoService'
+import { leerAviso, guardarAviso, AVISO_APAGADO } from '@/services/avisoService'
+import { leerVersionPublicada, guardarVersionPublicada, VERSION_VACIA } from '@/services/appVersionService'
+import { WHATSAPP_COBRIFY_LEGIBLE } from '@/data/contacto'
 import { VERSION, COMMIT, versionDetallada } from '@/utils/versionApp'
 /**
  * Configuración del admin: tres pestañas.
@@ -242,6 +245,10 @@ function TablaDePlanes({ filas, vacio = 'Sin planes' }) {
 function SystemSection() {
   const [estado, setEstado] = useState(MANTENIMIENTO_APAGADO)
   const [mensaje, setMensaje] = useState('')
+  // Cierre selectivo: solo las apps instaladas con build por debajo de estos.
+  const [soloApps, setSoloApps] = useState(false)
+  const [minIos, setMinIos] = useState('')
+  const [minAndroid, setMinAndroid] = useState('')
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState(null)
@@ -250,17 +257,26 @@ function SystemSection() {
     leerMantenimiento().then(m => {
       setEstado(m)
       setMensaje(m.mensaje)
+      setSoloApps(!!m.soloAppsAnterioresA)
+      setMinIos(m.soloAppsAnterioresA?.ios ? String(m.soloAppsAnterioresA.ios) : '')
+      setMinAndroid(m.soloAppsAnterioresA?.android ? String(m.soloAppsAnterioresA.android) : '')
       setCargando(false)
     })
   }, [])
 
-  async function cambiar(activo) {
-    if (activo && !window.confirm('¿Cerrar Cobrify a todos los clientes ahora mismo?\n\nDejan de poder facturar hasta que lo apagues. Tú sigues entrando al panel.')) return
+  const selectivo = () => (soloApps && (Number(minIos) > 0 || Number(minAndroid) > 0)
+    ? { ios: Number(minIos) || 0, android: Number(minAndroid) || 0 }
+    : null)
+  const hayCambios = mensaje !== estado.mensaje
+    || JSON.stringify(selectivo()) !== JSON.stringify(estado.soloAppsAnterioresA)
+
+  async function guardar(activo) {
     setGuardando(true)
     setError(null)
     try {
-      await guardarMantenimiento({ activo, mensaje })
-      setEstado({ activo, mensaje: mensaje.trim() })
+      const soloAppsAnterioresA = selectivo()
+      await guardarMantenimiento({ activo, mensaje, soloAppsAnterioresA })
+      setEstado({ activo, mensaje: mensaje.trim(), soloAppsAnterioresA })
     } catch (e) {
       setError(e.message || 'No se pudo guardar')
     } finally {
@@ -268,17 +284,15 @@ function SystemSection() {
     }
   }
 
-  async function guardarMensaje() {
-    setGuardando(true)
-    setError(null)
-    try {
-      await guardarMantenimiento({ activo: estado.activo, mensaje })
-      setEstado(e => ({ ...e, mensaje: mensaje.trim() }))
-    } catch (e) {
-      setError(e.message || 'No se pudo guardar')
-    } finally {
-      setGuardando(false)
+  async function cambiar(activo) {
+    if (activo) {
+      const s = selectivo()
+      const pregunta = s
+        ? `¿Cerrar SOLO las apps sin actualizar?\n\nSe cierran las apps con build menor a ${[s.ios && `${s.ios} en iPhone`, s.android && `${s.android} en Android`].filter(Boolean).join(' y ')}. La web y las apps al día siguen funcionando.`
+        : '¿Cerrar Cobrify a todos los clientes ahora mismo?\n\nDejan de poder facturar hasta que lo apagues. Tú sigues entrando al panel.'
+      if (!window.confirm(pregunta)) return
     }
+    await guardar(activo)
   }
 
   return (
@@ -294,12 +308,18 @@ function SystemSection() {
             <div className="flex items-center justify-between gap-4 py-1">
               <div>
                 <p className="font-medium text-gray-900">
-                  {estado.activo ? 'Cobrify está cerrado' : 'Cobrify está abierto'}
+                  {!estado.activo
+                    ? 'Cobrify está abierto'
+                    : estado.soloAppsAnterioresA
+                      ? 'Cerrado solo para las apps sin actualizar'
+                      : 'Cobrify está cerrado'}
                 </p>
                 <p className="text-gray-500">
-                  {estado.activo
-                    ? 'Tus clientes ven la pantalla de mantenimiento y no pueden facturar.'
-                    : 'Todo funciona con normalidad.'}
+                  {!estado.activo
+                    ? 'Todo funciona con normalidad.'
+                    : estado.soloAppsAnterioresA
+                      ? 'La web y las apps al día siguen funcionando; las apps viejas ven la pantalla de mantenimiento.'
+                      : 'Tus clientes ven la pantalla de mantenimiento y no pueden facturar.'}
                 </p>
               </div>
               <Boton
@@ -314,26 +334,50 @@ function SystemSection() {
 
             <div className="mt-4 border-t border-gray-100 pt-4">
               <label className="block font-medium text-gray-900">Mensaje para el cliente</label>
-              <p className="mb-2 text-gray-500">Si lo dejas vacío, se muestra un aviso genérico.</p>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={mensaje}
-                  onChange={e => setMensaje(e.target.value)}
-                  maxLength={200}
-                  placeholder="Volvemos a las 3 de la tarde."
-                  className="h-8 flex-1 rounded-md border border-gray-300 px-2.5 text-[12.5px] focus:outline-none focus:ring-2 focus:ring-primary-500/40"
-                />
-                <Boton tamano="sm" onClick={guardarMensaje} disabled={guardando || mensaje === estado.mensaje}>
-                  Guardar
-                </Boton>
-              </div>
+              <p className="mb-2 text-gray-500">
+                Si lo dejas vacío, se muestra un aviso genérico. Si cierras apps viejas, pon aquí el número de WhatsApp nuevo:
+                el enlace de esa pantalla, en las apps viejas, apunta al número que tenían grabado.
+              </p>
+              <input
+                type="text"
+                value={mensaje}
+                onChange={e => setMensaje(e.target.value)}
+                maxLength={300}
+                placeholder="Volvemos a las 3 de la tarde."
+                className="h-8 w-full rounded-md border border-gray-300 px-2.5 text-[12.5px] focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+              />
+            </div>
+
+            <div className="mt-4 border-t border-gray-100 pt-4 space-y-3">
+              <Casilla
+                etiqueta="Cerrar solo las apps sin actualizar"
+                ayuda="La web y las apps al día siguen abiertas. Se cierran las apps instaladas con un build menor al que pongas aquí; sirve para sacar de circulación una versión vieja. Las apps de antes del 4 de setiembre de 2026 no conocen el modo mantenimiento y no se cierran con esto."
+                checked={soloApps}
+                onChange={e => setSoloApps(e.target.checked)}
+              />
+              {soloApps && (
+                <div className="grid grid-cols-2 gap-3 pl-6">
+                  <Campo etiqueta="iPhone: cerrar builds menores a" ayuda="El build es el número entre paréntesis en el pie del menú de la app, p. ej. 4.48.0 (74).">
+                    <Entrada type="number" min="0" value={minIos} onChange={e => setMinIos(e.target.value)} placeholder="74" />
+                  </Campo>
+                  <Campo etiqueta="Android: cerrar builds menores a" ayuda="Pon el build de la versión que YA está publicada en Play Store, o los encierras sin salida.">
+                    <Entrada type="number" min="0" value={minAndroid} onChange={e => setMinAndroid(e.target.value)} placeholder="201" />
+                  </Campo>
+                </div>
+              )}
+              <Boton tamano="sm" onClick={() => guardar(estado.activo)} disabled={guardando || !hayCambios}>
+                {guardando ? 'Guardando…' : 'Guardar'}
+              </Boton>
             </div>
 
             {error && <p className="mt-3 text-red-600">{error}</p>}
           </>
         )}
       </Seccion>
+
+      <AvisoSection />
+
+      <VersionTiendasSection />
 
       <Seccion titulo="Información">
         <div className="space-y-1.5">
@@ -351,6 +395,226 @@ function SystemSection() {
   )
 }
 
+
+/**
+ * Aviso para todos los clientes (appConfig/aviso): una tarjeta arriba de la
+ * app, con botones de WhatsApp si lleva número. Ver avisoService.
+ *
+ * La primera vez el formulario ya viene con el aviso del cambio de número de
+ * WhatsApp (13-set-2026): solo hay que revisarlo y publicar.
+ */
+function AvisoSection() {
+  const [estado, setEstado] = useState(AVISO_APAGADO)
+  const [f, setF] = useState(AVISO_APAGADO)
+  const [cargando, setCargando] = useState(true)
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    leerAviso().then(a => {
+      setEstado(a)
+      setF(a.id || a.titulo || a.mensaje ? a : {
+        ...a,
+        titulo: 'Cambiamos de número de WhatsApp',
+        mensaje: `Desde ahora atendemos por el ${WHATSAPP_COBRIFY_LEGIBLE}. Guárdalo en tus contactos: el número anterior ya no funciona.`,
+        whatsapp: WHATSAPP_COBRIFY_LEGIBLE,
+      })
+      setCargando(false)
+    })
+  }, [])
+
+  const set = (k, v) => setF(p => ({ ...p, [k]: v }))
+  const cambioTexto = ['titulo', 'mensaje', 'whatsapp', 'enlace']
+    .some(k => (f[k] || '').trim() !== (estado[k] || '').trim())
+  const hayCambios = cambioTexto || f.paraResellers !== estado.paraResellers
+
+  async function guardar(activo) {
+    if (activo && !(f.titulo.trim() || f.mensaje.trim())) {
+      setError('Escribe al menos un título o un mensaje.')
+      return
+    }
+    setGuardando(true)
+    setError(null)
+    try {
+      // Con texto nuevo cambia el id: lo vuelven a ver quienes cerraron el anterior.
+      await guardarAviso({ ...f, activo, renovar: activo && (cambioTexto || !estado.id) })
+      const nuevo = await leerAviso()
+      setEstado(nuevo)
+      setF(nuevo)
+    } catch (e) {
+      setError(e.message || 'No se pudo guardar')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <Seccion
+      titulo="Aviso para todos los clientes"
+      descripcion="Una tarjeta arriba de la app, en la web y en las apps al día. Cada cliente la ve hasta que la cierra; si cambias el texto, la vuelve a ver."
+    >
+      {cargando ? (
+        <p className="py-2 text-gray-500">Cargando…</p>
+      ) : (
+        <>
+          <div className="flex items-center justify-between gap-4 py-1">
+            <div>
+              <p className="font-medium text-gray-900">
+                {estado.activo ? 'El aviso está publicado' : 'No hay aviso publicado'}
+              </p>
+              <p className="text-gray-500">
+                {estado.activo
+                  ? `Lo ven los clientes al entrar${estado.paraResellers ? ', también los de resellers' : ' (los de resellers no)'}.`
+                  : 'Revisa el texto y publícalo.'}
+              </p>
+            </div>
+            <Boton
+              variante={estado.activo ? 'peligro' : 'primario'}
+              tamano="sm"
+              onClick={() => guardar(!estado.activo)}
+              disabled={guardando}
+            >
+              {guardando ? 'Guardando…' : estado.activo ? 'Quitar' : 'Publicar'}
+            </Boton>
+          </div>
+
+          <div className="mt-4 border-t border-gray-100 pt-4 space-y-3">
+            <Campo etiqueta="Título">
+              <Entrada value={f.titulo} onChange={e => set('titulo', e.target.value)} maxLength={80} placeholder="Cambiamos de número de WhatsApp" />
+            </Campo>
+            <Campo etiqueta="Mensaje">
+              <AreaTexto rows={3} value={f.mensaje} onChange={e => set('mensaje', e.target.value)} maxLength={400} />
+            </Campo>
+            <div className="grid grid-cols-2 gap-3">
+              <Campo etiqueta="Número de WhatsApp (opcional)" ayuda="Agrega los botones Escribir y Copiar número.">
+                <Entrada value={f.whatsapp} onChange={e => set('whatsapp', e.target.value)} placeholder={WHATSAPP_COBRIFY_LEGIBLE} />
+              </Campo>
+              <Campo etiqueta="Enlace (opcional)" ayuda="Agrega un botón Ver más.">
+                <Entrada value={f.enlace} onChange={e => set('enlace', e.target.value)} placeholder="https://…" />
+              </Campo>
+            </div>
+            <Casilla
+              etiqueta="Mostrar también a los clientes de resellers"
+              ayuda="Apagado por defecto: ellos tratan con su reseller, no con Cobrify."
+              checked={f.paraResellers}
+              onChange={e => set('paraResellers', e.target.checked)}
+            />
+            {estado.activo && (
+              <Boton tamano="sm" onClick={() => guardar(true)} disabled={guardando || !hayCambios}>
+                Guardar cambios
+              </Boton>
+            )}
+          </div>
+          {error && <p className="mt-3 text-red-600">{error}</p>}
+        </>
+      )}
+    </Seccion>
+  )
+}
+
+/**
+ * Versión de la app en las tiendas (appConfig/version): la última publicada
+ * (franja "Nueva versión disponible") y la mínima aceptada (el candado: la app
+ * se cierra hasta actualizar). Ver appVersionService.
+ */
+function VersionTiendasSection() {
+  const [estado, setEstado] = useState(VERSION_VACIA)
+  const [f, setF] = useState(VERSION_VACIA)
+  const [cargando, setCargando] = useState(true)
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    leerVersionPublicada().then(v => {
+      setEstado(v)
+      setF(v)
+      setCargando(false)
+    })
+  }, [])
+
+  const set = (k, v) => setF(p => ({ ...p, [k]: v }))
+  const hayCambios = Object.keys(VERSION_VACIA).some(k => (f[k] || '') !== (estado[k] || ''))
+
+  async function guardar() {
+    const subeMinimo = (Number(f.iosMinBuild) || 0) > (Number(estado.iosMinBuild) || 0)
+      || (Number(f.androidMinBuild) || 0) > (Number(estado.androidMinBuild) || 0)
+    if (subeMinimo && !window.confirm('Vas a subir el build mínimo.\n\nLas apps instaladas por debajo de ese número se cierran con "Actualiza para seguir" hasta que actualicen. Asegúrate de que esa versión ya esté publicada en la tienda.')) return
+    setGuardando(true)
+    setError(null)
+    try {
+      await guardarVersionPublicada(f)
+      const nuevo = await leerVersionPublicada()
+      setEstado(nuevo)
+      setF(nuevo)
+    } catch (e) {
+      setError(e.message || 'No se pudo guardar')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <Seccion
+      titulo="Versión de la app en las tiendas"
+      descripcion="Lo que la app instalada compara al abrir. El build es el número entre paréntesis en el pie del menú de la app, p. ej. iPhone 4.48.0 (74)."
+      acciones={(
+        <Boton tamano="sm" variante="primario" onClick={guardar} disabled={guardando || !hayCambios}>
+          {guardando ? 'Guardando…' : 'Guardar'}
+        </Boton>
+      )}
+    >
+      {cargando ? (
+        <p className="py-2 text-gray-500">Cargando…</p>
+      ) : (
+        <div className="space-y-4">
+          <div>
+            <p className="font-medium text-gray-900">Última publicada</p>
+            <p className="mb-2 text-gray-500">
+              Si la instalada es más vieja, la app muestra la franja "Nueva versión disponible" con el botón a la tienda.
+              Se puede cerrar, pero vuelve cada vez que abren la app.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <Campo etiqueta="iPhone (build)">
+                <Entrada type="number" min="0" value={f.iosBuild} onChange={e => set('iosBuild', e.target.value)} placeholder="74" />
+              </Campo>
+              <Campo etiqueta="Android (build)">
+                <Entrada type="number" min="0" value={f.androidBuild} onChange={e => set('androidBuild', e.target.value)} placeholder="201" />
+              </Campo>
+            </div>
+          </div>
+          <div>
+            <p className="font-medium text-gray-900">Mínima obligatoria (el candado)</p>
+            <p className="mb-2 text-gray-500">
+              Por debajo de este build la app se cierra con "Actualiza para seguir" y no hay forma de saltárselo. Vacío = sin candado.
+              Solo lo obedecen las apps compiladas después del 14 de setiembre de 2026; las anteriores no lo conocen.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <Campo etiqueta="iPhone (build mínimo)">
+                <Entrada type="number" min="0" value={f.iosMinBuild} onChange={e => set('iosMinBuild', e.target.value)} placeholder="Sin candado" />
+              </Campo>
+              <Campo etiqueta="Android (build mínimo)">
+                <Entrada type="number" min="0" value={f.androidMinBuild} onChange={e => set('androidMinBuild', e.target.value)} placeholder="Sin candado" />
+              </Campo>
+            </div>
+          </div>
+          <div>
+            <p className="font-medium text-gray-900">Enlaces a la tienda (opcional)</p>
+            <p className="mb-2 text-gray-500">Si los dejas vacíos, el botón abre la ficha de Cobrify en App Store o Play Store.</p>
+            <div className="grid grid-cols-2 gap-3">
+              <Campo etiqueta="App Store">
+                <Entrada value={f.iosUrl} onChange={e => set('iosUrl', e.target.value)} placeholder="itms-apps://apps.apple.com/…" />
+              </Campo>
+              <Campo etiqueta="Play Store">
+                <Entrada value={f.androidUrl} onChange={e => set('androidUrl', e.target.value)} placeholder="market://details?id=…" />
+              </Campo>
+            </div>
+          </div>
+          {error && <p className="text-red-600">{error}</p>}
+        </div>
+      )}
+    </Seccion>
+  )
+}
 
 function MaintenanceSection() {
   return (
