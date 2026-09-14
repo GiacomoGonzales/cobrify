@@ -1019,6 +1019,15 @@ Gracias por tu preferencia.`
     const deletedId = deletingInvoice.id
     setIsDeleting(true)
     try {
+      // Eliminar deshace la venta igual que anularla: devuelve el stock (con lotes,
+      // series y variantes) y los insumos, descuenta las métricas del vendedor y
+      // libera las notas de venta convertidas. Antes solo borraba el documento y el
+      // stock se perdía: Routek eliminó una boleta pendiente (14-set-2026), el
+      // producto quedó en cero y no pudo emitir la factura que la reemplazaba. Va
+      // ANTES de borrar: si algo falla, el comprobante sigue ahí y reintentar no
+      // duplica, porque la marca stockRestored lo frena.
+      await applySunatVoidSideEffects(deletingInvoice, { porEliminacion: true })
+
       // auditInfo → log inmutable en deletedInvoices (quién/cuándo/qué número)
       const result = await deleteInvoice(businessId, deletedId, {
         invoice: deletingInvoice,
@@ -1027,16 +1036,32 @@ Gracias por tu preferencia.`
       })
 
       if (result.success) {
-        toast.success('Factura eliminada exitosamente')
+        toast.success(`${deletingInvoice.number || 'Comprobante'} eliminado`)
+        // Las notas de venta que este comprobante había convertido ya quedaron
+        // libres en Firestore: reflejarlo en la lista sin recargarla.
+        const notasLiberadas = deletingInvoice.convertedFrom?.ids
+          || (deletingInvoice.convertedFrom?.id ? [deletingInvoice.convertedFrom.id] : [])
+        // Una NC eliminada deja su documento original como estaba: releer solo ese.
+        const original = deletingInvoice.documentType === 'nota_credito'
+          ? deletingInvoice.referencedInvoiceFirestoreId
+          : null
         setDeletingInvoice(null)
         // Quitarlo de la lista en memoria (evita recargar toda la colección)
-        setInvoices(prev => prev.filter(inv => inv.id !== deletedId))
+        setInvoices(prev => prev
+          .filter(inv => inv.id !== deletedId)
+          .map(inv => {
+            if (!notasLiberadas.includes(inv.id)) return inv
+            const rest = { ...inv }
+            delete rest.convertedTo
+            return rest
+          }))
+        if (original) refreshOneInvoice(original)
       } else {
         throw new Error(result.error)
       }
     } catch (error) {
       console.error('Error al eliminar factura:', error)
-      toast.error('Error al eliminar la factura. Inténtalo nuevamente.')
+      toast.error('No se pudo eliminar el comprobante. Inténtalo nuevamente.')
     } finally {
       setIsDeleting(false)
     }
@@ -1505,7 +1530,10 @@ Gracias por tu preferencia.`
   // la rechazaba después, el stock quedaba inflado sin reversa). Idempotente: lee el
   // comprobante FRESCO de Firestore y si stockRestored ya está marcado no aplica nada
   // (protege contra polling + reintento simultáneos y reintentos de bajas ya procesadas).
-  const applySunatVoidSideEffects = async (invoice) => {
+  // `porEliminacion`: la misma devolución cuando el comprobante se BORRA con
+  // Eliminar en vez de anularse. Deshacer una venta es igual por los dos caminos;
+  // cambian el nombre del movimiento en el kardex y los avisos.
+  const applySunatVoidSideEffects = async (invoice, { porEliminacion = false } = {}) => {
     if (!invoice) return
     const businessId = getBusinessId()
 
@@ -1530,12 +1558,13 @@ Gracias por tu preferencia.`
     // resolvió la diferencia con un conteo físico. El comprobante se anula igual;
     // lo único que no ocurre es el movimiento de stock.
     if (freshInvoice.skipStockRestore === true) {
-      toast.info('El comprobante quedó anulado. El stock no se movió: este comprobante está marcado para ajustarse por conteo.')
+      toast.info(`El comprobante quedó ${porEliminacion ? 'eliminado' : 'anulado'}. El stock no se movió: este comprobante está marcado para ajustarse por conteo.`)
       return
     }
 
     const series = invoice.series || invoice.number?.split('-')[0] || ''
-    const docTypeName = series.toUpperCase().startsWith('B') ? 'Boleta' : 'Factura'
+    const docTypeName = invoice.documentType === 'nota_venta' ? 'Nota de venta'
+      : series.toUpperCase().startsWith('B') ? 'Boleta' : 'Factura'
 
     if (invoice.documentType === 'nota_credito') {
       // Anular una NC va en la dirección CONTRARIA a anular una venta: no devuelve
@@ -1559,10 +1588,12 @@ Gracias por tu preferencia.`
       const invoiceMovements = movementsResult.success ? movementsResult.data : []
       const hasSaleMovements = invoiceMovements.some(m => m.type === 'sale')
 
-      if (!hasSaleMovements) {
+      // Un comprobante convertido desde notas de venta no descuenta nada: el stock
+      // salió con las notas, que siguen vigentes. No es un descuadre, no se avisa.
+      if (!hasSaleMovements && !invoice.convertedFrom) {
         console.warn(`⚠️ Venta ${invoice.number} sin movimientos de stock originales. Se omite la devolución para evitar descuadre.`)
         toast.warning(
-          'La venta original no registró movimientos de stock. No se devolvió stock al anular para evitar descuadre. Revisa el inventario manualmente.',
+          `La venta original no registró movimientos de stock. No se devolvió stock al ${porEliminacion ? 'eliminar' : 'anular'} para evitar descuadre. Revisa el inventario manualmente.`,
           8000
         )
       }
@@ -1620,16 +1651,21 @@ Gracias por tu preferencia.`
             await createStockMovement(businessId, {
               productId: item.productId,
               warehouseId: warehouseId,
-              type: 'entry',
+              // Al eliminar queda en el kardex como "Devolución por anulación"
+              // (void_return, el tipo que usa anular una nota de venta); la anulación
+              // SUNAT se sigue registrando como entrada.
+              type: porEliminacion ? 'void_return' : 'entry',
               quantity: quantityToRestore,
-              reason: `Anulación de ${docTypeName.toLowerCase()}`,
-              referenceType: 'sunat_void',
+              reason: `${porEliminacion ? 'Eliminación' : 'Anulación'} de ${docTypeName.toLowerCase()}`,
+              referenceType: porEliminacion ? 'invoice_deleted' : 'sunat_void',
               referenceId: invoice.id,
               referenceNumber: invoice.number,
               userId: user.uid,
               ...(item.batchNumber && { batchNumber: item.batchNumber }),
               ...(variantSku && { variantSku }),
-              notes: `Stock devuelto por anulación SUNAT de ${invoice.number}${lotsNote}`
+              notes: porEliminacion
+                ? `Stock devuelto por eliminación de ${invoice.number}${lotsNote}`
+                : `Stock devuelto por anulación SUNAT de ${invoice.number}${lotsNote}`
             })
 
             console.log(`✅ Stock restaurado para ${item.name}: +${quantityToRestore}`)
@@ -4532,8 +4568,10 @@ Gracias por tu preferencia.`
                   {/* Los comprobantes aceptados por SUNAT tienen validez fiscal y no se pueden eliminar */}
                   {/* Facturas/Boletas aceptadas solo se pueden anular mediante Nota de Crédito */}
                   {permisosComprobante.anular && businessSettings?.allowDeleteInvoices && (
-                    // Notas de venta (sin validez fiscal) se pueden eliminar si está habilitado
-                    invoice.documentType === 'nota_venta' ||
+                    // Notas de venta (sin validez fiscal) se pueden eliminar si está habilitado,
+                    // salvo las ya convertidas: su stock ahora respalda la factura o la boleta,
+                    // y devolverlo al borrar la nota lo contaría dos veces.
+                    (invoice.documentType === 'nota_venta' && !invoice.convertedTo) ||
                     // Facturas/Boletas/Notas de Crédito/Notas de Débito: solo si NO fueron aceptadas por SUNAT
                     (invoice.documentType !== 'nota_venta' && invoice.sunatStatus !== 'accepted')
                   ) && (
@@ -5304,7 +5342,9 @@ Gracias por tu preferencia.`
                 ¿Estás seguro de que deseas eliminar el comprobante{' '}
                 <strong>{deletingInvoice?.number}</strong>?
               </p>
-              <p className="text-sm text-gray-600 mt-2">Esta acción no se puede deshacer.</p>
+              <p className="text-sm text-gray-600 mt-2">
+                Esta acción no se puede deshacer. El inventario vuelve a como estaba antes de este comprobante.
+              </p>
               {/* Aviso del salto de correlativo: el número eliminado NO se
                   reutiliza. Sin este aviso, los usuarios luego reportan
                   "faltan comprobantes" al ver el hueco en la numeración. */}

@@ -185,7 +185,7 @@ export default {
         },
         {
           type: 'texto',
-          text: '**Eliminar**: borra el comprobante del historial. Solo aplica a notas de venta y a documentos que SUNAT **no** aceptó — un comprobante aceptado tiene validez fiscal y nunca se elimina, se corrige con NC o baja. Si trabajas con cajeros, piénsalo dos veces: anular deja rastro, eliminar no.',
+          text: '**Eliminar**: borra el comprobante del historial y devuelve al inventario lo que esa venta había descontado. Solo aplica a notas de venta que no se convirtieron y a documentos que SUNAT **no** aceptó — un comprobante aceptado tiene validez fiscal y nunca se elimina, se corrige con NC o baja. Si trabajas con cajeros, piénsalo dos veces: anular deja rastro, eliminar no.',
         },
         {
           type: 'enlace',
@@ -388,7 +388,7 @@ export default {
     },
     {
       q: '¿Cuál es la diferencia entre anular y eliminar?',
-      a: '**Anular** deja el comprobante en el historial, marcado, con su stock devuelto y su rastro; si fue a SUNAT, además envía la Comunicación de Baja. **Eliminar** lo borra y solo existe si lo habilitaste en Configuración, y nunca para documentos aceptados por SUNAT. Ante la duda, anula.',
+      a: '**Anular** deja el comprobante en el historial, marcado, con su stock devuelto y su rastro; si fue a SUNAT, además envía la Comunicación de Baja. **Eliminar** lo borra, también con su stock devuelto, y solo existe si lo habilitaste en Configuración, y nunca para documentos aceptados por SUNAT. Ante la duda, anula.',
     },
     {
       q: 'Dice "Anulación en proceso" desde hace rato, ¿está trabada?',
