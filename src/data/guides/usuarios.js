@@ -6,7 +6,7 @@
  */
 export default {
   id: 'usuarios',
-  actualizado: '09/09/2026',
+  actualizado: '14/09/2026',
   intro:
     'Acá creas las cuentas de tu equipo y decides qué puede ver y hacer cada uno. Es la pantalla que evita que un cajero vea tus márgenes o cambie tus precios.',
 
@@ -91,7 +91,7 @@ export default {
 
     {
       id: 'editar-anular',
-      title: 'Quién puede editar y anular ventas',
+      title: 'Quién puede editar, anular y reimprimir ventas',
       blocks: [
         {
           type: 'texto',
@@ -99,7 +99,7 @@ export default {
         },
         {
           type: 'texto',
-          text: 'En la ficha del usuario, el bloque **Qué puede hacer en Ventas** tiene dos casillas: **Editar comprobantes emitidos** y **Anular comprobantes emitidos**. Al desmarcar una, esa opción simplemente **deja de aparecerle** en el menú de la página Ventas.',
+          text: 'En la ficha del usuario, el bloque **Qué puede hacer en Ventas** tiene tres casillas: **Editar comprobantes emitidos**, **Anular comprobantes emitidos** y **Reimprimir comprobantes**. Al desmarcar una, esa opción simplemente **deja de aparecerle** en la página Ventas.',
         },
         {
           type: 'tabla',
@@ -107,11 +107,12 @@ export default {
           filas: [
             ['Editar comprobantes emitidos', 'Editar documento · Editar fecha y reenviar a SUNAT · Editar y reemitir'],
             ['Anular comprobantes emitidos', 'Anular Nota de Venta · Anular en SUNAT · Eliminar'],
+            ['Reimprimir comprobantes', 'Imprimir ticket · Vista previa y PDF · WhatsApp · Imprimir tickets y Descargar PDFs de varios a la vez'],
           ],
         },
         {
           type: 'consejo',
-          text: 'Son dos casillas separadas a propósito. Hay negocios donde el encargado corrige notas de venta todo el día pero anular anula solo el dueño.',
+          text: 'Son casillas separadas a propósito. Hay negocios donde el encargado corrige notas de venta todo el día pero anular anula solo el dueño, y otros donde nadie más que el dueño saca otra copia de un comprobante.',
         },
         {
           type: 'ojo',
@@ -119,7 +120,7 @@ export default {
         },
         {
           type: 'texto',
-          text: 'Sigue pudiendo vender, cobrar, imprimir y consultar el comprobante. Solo pierde las opciones que tocan una venta ya hecha.',
+          text: 'Sigue pudiendo vender, cobrar y consultar el comprobante, y el ticket de la venta que acaba de hacer en el POS sale como siempre. Solo pierde las opciones que tocan una venta ya hecha.',
         },
       ],
     },

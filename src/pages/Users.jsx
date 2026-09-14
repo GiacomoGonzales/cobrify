@@ -1473,7 +1473,7 @@ export default function Users() {
                         })}
                       </div>
                       <p className="text-xs text-gray-500 mt-2">
-                        Desmarcar una casilla le esconde esa opción del menú de Ventas. Vender, cobrar e imprimir siguen igual.
+                        Desmarcar una casilla le esconde esa opción en Ventas. Vender, cobrar e imprimir el ticket de la venta que acaba de hacer siguen igual.
                       </p>
                     </div>
 

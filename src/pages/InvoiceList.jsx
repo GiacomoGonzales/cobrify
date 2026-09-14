@@ -3907,44 +3907,49 @@ Gracias por tu preferencia.`
               )}
             </Button>
           )}
-          <Button
-            onClick={handleBulkPrintTickets}
-            disabled={isBulkPrinting || isBulkDownloadingPDF || isBulkSendingSunat}
-            className="bg-white text-gray-900 hover:bg-gray-100 text-xs sm:text-sm px-2 sm:px-3 py-1.5 rounded-lg font-medium flex items-center gap-1 sm:gap-2 whitespace-nowrap"
-          >
-            {isBulkPrinting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="hidden sm:inline">Imprimiendo {bulkPrintProgress.current}/{bulkPrintProgress.total}...</span>
-                <span className="sm:hidden">{bulkPrintProgress.current}/{bulkPrintProgress.total}</span>
-              </>
-            ) : (
-              <>
-                <Printer className="w-4 h-4" />
-                <span className="hidden sm:inline">Imprimir tickets</span>
-                <span className="sm:hidden">Imprimir</span>
-              </>
-            )}
-          </Button>
-          <Button
-            onClick={handleBulkDownloadPDFs}
-            disabled={isBulkPrinting || isBulkDownloadingPDF || isBulkSendingSunat}
-            className="bg-blue-500 text-white hover:bg-blue-600 text-xs sm:text-sm px-2 sm:px-3 py-1.5 rounded-lg font-medium flex items-center gap-1 sm:gap-2 whitespace-nowrap"
-          >
-            {isBulkDownloadingPDF ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="hidden sm:inline">Descargando {bulkPDFProgress.current}/{bulkPDFProgress.total}...</span>
-                <span className="sm:hidden">{bulkPDFProgress.current}/{bulkPDFProgress.total}</span>
-              </>
-            ) : (
-              <>
-                <Download className="w-4 h-4" />
-                <span className="hidden sm:inline">Descargar PDFs</span>
-                <span className="sm:hidden">PDFs</span>
-              </>
-            )}
-          </Button>
+          {/* Sacar copias: el dueño se lo puede quitar a un sub-usuario (utils/permisosDeComprobantes). */}
+          {permisosComprobante.reimprimir && (
+            <>
+              <Button
+                onClick={handleBulkPrintTickets}
+                disabled={isBulkPrinting || isBulkDownloadingPDF || isBulkSendingSunat}
+                className="bg-white text-gray-900 hover:bg-gray-100 text-xs sm:text-sm px-2 sm:px-3 py-1.5 rounded-lg font-medium flex items-center gap-1 sm:gap-2 whitespace-nowrap"
+              >
+                {isBulkPrinting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="hidden sm:inline">Imprimiendo {bulkPrintProgress.current}/{bulkPrintProgress.total}...</span>
+                    <span className="sm:hidden">{bulkPrintProgress.current}/{bulkPrintProgress.total}</span>
+                  </>
+                ) : (
+                  <>
+                    <Printer className="w-4 h-4" />
+                    <span className="hidden sm:inline">Imprimir tickets</span>
+                    <span className="sm:hidden">Imprimir</span>
+                  </>
+                )}
+              </Button>
+              <Button
+                onClick={handleBulkDownloadPDFs}
+                disabled={isBulkPrinting || isBulkDownloadingPDF || isBulkSendingSunat}
+                className="bg-blue-500 text-white hover:bg-blue-600 text-xs sm:text-sm px-2 sm:px-3 py-1.5 rounded-lg font-medium flex items-center gap-1 sm:gap-2 whitespace-nowrap"
+              >
+                {isBulkDownloadingPDF ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="hidden sm:inline">Descargando {bulkPDFProgress.current}/{bulkPDFProgress.total}...</span>
+                    <span className="sm:hidden">{bulkPDFProgress.current}/{bulkPDFProgress.total}</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" />
+                    <span className="hidden sm:inline">Descargar PDFs</span>
+                    <span className="sm:hidden">PDFs</span>
+                  </>
+                )}
+              </Button>
+            </>
+          )}
           <Button
             onClick={() => handleBulkArchive(!showArchived)}
             disabled={isBulkPrinting || isBulkDownloadingPDF || isBulkArchiving || isBulkSendingSunat}
@@ -4288,63 +4293,68 @@ Gracias por tu preferencia.`
                     <span>Ver detalles</span>
                   </button>
 
-                  {/* Imprimir ticket */}
-                  <button
-                    onClick={() => {
-                      setOpenMenuId(null)
-                      if (!empresaDe(invoice)?.ruc) {
-                        toast.error('Configura los datos de tu empresa primero')
-                        return
-                      }
-                      handlePrintTicket(invoice)
-                    }}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
-                  >
-                    <Printer className="w-4 h-4 text-gray-400" />
-                    <span>Imprimir ticket</span>
-                  </button>
+                  {/* Otra copia del comprobante: se puede quitar por usuario (utils/permisosDeComprobantes). */}
+                  {permisosComprobante.reimprimir && (
+                    <>
+                      {/* Imprimir ticket */}
+                      <button
+                        onClick={() => {
+                          setOpenMenuId(null)
+                          if (!empresaDe(invoice)?.ruc) {
+                            toast.error('Configura los datos de tu empresa primero')
+                            return
+                          }
+                          handlePrintTicket(invoice)
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                      >
+                        <Printer className="w-4 h-4 text-gray-400" />
+                        <span>Imprimir ticket</span>
+                      </button>
 
-                  {/* Vista previa de PDF */}
-                  <button
-                    onClick={async () => {
-                      setOpenMenuId(null)
-                      if (!empresaDe(invoice)?.ruc) {
-                        toast.error('Configura los datos de tu empresa primero')
-                        return
-                      }
-                      try {
-                        await previewInvoicePDF(invoice, empresaDe(invoice), branding, branches)
-                      } catch (e) {
-                        toast.error('Error al generar vista previa')
-                      }
-                    }}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
-                  >
-                    <FileText className="w-4 h-4 text-gray-400" />
-                    <span>Vista previa de PDF</span>
-                  </button>
+                      {/* Vista previa de PDF */}
+                      <button
+                        onClick={async () => {
+                          setOpenMenuId(null)
+                          if (!empresaDe(invoice)?.ruc) {
+                            toast.error('Configura los datos de tu empresa primero')
+                            return
+                          }
+                          try {
+                            await previewInvoicePDF(invoice, empresaDe(invoice), branding, branches)
+                          } catch (e) {
+                            toast.error('Error al generar vista previa')
+                          }
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                      >
+                        <FileText className="w-4 h-4 text-gray-400" />
+                        <span>Vista previa de PDF</span>
+                      </button>
 
-                  {/* Descargar PDF */}
-                  <button
-                    onClick={async () => {
-                      setOpenMenuId(null)
-                      try {
-                        const result = await generateInvoicePDF(invoice, empresaDe(invoice), true, branding, branches)
-                        if (result?.fileName) {
-                          toast.success(`PDF guardado: ${result.fileName}`)
-                        } else {
-                          toast.success('PDF descargado exitosamente')
-                        }
-                      } catch (error) {
-                        console.error('Error al generar PDF:', error)
-                        toast.error(`Error al generar el PDF: ${error.message}`)
-                      }
-                    }}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
-                  >
-                    <Download className="w-4 h-4 text-gray-400" />
-                    <span>Descargar PDF</span>
-                  </button>
+                      {/* Descargar PDF */}
+                      <button
+                        onClick={async () => {
+                          setOpenMenuId(null)
+                          try {
+                            const result = await generateInvoicePDF(invoice, empresaDe(invoice), true, branding, branches)
+                            if (result?.fileName) {
+                              toast.success(`PDF guardado: ${result.fileName}`)
+                            } else {
+                              toast.success('PDF descargado exitosamente')
+                            }
+                          } catch (error) {
+                            console.error('Error al generar PDF:', error)
+                            toast.error(`Error al generar el PDF: ${error.message}`)
+                          }
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-3"
+                      >
+                        <Download className="w-4 h-4 text-gray-400" />
+                        <span>Descargar PDF</span>
+                      </button>
+                    </>
+                  )}
 
                   {/* Descargar XML - Prioriza el XML real firmado de Storage, fallback al generador frontend */}
                   {(invoice.documentType === 'factura' || invoice.documentType === 'boleta' ||
@@ -5227,33 +5237,36 @@ Gracias por tu preferencia.`
 
             {/* ========== ACCIONES ========== */}
             <div className="border-t border-gray-200 pt-4 space-y-3">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <Button size="sm" variant="outline" onClick={() => handleSendWhatsApp(viewingInvoice)} disabled={sendingWhatsApp}>
-                  {sendingWhatsApp ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Share2 className="w-4 h-4 mr-1" />}
-                  WhatsApp
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => {
-                  if (!empresaDe(viewingInvoice)?.ruc) { toast.error('Configura los datos de tu empresa primero'); return; }
-                  handlePrintTicket()
-                }}>
-                  <Printer className="w-4 h-4 mr-1" />
-                  Ticket
-                </Button>
-                <Button size="sm" variant="outline" onClick={async () => {
-                  if (!empresaDe(viewingInvoice)?.ruc) { toast.error('Configura los datos de tu empresa primero'); return; }
-                  try { await previewInvoicePDF(viewingInvoice, empresaDe(viewingInvoice), branding, branches) } catch (e) { toast.error('Error al generar vista previa') }
-                }}>
-                  <Eye className="w-4 h-4 mr-1" />
-                  Vista Previa
-                </Button>
-                <Button size="sm" onClick={async () => {
-                  if (!empresaDe(viewingInvoice)?.ruc) { toast.error('Configura los datos de tu empresa primero'); return; }
-                  try { await generateInvoicePDF(viewingInvoice, empresaDe(viewingInvoice), true, branding, branches); toast.success('PDF descargado') } catch (e) { toast.error('Error') }
-                }}>
-                  <Download className="w-4 h-4 mr-1" />
-                  PDF
-                </Button>
-              </div>
+              {/* Mandar, imprimir o bajar otra copia: se puede quitar por usuario. */}
+              {permisosComprobante.reimprimir && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <Button size="sm" variant="outline" onClick={() => handleSendWhatsApp(viewingInvoice)} disabled={sendingWhatsApp}>
+                    {sendingWhatsApp ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Share2 className="w-4 h-4 mr-1" />}
+                    WhatsApp
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => {
+                    if (!empresaDe(viewingInvoice)?.ruc) { toast.error('Configura los datos de tu empresa primero'); return; }
+                    handlePrintTicket()
+                  }}>
+                    <Printer className="w-4 h-4 mr-1" />
+                    Ticket
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={async () => {
+                    if (!empresaDe(viewingInvoice)?.ruc) { toast.error('Configura los datos de tu empresa primero'); return; }
+                    try { await previewInvoicePDF(viewingInvoice, empresaDe(viewingInvoice), branding, branches) } catch (e) { toast.error('Error al generar vista previa') }
+                  }}>
+                    <Eye className="w-4 h-4 mr-1" />
+                    Vista Previa
+                  </Button>
+                  <Button size="sm" onClick={async () => {
+                    if (!empresaDe(viewingInvoice)?.ruc) { toast.error('Configura los datos de tu empresa primero'); return; }
+                    try { await generateInvoicePDF(viewingInvoice, empresaDe(viewingInvoice), true, branding, branches); toast.success('PDF descargado') } catch (e) { toast.error('Error') }
+                  }}>
+                    <Download className="w-4 h-4 mr-1" />
+                    PDF
+                  </Button>
+                </div>
+              )}
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" className="flex-1" onClick={() => setViewingInvoice(null)}>
                   Cerrar

@@ -173,6 +173,7 @@ export default function DetalleUsuarioModal({
               {[
                 acciones.editar ? null : 'No puede editar comprobantes emitidos',
                 acciones.anular ? null : 'No puede anular ni eliminar comprobantes',
+                acciones.reimprimir ? null : 'No puede reimprimir tickets ni PDFs',
               ].filter(Boolean).map((t) => (
                 <span key={t} className="block">{t}</span>
               ))}
