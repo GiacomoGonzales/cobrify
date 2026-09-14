@@ -1156,11 +1156,20 @@ export default function Chat() {
               </div>
               <p className="text-[11px] text-primary-800 mt-1">
                 {campanaEnCurso.enviados || 0} enviados
+                {campanaEnCurso.noEntregados ? ` (${campanaEnCurso.noEntregados} no llegaron)` : ''}
                 {campanaEnCurso.fallidos ? ` · ${campanaEnCurso.fallidos} fallidos` : ''}
-                {campanaEnCurso.omitidos ? ` · ${campanaEnCurso.omitidos} omitidos (baja)` : ''}
+                {campanaEnCurso.omitidos
+                  ? ` · ${campanaEnCurso.omitidos} omitidos ${campanaEnCurso.alcance === 'clientes' ? '(ya la tenían o pidieron baja)' : '(baja)'}`
+                  : ''}
                 {' '}de {campanaEnCurso.total}
                 {campanaEnCurso.estado === 'terminada' ? ' · terminada' : ''}
               </p>
+              {campanaEnCurso.alcance === 'clientes' && campanaEnCurso.estado === 'terminada'
+                && (campanaEnCurso.pendientes || 0) + (campanaEnCurso.fallidos || 0) + (campanaEnCurso.noEntregados || 0) > 0 && (
+                <p className="text-[11px] text-primary-700 mt-0.5">
+                  Vuelve a lanzarla, mejor al día siguiente, para seguir con los que faltan. A quien ya le llegó no se le repite.
+                </p>
+              )}
             </div>
           )}
         </div>

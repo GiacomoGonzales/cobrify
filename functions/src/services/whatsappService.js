@@ -142,6 +142,8 @@ export function parseWhatsappWebhook(body) {
           // recipient_user_id.
           waId: s.recipient_id || s.recipient_user_id || null,
           error: s.errors?.[0]?.title || null,
+          // El código dice si vale la pena reintentar (ver actualizarEstadoMensaje).
+          errorCode: s.errors?.[0]?.code || null,
         })
       }
     }

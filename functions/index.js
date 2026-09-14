@@ -14049,21 +14049,81 @@ async function guardarReaccionEntrante(m) {
 }
 
 /** Actualiza enviado / entregado / leido de un mensaje que mandamos nosotros. */
+/**
+ * Fallos de entrega que no vale la pena reintentar: el número no tiene
+ * WhatsApp (131026), la persona apagó los mensajes de marketing de la empresa
+ * (131050) o es el mismo número que envía (131021). Los demás, como el tope de
+ * Meta de mensajes de marketing por persona (131049), son pasajeros: al
+ * relanzar la campaña se le vuelve a intentar.
+ */
+const FALLOS_WA_DEFINITIVOS = new Set([131021, 131026, 131050])
+
 async function actualizarEstadoMensaje(s) {
   const { phoneNumberId } = s.cuenta
   if (!phoneNumberId || !s.waId || !s.waMessageId) return
 
-  const ref = db.collection('whatsappConversations')
-    .doc(idConversacionWa(phoneNumberId, s.waId))
-    .collection('messages').doc(s.waMessageId)
+  const convRef = db.collection('whatsappConversations').doc(idConversacionWa(phoneNumberId, s.waId))
+  const ref = convRef.collection('messages').doc(s.waMessageId)
+  const cambios = {
+    estado: s.estado,
+    ...(s.error ? { error: s.error } : {}),
+    ...(s.errorCode ? { errorCode: s.errorCode } : {}),
+    estadoAt: Timestamp.fromMillis(s.timestamp),
+  }
 
   // merge: el estado puede llegar ANTES que el mensaje que lo origino (Meta no
   // garantiza el orden), asi que no se asume que el documento ya exista.
-  await ref.set({
-    estado: s.estado,
-    ...(s.error ? { error: s.error } : {}),
-    estadoAt: Timestamp.fromMillis(s.timestamp),
-  }, { merge: true })
+  if (s.estado !== 'failed') {
+    await ref.set(cambios, { merge: true })
+    return
+  }
+
+  // Meta puede aceptar una plantilla y avisar minutos después que no la
+  // entregó. Antes la campaña la seguía contando como enviada y, al
+  // relanzarla, se saltaba a esa persona 7 días por "ya la recibió". La
+  // transacción evita contar dos veces el mismo fallo si Meta repite el aviso.
+  let previo = null
+  try {
+    previo = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref)
+      tx.set(ref, cambios, { merge: true })
+      return snap.exists ? snap.data() : null
+    })
+  } catch (error) {
+    console.error('[WhatsApp] Estado fallido sin transaccion:', error.message)
+    await ref.set(cambios, { merge: true })
+    return
+  }
+  if (!previo || previo.estado === 'failed' || previo.tipo !== 'template') return
+
+  try {
+    const trabajos = []
+    if (previo.campaignId) {
+      const campRef = db.collection('whatsappCampaigns').doc(previo.campaignId)
+      // Contador aparte: el envío reescribe enviados/fallidos/omitidos enteros
+      // después de cada mensaje y pisaría un incremento hecho acá.
+      trabajos.push(campRef.set({ noEntregados: FieldValue.increment(1) }, { merge: true }))
+      trabajos.push(campRef.collection('destinatarios').doc(convRef.id).set({
+        estado: 'no_entregado',
+        error: s.error || null,
+        errorCode: s.errorCode || null,
+        noEntregadoAt: FieldValue.serverTimestamp(),
+      }, { merge: true }))
+    }
+    if (!FALLOS_WA_DEFINITIVOS.has(Number(s.errorCode))) {
+      // Se borra la marca de "ya la recibió", pero solo si sigue siendo la de
+      // este envío: si después salió otro, esa marca es buena.
+      trabajos.push(db.runTransaction(async (tx) => {
+        const conv = (await tx.get(convRef)).data() || {}
+        const esteEnvio = conv.ultimaPlantilla === previo.plantilla?.name
+          && (conv.ultimaPlantillaAt?.toMillis?.() || 0) === (previo.timestamp?.toMillis?.() || -1)
+        if (esteEnvio) tx.update(convRef, { ultimaPlantilla: FieldValue.delete() })
+      }))
+    }
+    await Promise.all(trabajos)
+  } catch (error) {
+    console.error('[WhatsApp] No se pudo anotar la plantilla no entregada:', error.message)
+  }
 }
 
 /**
