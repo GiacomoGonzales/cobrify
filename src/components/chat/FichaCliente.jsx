@@ -222,7 +222,7 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
       </div>
 
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto chat-scrollbar p-4">
         {/* ---------- Varias empresas: primero se elige cuál ---------- */}
         {enLista && (
           <div className="space-y-3">

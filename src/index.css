@@ -282,6 +282,44 @@
     background: rgba(0, 0, 0, 0.25);
   }
 
+  /* Scrollbar de la bandeja de WhatsApp: los mismos valores que WhatsApp Web
+     (6 px, pulgar gris translúcido, sin pista). La lista y el hilo no tenían
+     ninguna y salía la barra gruesa del sistema. */
+  .chat-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(11, 20, 26, 0.2) transparent;
+  }
+
+  .chat-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .chat-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .chat-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(11, 20, 26, 0.2);
+    border-radius: 3px;
+  }
+
+  .chat-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(11, 20, 26, 0.35);
+  }
+
+  .chat-cobrify.oscuro .chat-scrollbar {
+    scrollbar-color: rgba(233, 237, 239, 0.2) transparent;
+  }
+
+  .chat-cobrify.oscuro .chat-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(233, 237, 239, 0.2);
+  }
+
+  .chat-cobrify.oscuro .chat-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(233, 237, 239, 0.35);
+  }
+
   /* Catalog scrollbar - sutil, delgada */
   .catalog-scrollbar {
     scrollbar-width: thin;

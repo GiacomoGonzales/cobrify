@@ -707,6 +707,15 @@ export default function Chat() {
     return c
   }, [conversaciones])
 
+  // Conversaciones con mensajes sin leer, por estado. Como una pendiente ya
+  // no vuelve a abiertas cuando el cliente escribe, la pestaña tiene que
+  // avisar que hay algo nuevo ahí adentro.
+  const sinLeerPorEstado = useMemo(() => {
+    const c = { abierta: 0, pendiente: 0, completada: 0 }
+    for (const conv of conversaciones) if ((conv.sinLeer || 0) > 0) c[estadoDe(conv)] = (c[estadoDe(conv)] || 0) + 1
+    return c
+  }, [conversaciones])
+
   // Texto buscable de cada conversación: quien escribe, su número y la ficha
   // del negocio vinculado (razón social, nombre comercial, RUC, correo, código
   // de cliente). Se arma una vez por cambio y cada tecla solo compara texto.
@@ -761,11 +770,20 @@ export default function Chat() {
     return m
   }, [etiquetas])
 
-  // Sin aviso al cambiar de estado: la conversación ya se mueve de pestaña a
-  // la vista, y el toast solo estorbaba.
+  // Al cambiar el estado, la conversación se va de la pestaña en la que estás.
+  // En pantalla grande se abre la siguiente de la lista (o la anterior, si era
+  // la última), para despachar de corrido; en el celular se vuelve a la lista.
+  // Buscando no se mueve nada: ahí la lista muestra todas las pestañas. Y sin
+  // aviso: el movimiento ya se ve, y el toast solo estorbaba.
   const handleEstado = async (estado) => {
+    const seVa = estado !== tab && !buscando
+    const i = filtradas.findIndex((c) => c.id === activaId)
+    const siguiente = seVa && i >= 0 ? filtradas[i + 1] || filtradas[i - 1] || null : null
     try {
       await cambiarEstado(activaId, estado)
+      if (!seVa) return
+      const pantallaGrande = window.matchMedia?.('(min-width: 768px)').matches
+      setActivaId(pantallaGrande ? siguiente?.id || null : null)
     } catch {
       toast.error('No se pudo cambiar el estado')
     }
@@ -948,6 +966,32 @@ export default function Chat() {
     setAdjunto(file)
     setPieAdjunto('')
   }
+
+  // Pegar una captura con Ctrl+V (o Cmd+V) con la conversación abierta, esté
+  // donde esté el cursor, como en WhatsApp Web: entra como adjunto por el
+  // mismo camino que el clip. Si lo pegado es texto, no se toca nada.
+  const tomarAdjuntoRef = useRef(null)
+  tomarAdjuntoRef.current = tomarAdjunto
+  useEffect(() => {
+    const alPegar = (e) => {
+      const archivos = [...(e.clipboardData?.files || [])]
+      const archivo = archivos.find((f) => f.type.startsWith('image/')) || archivos[0]
+      if (!archivo) return
+      e.preventDefault()
+      // Una captura llega como "image.png": con fecha y hora se entiende
+      // mejor en la conversación y en las descargas del cliente.
+      const d = new Date()
+      const dos = (n) => String(n).padStart(2, '0')
+      const sello = `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}-${dos(d.getHours())}${dos(d.getMinutes())}`
+      const ext = (archivo.type.split('/')[1] || 'png').replace('jpeg', 'jpg')
+      const conNombre = archivo.name && archivo.name !== 'image.png'
+        ? archivo
+        : new File([archivo], `captura-${sello}.${ext}`, { type: archivo.type })
+      tomarAdjuntoRef.current?.(conNombre)
+    }
+    document.addEventListener('paste', alPegar)
+    return () => document.removeEventListener('paste', alPegar)
+  }, [])
 
   /** Soltar archivos encima de la conversación. */
   const alSoltarArchivos = (e) => {
@@ -1142,6 +1186,12 @@ export default function Chat() {
                 {conteos[e.id] > 0 && (
                   <span className="ml-1 text-[11px] text-gray-400">{conteos[e.id]}</span>
                 )}
+                {tab !== e.id && sinLeerPorEstado[e.id] > 0 && (
+                  <span
+                    className="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-green-500 align-middle"
+                    title={`${sinLeerPorEstado[e.id]} sin leer`}
+                  />
+                )}
               </button>
             ))}
           </div>
@@ -1218,7 +1268,7 @@ export default function Chat() {
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto chat-scrollbar">
           {cargando && (
             <p className="p-4 text-[13px] text-gray-500">Cargando conversaciones...</p>
           )}
@@ -1662,7 +1712,7 @@ export default function Chat() {
               // no se desplaza. Así la foto se queda quieta mientras pasan los
               // mensajes, como en WhatsApp, y además se ve por detrás de la
               // cabecera y del compositor.
-              className="flex-1 overflow-y-auto px-4 py-4 space-y-2"
+              className="flex-1 overflow-y-auto chat-scrollbar px-4 py-4 space-y-2"
             >
               {elementos.map((el) => {
                 if (el.separador) {

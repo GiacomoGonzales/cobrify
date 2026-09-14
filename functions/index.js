@@ -13922,7 +13922,12 @@ async function guardarMensajeEntrante(m) {
     // completada y el cliente vuelve a escribir, tiene que reaparecer en la
     // bandeja activa sola — una respuesta perdida en "Completadas" es un
     // cliente que cree que lo ignoraron.
-    estado: 'abierta',
+    //
+    // Una PENDIENTE, en cambio, se queda pendiente aunque el cliente escriba:
+    // es trabajo por hacer de Cobrify (instalar, revisar, terminar de
+    // configurar) y solo Giacomo la da por terminada. Antes cada mensaje la
+    // devolvía a abiertas y la tarea se perdía de vista (14-set-2026).
+    ...(convPrevia.data()?.estado === 'pendiente' ? {} : { estado: 'abierta' }),
     ...vinculo,
     // Baja voluntaria: "no enviar mas", "baja", "stop"... queda marcado y las
     // campañas lo saltan para siempre. Reversible a mano desde la ficha.
