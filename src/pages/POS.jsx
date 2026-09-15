@@ -59,8 +59,9 @@ import DespachoCombustibleModal from '@/components/pos/DespachoCombustibleModal'
 import { estacionActiva, combustiblesDe, factorDeAjuste } from '@/utils/serviceStation'
 import { WALLET_EN_APROBACION, programaVigente, vigenciaLegible } from '@/services/loyaltyService'
 import { promoParaProducto, CANAL_POS } from '@/services/scheduledDiscountService'
-import { formatCurrency, formatUnitPrice, formatLineAmount, applyMarginToCost, buildSearchHaystack, matchesPrebuilt, cleanText } from '@/lib/utils'
+import { formatCurrency, formatUnitPrice, formatLineAmount, applyMarginToCost, buildSearchHaystack, matchesPrebuilt, cleanText, palabrasDeBusqueda, coincidenPalabras } from '@/lib/utils'
 import { buildProductHaystack } from '@/utils/productSearch'
+import { compararEnEspanol } from '@/utils/listasGrandes'
 import {
   isMultiCurrencyEnabled,
   getDefaultCurrency,
@@ -3626,14 +3627,36 @@ export default function POS() {
     [stockEnVista],
   )
 
+  // Orden del catálogo: los agotados al FINAL y alfabético dentro de cada
+  // grupo (mismo criterio que la página de Productos; antes los que no se
+  // podían vender ocupaban las primeras pantallas, justo las que el cajero
+  // mira con el cliente enfrente). Se arma cuando cambian los productos o el
+  // almacén, NO en cada tecla: antes se reordenaban todas las coincidencias en
+  // cada búsqueda y con 4k productos eso trababa el celular (DHANY MEGAFIESTA,
+  // 15/09/2026). Filtrar la lista ya ordenada da el mismo orden (el sort es
+  // estable). Ver src/utils/listasGrandes.js.
+  const productosOrdenados = React.useMemo(() => {
+    const conClave = products.map(p => ({ p, agotado: agotado(p), nombre: p.name || '' }))
+    conClave.sort((a, b) => {
+      if (a.agotado !== b.agotado) return a.agotado ? 1 : -1
+      return compararEnEspanol(a.nombre, b.nombre)
+    })
+    return conClave.map(x => x.p)
+  }, [products, agotado])
+
   const filteredProducts = React.useMemo(() => {
-    return products.filter(p => {
+    // La búsqueda y la rama de la categoría se preparan UNA vez, no por producto.
+    const palabras = palabrasDeBusqueda(deferredSearchTerm)
+    const idsDeLaCategoria = (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'sin-categoria')
+      ? null
+      : new Set([selectedCategoryFilter, ...getAllSubcategoryIds(categories, selectedCategoryFilter)])
+    return productosOrdenados.filter(p => {
       // Excluir productos desactivados (isActive === false).
       // Si el campo no existe (undefined) se considera activo por retrocompatibilidad.
       if (p.isActive === false) return false
       // Los combustibles viven en su barra de arriba, no en el catalogo.
       if (idsDeCombustible.has(p.id)) return false
-      const matchesSearch = matchesPrebuilt(deferredSearchTerm, productSearchIndex.get(p.id) || '')
+      const matchesSearch = coincidenPalabras(palabras, productSearchIndex.get(p.id) || '')
 
       // Filtro de categoría: incluye productos de subcategorías cuando se selecciona categoría padre
       let matchesCategory = false
@@ -3643,11 +3666,8 @@ export default function POS() {
       } else if (selectedCategoryFilter === 'sin-categoria') {
         matchesCategory = !p.category
       } else {
-        // Verifica si el producto está en la categoría seleccionada O en alguna de sus subcategorías
-        const subcategoryIds = getAllSubcategoryIds(categories, selectedCategoryFilter)
-        matchesCategory =
-          p.category === selectedCategoryFilter ||
-          subcategoryIds.includes(p.category)
+        // En la categoría seleccionada o en alguna de sus subcategorías.
+        matchesCategory = idsDeLaCategoria.has(p.category)
       }
 
       // Filtro de marca (managed brandId). "Sin marca" = sin brandId.
@@ -3665,17 +3685,7 @@ export default function POS() {
 
       return matchesSearch && matchesCategory && matchesBrand
     })
-    // Los agotados van al FINAL, y dentro de cada grupo alfabético (mismo
-    // criterio que la página de Productos). Antes el orden era solo
-    // alfabético y los que no se podían vender ocupaban las primeras
-    // pantallas, justo las que el cajero mira con el cliente enfrente.
-    .sort((a, b) => {
-      const va = agotado(a)
-      const vb = agotado(b)
-      if (va !== vb) return va ? 1 : -1
-      return (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' })
-    })
-  }, [products, idsDeCombustible, deferredSearchTerm, productSearchIndex, selectedCategoryFilter, selectedBrandFilter, categories, businessSettings?.posCustomFields?.hideOutOfStockInPOS, selectedWarehouse, agotado])
+  }, [productosOrdenados, idsDeCombustible, deferredSearchTerm, productSearchIndex, selectedCategoryFilter, selectedBrandFilter, categories, businessSettings?.posCustomFields?.hideOutOfStockInPOS, agotado])
 
   // Cap del render para que el grid no explote en pantallas con miles de
   // productos. Antes al buscar mostraba TODAS las coincidencias (con 4k

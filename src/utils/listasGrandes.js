@@ -18,6 +18,12 @@
 // cada llamada y con miles de productos se nota. Compara igual.
 const ORDEN_ES = new Intl.Collator('es', { sensitivity: 'base' })
 
+/**
+ * Compara dos textos como `a.localeCompare(b, 'es', { sensitivity: 'base' })`,
+ * con el comparador ya armado. Para ordenar miles de ítems.
+ */
+export const compararEnEspanol = ORDEN_ES.compare
+
 /** Cuántas sugerencias muestra un desplegable de búsqueda. El POS dibuja 60. */
 export const TOPE_DE_SUGERENCIAS = 60
 
