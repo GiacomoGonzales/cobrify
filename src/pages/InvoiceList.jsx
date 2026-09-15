@@ -60,7 +60,8 @@ import Table, { TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate, formatDateTime, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
-import { getDocumentTotalInBase, getDocumentRate, getReportsCurrency, resolveReportsRate, convertBaseToDisplay } from '@/utils/currency'
+import { getDocumentTotalInBase, getReportsCurrency, resolveReportsRate, convertBaseToDisplay } from '@/utils/currency'
+import { metodosRealesDelComprobante as getRealPaymentMethods, montoPorMetodoEnBase as getAmountByMethodInBase } from '@/utils/pagosDelComprobante'
 import { getInvoiceDate, getInvoiceTimeInfo } from '@/utils/invoiceDate'
 import { consumoDeModificadoresDeVarias } from '@/utils/modificadorInsumo'
 import { toDateString } from '@/utils/emissionDate'
@@ -835,77 +836,8 @@ Gracias por tu preferencia.`
     setInvoices(demoData.invoices || [])
   }, [isDemoMode, demoData])
 
-  // Métodos de pago REALES de un comprobante (para mostrar y filtrar).
-  // Prioriza paymentHistory: en ventas al crédito/parciales, los pagos hechos
-  // con "Registrar Pago" (ej. Yape) quedan SOLO ahí — paymentMethod/payments
-  // conservan el método que estaba seleccionado en el POS al emitir, que en
-  // una venta al crédito no representa ningún pago real. Mismo criterio que
-  // el cuadre de caja (cashReportService.formatPaymentMethods).
-  const getRealPaymentMethods = (invoice) => {
-    // Una nota de credito NO tiene forma de pago: no es un cobro, es la
-    // reversion de un documento. La caja tampoco la cuenta como venta. Antes
-    // caia al relleno de abajo y mostraba "Efectivo", y el cliente pedia poder
-    // cambiarlo — pero el dato no existe, no es que estuviera mal elegido.
-    if (invoice.documentType === 'nota_credito') return ['—']
-
-    if (Array.isArray(invoice.paymentHistory) && invoice.paymentHistory.length > 0) {
-      return [...new Set(invoice.paymentHistory.map(p => p.method || 'Efectivo'))]
-    }
-    // Venta al crédito sin ningún pago registrado aún: no hay método real.
-    if (invoice.paymentStatus === 'pending') return ['Crédito']
-    if (Array.isArray(invoice.payments) && invoice.payments.length > 0) {
-      return [...new Set(invoice.payments.map(p => p.method || 'Efectivo'))]
-    }
-    // Array de pagos EXPLÍCITAMENTE vacío: típico de notas de venta provisionales
-    // que no capturaron ningún pago real. El POS guarda paymentMethod:'Efectivo'
-    // por defecto aunque no haya cobro, así que en vez de heredar ese relleno
-    // mostramos un guion (no hay método real). Los documentos ANTIGUOS no tienen
-    // el campo `payments`; para esos seguimos usando su paymentMethod histórico.
-    if (Array.isArray(invoice.payments)) return ['—']
-    return [invoice.paymentMethod || 'Efectivo']
-  }
-
-  /**
-   * Cuánto de este comprobante se cobró con UN método, en soles base.
-   *
-   * Hace falta porque un comprobante puede pagarse con varios métodos a la vez.
-   * Al filtrar Ventas por "Efectivo", el total sumaba el importe COMPLETO del
-   * documento aunque solo una parte hubiera sido efectivo: una venta de S/71.50
-   * pagada con S/1 en efectivo y S/70.50 por Yape sumaba los 71.50 al efectivo
-   * y descuadraba la caja (reporte de DHANY, 21-ago).
-   *
-   * Sigue la MISMA prioridad que getRealPaymentMethods —paymentHistory primero,
-   * después payments, después el método histórico— para que el monto y la
-   * etiqueta que se muestran al lado no puedan contradecirse.
-   *
-   * Los comprobantes viejos no tienen desglose: si su único método es el que se
-   * está filtrando, cuenta por su total, que es lo que se venía mostrando.
-   */
-  const getAmountByMethodInBase = (invoice, metodo) => {
-    const buscado = String(metodo || '').toLowerCase()
-    const totalBase = getDocumentTotalInBase(invoice)
-    // Los importes de cada pago están en la moneda del documento; el total del
-    // reporte va en soles. Se convierte con el TC congelado del propio doc.
-    const aBase = (monto) => {
-      const tc = getDocumentRate(invoice)
-      return (Number(monto) || 0) * (tc > 0 ? tc : 1)
-    }
-    const sumar = (lista) => lista
-      .filter(pago => String(pago.method || 'Efectivo').toLowerCase() === buscado)
-      .reduce((suma, pago) => suma + aBase(pago.amount), 0)
-
-    if (Array.isArray(invoice.paymentHistory) && invoice.paymentHistory.length > 0) {
-      return sumar(invoice.paymentHistory)
-    }
-    if (invoice.paymentStatus === 'pending') {
-      return buscado === 'crédito' ? totalBase : 0
-    }
-    if (Array.isArray(invoice.payments) && invoice.payments.length > 0) {
-      return sumar(invoice.payments)
-    }
-    const metodos = getRealPaymentMethods(invoice)
-    return metodos.length === 1 && metodos[0].toLowerCase() === buscado ? totalBase : 0
-  }
+  // Qué método cobró cuánto (getRealPaymentMethods, getAmountByMethodInBase) vive en
+  // utils/pagosDelComprobante: el Flujo de Caja reparte sus ventas con la misma regla.
 
   // Carga PROGRESIVA por lotes (cuentas con miles de comprobantes): el primer
   // lote pinta la tabla de inmediato y el resto sigue llegando en background

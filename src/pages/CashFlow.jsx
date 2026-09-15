@@ -10,6 +10,7 @@ import { getDocumentTotalInBase, convertToBase } from '@/utils/currency'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { isPendingInvoice, getPendingAmount } from '@/utils/receivables'
 import { esDeSucursal } from '@/utils/branchScope'
+import { repartirPorMetodo } from '@/utils/pagosDelComprobante'
 import { almacenesDeSucursal, esDeSucursalLaCompra } from '@/utils/purchaseBranch'
 import {
   TrendingUp,
@@ -461,20 +462,36 @@ export default function CashFlow() {
       return isPaid || hasPayments
     })
 
-    const salesIncome = paidInvoices.reduce((sum, inv) => {
+    // Cuánto entró de cada comprobante: lo cobrado en paymentHistory (ventas al
+    // crédito o con pagos parciales) o el total si se pagó al contado. Es lo que
+    // suma "Ventas", y lo mismo que se reparte por método y por local.
+    const cobradoDe = (inv) => {
       // Multi-divisa: los pagos en paymentHistory están en la moneda nativa
       // de la factura, así que convertimos cada uno a PEN usando el TC
       // congelado en la factura. Para facturas PEN devuelve el monto tal cual.
       if (inv.paymentHistory && inv.paymentHistory.length > 0) {
         const paid = inv.paymentHistory.reduce((s, p) => s + (p.amount || 0), 0)
-        return sum + convertToBase(paid, inv.currency, inv.exchangeRate)
+        return convertToBase(paid, inv.currency, inv.exchangeRate)
       }
       // Si status es 'paid' y no tiene paymentHistory, es una venta al contado
-      if (inv.status === 'paid') {
-        return sum + getDocumentTotalInBase(inv)
+      if (inv.status === 'paid') return getDocumentTotalInBase(inv)
+      return 0
+    }
+    const salesIncome = paidInvoices.reduce((sum, inv) => sum + cobradoDe(inv), 0)
+
+    // Las mismas ventas repartidas por método de pago (CONSORCIO ANDINA GROUP,
+    // 14-set-2026). El reparto sale de utils/pagosDelComprobante, la regla de
+    // Ventas y de la caja, y suma exacto `salesIncome`.
+    const porMetodo = {}
+    for (const inv of paidInvoices) {
+      for (const [metodo, monto] of Object.entries(repartirPorMetodo(inv, cobradoDe(inv)))) {
+        porMetodo[metodo] = (porMetodo[metodo] || 0) + monto
       }
-      return sum
-    }, 0)
+    }
+    const ventasPorMetodo = Object.entries(porMetodo)
+      .filter(([, monto]) => monto >= 0.005)
+      .map(([metodo, monto]) => ({ metodo, monto }))
+      .sort((a, b) => b.monto - a.monto)
 
     // 2. Otros ingresos (movimientos de caja tipo income)
     // IMPORTANTE: Excluir movimientos con sessionId (son del Control de Caja diario, no del Flujo de Caja)
@@ -516,6 +533,28 @@ export default function CashFlow() {
       acc[cat].items.push(e)
       return acc
     }, {})
+
+    // Ventas y gastos de cada local, lado a lado: con el filtro se ve un local a
+    // la vez, esto es para compararlos (CONSORCIO ANDINA GROUP). Salen de los
+    // MISMOS comprobantes y gastos de arriba, con el criterio de sucursal del
+    // filtro (utils/branchScope). Lo que no cae en ningún local activo (una
+    // sucursal borrada) va en su propia fila, para que el cuadro sume el total.
+    const locales = branches.length === 0 ? [] : [
+      { id: 'main', nombre: 'Principal' },
+      ...branches.map(b => ({ id: b.id, nombre: b.name })),
+    ]
+    const porLocal = locales.map(local => ({
+      ...local,
+      ventas: paidInvoices.filter(inv => esDeSucursal(inv, local.id)).reduce((s, inv) => s + cobradoDe(inv), 0),
+      gastos: filteredExpenses.filter(e => esDeSucursal(e, local.id)).reduce((s, e) => s + expenseInBase(e), 0),
+    }))
+    if (porLocal.length > 0) {
+      const restoVentas = salesIncome - porLocal.reduce((s, l) => s + l.ventas, 0)
+      const restoGastos = expensesTotal - porLocal.reduce((s, l) => s + l.gastos, 0)
+      if (Math.abs(restoVentas) >= 0.01 || Math.abs(restoGastos) >= 0.01) {
+        porLocal.push({ id: 'otros', nombre: 'Locales inactivos', ventas: restoVentas, gastos: restoGastos })
+      }
+    }
 
     // 2. Compras pagadas (filtradas por sucursal)
     // A) Compras al contado pagadas en el período
@@ -730,6 +769,7 @@ export default function CashFlow() {
       financialIncomeMovements,
       totalIncome,
       paidInvoices,
+      ventasPorMetodo,
 
       // Egresos
       expensesTotal,
@@ -746,6 +786,7 @@ export default function CashFlow() {
       expensesByCategory,
       paidPurchases,
       filteredExpenses,
+      porLocal,
 
       // Balance
       balance,
@@ -761,7 +802,7 @@ export default function CashFlow() {
       pendingLoanInstallments,
       projectedBalance
     }
-  }, [invoices, expenses, purchases, cashMovements, loans, financialMovements, dateRange, branchFilter, getWarehouseIdsForBranch])
+  }, [invoices, expenses, purchases, cashMovements, loans, financialMovements, dateRange, branchFilter, getWarehouseIdsForBranch, branches])
 
   // Formatear moneda
   function formatCurrency(amount) {
@@ -1221,6 +1262,44 @@ export default function CashFlow() {
             </div>
           </div>
 
+          {/* Ventas y gastos por local, lado a lado (solo con "Todas"): con el
+              filtro se ve un local a la vez; esto es para compararlos. */}
+          {branchFilter === 'all' && cashFlowData.porLocal.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-6">
+              <div className="flex items-center gap-2 mb-3">
+                <Store className="w-5 h-5 text-gray-500" />
+                <h2 className="text-lg font-semibold text-gray-900">Por local</h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-2 font-medium text-gray-500">Local</th>
+                      <th className="text-right py-2 font-medium text-gray-500">Ventas</th>
+                      <th className="text-right py-2 font-medium text-gray-500">Gastos</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cashFlowData.porLocal.map(local => (
+                      <tr key={local.id} className="border-b border-gray-100">
+                        <td className="py-2 text-gray-900">{local.nombre}</td>
+                        <td className="py-2 text-right font-medium text-green-600">{formatCurrency(local.ventas)}</td>
+                        <td className="py-2 text-right font-medium text-red-600">{formatCurrency(local.gastos)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td className="py-2 font-semibold text-gray-900">Total</td>
+                      <td className="py-2 text-right font-bold text-green-600">{formatCurrency(cashFlowData.salesIncome)}</td>
+                      <td className="py-2 text-right font-bold text-red-600">{formatCurrency(cashFlowData.expensesTotal)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* Sección de Ingresos */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <button
@@ -1239,18 +1318,30 @@ export default function CashFlow() {
               <div className="p-3 sm:p-6">
                 {/* Vista móvil: Cards */}
                 <div className="sm:hidden space-y-3">
-                  {/* Ventas */}
-                  <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                        <ShoppingCart className="w-4 h-4 text-green-600" />
+                  {/* Ventas, y debajo el mismo total por método de pago */}
+                  <div className="py-3 border-b border-gray-100">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                          <ShoppingCart className="w-4 h-4 text-green-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">Ventas</p>
+                          <p className="text-xs text-gray-500">{cashFlowData.paidInvoices.length} facturas</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-gray-900">Ventas</p>
-                        <p className="text-xs text-gray-500">{cashFlowData.paidInvoices.length} facturas</p>
-                      </div>
+                      <span className="font-semibold text-green-600">{formatCurrency(cashFlowData.salesIncome)}</span>
                     </div>
-                    <span className="font-semibold text-green-600">{formatCurrency(cashFlowData.salesIncome)}</span>
+                    {cashFlowData.ventasPorMetodo.length > 0 && (
+                      <div className="mt-2 pl-11 space-y-1">
+                        {cashFlowData.ventasPorMetodo.map(({ metodo, monto }) => (
+                          <div key={metodo} className="flex items-center justify-between text-sm">
+                            <span className="text-gray-600">{metodo}</span>
+                            <span className="text-gray-700">{formatCurrency(monto)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {cashFlowData.loansIncome > 0 && (
@@ -1341,6 +1432,14 @@ export default function CashFlow() {
                       </td>
                       <td className="py-3 text-right font-semibold text-green-600">{formatCurrency(cashFlowData.salesIncome)}</td>
                     </tr>
+                    {/* El mismo total de Ventas, por método de pago */}
+                    {cashFlowData.ventasPorMetodo.map(({ metodo, monto }) => (
+                      <tr key={`metodo-${metodo}`} className="border-b border-gray-50">
+                        <td className="py-1.5" />
+                        <td colSpan={2} className="py-1.5 pl-6 text-sm text-gray-600">{metodo}</td>
+                        <td className="py-1.5 text-right text-sm text-gray-700">{formatCurrency(monto)}</td>
+                      </tr>
+                    ))}
                     {cashFlowData.loansIncome > 0 && (
                       <tr className="border-b border-gray-100">
                         <td className="py-3 text-sm text-gray-500">-</td>

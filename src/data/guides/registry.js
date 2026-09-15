@@ -239,6 +239,16 @@ export const GUIDES = [
     load: () => import('./contabilidad.js'),
   },
   {
+    id: 'flujo-caja',
+    route: '/app/flujo-caja',
+    title: 'Flujo de Caja',
+    category: 'Finanzas',
+    description: 'Cuánta plata entró y salió en un período: ventas cobradas por método de pago, gastos, compras pagadas y préstamos, y cada local lado a lado.',
+    keywords: 'flujo de caja ingresos egresos balance ventas cobradas gastos compras prestamos por cobrar por pagar proyeccion local sucursal comparar metodo de pago efectivo tarjeta yape plin izipay transferencia',
+    modos: null,
+    load: () => import('./flujo-caja.js'),
+  },
+  {
     id: 'reportes',
     route: '/app/reportes',
     title: 'Reportes',
