@@ -13,7 +13,13 @@ struct FichaClienteView: View {
     /// cierran juntas las tres ventanas encimadas. Antes había que tocar
     /// "Cerrar" tres veces para salir (pedido de Giacomo, 14-set-2026).
     var alTerminar: (() -> Void)? = nil
+    /// Si se abrió desde la cartera de un reseller o de un vendedor: lo dice
+    /// arriba, porque esta cuenta no es la de la conversación.
+    var origen: String? = nil
     @StateObject private var store = FichaStore()
+    @StateObject private var cartera = CarteraStore()
+    @State private var clienteDeCartera: CuentaDeCarteraAbierta?
+    @State private var verTodaLaCartera = false
     @StateObject private var otros = OtrosContactosStore()
     @State private var mostrarRenovar = false
     @State private var mostrarAddon = false
@@ -53,16 +59,26 @@ struct FichaClienteView: View {
                     ReactivarSheet(store: store, alTerminar: alTerminar)
                 }
             }
+            // Una cuenta de la cartera se abre encima, con su propia ficha; al
+            // cerrarla se vuelve a la del reseller o el vendedor.
+            .sheet(item: $clienteDeCartera) { c in
+                FichaClienteView(businessId: c.id, conversacionId: conversacionId,
+                                 alTerminar: alTerminar, origen: c.origen)
+            }
         }
         .task {
             await store.cargar(businessId: businessId)
             await otros.cargar(businessId: businessId, excepto: conversacionId)
+            await cartera.cargar(cuentaId: businessId)
         }
     }
 
     @ViewBuilder private func lista(_ f: FichaCliente) -> some View {
         List {
             Section {
+                if let origen {
+                    Text(origen).font(.caption).foregroundStyle(.secondary)
+                }
                 LabeledContent("Negocio", value: f.nombre ?? "—")
                 if let ruc = f.ruc, !ruc.isEmpty { FilaCopiable(etiqueta: "RUC", valor: ruc) }
                 if let email = f.email { LabeledContent("Correo", value: email) }
@@ -252,6 +268,34 @@ struct FichaClienteView: View {
                     } label: {
                         Label("Suspender acceso", systemImage: "lock")
                     }
+                }
+            }
+
+            // La cartera: si esta cuenta es la principal de un reseller, sus
+            // clientes; si es el usuario de un vendedor, sus cuentas. Primero lo
+            // que pide atención (pedido de Giacomo, 15-set-2026).
+            if let c = cartera.cartera {
+                Section {
+                    if c.cuentas.isEmpty {
+                        Text("Todavía no tiene cuentas.").foregroundStyle(.secondary)
+                    }
+                    ForEach(verTodaLaCartera ? c.cuentas : Array(c.cuentas.prefix(8))) { cuenta in
+                        Button {
+                            clienteDeCartera = CuentaDeCarteraAbierta(id: cuenta.id, origen: c.origenDeUnaCuenta)
+                        } label: {
+                            FilaCuenta(cuenta: cuenta)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if c.cuentas.count > 8 {
+                        Button(verTodaLaCartera ? "Ver menos" : "Ver todas (\(c.cuentas.count))") {
+                            verTodaLaCartera.toggle()
+                        }
+                    }
+                } header: {
+                    Text("\(c.titulo) (\(c.cuentas.count))")
+                } footer: {
+                    Text(c.resumen)
                 }
             }
         }
@@ -752,4 +796,10 @@ struct ReactivarSheet: View {
     private func terminar() {
         if let alTerminar { alTerminar() } else { dismiss() }
     }
+}
+
+/// La cuenta de la cartera que se abrió encima, y lo que dice arriba su ficha.
+private struct CuentaDeCarteraAbierta: Identifiable {
+    let id: String
+    let origen: String
 }

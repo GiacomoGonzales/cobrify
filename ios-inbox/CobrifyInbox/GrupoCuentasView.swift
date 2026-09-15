@@ -9,6 +9,10 @@ struct GrupoCuentasView: View {
     @State private var mostrarBuscar = false
     @State private var editandoRol = false
     @State private var rol = ""
+    @StateObject private var carteraVendedor = CarteraStore()
+    @State private var vendedores: [VendedorCobrify] = []
+    @State private var eligiendoVendedor = false
+    @State private var verTodaLaCartera = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -42,6 +46,9 @@ struct GrupoCuentasView: View {
             .sheet(isPresented: $mostrarBuscar) {
                 AgregarCuentaSheet(conversationId: conv.id, sugeridas: grupo.sugeridas)
             }
+            .sheet(isPresented: $eligiendoVendedor) {
+                ElegirVendedorSheet(conversationId: conv.id, vendedores: vendedores, actual: vendedorAsignado)
+            }
             .alert("¿Quién te escribe?", isPresented: $editandoRol) {
                 TextField("Secretaria, contador, almacén…", text: $rol)
                 Button("Guardar") { BuscadorNegocios.guardarRol(conversationId: conv.id, rol: rol) }
@@ -55,6 +62,14 @@ struct GrupoCuentasView: View {
             rol = conv.rolContacto ?? ""
         }
         .onDisappear { grupo.parar() }
+        .task { vendedores = await Vendedores.listar() }
+        .task(id: vendedorAsignado) {
+            if let id = vendedorAsignado {
+                await carteraVendedor.cargar(vendedorId: id)
+            } else {
+                carteraVendedor.cartera = nil
+            }
+        }
     }
 
     private var lista: some View {
@@ -124,7 +139,52 @@ struct GrupoCuentasView: View {
                     Text("Cuentas que trajo el mismo vendedor o reseller. Solo se suman si tú las agregas.")
                 }
             }
+
+            // Qué vendedor de Cobrify es este contacto: su cartera sale abajo.
+            // Si el número es el de un vendedor registrado, se propone.
+            if !vendedores.isEmpty {
+                Section("Vendedor") {
+                    if let id = vendedorAsignado {
+                        LabeledContent("Vendedor de Cobrify",
+                                       value: vendedores.first { $0.id == id }?.nombre ?? "Vendedor")
+                        Button("Cambiar") { eligiendoVendedor = true }
+                    } else if let sugerido = Vendedores.porTelefono(vendedores, waId: conv.waId) {
+                        Button("Es \(sugerido.nombre), vendedor de Cobrify: asignarlo") {
+                            Task { try? await Vendedores.asignar(conversationId: conv.id, vendedorId: sugerido.id) }
+                        }
+                    } else {
+                        Button("¿Es vendedor de Cobrify? Asignarlo") { eligiendoVendedor = true }
+                    }
+                }
+            }
+
+            if vendedorAsignado != nil, let c = carteraVendedor.cartera {
+                Section {
+                    if c.cuentas.isEmpty {
+                        Text("Todavía no tiene cuentas.").foregroundStyle(.secondary)
+                    }
+                    ForEach(verTodaLaCartera ? c.cuentas : Array(c.cuentas.prefix(8))) { cuenta in
+                        Button { fichaDe = cuenta.id } label: { FilaCuenta(cuenta: cuenta) }
+                            .buttonStyle(.plain)
+                    }
+                    if c.cuentas.count > 8 {
+                        Button(verTodaLaCartera ? "Ver menos" : "Ver todas (\(c.cuentas.count))") {
+                            verTodaLaCartera.toggle()
+                        }
+                    }
+                } header: {
+                    Text("\(c.titulo) (\(c.cuentas.count))")
+                } footer: {
+                    Text(c.resumen)
+                }
+            }
         }
+    }
+
+    /// El vendedor asignado, al día: la conversación que escucha el grupo manda
+    /// sobre la que se recibió al abrir (que no se entera de los cambios).
+    private var vendedorAsignado: String? {
+        grupo.conversacion.map { $0.vendedorContactoId } ?? conv.vendedorContactoId
     }
 
     /// Lo que importa de un vistazo cuando son varias: cuántas están al día.
@@ -137,7 +197,7 @@ struct GrupoCuentasView: View {
 
 private struct IdFicha: Identifiable { let id: String }
 
-private struct FilaCuenta: View {
+struct FilaCuenta: View {
     let cuenta: CuentaResumen
     var principal = false
 
@@ -247,6 +307,68 @@ private struct AgregarCuentaSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { Button("Cancelar") { dismiss() } }
             }
+        }
+    }
+}
+
+/// Elegir qué vendedor de Cobrify es este contacto (o que no es ninguno).
+private struct ElegirVendedorSheet: View {
+    let conversationId: String
+    let vendedores: [VendedorCobrify]
+    let actual: String?
+    @Environment(\.dismiss) private var dismiss
+    @State private var error: String?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    fila(id: nil, nombre: "No es vendedor", detalle: nil)
+                    ForEach(vendedores.filter { $0.activo || $0.id == actual }) { v in
+                        fila(id: v.id, nombre: v.nombre, detalle: v.telefono.nilSiVacio)
+                    }
+                } footer: {
+                    Text("Su cartera aparece en la ficha: las cuentas que tiene asignadas, con su vencimiento.")
+                }
+                if let error {
+                    Section { Text(error).foregroundStyle(.red) }
+                }
+            }
+            .navigationTitle("Vendedor de Cobrify")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) { Button("Cancelar") { dismiss() } }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func fila(id: String?, nombre: String, detalle: String?) -> some View {
+        Button {
+            Task {
+                do {
+                    try await Vendedores.asignar(conversationId: conversationId, vendedorId: id)
+                    dismiss()
+                } catch {
+                    self.error = "No se pudo guardar el vendedor."
+                }
+            }
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    // Color.primary y no .primary: dentro de un botón, .primary
+                    // es el tinte y el nombre saldría verde.
+                    Text(nombre).foregroundStyle(Color.primary)
+                    if let detalle {
+                        Text(detalle).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                if id == actual {
+                    Image(systemName: "checkmark").fontWeight(.semibold).foregroundStyle(.tint)
+                }
+            }
+            .contentShape(Rectangle())
         }
     }
 }

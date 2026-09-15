@@ -576,6 +576,8 @@ struct CuentaResumen: Identifiable, Equatable {
 final class GrupoCuentasStore: ObservableObject {
     @Published var cuentas: [CuentaResumen] = []
     @Published var sugeridas: [CuentaResumen] = []
+    /// La conversación al día: el vendedor asignado cambia lo que se muestra.
+    @Published var conversacion: Conversacion?
     @Published var cargando = true
 
     private let db = Firestore.firestore()
@@ -585,11 +587,22 @@ final class GrupoCuentasStore: ObservableObject {
     /// rehace sola —antes había que salir y volver a entrar para verlo.
     func escuchar(conversationId: String) {
         guard listener == nil else { return }
+        #if DEBUG
+        if VistaPrevia.activa {
+            conversacion = VistaPrevia.conversacionDeVendedor
+            cuentas = VistaPrevia.cuentasDelGrupo
+            cargando = false
+            return
+        }
+        #endif
         listener = db.collection("whatsappConversations").document(conversationId)
             .addSnapshotListener { [weak self] snap, _ in
                 guard let self, let data = snap?.data() else { return }
                 let conv = Conversacion(id: snap?.documentID ?? "", data: data)
-                Task { await self.cargar(ids: conv.linkedBusinessIds) }
+                Task { @MainActor in
+                    self.conversacion = conv
+                    await self.cargar(ids: conv.linkedBusinessIds)
+                }
             }
     }
 

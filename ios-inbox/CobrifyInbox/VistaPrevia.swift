@@ -46,6 +46,71 @@ enum VistaPrevia {
     /// real" sin sesión.
     static let soloFicha = ProcessInfo.processInfo.arguments.contains("-ficha")
 
+    /// `-grupo`: la hoja de cuentas de una conversación con un vendedor de
+    /// Cobrify asignado, para mirar la sección del vendedor y su cartera.
+    static let soloGrupo = ProcessInfo.processInfo.arguments.contains("-grupo")
+
+    struct AnfitrionDeGrupo: View {
+        @State private var abierta = true
+        var body: some View {
+            Button("Abrir las cuentas") { abierta = true }
+                .sheet(isPresented: $abierta) {
+                    GrupoCuentasView(conv: VistaPrevia.conversacionDeVendedor)
+                }
+        }
+    }
+
+    static let vendedores: [VendedorCobrify] = [
+        VendedorCobrify(id: "vp-vendedor", nombre: "Carlos Ruiz", telefono: "987654321", activo: true),
+        VendedorCobrify(id: "vp-vendedor-2", nombre: "Lucía Paredes", telefono: "912345678", activo: true),
+    ]
+
+    static let conversacionDeVendedor = Conversacion(id: "vp-vendedor-chat", data: [
+        "nombre": "Carlos Ruiz",
+        "waId": "51987654321",
+        "ultimoMensaje": "Hola, ¿me pasas el estado de mis clientes?",
+        "estado": "abierta",
+        "linkedBusinessId": "vp-negocio",
+        "vendedorContactoId": "vp-vendedor",
+    ])
+
+    static var cuentasDelGrupo: [CuentaResumen] {
+        [CuentaResumen(id: "vp-negocio", nombre: "Pollería El Buen Sabor SAC", planName: "Plan Mensual",
+                       vence: Date().addingTimeInterval(20 * 86400), accessBlocked: false)]
+    }
+
+    /// Una cartera de mentira para `-ficha`: la cuenta "vp-negocio" hace de reseller.
+    static func cartera(_ cuentaId: String) -> Cartera? {
+        guard cuentaId == "vp-negocio" else { return nil }
+        return Cartera(tipo: .reseller, id: cuentaId, nombre: "WIROTECH", cuentas: Cartera.ordenar(cuentasDePrueba))
+    }
+
+    static func carteraDeVendedor(_ id: String) -> Cartera? {
+        Cartera(tipo: .vendedor, id: id, nombre: "Carlos Ruiz",
+                cuentas: Cartera.ordenar(Array(cuentasDePrueba.prefix(5))))
+    }
+
+    private static var cuentasDePrueba: [CuentaResumen] {
+        func c(_ id: String, _ nombre: String, _ plan: String, _ dias: Double?,
+               bloqueada: Bool = false, sinVencimiento: Bool = false) -> CuentaResumen {
+            CuentaResumen(id: id, nombre: nombre, planName: plan,
+                          vence: dias.map { Date().addingTimeInterval($0 * 86400) },
+                          accessBlocked: bloqueada, nuncaVence: sinVencimiento)
+        }
+        return [
+            c("vp-c1", "JTMOTOR SHOW E.I.R.L.", "Plan Semestral", 51),
+            c("vp-c2", "Gabriel Ferretería", "Plan Mensual", -3, bloqueada: true),
+            c("vp-c3", "Flores Bejar Kevin", "Plan Anual", 210),
+            c("vp-c4", "Botica San Martín", "Plan Mensual", 2),
+            c("vp-c5", "Agrodistribuciones Dival SAC", "Plan Anual", 287),
+            c("vp-c6", "Surco Sotomayor Stephanie", "Plan Anual", 217),
+            c("vp-c7", "Minimarket Los Andes", "Plan Mensual", -12),
+            c("vp-c8", "Textil Arequipa", "Plan Mensual", 6),
+            c("vp-c9", "Óptica Visión Clara", "Plan Semestral", 95),
+            c("vp-c10", "Restaurante El Tambo", "Ilimitado", nil, sinVencimiento: true),
+        ]
+    }
+
     /// El papel de la conversación en `-ficha`: presenta la ficha como hoja,
     /// igual que la app, para ver que al renovar se cierra todo y se vuelve
     /// acá de una sola vez.
@@ -92,6 +157,8 @@ enum VistaPrevia {
             SplashView()
         } else if soloFicha {
             AnfitrionDeFicha()
+        } else if soloGrupo {
+            AnfitrionDeGrupo()
         } else if enBandeja {
             // La app entera: sirve para la bandeja, las carpetas y tambien
             // para Ajustes (apariencia, respuestas rapidas).

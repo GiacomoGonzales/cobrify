@@ -19,6 +19,9 @@ struct Conversacion: Identifiable, Equatable {
     /// Quien escribe cuando no es el titular: "Secretaria", "Contador".
     /// Una misma empresa puede tener varios numeros escribiendo por ella.
     var rolContacto: String?
+    /// El vendedor de Cobrify que es este contacto (lo asigna el admin): trae su
+    /// cartera a la ficha. Espejo de la web (15-set-2026).
+    var vendedorContactoId: String?
     var optOut: Bool
     var ventanaVenceAt: Date?
     var etiquetas: [String]
@@ -44,6 +47,7 @@ struct Conversacion: Identifiable, Equatable {
         for id in extras where !todas.contains(id) { todas.append(id) }
         linkedBusinessIds = todas
         rolContacto = (data["rolContacto"] as? String)?.trimmingCharacters(in: .whitespaces).nilSiVacio
+        vendedorContactoId = (data["vendedorContactoId"] as? String)?.nilSiVacio
         etiquetas = data["etiquetas"] as? [String] ?? []
         nota = data["nota"] as? String
         optOut = data["optOut"] as? Bool ?? false

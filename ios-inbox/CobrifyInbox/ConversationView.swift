@@ -243,7 +243,7 @@ struct ConversationView: View {
                     }
                 }
             }
-            if conv.linkedBusinessId != nil {
+            if conv.linkedBusinessId != nil || conv.vendedorContactoId != nil {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         mostrarFicha = true
@@ -334,6 +334,14 @@ struct ConversationView: View {
                         } label: {
                             Label("Vincular a un negocio", systemImage: "link")
                         }
+                        // Un vendedor de Cobrify que escribe sin cuenta propia:
+                        // asignarlo trae su cartera a la ficha.
+                        Button {
+                            mostrarFicha = true
+                        } label: {
+                            Label(conv.vendedorContactoId == nil ? "Es vendedor de Cobrify…" : "Ficha del vendedor",
+                                  systemImage: "person.badge.key")
+                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -371,9 +379,7 @@ struct ConversationView: View {
             .presentationDetents([.medium])
         }
         .sheet(isPresented: $mostrarFicha) {
-            if conv.linkedBusinessId != nil {
-                GrupoCuentasView(conv: conv)
-            }
+            GrupoCuentasView(conv: conv)
         }
         .sheet(isPresented: $mostrarVincular) {
             VincularSheet(conversationId: conv.id)
