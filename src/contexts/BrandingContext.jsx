@@ -16,6 +16,7 @@ import { useLocation } from 'react-router-dom'
 import { estaEnElChat, MARCA_CHAT } from '@/utils/dominioChat'
 import { pestanaDeLaTienda } from '@/utils/pestanaDelCatalogo'
 import { seccionDeLaRuta, recordarTitulo } from '@/utils/tituloDePestana'
+import { nombreDelSistema, esMarcaPropia } from '@/utils/nombreDelSistema'
 
 const BrandingContext = createContext({
   branding: DEFAULT_BRANDING,
@@ -226,8 +227,8 @@ export function BrandingProvider({ children }) {
     // Fuera del sistema (la landing) NO se toca el título largo: ese es el que
     // lee Google y el que trae las visitas. Adentro manda el nombre de la
     // página, que es lo que sirve para distinguir dos pestañas abiertas.
-    const marcaPropia = branding.companyName && branding.companyName !== DEFAULT_BRANDING.companyName
-    const marca = marcaPropia ? branding.companyName : 'Cobrify'
+    const marcaPropia = esMarcaPropia(branding)
+    const marca = nombreDelSistema(branding)
     const seccion = seccionDeLaRuta(location.pathname)
     const titulo = seccion
       ? `${seccion} - ${marca}`

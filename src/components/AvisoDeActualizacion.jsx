@@ -1,5 +1,7 @@
 import { RefreshCw } from 'lucide-react'
 import { useActualizacion } from '@/contexts/ActualizacionContext'
+import { useBranding } from '@/contexts/BrandingContext'
+import { nombreDelSistema } from '@/utils/nombreDelSistema'
 
 /**
  * "Hay una versión nueva", en el pie del menú lateral.
@@ -17,9 +19,15 @@ import { useActualizacion } from '@/contexts/ActualizacionContext'
  */
 export default function AvisoDeActualizacion({ soloIcono = false, className = '' }) {
   const { hay, tipo, actualizando, actualizar } = useActualizacion()
+  const { branding, isLoading: cargandoMarca } = useBranding()
   if (!hay) return null
 
-  const texto = tipo === 'tienda' ? 'Actualizar la app' : 'Actualizar Cobrify'
+  // Con el nombre del sistema que ve ESTE usuario: la marca de su reseller, o
+  // Cobrify (utils/nombreDelSistema). Mientras la marca carga, un texto neutro,
+  // para que al cliente de un reseller no le asome "Cobrify" (Ezfactu, 15/09/2026).
+  const texto = tipo === 'tienda'
+    ? 'Actualizar la app'
+    : cargandoMarca ? 'Actualizar el sistema' : `Actualizar ${nombreDelSistema(branding)}`
   const detalle = tipo === 'tienda'
     ? 'Hay una versión nueva en la tienda'
     : 'Se recargará la página para instalarla'
