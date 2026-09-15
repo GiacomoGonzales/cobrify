@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 /**
  * El menú "⋯" de una fila o de una tarjeta.
@@ -13,8 +13,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
  * abajo, sube; nunca se sale por arriba; y si aun así no cabe, se desplaza por
  * dentro.
  *
- * Se usa en Usuarios y en Resellers. Cualquier arreglo de posición va acá y
- * sirve para los dos.
+ * Se usa en Usuarios, Resellers, Pagos, Comprobantes y Altas. Cualquier
+ * arreglo de posición va acá y sirve para todas.
  */
 
 const ANCHO = 232 // tiene que coincidir con el w-[232px] de CajaMenu
@@ -24,6 +24,17 @@ export function useMenuDeFila() {
   const [posicion, setPosicion] = useState({ top: 0, left: 0 })
   const disparador = useRef(null)
   const menu = useRef(null)
+
+  // Las páginas pintan el menú DOS veces para la misma fila: en las tarjetas
+  // del celular y en la tabla de escritorio, y una de las dos está oculta
+  // (display: none). Con un ref normal se quedaba la última en montarse, la de
+  // la tabla: en el celular apuntaba a la OCULTA, tocar una opción contaba
+  // como "tocar afuera", el menú se cerraba al apoyar el dedo y el toque nunca
+  // llegaba a la opción ("Agregar saldo" en Resellers, 14-set-2026). Este ref
+  // se queda solo con la copia que se ve.
+  const refMenu = useCallback(el => {
+    if (el && el.getClientRects().length > 0) menu.current = el
+  }, [])
 
   const calcular = el => {
     if (!el) return null
@@ -65,9 +76,14 @@ export function useMenuDeFila() {
   // Se escucha en la fase de captura y en `mousedown` para adelantarse a los
   // onClick de la pagina — si no, abrir un menu sobre una fila clicable podia
   // disparar la accion de la fila.
+  //
+  // "Adentro" es cualquier recuadro de menú, no solo el del ref: así un toque
+  // en la copia visible nunca cuenta como afuera, aunque el ref se hubiera
+  // quedado con otra (por ejemplo, al girar una tablet con el menú abierto).
   useEffect(() => {
     if (!abiertoEn) return undefined
     const alTocar = e => {
+      if (e.target?.closest?.('[data-menu-fila]')) return
       if (menu.current?.contains(e.target)) return
       if (disparador.current?.contains(e.target)) return
       setAbiertoEn(null)
@@ -102,7 +118,7 @@ export function useMenuDeFila() {
 
   const cerrar = () => { setAbiertoEn(null); disparador.current = null }
 
-  return { abiertoEn, posicion, alternar, cerrar, refMenu: menu }
+  return { abiertoEn, posicion, alternar, cerrar, refMenu }
 }
 
 /** El botón de tres puntos que lo abre. */
@@ -125,6 +141,7 @@ export function CajaMenu({ posicion, refMenu, children }) {
   return (
     <div
       ref={refMenu}
+      data-menu-fila=""
       className="fixed w-[232px] max-h-[calc(100vh-16px)] overflow-y-auto overflow-x-hidden overscroll-contain whitespace-normal bg-white rounded-md border border-gray-200 shadow-md py-1 z-50 text-left"
       style={{ top: posicion.top, left: posicion.left }}
       onClick={e => e.stopPropagation()}
