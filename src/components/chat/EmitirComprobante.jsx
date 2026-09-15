@@ -3,6 +3,8 @@ import { AlertCircle, Check, Loader2 } from 'lucide-react'
 import { auth } from '@/lib/firebase'
 import { useToast } from '@/contexts/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { useActualizacion } from '@/contexts/ActualizacionContext'
+import { aplazarRecargas } from '@/utils/fallosDeCarga'
 import { Modal, Campo, Entrada, Selector, Casilla, Boton, Aviso } from '@/components/admin/ui'
 import { formatearNumero, msRestantesDeVentana } from '@/services/whatsappChatService'
 import {
@@ -10,6 +12,8 @@ import {
   METODOS_DE_COBRO,
   armarComprobante,
   cargarEmisor,
+  cargarGeneradorPdf,
+  comprobantesParaReenviar,
   completarCliente,
   desglose as calcularDesglose,
   emitirComprobante,
@@ -18,6 +22,7 @@ import {
   leerComprobante,
   numeroProbable,
   productoSugerido,
+  sePuedeReenviar,
   soloDigitos,
   textoDelEnvio,
   tipoPorDocumento,
@@ -66,6 +71,9 @@ export default function ModalEmitirComprobante({ conversacion, ficha, onCerrar, 
   const [paso, setPaso] = useState('formulario')
   const [comprobante, setComprobante] = useState(null)
   const [fallo, setFallo] = useState(null)
+  // El generador del PDF se pide al abrir y, mientras la ventana siga abierta,
+  // nada recarga la página sola (ver usePreparacionDelPdf).
+  const pdf = usePreparacionDelPdf()
 
   useEffect(() => {
     let vivo = true
@@ -133,7 +141,7 @@ export default function ModalEmitirComprobante({ conversacion, ficha, onCerrar, 
   const trabajando = paso === 'emitiendo' || paso === 'sunat' || paso === 'enviando'
 
   const emitir = async () => {
-    if (!valido || !ventanaAbierta || trabajando) return
+    if (!valido || !ventanaAbierta || trabajando || pdf !== 'listo') return
     const datos = armarComprobante({
       tipo,
       cliente: {
@@ -230,7 +238,7 @@ export default function ModalEmitirComprobante({ conversacion, ficha, onCerrar, 
     return (
       <>
         <Boton onClick={onCerrar}>Cancelar</Boton>
-        <Boton variante="primario" onClick={emitir} disabled={!valido || !ventanaAbierta || !emisor}>
+        <Boton variante="primario" onClick={emitir} disabled={!valido || !ventanaAbierta || !emisor || pdf !== 'listo'}>
           {valido ? `Emitir ${etiqueta.toLowerCase()} y enviar` : 'Emitir y enviar'}
         </Boton>
       </>
@@ -250,6 +258,8 @@ export default function ModalEmitirComprobante({ conversacion, ficha, onCerrar, 
       ) : (
         <div className="space-y-4">
           {errorEmisor && <Aviso tono="rojo" titulo="No se puede emitir desde tu cuenta">{errorEmisor}</Aviso>}
+
+          {pdf === 'fallo' && <AvisoVersionVieja />}
 
           {!ventanaAbierta && (
             <Aviso tono="rojo" titulo="La ventana de 24 horas está cerrada">
@@ -402,5 +412,202 @@ function Avance({ paso, tipo, comprobante, fallo }) {
         <Aviso titulo="Listo">El PDF ya está en la conversación.</Aviso>
       )}
     </div>
+  )
+}
+
+/**
+ * Prepara el generador del PDF al abrir una ventana y, mientras siga abierta,
+ * frena la recarga automática por archivos que faltan (utils/fallosDeCarga):
+ * recargar a mitad de emitir o de enviar deja el comprobante hecho y sin
+ * mandar (reporte de Giacomo, 15-set-2026).
+ * @returns {'cargando'|'listo'|'fallo'}
+ */
+function usePreparacionDelPdf() {
+  const [estado, setEstado] = useState('cargando')
+  useEffect(() => {
+    const soltar = aplazarRecargas()
+    let vivo = true
+    cargarGeneradorPdf()
+      .then(() => { if (vivo) setEstado('listo') })
+      .catch(() => { if (vivo) setEstado('fallo') })
+    return () => {
+      vivo = false
+      soltar()
+    }
+  }, [])
+  return estado
+}
+
+/**
+ * La pestaña corre una versión vieja: falta el archivo que arma el PDF. Se dice
+ * ANTES de emitir, con el botón para ponerse al día.
+ */
+function AvisoVersionVieja() {
+  const actualizacion = useActualizacion()
+  const [actualizando, setActualizando] = useState(false)
+  const actualizar = async () => {
+    setActualizando(true)
+    if (actualizacion.hay && actualizacion.tipo === 'web') {
+      actualizacion.actualizar()
+      return
+    }
+    // Sin una versión esperando, lo mismo que el plan B de ActualizacionContext:
+    // soltar el service worker y sus copias, y recargar.
+    try {
+      const registros = (await navigator.serviceWorker?.getRegistrations?.()) || []
+      await Promise.all(registros.map((r) => r.unregister()))
+      if (window.caches?.keys) {
+        const claves = await caches.keys()
+        await Promise.all(claves.map((c) => caches.delete(c)))
+      }
+    } catch { /* navegador sin service worker */ }
+    window.location.reload()
+  }
+  return (
+    <div className="space-y-2">
+      <Aviso tono="rojo" titulo="Esta pestaña tiene una versión vieja de Cobrify">
+        Falta el archivo que arma el PDF. Actualiza antes de seguir: así no se gasta un número en un
+        comprobante que no se podría enviar.
+      </Aviso>
+      <Boton onClick={actualizar} disabled={actualizando}>
+        {actualizando ? 'Actualizando…' : 'Actualizar ahora'}
+      </Boton>
+    </div>
+  )
+}
+
+/**
+ * Volver a mandar el PDF de un comprobante ya emitido, sin emitir otro: el que
+ * no llegó (un envío cortado, la ventana de 24 h cerrada) o el que el cliente
+ * pide de nuevo. Queda abierta después de mandar, por si hay más de uno.
+ */
+export function ModalReenviarComprobante({ conversacion, ficha, onCerrar }) {
+  const { user } = useAuth()
+  const pdf = usePreparacionDelPdf()
+  const [emisor, setEmisor] = useState(null)
+  const [lista, setLista] = useState(null) // null mientras se busca
+  const [error, setError] = useState('')
+  const [elegido, setElegido] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [enviados, setEnviados] = useState(() => new Set())
+  const [falloEnvio, setFalloEnvio] = useState('')
+  const ventanaAbierta = msRestantesDeVentana(conversacion) > 0
+
+  useEffect(() => {
+    let vivo = true
+    Promise.all([
+      cargarEmisor(user.uid),
+      comprobantesParaReenviar({ uid: user.uid, conversacionId: conversacion.id, documento: ficha?.ruc }),
+    ])
+      .then(([e, l]) => {
+        if (!vivo) return
+        setEmisor(e)
+        setLista(l)
+        // Primero el que todavía no salió por WhatsApp.
+        const primero = l.find((c) => sePuedeReenviar(c) && !c.whatsappSentAt) || l.find(sePuedeReenviar)
+        if (primero) setElegido(primero.id)
+      })
+      .catch((err) => {
+        if (!vivo) return
+        setError(err.message || 'No se pudieron leer los comprobantes')
+        setLista([])
+      })
+    return () => { vivo = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.uid, conversacion.id])
+
+  const enviar = async () => {
+    if (!elegido || enviando || pdf !== 'listo' || !ventanaAbierta || !emisor) return
+    setEnviando(true)
+    setFalloEnvio('')
+    try {
+      const completo = await leerComprobante(user.uid, elegido)
+      const idToken = await auth.currentUser.getIdToken()
+      await enviarPdfPorWhatsapp({
+        uid: user.uid,
+        comprobante: completo,
+        ajustes: emisor.ajustes,
+        conversacionId: conversacion.id,
+        idToken,
+      })
+      setEnviados((s) => new Set(s).add(elegido))
+    } catch (err) {
+      setFalloEnvio(err.message || 'No se pudo enviar el PDF')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  const listoParaEnviar = !!elegido && !enviando && pdf === 'listo' && ventanaAbierta && !!emisor && !enviados.has(elegido)
+
+  return (
+    <Modal
+      titulo="Reenviar comprobante"
+      subtitulo={ficha?.nombre || conversacion?.nombre || formatearNumero(conversacion?.waId)}
+      ancho="md"
+      onClose={enviando ? undefined : onCerrar}
+      pie={(
+        <>
+          <Boton onClick={onCerrar} disabled={enviando}>Cerrar</Boton>
+          <Boton variante="primario" onClick={enviar} disabled={!listoParaEnviar}>
+            {enviando ? (<><Loader2 className="w-3.5 h-3.5 animate-spin" />Enviando…</>) : 'Enviar por WhatsApp'}
+          </Boton>
+        </>
+      )}
+    >
+      <div className="space-y-3">
+        {pdf === 'fallo' && <AvisoVersionVieja />}
+        {!ventanaAbierta && (
+          <Aviso tono="rojo" titulo="La ventana de 24 horas está cerrada">
+            WhatsApp no deja mandar archivos hasta que el cliente vuelva a escribir.
+          </Aviso>
+        )}
+        {error && <Aviso tono="rojo" titulo="No se pudieron leer los comprobantes">{error}</Aviso>}
+        {falloEnvio && <Aviso tono="rojo" titulo="No se pudo enviar">{falloEnvio}</Aviso>}
+
+        {lista === null ? (
+          <p className="flex items-center gap-2 text-[12.5px] text-gray-500">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            Buscando sus comprobantes…
+          </p>
+        ) : lista.length === 0 ? (
+          !error && <p className="text-[12.5px] text-gray-500">No hay comprobantes de este cliente.</p>
+        ) : (
+          <ul className="divide-y divide-gray-200 rounded-md border border-gray-200">
+            {lista.map((c) => {
+              const puede = sePuedeReenviar(c)
+              const recien = enviados.has(c.id)
+              const estado = recien ? 'Enviado ahora' : c.whatsappSentAt ? 'Ya se envió' : 'No se envió'
+              return (
+                <li key={c.id}>
+                  <label className={`flex items-center gap-3 px-3 py-2.5 ${puede ? 'cursor-pointer hover:bg-gray-50' : 'opacity-60'}`}>
+                    <input
+                      type="radio"
+                      name="comprobante-a-reenviar"
+                      value={c.id}
+                      checked={elegido === c.id}
+                      disabled={!puede || enviando}
+                      onChange={() => setElegido(c.id)}
+                    />
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-[13px] font-medium text-gray-900">
+                        {ETIQUETA_TIPO[c.documentType]} {c.number}
+                      </span>
+                      <span className="block text-[11.5px] text-gray-500">
+                        {c.issueDate || c.emissionDate || ''} · {dinero(c.total)}
+                        {!puede && ' · SUNAT todavía no la aceptó'}
+                      </span>
+                    </span>
+                    <span className={`text-[11px] ${recien ? 'font-medium text-primary-700' : c.whatsappSentAt ? 'text-gray-400' : 'text-gray-600'}`}>
+                      {estado}
+                    </span>
+                  </label>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+    </Modal>
   )
 }

@@ -35,7 +35,7 @@ import {
 } from '@/services/whatsappChatService'
 import { registerPayment, suspendUser, reactivateUser, PLANS } from '@/services/subscriptionService'
 import { METODOS_DE_COBRO as METODOS } from '@/services/comprobanteChatService'
-import ModalEmitirComprobante from '@/components/chat/EmitirComprobante'
+import ModalEmitirComprobante, { ModalReenviarComprobante } from '@/components/chat/EmitirComprobante'
 
 /**
  * La segunda línea de un resultado de búsqueda: lo que permite distinguir dos
@@ -72,6 +72,7 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
   const [reactivarAbierto, setReactivarAbierto] = useState(false)
   const [comprobantesAbierto, setComprobantesAbierto] = useState(false)
   const [emitirAbierto, setEmitirAbierto] = useState(false)
+  const [reenviarAbierto, setReenviarAbierto] = useState(false)
   const [altaAbierta, setAltaAbierta] = useState(false)
   const [verTodosLosPagos, setVerTodosLosPagos] = useState(false)
   const [trabajando, setTrabajando] = useState(false)
@@ -123,6 +124,7 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
     setReactivarAbierto(false)
     setComprobantesAbierto(false)
     setEmitirAbierto(false)
+    setReenviarAbierto(false)
     setVerTodosLosPagos(false)
     if (!businessId) { setCargando(false); return undefined }
     // Una respuesta que llega después de cambiar de conversación (o de
@@ -336,6 +338,13 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
             >
               <FileText className="w-3.5 h-3.5" />
               Emitir comprobante
+            </button>
+            <button
+              onClick={() => setReenviarAbierto(true)}
+              className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-2 text-[12px] font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Reenviar comprobante
             </button>
           </div>
         )}
@@ -595,6 +604,16 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
               Emitir comprobante
             </button>
 
+            {/* El PDF de uno ya emitido, sin emitir otro: el que no llegó o el
+                que el cliente pide de nuevo. */}
+            <button
+              onClick={() => setReenviarAbierto(true)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white text-gray-700 border border-gray-300 text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors"
+            >
+              <FileText className="w-4 h-4" />
+              Reenviar comprobante
+            </button>
+
             {/* Cortar y devolver el acceso. Son las dos acciones que antes
                 obligaban a salir del chat y abrir el panel. */}
             {ficha.accessBlocked ? (
@@ -685,6 +704,14 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
           ficha={ficha}
           onCerrar={() => setEmitirAbierto(false)}
           onEmitido={() => setEmitirAbierto(false)}
+        />
+      )}
+
+      {reenviarAbierto && (
+        <ModalReenviarComprobante
+          conversacion={conversacion}
+          ficha={ficha}
+          onCerrar={() => setReenviarAbierto(false)}
         />
       )}
 

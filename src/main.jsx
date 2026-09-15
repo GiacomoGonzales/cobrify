@@ -8,7 +8,7 @@ import './index.css'
 import '@/lib/globalAudio' // Desbloquear audio con el primer click (login, etc.)
 import { restaurarEscala } from '@/utils/escalaInterfaz'
 import RecuperacionDeCarga from '@/components/RecuperacionDeCarga'
-import { esFalloDeDescarga, decidirRecarga, CLAVE_RECARGA } from '@/utils/fallosDeCarga'
+import { esFalloDeDescarga, decidirRecarga, CLAVE_RECARGA, recargasAplazadas } from '@/utils/fallosDeCarga'
 
 // El tamaño de interfaz elegido en ESTE dispositivo, antes del primer
 // render: aplicarlo después haría que la app salte de chica a grande.
@@ -25,6 +25,9 @@ restaurarEscala()
  */
 window.addEventListener('vite:preloadError', (evento) => {
   if (!esFalloDeDescarga(evento)) return
+  // Alguien en medio de algo que no se puede cortar (emitir un comprobante):
+  // sin `preventDefault`, el error le llega a quien pidió el archivo.
+  if (recargasAplazadas()) return
   let anotado = null
   try { anotado = sessionStorage.getItem(CLAVE_RECARGA) } catch (e) { /* modo privado */ }
   if (!decidirRecarga(Date.now(), anotado).recargar) return

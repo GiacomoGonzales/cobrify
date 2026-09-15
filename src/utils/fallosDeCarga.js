@@ -86,3 +86,26 @@ export function decidirRecarga(ahora, anotado, espera = ESPERA_ENTRE_RECARGAS_MS
   if (ahora - previo >= espera) return { recargar: true, motivo: 'paso el tiempo de espera' }
   return { recargar: false, motivo: 'ya se recargo recien' }
 }
+
+/**
+ * Mientras alguien está en medio de algo que no se puede cortar (emitir un
+ * comprobante: el número ya se gastó y falta mandarlo), la recarga automática
+ * hace más daño que el archivo que falta: se pierde la ventana y el
+ * comprobante queda sin enviar (reporte de Giacomo, 15-set-2026). Quien toma
+ * este turno recibe el error como cualquier otro y decide qué mostrar.
+ */
+let aplazadas = 0
+
+/** Frena las recargas automáticas; devuelve con qué soltarlas (sirve de limpieza de un efecto). */
+export function aplazarRecargas() {
+  aplazadas += 1
+  let suelto = false
+  return () => {
+    if (suelto) return
+    suelto = true
+    aplazadas = Math.max(0, aplazadas - 1)
+  }
+}
+
+/** ¿Alguien pidió no recargar ahora? */
+export const recargasAplazadas = () => aplazadas > 0

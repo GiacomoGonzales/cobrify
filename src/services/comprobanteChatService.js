@@ -1,4 +1,4 @@
-import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, limit, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
 import { serieParaNumerar, numeroSiguiente } from '@/utils/serieParaNumerar'
 import { db } from '@/lib/firebase'
 import {
@@ -163,6 +163,10 @@ export const armarComprobante = ({ tipo, cliente, producto, desglose: d, metodo,
     igvRate,
     paymentMethod: metodo,
     paymentType: 'contado',
+    // `status` es lo que lee Ventas para mostrarla "Pagada" y contarla entre
+    // las pagadas, y el POS lo pone. Sin él, las del chat salían sin estado
+    // (reporte de Giacomo, 15-set-2026).
+    status: 'paid',
     paymentStatus: 'completed',
     amountPaid: d.total,
     balance: 0,
@@ -234,15 +238,35 @@ export const textoDelEnvio = (comprobante) =>
   `${ETIQUETA_TIPO[comprobante.documentType] || 'Comprobante'} ${comprobante.number} por S/ ${r2(comprobante.total).toFixed(2)}. Gracias por tu pago`
 
 /**
+ * El generador del PDF, bajado una sola vez y a pedido.
+ *
+ * Las ventanas lo piden APENAS se abren, no al final: con la pestaña en una
+ * versión vieja de Cobrify ese archivo ya no existe en el servidor, y cuando
+ * la falla llegaba después de emitir, la factura quedaba hecha, aceptada por
+ * SUNAT y sin enviar (reporte de Giacomo, 15-set-2026: tres facturas así).
+ * Así el problema se ve antes de gastar un número.
+ */
+let generadorPdf = null
+export const cargarGeneradorPdf = () => {
+  if (!generadorPdf) {
+    generadorPdf = import('@/utils/pdfGenerator').catch((error) => {
+      generadorPdf = null // que el siguiente intento (ya actualizado) lo vuelva a pedir
+      throw error
+    })
+  }
+  return generadorPdf
+}
+
+/**
  * Arma el PDF en el navegador y lo manda como documento en la conversación,
  * por el mismo camino que un adjunto del clip. Deja anotado en el comprobante
  * cuándo y a qué conversación se mandó.
  *
- * El generador del PDF se carga recién acá: son 3.400 líneas que el chat no
- * necesita hasta que alguien emite.
+ * El generador es un archivo aparte (son 3.400 líneas que el chat no necesita
+ * hasta que alguien emite): ver `cargarGeneradorPdf`.
  */
 export const enviarPdfPorWhatsapp = async ({ uid, comprobante, ajustes, conversacionId, idToken }) => {
-  const { getInvoicePDFBlob } = await import('@/utils/pdfGenerator')
+  const { getInvoicePDFBlob } = await cargarGeneradorPdf()
   const blob = await getInvoicePDFBlob(comprobante, ajustes, null, [])
   const etiqueta = ETIQUETA_TIPO[comprobante.documentType] || 'Comprobante'
   const archivo = new File([blob], `${etiqueta} ${comprobante.number}.pdf`, { type: 'application/pdf' })
@@ -256,3 +280,36 @@ export const enviarPdfPorWhatsapp = async ({ uid, comprobante, ajustes, conversa
   }).catch(() => {})
   return r
 }
+
+/**
+ * Los últimos comprobantes de este cliente, para volver a mandar el PDF de uno
+ * ya emitido: los que salieron desde esta conversación y los que llevan su RUC
+ * o DNI (emitidos desde Ventas, por ejemplo). Sin anulados.
+ *
+ * Dos consultas de igualdad simple, sin orden en el servidor: no necesitan
+ * índices compuestos. El orden se hace acá, el más nuevo primero.
+ */
+export const comprobantesParaReenviar = async ({ uid, conversacionId, documento }) => {
+  const ref = collection(db, 'businesses', uid, 'invoices')
+  const d = soloDigitos(documento)
+  const consultas = [getDocs(query(ref, where('whatsappConversationId', '==', conversacionId), limit(30)))]
+  if (d.length === 11 || d.length === 8) {
+    consultas.push(getDocs(query(ref, where('customer.documentNumber', '==', d), limit(60))))
+  }
+  const resultados = await Promise.allSettled(consultas)
+  if (resultados.every((r) => r.status === 'rejected')) throw resultados[0].reason
+  const porId = new Map()
+  for (const r of resultados) {
+    if (r.status !== 'fulfilled') continue
+    for (const s of r.value.docs) porId.set(s.id, { id: s.id, ...s.data() })
+  }
+  const ms = (t) => t?.toMillis?.() ?? (t?.seconds ? t.seconds * 1000 : 0)
+  return [...porId.values()]
+    .filter((c) => ['factura', 'boleta', 'nota_venta'].includes(c.documentType))
+    .filter((c) => !['cancelled', 'voided'].includes(c.status))
+    .sort((a, b) => ms(b.createdAt) - ms(a.createdAt))
+    .slice(0, 8)
+}
+
+/** Solo se manda lo que SUNAT aceptó, o lo que no va a SUNAT (nota de venta). */
+export const sePuedeReenviar = (c) => c.documentType === 'nota_venta' || c.sunatStatus === 'accepted'
