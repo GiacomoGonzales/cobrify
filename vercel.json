@@ -10,10 +10,32 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|Googlebot|bingbot|Applebot|Google-InspectionTool|DuckDuckBot|YandexBot|Slurp|CobrifyChat).*"
+          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|CobrifyChat).*"
         }
       ],
       "destination": "/api/catalog-meta?slug=:slug"
+    },
+    {
+      "source": "/catalogo/:slug/tienda",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|CobrifyChat).*"
+        }
+      ],
+      "destination": "/api/catalog-meta?slug=:slug&pagina=tienda"
+    },
+    {
+      "source": "/catalogo/:slug/legal/:pagina",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|CobrifyChat).*"
+        }
+      ],
+      "destination": "/api/catalog-meta?slug=:slug&pagina=legal&legal=:pagina"
     },
     {
       "source": "/menu/:slug",
@@ -21,7 +43,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|Googlebot|bingbot|Applebot|Google-InspectionTool|DuckDuckBot|YandexBot|Slurp|CobrifyChat).*"
+          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|CobrifyChat).*"
         }
       ],
       "destination": "/api/menu-meta?slug=:slug"
@@ -32,10 +54,43 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|Googlebot|bingbot|Applebot|Google-InspectionTool|DuckDuckBot|YandexBot|Slurp|CobrifyChat).*"
+          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|CobrifyChat).*"
         }
       ],
       "destination": "/api/domain-meta"
+    },
+    {
+      "source": "/tienda",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|CobrifyChat).*"
+        }
+      ],
+      "destination": "/api/domain-meta?pagina=tienda"
+    },
+    {
+      "source": "/legal/:pagina",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|CobrifyChat).*"
+        }
+      ],
+      "destination": "/api/domain-meta?pagina=legal&legal=:pagina"
+    },
+    {
+      "source": "/reclamos",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|CobrifyChat).*"
+        }
+      ],
+      "destination": "/api/domain-meta?pagina=reclamos"
     },
     {
       "source": "/:codigo([a-hj-km-np-z2-9]{10})",
@@ -43,7 +98,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|Googlebot|bingbot|Applebot|Google-InspectionTool|DuckDuckBot|YandexBot|Slurp|CobrifyChat).*"
+          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|CobrifyChat).*"
         },
         {
           "type": "host",
@@ -58,7 +113,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|Googlebot|bingbot|Applebot|Google-InspectionTool|DuckDuckBot|YandexBot|Slurp|CobrifyChat).*"
+          "value": ".*(facebookexternalhit|Facebot|LinkedInBot|Twitterbot|WhatsApp|TelegramBot|Slackbot|Discordbot|Pinterest|CobrifyChat).*"
         }
       ],
       "destination": "/api/registro-meta"

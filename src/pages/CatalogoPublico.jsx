@@ -32,7 +32,10 @@ import CatalogFooter from '@/components/catalog/CatalogFooter'
 import HeroMondrian from '@/components/catalog/HeroMondrian'
 import HeroZine from '@/components/catalog/HeroZine'
 import CatalogAmbience from '@/components/catalog/CatalogAmbience'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams, useLocation, useNavigate } from 'react-router-dom'
+import { aplicarSeoDePagina, restaurarSeoDePagina } from '@/utils/seoDePagina'
+import { hayPixeles, redesConPixel, cargarPixeles, eventoDePixel, leerConsentimiento } from '@/utils/pixelesDelCatalogo'
+import AvisoDeCookies from '@/components/catalog/AvisoDeCookies'
 import { collection, query, where, getDocs, doc, getDoc, orderBy, limit, startAfter, documentId } from 'firebase/firestore'
 // CATALOGO = catalogDb (SIN cache persistente), a proposito (14-ago-2026):
 // la instancia principal `db` usa persistencia multi-pestana en IndexedDB, y
@@ -195,6 +198,8 @@ const TEXTURA_PAPEL = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2
 export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = false, customDomain = null, preloadedBusiness = null }) {
   const { slug, rubro: rubroDemo } = useParams()
   const [searchParams] = useSearchParams()
+  const location = useLocation()
+  const navigate = useNavigate()
   const tableFromUrl = searchParams.get('mesa') || searchParams.get('table') || ''
   // `t` = ID del documento de la mesa. Es lo unico que identifica una mesa sin
   // ambiguedad: dos sucursales pueden tener ambas "Mesa 5" y el numero solo no
@@ -247,6 +252,11 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const productsTopRef = useRef(null)
   const [categories, setCategories] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
+  // ?buscar=Clásico abre la tienda ya filtrada (los enlaces de la portada de CITEX).
+  useEffect(() => {
+    const buscar = searchParams.get('buscar')
+    if (buscar) setSearchQuery(buscar)
+  }, [searchParams])
   // Panel de busqueda (port shopifree): la lupa junto a las categorias lo
   // abre; la barra ancha bajo el hero ya no existe.
   const [searchOpen, setSearchOpen] = useState(false)
@@ -278,6 +288,17 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     }
   })
   const [cartOpen, setCartOpen] = useState(false)
+  // PÍXELES de publicidad (utils/pixelesDelCatalogo): se cargan solo si el
+  // negocio los configuró Y el comprador aceptó las cookies (AvisoDeCookies).
+  const pixeles = business?.catalogPixels || null
+  const [consentimiento, setConsentimiento] = useState(null)
+  useEffect(() => {
+    if (business?.id) setConsentimiento(leerConsentimiento(business.id))
+  }, [business?.id])
+  const pixelesActivos = !isDemo && hayPixeles(pixeles) && consentimiento === 'si'
+  useEffect(() => {
+    if (pixelesActivos) cargarPixeles(pixeles)
+  }, [pixelesActivos, pixeles])
 
   // Persistir el carrito en localStorage ante cualquier cambio (agregar, quitar,
   // cambiar cantidad). Al vaciarse (pedido enviado) se limpia la clave.
@@ -579,29 +600,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     checkActiveTable()
   }, [business, tableFromUrl, tableIdFromUrl, isRestaurantMenu, isDemo])
 
-  // Actualizar título y favicon de la pestaña con datos del negocio
-  useEffect(() => {
-    if (!business) return
-    const businessName = business.name || business.businessName || ''
-    if (businessName) {
-      // El título que eligió el negocio (Apariencia), o el de siempre.
-      document.title = business.catalogPageTitle?.trim() || (isRestaurantMenu
-        ? `${businessName} - Menú Digital`
-        : `${businessName} - Catálogo`)
-    }
-    // El ícono de la pestaña: el que subió el negocio para eso, o su logo.
-    const displayLogo = business.catalogFaviconUrl || business.catalogLogoUrl || business.logoUrl
-    if (displayLogo) {
-      const favicons = document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"], link[rel="shortcut icon"]')
-      favicons.forEach(el => el.setAttribute('href', displayLogo))
-    }
-    // Restaurar al desmontar
-    return () => {
-      document.title = 'Sistema de Facturación Electrónica SUNAT | Retail y Restaurantes en Perú'
-      const favicons = document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"], link[rel="shortcut icon"]')
-      favicons.forEach(el => el.setAttribute('href', '/logo.png'))
-    }
-  }, [business, isRestaurantMenu])
+  // El título, la descripción y el ícono de la pestaña se ponen más abajo,
+  // junto con el resto del SEO de la página (después de saber qué página es).
 
   // Obtener categorías raíz (sin parentId) para mostrar en el catálogo, ordenadas
   const rootCategories = useMemo(() => {
@@ -1089,10 +1089,24 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
   const thPrice = themeClasses.priceClass || 'text-base font-bold'
   const thFontWrapper = themeClasses.fontWrapper || 'font-sans'
 
+  // Precio de un producto en la moneda del catálogo, para los píxeles.
+  const precioParaPixel = (item, unitPrice = null) => {
+    const fixedUSD = Number(item?.fixedPriceUSD)
+    if (catalogCurrency === 'USD' && Number.isFinite(fixedUSD) && fixedUSD > 0) return fixedUSD
+    const pen = Number(unitPrice ?? item?.unitPrice ?? item?.price) || 0
+    return catalogCurrency === 'PEN' ? pen : Number(convertFromBase(pen, 'USD', catalogExchangeRate || 1).toFixed(2))
+  }
+
   // Funciones del carrito
   const addToCart = (product, quantity = 1, selectedModifiers = [], unitPrice = null, priceLevelLabel = null, basePrice = null) => {
     // No permitir agregar productos agotados
     if (isProductOutOfStock(product, ignoreStock, almacenesDelCatalogo(business))) return
+    // Aviso a los píxeles de publicidad (no hace nada si no hay ninguno cargado).
+    eventoDePixel('alCarrito', {
+      items: [{ id: product.id, nombre: product.name, precio: precioParaPixel(product, unitPrice), cantidad: Number(quantity) || 1 }],
+      valor: precioParaPixel(product, unitPrice) * (Number(quantity) || 1),
+      moneda: catalogCurrency,
+    })
 
     // Determinar precio según cantidad: para cada nivel de precio (price2/3/4)
     // que cumpla su cantidad mínima propia, elegimos el MÁS BARATO. Si ninguno
@@ -1349,6 +1363,14 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       )
     }
 
+    // Para los píxeles, el pedido por WhatsApp es el cierre que la tienda
+    // puede saber (no hace nada si no hay ninguno cargado).
+    eventoDePixel('pedido', {
+      id: `wa-${Date.now()}`,
+      items: cart.map((i) => ({ id: i.id, nombre: i.name, precio: itemDisplay(i), cantidad: i.quantity })),
+      valor: cart.reduce((s, i) => s + itemDisplay(i) * i.quantity, 0),
+      moneda: catalogCurrency,
+    })
     window.open(`https://wa.me/${phone}?text=${message}`, '_blank')
   }
 
@@ -1378,15 +1400,120 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
     document.documentElement.style.fontSize = '16px'
     return () => { document.documentElement.style.fontSize = antes }
   }, [Replica])
-  const irATienda = () => {
-    const tienda = document.getElementById('tienda')
-    if (tienda) tienda.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-  // "Ver precios" de una línea de su web: filtra la tienda y baja a ella.
+  // PÁGINAS de la réplica (pedido de Luis, 14-set-2026): la portada de su web
+  // en la raíz, la tienda en /tienda y sus políticas en /legal/... Los catálogos
+  // de siempre son una sola página: la tienda. `base` es '' en el dominio
+  // propio y '/catalogo/<slug>' en cobrifyperu.com; los enlaces de la réplica
+  // salen de ahí.
+  const base = customDomain
+    ? ''
+    : `${location.pathname.startsWith('/app/') ? '/app' : ''}/${isRestaurantMenu ? 'menu' : 'catalogo'}/${slug || ''}`
+  const paginaDeReplica = useMemo(() => {
+    if (!replicaId) return 'tienda'
+    const resto = location.pathname.slice(base.length).replace(/\/+$/, '')
+    if (resto === '/tienda') return 'tienda'
+    const pagLegal = resto.match(/^\/legal\/([a-z0-9-]+)$/)
+    if (pagLegal) return `legal/${pagLegal[1]}`
+    return 'inicio'
+  }, [replicaId, location.pathname, base])
+  const enTienda = paginaDeReplica === 'tienda'
+  // "Ver precios" de una línea de su web: abre la tienda filtrada por esa línea.
   const verLineaDeReplica = (texto) => {
     setSearchQuery(texto || '')
-    setTimeout(irATienda, 60)
+    navigate(`${base}/tienda${texto ? `?buscar=${encodeURIComponent(texto)}` : ''}`)
   }
+  // Al cambiar de página: arriba, o a la sección que pide el enlace (#nosotros).
+  useEffect(() => {
+    if (!Replica) return undefined
+    const id = location.hash ? decodeURIComponent(location.hash.slice(1)) : ''
+    if (!id) {
+      window.scrollTo(0, 0)
+      return undefined
+    }
+    // La sección puede tardar un instante en pintarse al cambiar de página:
+    // se la busca hasta 1.5 s antes de darse por vencido.
+    let intentos = 0
+    const t = setInterval(() => {
+      const destino = document.getElementById(id)
+      intentos += 1
+      if (destino || intentos > 25) {
+        clearInterval(t)
+        if (destino) destino.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    }, 60)
+    return () => clearInterval(t)
+  }, [Replica, location.key, location.hash])
+
+  // TÍTULO, descripción, dirección canónica y tarjetas de la página
+  // (utils/seoDePagina), más el ícono de la pestaña. Con réplica cada página
+  // tiene lo suyo (aMedida/citex/seo.js); sin réplica, el título elegido en
+  // Apariencia (o el de siempre), y la descripción sale del eslogan o de la
+  // bienvenida del catálogo.
+  useEffect(() => {
+    if (!business) return undefined
+    const businessName = business.name || business.businessName || ''
+    const seoReplica = Replica?.seoDePagina ? Replica.seoDePagina(paginaDeReplica) : null
+    const tituloPorDefecto = business.catalogPageTitle?.trim()
+      || (isRestaurantMenu ? `${businessName} - Menú Digital` : `${businessName} - Catálogo`)
+    const descripcionPorDefecto = String(business.catalogTagline || business.catalogWelcome || business.companySlogan || '').trim()
+      || (isRestaurantMenu
+        ? `Menú digital de ${businessName}. Mira la carta y haz tu pedido desde tu celular.`
+        : `Catálogo de productos de ${businessName}. Mira los productos y haz tu pedido.`)
+    const origen = customDomain ? `https://${customDomain}` : 'https://cobrifyperu.com'
+    const rutaCanonica = (customDomain
+      ? location.pathname
+      : `/${isRestaurantMenu ? 'menu' : 'catalogo'}/${slug}${location.pathname.slice(base.length)}`
+    ).replace(/\/+$/, '') || '/'
+    if (isDemo || !businessName) {
+      if (businessName) document.title = tituloPorDefecto
+    } else {
+      aplicarSeoDePagina({
+        titulo: seoReplica?.titulo || tituloPorDefecto,
+        descripcion: seoReplica?.descripcion || descripcionPorDefecto,
+        url: `${origen}${rutaCanonica}`,
+        imagen: business.catalogSocialImage || business.catalogLogoUrl || business.logoUrl || '',
+        tipo: seoReplica?.tipo || 'website',
+        nombreDelSitio: businessName,
+      })
+    }
+    // El ícono de la pestaña: el que subió el negocio para eso, o su logo.
+    const displayLogo = business.catalogFaviconUrl || business.catalogLogoUrl || business.logoUrl
+    if (displayLogo) {
+      const favicons = document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"], link[rel="shortcut icon"]')
+      favicons.forEach(el => el.setAttribute('href', displayLogo))
+    }
+    // Restaurar al desmontar
+    return () => {
+      restaurarSeoDePagina()
+      document.title = 'Sistema de Facturación Electrónica SUNAT | Retail y Restaurantes en Perú'
+      const favicons = document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"], link[rel="shortcut icon"]')
+      favicons.forEach(el => el.setAttribute('href', '/logo.png'))
+    }
+  }, [business, isRestaurantMenu, isDemo, customDomain, slug, base, Replica, paginaDeReplica, location.pathname])
+
+  // Píxeles: la visita de cada página, el producto que se abre y el carrito
+  // al abrirse con productos. Los tres no hacen nada sin píxeles cargados.
+  useEffect(() => {
+    if (pixelesActivos) eventoDePixel('pagina')
+  }, [pixelesActivos, paginaDeReplica])
+  useEffect(() => {
+    if (!selectedProduct) return
+    eventoDePixel('producto', {
+      items: [{ id: selectedProduct.id, nombre: selectedProduct.name, precio: precioParaPixel(selectedProduct), cantidad: 1 }],
+      valor: precioParaPixel(selectedProduct),
+      moneda: catalogCurrency,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProduct])
+  useEffect(() => {
+    if (!cartOpen || cart.length === 0) return
+    eventoDePixel('carrito', {
+      items: cart.map((i) => ({ id: i.id, nombre: i.name, precio: precioParaPixel(i, i.unitPrice), cantidad: i.quantity })),
+      valor: cart.reduce((s, i) => s + precioParaPixel(i, i.unitPrice) * i.quantity, 0),
+      moneda: catalogCurrency,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartOpen])
 
   // Pantalla "Temporalmente fuera de servicio" — se muestra cuando la
   // suscripción del negocio está suspendida/bloqueada. El cliente final
@@ -1598,6 +1725,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           tema y carrito en la forma que el tema pide. */}
       {Replica ? (
         <Replica.Cabecera
+          base={base}
+          pagina={paginaDeReplica}
           cantidadEnCarrito={cartItemsCount}
           onCarrito={() => setCartOpen(true)}
           conCuentas={customerAccountsOn}
@@ -2010,10 +2139,17 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       {/* Hero / Búsqueda — carrusel (F2.2) si está activado, banner cuando hay
           portada única, clásico (gradient) si no hay nada */}
       {Replica ? (
-        <>
-          <Replica.Portada />
-          <Replica.SeccionesAntes onVerLinea={verLineaDeReplica} />
-        </>
+        // Las PÁGINAS de la réplica: la portada y las secciones de su web en la
+        // raíz, una política en /legal/..., y en /tienda nada acá (la tienda va
+        // abajo, en el bloque que solo se pinta en esa página).
+        paginaDeReplica === 'inicio' ? (
+          <>
+            <Replica.Portada base={base} />
+            <Replica.SeccionesAntes base={base} onVerLinea={verLineaDeReplica} />
+          </>
+        ) : paginaDeReplica.startsWith('legal/') ? (
+          <Replica.PaginaLegal base={base} pagina={paginaDeReplica.slice(6)} />
+        ) : null
       ) : themeChrome.heroCover === 'collage' ? (
         /* Collage de fanzine (Zine): reemplaza a portada y carrusel — la foto
            va DENTRO del collage, recortada y pegada, no como banner. */
@@ -2523,6 +2659,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         </div>
       )}
 
+      {/* La TIENDA: en un catálogo de siempre es toda la página; en la réplica
+          de CITEX, solo la página /tienda. */}
+      {enTienda && (
+      <>
       {/* Sellos de confianza (F2.6) — debajo del hero, activables */}
       <TrustBadges
         config={business?.catalogTrustBadges}
@@ -2559,7 +2699,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         </div>
       )}
 
-      {Replica && <Replica.EncabezadoTienda />}
+      {Replica && <Replica.EncabezadoTienda base={base} />}
       {/* Observaciones del catálogo */}
       {Replica ? <Replica.Notas texto={business?.catalogObservations} /> : business?.catalogObservations && (
         <div className="max-w-7xl mx-auto px-4 mt-4">
@@ -3184,6 +3324,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           </p>
         )}
       </main>
+      </>
+      )}
         </div>{/* fin columna de contenido (layout sidebar) */}
       </div>{/* fin wrapper de dos columnas (layout sidebar) */}
 
@@ -3195,8 +3337,8 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
           Online). Vive en su propio componente y se pinta con tokens. */}
       {Replica ? (
         <>
-          <Replica.SeccionesDespues />
-          <Replica.Pie />
+          {paginaDeReplica === 'inicio' && <Replica.SeccionesDespues base={base} />}
+          <Replica.Pie base={base} />
           <Replica.Flotantes />
         </>
       ) : (
@@ -3322,6 +3464,16 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         business={business}
         onAddMore={() => {}}
       />
+
+      {/* Aviso de cookies: solo si el negocio configuró píxeles (utils/pixelesDelCatalogo). */}
+      {!isDemo && business?.id && hayPixeles(pixeles) && (
+        <AvisoDeCookies
+          businessId={business.id}
+          redes={redesConPixel(pixeles)}
+          politica={Replica ? `${base}/legal/politica-privacidad` : null}
+          onDecidir={(acepta) => setConsentimiento(acepta ? 'si' : 'no')}
+        />
+      )}
     </div>
     </CatalogThemeProvider>
   )

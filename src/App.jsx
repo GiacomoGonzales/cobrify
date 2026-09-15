@@ -314,6 +314,13 @@ function App() {
                     : <LandingRouter />
               }
             />
+            {/* Con DOMINIO PROPIO de catálogo (citex.pe), estas páginas también son
+                del catálogo: la tienda, las políticas y el libro de reclamaciones
+                viven en el mismo dominio (pedido de CITEX, 14-set-2026). En
+                cobrifyperu.com no existen y vuelven al inicio. */}
+            <Route path="/tienda" element={<LandingRouter subpagina="catalogo" />} />
+            <Route path="/legal/:pagina" element={<LandingRouter subpagina="catalogo" />} />
+            <Route path="/reclamos" element={<LandingRouter subpagina="reclamos" />} />
 
             {/* Activar una cuenta nueva. En registro.cobrifyperu.com el código
                 va pelado en la raíz —es el enlace que se manda por WhatsApp a
@@ -345,6 +352,12 @@ function App() {
             {/* Catálogo público */}
             <Route path="/catalogo/:slug" element={<CatalogoPublico />} />
             <Route path="/app/catalogo/:slug" element={<CatalogoPublico />} />
+            {/* Páginas de un catálogo con diseño a medida (hoy CITEX): la tienda y
+                las políticas, dentro del mismo enlace. */}
+            <Route path="/catalogo/:slug/tienda" element={<CatalogoPublico />} />
+            <Route path="/catalogo/:slug/legal/:pagina" element={<CatalogoPublico />} />
+            <Route path="/app/catalogo/:slug/tienda" element={<CatalogoPublico />} />
+            <Route path="/app/catalogo/:slug/legal/:pagina" element={<CatalogoPublico />} />
 
             {/* Menú digital para restaurantes */}
             <Route path="/menu/:slug" element={<CatalogoPublico isRestaurantMenu />} />

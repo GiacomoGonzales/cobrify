@@ -69,8 +69,11 @@ const complaintSchema = z.object({
   path: ['guardian']
 })
 
-export default function LibroReclamaciones() {
-  const { slug } = useParams()
+export default function LibroReclamaciones({ slugFijo = null }) {
+  const { slug: slugDeRuta } = useParams()
+  // Con dominio propio de catálogo (citex.pe/reclamos) el libro no lleva el
+  // slug en la dirección: llega fijo desde LandingRouter.
+  const slug = slugFijo || slugDeRuta
   const [business, setBusiness] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)

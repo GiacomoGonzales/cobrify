@@ -21,6 +21,7 @@ import {
 } from '@/components/catalog/catalogHelpers'
 import { validateCoupon, normalizeCouponCode } from '@/services/couponService'
 import { idDeFidelizacion } from '@/utils/businessGroup'
+import { eventoDePixel } from '@/utils/pixelesDelCatalogo'
 import {
   X,
   Plus,
@@ -519,6 +520,13 @@ export default function CartDrawer({
             : Math.min(appliedCoupon.value, orderGrossInBase))
         : 0
       const orderTotalDisplay = Math.max(0, orderGrossDisplay - couponDiscDisplay)
+      // El pedido, para los píxeles de publicidad (no hace nada si no hay ninguno cargado).
+      const avisarPedidoAPixeles = (id) => eventoDePixel('pedido', {
+        id: String(id || ''),
+        items: cart.map((i) => ({ id: i.id, nombre: i.name, precio: itemUnitInCatalogCcy(i), cantidad: i.quantity })),
+        valor: orderTotalDisplay,
+        moneda: catalogCurrency,
+      })
       const orderTotalInBase = Math.max(0, orderGrossInBase - couponDiscInBase)
       const taxCfg = business.emissionConfig?.taxConfig || business.taxConfig || {}
       const igvRate = taxCfg.igvRate || 18
@@ -660,6 +668,7 @@ export default function CartDrawer({
           setOrderConfirmItems([...cart])
         setOrderConfirmCoupon(appliedCoupon ? { ...appliedCoupon } : null)
           setOrderSuccess(true)
+          avisarPedidoAPixeles(activeTableOrder.orderNumber || orderNum)
 
           // Limpiar carrito y recargar orden
           cart.forEach(item => onRemove(item.cartItemId || item.id))
@@ -741,6 +750,7 @@ export default function CartDrawer({
       setOrderConfirmItems([...cart])
         setOrderConfirmCoupon(appliedCoupon ? { ...appliedCoupon } : null)
       setOrderSuccess(true)
+      avisarPedidoAPixeles(orderNum)
 
       // Limpiar carrito y recargar orden activa
       cart.forEach(item => onRemove(item.cartItemId || item.id))

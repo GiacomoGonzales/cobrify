@@ -5,39 +5,58 @@
  * notar.
  *
  * Es una copia de su web: cabecera, portada, secciones 01 a 08, pie y botón
- * de WhatsApp, con la tienda en vivo entre "02 / Productos" y "03 /
- * Ubicación". El marcado, las clases y los textos salen de su página tal como
+ * de WhatsApp. El marcado, las clases y los textos salen de su página tal como
  * estaba el 10-set-2026; los estilos propios están en citex.css. Si Luis
  * cambia su web, esto se cambia a mano: no se sincroniza solo.
  *
- * Lo carga CatalogoPublico solo cuando el tema tiene `replica: 'citex'`
- * (src/themes/temasAMedida.js), con import dinámico: a los demás catálogos
- * no les pesa. Todas las réplicas exportan las mismas piezas: Cabecera,
- * Portada, SeccionesAntes, EncabezadoTienda, Notas, SeccionesDespues, Pie y
- * Flotantes.
+ * Segunda vuelta (14-set-2026, pedido de Luis): citex.pe es ahora un sitio de
+ * varias PÁGINAS y nada sale del dominio.
+ *   /               la portada y las secciones de su web (sin la tienda)
+ *   /tienda         la tienda en línea, en su propia página
+ *   /legal/...      sus cuatro políticas (./legales.js), antes en citex.com.pe
+ *   /reclamos       el Libro de Reclamaciones
+ * El cotizador "Armar mi pedido" (citex.com.pe/cotizador) desapareció: la
+ * tienda lo reemplaza. Los PDF de sus catálogos viven en public/a-medida/citex.
+ * Cada página tiene su título y descripción (./seo.js).
+ *
+ * `base` es '' en citex.pe y '/catalogo/citex' en cobrifyperu.com: todos los
+ * enlaces internos salen de ahí. Lo carga CatalogoPublico solo cuando el tema
+ * tiene `replica: 'citex'` (src/themes/temasAMedida.js), con import dinámico:
+ * a los demás catálogos no les pesa. Todas las réplicas exportan las mismas
+ * piezas: Cabecera, Portada, SeccionesAntes, EncabezadoTienda, Notas,
+ * PaginaLegal, SeccionesDespues, Pie, Flotantes y seoDePagina.
  */
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ShoppingBag, User } from 'lucide-react'
+import { abrirPreferenciasDeCookies } from '@/utils/pixelesDelCatalogo'
+import { LEGALES, ORDEN_LEGALES } from './legales.js'
+import { seoDePaginaCitex } from './seo.js'
 import './citex.css'
 
-const WEB = 'https://www.citex.com.pe'
 const WHATSAPP = 'https://wa.me/51976291526'
 
+// Sus catálogos en PDF, ahora dentro del dominio.
+const ARCHIVOS = {
+  pdfAlgodon: '/a-medida/citex/catalogo-algodon.pdf',
+  pdfSublimacion: '/a-medida/citex/catalogo-sublimacion.pdf',
+}
+
 const ENLACES = {
-  cotizador: `${WEB}/cotizador`,
-  catalogos: `${WEB}/catalogo`,
-  pdfAlgodon: `${WEB}/CATALOGO_ALGODO_N_CITEX.pdf`,
-  pdfSublimacion: `${WEB}/CATALOGO_SUBLIMACIO_N_CITEX.pdf`,
-  reclamos: 'https://cobrifyperu.com/app/reclamos/citex',
   whatsappCotizar: `${WHATSAPP}?text=Hola%20CITEX%2C%20quiero%20cotizar%20polos%20por%20mayor`,
   whatsappCotizarPolos: `${WHATSAPP}?text=Hola%20CITEX%2C%20quiero%20cotizar%20polos`,
   mapsFiscal: 'https://maps.app.goo.gl/WRn3sH5x7dHvHGBH9',
   mapsTienda: 'https://maps.app.goo.gl/wjbSGpWueKZmS1tg6',
-  privacidad: `${WEB}/legal/politica-privacidad`,
-  cambios: `${WEB}/legal/politica-cambios-devoluciones`,
-  envios: `${WEB}/legal/politica-envios`,
-  terminos: `${WEB}/legal/terminos-condiciones`,
 }
+
+// Las páginas del sitio, relativas a `base`.
+const tienda = (base) => `${base}/tienda`
+const inicio = (base) => `${base}/`
+const legal = (base, pagina) => `${base}/legal/${pagina}`
+const seccion = (base, id) => `${base}/#${id}`
+// En citex.pe el libro vive en /reclamos; desde cobrifyperu.com sigue siendo
+// el de siempre, con su enlace corto.
+const reclamos = (base) => (base ? '/reclamos/citex' : '/reclamos')
 
 // Las imágenes de su web (venían metidas en el HTML) viven en public/.
 const IMG = {
@@ -51,12 +70,9 @@ const PILDORA = 'inline-flex items-center justify-center rounded-full bg-white t
 const PILDORA_CONTORNO = 'inline-flex items-center justify-center rounded-full bg-transparent text-white border border-white/80 px-[28px] h-[44px] text-[11px] font-[600] tracking-[0.12em] uppercase hover:bg-white hover:text-black transition-all duration-300 backdrop-blur-[2px]'
 const FLECHA = 'w-8 h-8 rounded-full border border-black/15 flex items-center justify-center group-hover:bg-black group-hover:text-white transition-colors'
 
-// La cabecera es pegajosa: cada ancla deja su alto de margen (citex.css).
-const irA = (id) => (e) => {
-  if (e && e.preventDefault) e.preventDefault()
-  const destino = document.getElementById(id)
-  if (destino) destino.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
+/** El título y la descripción de cada página, para CatalogoPublico (utils/seoDePagina). */
+// eslint-disable-next-line react-refresh/only-export-components
+export const seoDePagina = (pagina) => seoDePaginaCitex(pagina)
 
 const LINEAS = [
   {
@@ -70,9 +86,10 @@ const LINEAS = [
     accion: 'Ver precios', buscar: 'Over',
   },
   {
+    // Sin el cotizador, lo personalizado se cotiza con el formulario de abajo.
     etiqueta: 'A medida', numero: '03', img: IMG.personalizado, alt: 'Polo Personalizado', titulo: 'Polo Personalizado',
     texto: 'Tu marca, tu etiqueta, los colores que quiera. Desde 50 unidades.',
-    accion: 'Cotización', href: ENLACES.cotizador,
+    accion: 'Cotizar', ancla: 'cotizacion',
   },
 ]
 
@@ -84,8 +101,8 @@ const BENEFICIOS = [
 ]
 
 const PASOS = [
-  ['01', 'Elige tu modelo', 'Revisa el catálogo y cuéntanos qué necesitas.'],
-  ['02', 'Solicita tu cotización', 'Indica cantidad, talla, color, material y ciudad.'],
+  ['01', 'Elige tu modelo', 'Revisa la tienda y cuéntanos qué necesitas.'],
+  ['02', 'Compra o cotiza', 'Compra en línea, o indica cantidad, talla, color, material y ciudad.'],
   ['03', 'Confirma el pedido', 'Te ayudamos a definir disponibilidad y entrega.'],
   ['04', 'Recibe tu compra', 'Retira en tienda o recibe tu pedido por envío.'],
 ]
@@ -105,7 +122,7 @@ const CONFIANZA = [
 ]
 
 /** Su cabecera. Suma lo que la tienda necesita y su web no tiene: carrito y cuenta. */
-export function Cabecera({ cantidadEnCarrito = 0, onCarrito, conCuentas = false, onCuenta }) {
+export function Cabecera({ base = '', pagina = 'inicio', cantidadEnCarrito = 0, onCarrito, conCuentas = false, onCuenta }) {
   const [abierto, setAbierto] = useState(false)
 
   // Con el menú abierto la página de atrás no se desplaza, como en su web.
@@ -121,17 +138,17 @@ export function Cabecera({ cantidadEnCarrito = 0, onCarrito, conCuentas = false,
     }
   }, [abierto])
 
-  // Primero se cierra el menú y después se desplaza: con el menú abierto la
-  // página está bloqueada.
-  const cerrarY = (accion) => (e) => {
-    if (e && e.preventDefault && accion) e.preventDefault()
-    setAbierto(false)
-    if (accion) setTimeout(() => accion(), 60)
-  }
+  // Al cambiar de página el menú se cierra solo.
+  useEffect(() => { setAbierto(false) }, [pagina])
+
+  const cerrar = () => setAbierto(false)
   const alInicio = (e) => {
-    e.preventDefault()
+    // Ya en la portada: subir, sin recargar nada.
+    if (pagina === 'inicio') {
+      e.preventDefault()
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
     setAbierto(false)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const carrito = (clase) => (
@@ -145,10 +162,10 @@ export function Cabecera({ cantidadEnCarrito = 0, onCarrito, conCuentas = false,
     <>
       <header className="citex-index-header" aria-label="Navegación principal">
         <nav className="citex-index-nav citex-index-nav-left" aria-label="Secciones principales">
-          <a href="#nosotros" onClick={irA('nosotros')}>Nosotros</a>
-          <a href="#tienda" onClick={irA('tienda')}>Productos</a>
-          <a href={ENLACES.cotizador} title="Arma tu pedido por mayor o personalizado">Armar mi pedido</a>
-          <a href="#ubicacion" onClick={irA('ubicacion')}>Tienda física</a>
+          <Link to={seccion(base, 'nosotros')}>Nosotros</Link>
+          <Link to={seccion(base, 'productos')}>Productos</Link>
+          <Link to={tienda(base)} aria-current={pagina === 'tienda' ? 'page' : undefined}>Tienda en línea</Link>
+          <Link to={seccion(base, 'ubicacion')}>Tienda física</Link>
         </nav>
         <button
           className="citex-index-menu-button"
@@ -161,12 +178,12 @@ export function Cabecera({ cantidadEnCarrito = 0, onCarrito, conCuentas = false,
           <span />
           <span />
         </button>
-        <a className="citex-index-logo" href="#inicio" aria-label="CITEX inicio" onClick={alInicio}>
+        <Link className="citex-index-logo" to={inicio(base)} aria-label="CITEX inicio" onClick={alInicio}>
           <img src={IMG.logo} alt="CITEX" />
-        </a>
+        </Link>
         <div className="citex-index-nav citex-index-nav-right">
-          <a className="citex-index-reclamaciones" href={ENLACES.reclamos} target="_blank" rel="noopener noreferrer">Libro de reclamaciones</a>
-          <a className="citex-index-store" href="#tienda" onClick={irA('tienda')}>Comprar ahora</a>
+          <Link className="citex-index-reclamaciones" to={reclamos(base)}>Libro de reclamaciones</Link>
+          <Link className="citex-index-store" to={tienda(base)}>Comprar ahora</Link>
           {conCuentas && (
             <button type="button" className="citex-index-cart citex-index-account" onClick={onCuenta} aria-label="Mi cuenta">
               <User className="w-[18px] h-[18px]" strokeWidth={1.6} />
@@ -179,20 +196,20 @@ export function Cabecera({ cantidadEnCarrito = 0, onCarrito, conCuentas = false,
         {carrito('citex-index-cart citex-index-cart-movil')}
       </header>
       <nav className={`citex-index-mobile-menu${abierto ? ' is-open' : ''}`} id="citex-index-mobile-menu" aria-label="Navegación móvil">
-        <a href="#nosotros" onClick={cerrarY(irA('nosotros'))}>Nosotros</a>
-        <a href="#tienda" onClick={cerrarY(irA('tienda'))}>Productos</a>
-        <a href={ENLACES.cotizador} title="Arma tu pedido por mayor o personalizado">Armar mi pedido</a>
-        <a href="#ubicacion" onClick={cerrarY(irA('ubicacion'))}>Tienda física</a>
-        <a href="#tienda" onClick={cerrarY(irA('tienda'))}>Comprar ahora</a>
-        {conCuentas && <a href="#cuenta" onClick={cerrarY(() => onCuenta && onCuenta())}>Mi cuenta</a>}
-        <a href={ENLACES.reclamos} target="_blank" rel="noopener noreferrer">Libro de reclamaciones</a>
+        <Link to={seccion(base, 'nosotros')} onClick={cerrar}>Nosotros</Link>
+        <Link to={seccion(base, 'productos')} onClick={cerrar}>Productos</Link>
+        <Link to={tienda(base)} onClick={cerrar}>Tienda en línea</Link>
+        <Link to={seccion(base, 'ubicacion')} onClick={cerrar}>Tienda física</Link>
+        <Link to={tienda(base)} onClick={cerrar}>Comprar ahora</Link>
+        {conCuentas && <a href="#cuenta" onClick={(e) => { e.preventDefault(); cerrar(); if (onCuenta) setTimeout(onCuenta, 60) }}>Mi cuenta</a>}
+        <Link to={reclamos(base)} onClick={cerrar}>Libro de reclamaciones</Link>
       </nav>
     </>
   )
 }
 
-/** Su portada: la foto, el titular y los tres botones cápsula. */
-export function Portada() {
+/** Su portada: la foto, el titular y los botones cápsula (sin el cotizador). */
+export function Portada({ base = '' }) {
   return (
     <section id="inicio" className="citex-hero relative h-[calc(100vh-52px)] min-h-[620px] bg-[#121212] overflow-hidden max-w-[100vw]">
       <div className="citex-hero-media absolute inset-0 w-full overflow-hidden">
@@ -206,9 +223,8 @@ export function Portada() {
             <h1 className="citex-hero-title montserrat">Polos de fábrica para marcas y emprendimientos</h1>
             <p className="citex-hero-lead">Compra por mayor o menor desde Gamarra. Prendas listas para personalizar y envíos a todo el Perú.</p>
             <div className="citex-hero-actions mt-8 w-full flex items-center gap-4">
-              <a className={`${PILDORA} citex-hero-quote`} href={ENLACES.cotizador} title="Elige productos, tallas, colores y estampados">Armar mi pedido</a>
-              <a className={PILDORA} href="#tienda" onClick={irA('tienda')}>Comprar ahora</a>
-              <a className={PILDORA_CONTORNO} href={ENLACES.catalogos} target="_blank" rel="noopener noreferrer">Ver catálogo</a>
+              <Link className={PILDORA} to={tienda(base)}>Comprar ahora</Link>
+              <Link className={PILDORA_CONTORNO} to={seccion(base, 'catalogos')}>Ver catálogos</Link>
             </div>
           </div>
         </div>
@@ -218,8 +234,8 @@ export function Portada() {
   )
 }
 
-/** 01 / Nosotros y 02 / Productos. "Ver precios" filtra la tienda por esa línea. */
-export function SeccionesAntes({ onVerLinea }) {
+/** 01 / Nosotros y 02 / Productos. "Ver precios" abre la tienda filtrada por esa línea. */
+export function SeccionesAntes({ base = '', onVerLinea }) {
   return (
     <>
       <section id="nosotros" className="bg-[#1E1E1E] text-white py-20 lg:py-28 px-6 lg:px-[8%]">
@@ -257,14 +273,14 @@ export function SeccionesAntes({ onVerLinea }) {
         </div>
       </section>
 
-      <section id="blog" className="bg-[#F4F2EE] py-20 lg:py-28 px-6 lg:px-[8%]">
+      <section id="productos" className="bg-[#F4F2EE] py-20 lg:py-28 px-6 lg:px-[8%]">
         <div className="max-w-[1400px] mx-auto">
           <div className="flex justify-between items-end mb-12">
             <div>
               <span className="text-[10px] tracking-[0.2em] uppercase text-black/40">02 / Productos</span>
               <h3 className="mt-3 text-[32px] lg:text-[42px] font-[300] tracking-[-0.02em] leading-[0.9]">Esenciales<br />de taller propio</h3>
             </div>
-            <a href="#tienda" onClick={irA('tienda')} className="hidden lg:inline-flex text-[11px] tracking-[0.14em] uppercase border-b border-black pb-1 hover:opacity-60">Comprar ahora</a>
+            <Link to={tienda(base)} className="hidden lg:inline-flex text-[11px] tracking-[0.14em] uppercase border-b border-black pb-1 hover:opacity-60">Comprar ahora</Link>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-[1px] bg-black/10 border border-black/10">
             {LINEAS.map((l) => (
@@ -282,15 +298,15 @@ export function SeccionesAntes({ onVerLinea }) {
                   <p className="mt-2 text-[13px] leading-[1.5] text-black/60 max-w-[28ch]">{l.texto}</p>
                   <div className="mt-6 flex items-center justify-between">
                     <span className="text-[12px] font-[600] tracking-[0.05em]">{l.accion}</span>
-                    {l.href ? (
-                      <a href={l.href} className={FLECHA} aria-label={`${l.accion}: ${l.titulo}`}>↗</a>
+                    {l.ancla ? (
+                      <Link to={seccion(base, l.ancla)} className={FLECHA} aria-label={`${l.accion}: ${l.titulo}`}>↗</Link>
                     ) : (
-                      <a
-                        href="#tienda"
-                        onClick={(e) => { e.preventDefault(); if (onVerLinea) onVerLinea(l.buscar) }}
+                      <Link
+                        to={tienda(base)}
+                        onClick={(e) => { if (onVerLinea) { e.preventDefault(); onVerLinea(l.buscar) } }}
                         className={FLECHA}
                         aria-label={`${l.accion}: ${l.titulo}`}
-                      >↗</a>
+                      >↗</Link>
                     )}
                   </div>
                 </div>
@@ -303,12 +319,15 @@ export function SeccionesAntes({ onVerLinea }) {
   )
 }
 
-/** Arriba de la tienda en vivo. Es también el destino de "Comprar ahora". */
-export function EncabezadoTienda() {
+/** Arriba de la tienda en vivo, en su propia página. */
+export function EncabezadoTienda({ base = '' }) {
   return (
-    <div id="tienda" className="max-w-7xl mx-auto px-4 pt-16 lg:pt-20 pb-4">
-      <span className="text-[10px] tracking-[0.2em] uppercase text-black/40">Tienda en línea</span>
-      <h3 className="mt-3 text-[32px] lg:text-[42px] font-[300] tracking-[-0.02em] leading-[0.9]">Compra por mayor<br />o menor</h3>
+    <div id="tienda" className="max-w-7xl mx-auto px-4 pt-10 lg:pt-14 pb-4">
+      <Link to={inicio(base)} className="citex-tienda-volver">← Inicio</Link>
+      <div>
+        <span className="text-[10px] tracking-[0.2em] uppercase text-black/40">Tienda en línea</span>
+        <h1 className="mt-3 text-[32px] lg:text-[42px] font-[300] tracking-[-0.02em] leading-[0.9]">Compra por mayor<br />o menor</h1>
+      </div>
     </div>
   )
 }
@@ -320,6 +339,59 @@ export function Notas({ texto }) {
     <div className="max-w-7xl mx-auto px-4 mt-2 mb-4">
       <p className="border-l border-black/10 pl-6 text-[13px] leading-[1.6] text-black/60 whitespace-pre-wrap max-w-[100ch]">{texto}</p>
     </div>
+  )
+}
+
+/**
+ * Una de sus páginas legales (./legales.js), con las migas, el título y los
+ * bloques tal como están en su web. Una dirección que no existe muestra el
+ * aviso y el camino de vuelta.
+ */
+export function PaginaLegal({ base = '', pagina }) {
+  const doc = LEGALES[pagina]
+  if (!doc) {
+    return (
+      <section className="citex-legal">
+        <div className="citex-legal-inner">
+          <nav className="citex-legal-crumbs" aria-label="Ubicación"><Link to={inicio(base)}>Inicio</Link> / <span>Página no encontrada</span></nav>
+          <h1>Esta página no existe</h1>
+          <p className="citex-legal-sub">El enlace puede estar mal escrito o la página ya no está.</p>
+          <div className="citex-legal-otras">
+            <Link to={inicio(base)}>Volver al inicio</Link>
+            <Link to={tienda(base)}>Ir a la tienda</Link>
+          </div>
+        </div>
+      </section>
+    )
+  }
+  return (
+    <section className="citex-legal">
+      <article className="citex-legal-inner">
+        <nav className="citex-legal-crumbs" aria-label="Ubicación"><Link to={inicio(base)}>Inicio</Link> / <span>{doc.corto}</span></nav>
+        <h1>{doc.titulo}</h1>
+        <div className="citex-legal-sub">{doc.subtitulo}</div>
+        {doc.actualizado && <p className="citex-legal-fecha">Última actualización: {doc.actualizado}</p>}
+        <div className="citex-legal-cuerpo">
+          {doc.bloques.map((b, k) => {
+            if (b.t === 'h2') {
+              // Su política de privacidad enlaza a #cookies desde el aviso.
+              const id = /cookies/i.test(b.x) ? 'cookies' : undefined
+              return <h2 key={k} id={id}>{b.x}</h2>
+            }
+            if (b.t === 'ul') {
+              return <ul key={k}>{b.x.map((x, j) => <li key={j}>{x}</li>)}</ul>
+            }
+            return <p key={k}>{b.x}</p>
+          })}
+        </div>
+        <nav className="citex-legal-otras" aria-label="Otras páginas legales">
+          {ORDEN_LEGALES.filter((p) => p !== pagina).map((p) => (
+            <Link key={p} to={legal(base, p)}>{LEGALES[p].corto}</Link>
+          ))}
+          <Link to={reclamos(base)}>Libro de Reclamaciones</Link>
+        </nav>
+      </article>
+    </section>
   )
 }
 
@@ -374,10 +446,10 @@ function FormularioCotizacion() {
 }
 
 /** 03 / Ubicación a 08 / Empieza tu pedido: todo lo que en su web va después de los productos. */
-export function SeccionesDespues() {
+export function SeccionesDespues({ base = '' }) {
   return (
     <>
-      <section id="ubicacion" className="bg-white py-20 lg:py-24 px-6 lg:px-[8%] border-y border-black/[0.06] mt-16">
+      <section id="ubicacion" className="bg-white py-20 lg:py-24 px-6 lg:px-[8%] border-y border-black/[0.06]">
         <div className="max-w-[1400px] mx-auto grid lg:grid-cols-2 gap-12">
           <div>
             <span className="text-[10px] tracking-[0.2em] uppercase text-black/40">03 / Ubicación</span>
@@ -408,21 +480,22 @@ export function SeccionesDespues() {
               <span className="citex-kicker">04 / Por qué CITEX</span>
               <h2 id="citex-conversion-title">Polos listos para hacer crecer tu marca.</h2>
             </div>
-            <p className="citex-section-copy">Elige el tipo de polo, define cantidades y recibe atención directa por WhatsApp. Pensado para emprendedores, marcas, promociones y compras rápidas de stock.</p>
+            <p className="citex-section-copy">Elige el tipo de polo, compra en línea o cotiza por WhatsApp. Pensado para emprendedores, marcas, promociones y compras rápidas de stock.</p>
           </div>
-          <div className="citex-catalog-strip" id="productos">
-            <a className="citex-catalog-card" href={ENLACES.pdfAlgodon} target="_blank" rel="noopener noreferrer">
+          {/* Sus dos catálogos en PDF y la tienda; el cotizador ya no va. */}
+          <div className="citex-catalog-strip" id="catalogos">
+            <a className="citex-catalog-card" href={ARCHIVOS.pdfAlgodon} target="_blank" rel="noopener noreferrer">
               <div><span>Catálogo PDF</span><strong>Algodón para tu marca</strong><p>Revisa modelos, materiales y opciones para polos de algodón.</p></div>
               <span>Ver catálogo</span>
             </a>
-            <a className="citex-catalog-card" href={ENLACES.pdfSublimacion} target="_blank" rel="noopener noreferrer">
+            <a className="citex-catalog-card" href={ARCHIVOS.pdfSublimacion} target="_blank" rel="noopener noreferrer">
               <div><span>Catálogo PDF</span><strong>Polos para sublimación</strong><p>Prendas listas para personalizar, vender o producir bajo pedido.</p></div>
               <span>Ver catálogo</span>
             </a>
-            <a className="citex-catalog-card" href={ENLACES.cotizador}>
-              <div><span>Atención rápida</span><strong>Tu pedido por mayor o personalizado</strong><p>Elige modelos, tallas y colores. Calcula tu total con precios por volumen.</p></div>
-              <span>Armar mi pedido →</span>
-            </a>
+            <Link className="citex-catalog-card" to={tienda(base)}>
+              <div><span>Tienda en línea</span><strong>Compra por mayor o menor</strong><p>Elige modelos, tallas y colores, y haz tu pedido con precios de fábrica.</p></div>
+              <span>Comprar ahora →</span>
+            </Link>
           </div>
           <div className="citex-benefits">
             {BENEFICIOS.map(([titulo, texto]) => (
@@ -437,10 +510,9 @@ export function SeccionesDespues() {
           <div className="citex-quote" id="cotizacion">
             <div className="citex-quote-intro">
               <span className="citex-kicker">05 / Cotización</span>
-              <h2>Arma tu pedido a tu medida.</h2>
-              <p>Elige tus polos, combina tallas y colores y añade estampados si los necesitas. Revisa el importe y envía tu pedido a CITEX por WhatsApp.</p>
-              <a className="citex-open-calculator" href={ENLACES.cotizador} title="Arma tu pedido por mayor o personalizado">Armar mi pedido →</a>
-              <p>¿Necesitas asesoría? Completa el formulario y conversemos por WhatsApp.</p>
+              <h2>Cotiza tu pedido a tu medida.</h2>
+              <p>¿Polos para tu marca, con tu etiqueta, o un pedido en volumen? Cuéntanos qué necesitas y te respondemos por WhatsApp con disponibilidad, precio y forma de entrega.</p>
+              <p>Si ya sabes qué quieres, cómpralo directo en la <Link to={tienda(base)} className="underline">tienda en línea</Link>.</p>
             </div>
             <FormularioCotizacion />
           </div>
@@ -464,7 +536,7 @@ export function SeccionesDespues() {
             <span className="citex-kicker">07 / Confianza</span>
             <h2 id="citex-trust-title">Una base sólida para tu próximo pedido.</h2>
             <p className="citex-trust-copy">Trabajamos desde Gamarra con atención directa de fábrica para que puedas elegir tus prendas con claridad y comprar con respaldo.</p>
-            <a className="citex-trust-link" href={ENLACES.cotizador} title="Arma tu pedido por mayor o personalizado">Armar mi pedido →</a>
+            <Link className="citex-trust-link" to={tienda(base)}>Comprar ahora →</Link>
           </div>
           <div className="citex-trust-grid">
             {CONFIANZA.map(([cifra, texto]) => (
@@ -478,12 +550,12 @@ export function SeccionesDespues() {
         <div className="citex-final-cta-inner">
           <div>
             <span className="citex-kicker">08 / Empieza tu pedido</span>
-            <h2 id="citex-final-cta-title">Define el modelo hoy y cotiza directo con fábrica.</h2>
-            <p>Envíanos cantidad, tallas, color, material y ciudad. Te ayudamos a confirmar disponibilidad, precio y forma de entrega.</p>
+            <h2 id="citex-final-cta-title">Define el modelo hoy y compra directo de fábrica.</h2>
+            <p>Compra en la tienda en línea o envíanos cantidad, tallas, color, material y ciudad. Te ayudamos a confirmar disponibilidad, precio y forma de entrega.</p>
           </div>
           <div className="citex-final-actions">
+            <Link to={tienda(base)}>Comprar ahora</Link>
             <a href={ENLACES.whatsappCotizar} target="_blank" rel="noopener noreferrer">Cotizar por WhatsApp</a>
-            <a href={ENLACES.catalogos}>Ver catálogos</a>
           </div>
         </div>
       </section>
@@ -491,8 +563,8 @@ export function SeccionesDespues() {
   )
 }
 
-/** Su pie, con los datos de la empresa y las páginas legales. */
-export function Pie() {
+/** Su pie, con los datos de la empresa y las páginas legales, todas dentro del dominio. */
+export function Pie({ base = '' }) {
   return (
     <div className="footer citex-final-footer">
       <div className="footer-inner">
@@ -505,17 +577,20 @@ export function Pie() {
             <div className="label">Accesos rápidos</div>
             <div className="footer-actions">
               <a href={ENLACES.whatsappCotizarPolos} target="_blank" rel="noopener noreferrer">Cotizar por WhatsApp</a>
-              <a href={ENLACES.catalogos}>Ver catálogos</a>
+              <Link to={tienda(base)}>Tienda en línea</Link>
+              <Link to={seccion(base, 'catalogos')}>Ver catálogos</Link>
+              <Link to={inicio(base)}>Inicio</Link>
             </div>
           </div>
           <div className="footer-link-group">
             <div className="label">Páginas legales</div>
             <div className="legal-links">
-              <a href={ENLACES.privacidad}>Privacidad</a>
-              <a href={ENLACES.cambios}>Cambios</a>
-              <a href={ENLACES.envios}>Envíos</a>
-              <a href={ENLACES.terminos}>Términos</a>
-              <a href={ENLACES.reclamos} target="_blank" rel="noopener noreferrer">Libro de Reclamaciones</a>
+              {ORDEN_LEGALES.map((p) => (
+                <Link key={p} to={legal(base, p)}>{LEGALES[p].corto}</Link>
+              ))}
+              <Link to={reclamos(base)}>Libro de Reclamaciones</Link>
+              {/* Su política dice que la decisión sobre las cookies se cambia acá. */}
+              <button type="button" onClick={abrirPreferenciasDeCookies}>Cookies</button>
             </div>
           </div>
         </div>

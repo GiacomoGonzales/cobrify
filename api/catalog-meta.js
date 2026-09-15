@@ -1,8 +1,16 @@
 // Vercel Serverless Function para meta tags dinámicos de catálogos
 // Llamar con: /api/catalog-meta?slug=mi-tienda
+//
+// Un catálogo con diseño a medida puede tener varias páginas (hoy CITEX):
+// /catalogo/<slug>/tienda y /catalogo/<slug>/legal/<política>. El rewrite las
+// manda acá con `pagina` (y `legal`); el título y la descripción de cada una
+// son los mismos que pone la app (ver api/domain-meta.js).
+import { paginaPedida, seoGenerico } from './domain-meta.js'
 
 const FIREBASE_PROJECT_ID = 'cobrify-395fe'
 
+// Solo los bots de vista previa, que no ejecutan JavaScript. Google y Bing sí
+// lo ejecutan y ven la aplicación de verdad.
 const SOCIAL_BOT_USER_AGENTS = [
   'facebookexternalhit',
   'Facebot',
@@ -13,9 +21,7 @@ const SOCIAL_BOT_USER_AGENTS = [
   'Slackbot',
   'Discordbot',
   'Pinterest',
-  'Googlebot',
-  'bingbot',
-  'Applebot'
+  'CobrifyChat',
 ]
 
 function isSocialBot(userAgent) {
@@ -75,18 +81,22 @@ async function findBusinessByCatalogSlug(slug) {
 
     const doc = results[0].document
     const fields = doc.fields || {}
+    const texto = (campo) => fields[campo]?.stringValue || null
 
     return {
-      name: fields.name?.stringValue || null,
-      businessName: fields.businessName?.stringValue || null,
-      catalogTagline: fields.catalogTagline?.stringValue || null,
-      catalogWelcome: fields.catalogWelcome?.stringValue || null,
-      catalogColor: fields.catalogColor?.stringValue || null,
-      catalogSocialImage: fields.catalogSocialImage?.stringValue || null,
-      catalogLogoUrl: fields.catalogLogoUrl?.stringValue || null,
-      logoUrl: fields.logoUrl?.stringValue || null,
-      // El título de la pestaña que eligió el negocio (Apariencia).
-      catalogPageTitle: fields.catalogPageTitle?.stringValue || null
+      name: texto('name'),
+      businessName: texto('businessName'),
+      catalogTagline: texto('catalogTagline'),
+      catalogWelcome: texto('catalogWelcome'),
+      companySlogan: texto('companySlogan'),
+      catalogColor: texto('catalogColor'),
+      catalogSocialImage: texto('catalogSocialImage'),
+      catalogLogoUrl: texto('catalogLogoUrl'),
+      catalogFaviconUrl: texto('catalogFaviconUrl'),
+      logoUrl: texto('logoUrl'),
+      // El título de la pestaña que eligió el negocio (Apariencia) y su tema.
+      catalogPageTitle: texto('catalogPageTitle'),
+      catalogTheme: texto('catalogTheme'),
     }
   } catch (error) {
     console.error('Error fetching from Firestore:', error)
@@ -94,17 +104,22 @@ async function findBusinessByCatalogSlug(slug) {
   }
 }
 
-function generateHTML(business, slug) {
+// Va dentro de atributos HTML: comillas y signos de menor se escapan.
+const escapar = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+
+function generateHTML(business, slug, pagina) {
   const businessName = business.name || business.businessName || 'Catálogo'
-  // El título que eligió el negocio, o el de siempre. Va dentro de atributos
-  // HTML: comillas y signos de menor se escapan.
-  const pageTitle = String(business.catalogPageTitle || `${businessName} - Catálogo de Productos`)
-    .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
-  const tagline = business.catalogTagline || `Catálogo de productos de ${businessName}`
-  const description = business.catalogWelcome || tagline
-  const logoUrl = business.catalogLogoUrl || business.logoUrl || 'https://cobrifyperu.com/logo.png'
+  const seo = seoGenerico(business, pagina)
+  // Sin tema a medida, el catálogo de siempre conserva su título de siempre.
+  const pageTitle = escapar(pagina.clave === 'inicio' && business.catalogTheme !== 'citex'
+    ? (business.catalogPageTitle || `${businessName} - Catálogo de Productos`)
+    : seo.titulo)
+  const description = escapar(pagina.clave === 'inicio' && business.catalogTheme !== 'citex'
+    ? (business.catalogWelcome || business.catalogTagline || `Catálogo de productos de ${businessName}`)
+    : seo.descripcion)
+  const logoUrl = business.catalogFaviconUrl || business.catalogLogoUrl || business.logoUrl || 'https://cobrifyperu.com/logo.png'
   const themeColor = business.catalogColor || '#10B981'
-  const url = `https://cobrifyperu.com/catalogo/${slug}`
+  const url = `https://cobrifyperu.com/catalogo/${slug}${pagina.ruta}`
   const socialImageUrl = business.catalogSocialImage || business.logoUrl || 'https://cobrifyperu.com/socialmedia.jpg'
 
   return `<!doctype html>
@@ -114,21 +129,23 @@ function generateHTML(business, slug) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${pageTitle}</title>
   <meta name="description" content="${description}" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="${url}" />
   <meta name="theme-color" content="${themeColor}" />
-  <link rel="icon" href="${logoUrl}" />
-  <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="${businessName}" />
+  <link rel="icon" href="${escapar(logoUrl)}" />
+  <meta property="og:type" content="${seo.tipo || 'website'}" />
+  <meta property="og:site_name" content="${escapar(businessName)}" />
   <meta property="og:url" content="${url}" />
   <meta property="og:title" content="${pageTitle}" />
   <meta property="og:description" content="${description}" />
-  <meta property="og:image" content="${socialImageUrl}" />
+  <meta property="og:image" content="${escapar(socialImageUrl)}" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta property="og:locale" content="es_PE" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${pageTitle}" />
   <meta name="twitter:description" content="${description}" />
-  <meta name="twitter:image" content="${socialImageUrl}" />
+  <meta name="twitter:image" content="${escapar(socialImageUrl)}" />
 </head>
 <body>
   <script>window.location.href="${url}";</script>
@@ -140,8 +157,9 @@ function generateHTML(business, slug) {
 export default async function handler(req, res) {
   const slug = req.query.slug
   const userAgent = req.headers['user-agent'] || ''
+  const pagina = paginaPedida(req.query)
 
-  console.log(`[CatalogMeta] slug=${slug}, UA=${userAgent.substring(0, 50)}`)
+  console.log(`[CatalogMeta] slug=${slug}, pagina=${pagina.clave}, UA=${userAgent.substring(0, 50)}`)
 
   if (!slug) {
     return res.redirect(302, '/')
@@ -149,18 +167,18 @@ export default async function handler(req, res) {
 
   // Solo servir meta tags a bots sociales
   if (!isSocialBot(userAgent)) {
-    return res.redirect(302, `/catalogo/${slug}`)
+    return res.redirect(302, `/catalogo/${slug}${pagina.ruta}`)
   }
 
   const business = await findBusinessByCatalogSlug(slug)
 
   if (!business) {
-    const html = generateHTML({ name: 'Catálogo' }, slug)
+    const html = generateHTML({ name: 'Catálogo' }, slug, pagina)
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
     return res.status(200).send(html)
   }
 
-  const html = generateHTML(business, slug)
+  const html = generateHTML(business, slug, pagina)
   res.setHeader('Content-Type', 'text/html; charset=utf-8')
   res.setHeader('Cache-Control', 'public, max-age=300')
   return res.status(200).send(html)

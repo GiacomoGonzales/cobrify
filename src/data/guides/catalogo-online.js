@@ -9,7 +9,7 @@
  */
 export default {
   id: 'catalogo-online',
-  actualizado: '06/09/2026',
+  actualizado: '15/09/2026',
   intro:
     'Tu catálogo online es una tienda web que sale de los productos que ya tienes cargados. No hay que armarla aparte: se enciende, se comparte el enlace y tus clientes pueden ver precios y hacer pedidos.',
 
@@ -93,6 +93,25 @@ export default {
         {
           type: 'ojo',
           text: 'Los productos sin foto se ven pobres en el catálogo. Si vas a compartirlo con clientes, vale la pena subir imágenes al menos de lo que más vendes.',
+        },
+      ],
+    },
+
+    {
+      id: 'seo-y-pixeles',
+      title: 'Google, redes y píxeles de publicidad',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Cada página del catálogo tiene su **título** y su **descripción** para Google y para la vista previa al compartir el enlace por WhatsApp o Facebook. El título lo eliges en **Apariencia > Pestaña del navegador**; la descripción sale del **eslogan** o del **mensaje de bienvenida** del catálogo. Con dominio propio, la dirección que se indexa es la tuya.',
+        },
+        {
+          type: 'texto',
+          text: 'En **Apariencia > Píxeles de publicidad** pegas el ID de tu **Meta Pixel** (Facebook e Instagram), **TikTok Pixel**, **Google Analytics** o **Pinterest**. El catálogo les avisa cuando alguien entra, mira un producto, lo agrega al carrito, abre el carrito para pedir y envía el pedido, así puedes medir y optimizar tus anuncios.',
+        },
+        {
+          type: 'ojo',
+          text: 'Por la ley de protección de datos, la primera vez que alguien entra el catálogo le pregunta si acepta las cookies, y los píxeles se activan solo si acepta. Puede cambiar su decisión después con el botón **Cookies**.',
         },
       ],
     },

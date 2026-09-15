@@ -32,9 +32,10 @@ import { useState, useEffect, useRef } from 'react'
 import {
   ArrowDown, Bell, Bike, CalendarDays, Check, ChevronDown, ChevronsUpDown, ChevronUp, Clock,
   Cog, Copy, Download, ExternalLink, Eye, FileText, Globe, Image, Info, LayoutGrid, Loader2,
-  MessageCircle, Package, Palette, QrCode, Save, ShoppingCart, Store, Trash2, User, X,
+  Megaphone, MessageCircle, Package, Palette, QrCode, Save, ShoppingCart, Store, Trash2, User, X,
 } from 'lucide-react'
 import QRCode from 'qrcode'
+import { normalizarPixeles } from '@/utils/pixelesDelCatalogo'
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { limpiarSlug, problemaDelSlug } from '@/utils/catalogSlug'
@@ -204,6 +205,8 @@ export default function Catalogo() {
   const [catalogPageTitle, setCatalogPageTitle] = useState('')
   const [catalogFaviconUrl, setCatalogFaviconUrl] = useState('')
   const [uploadingFavicon, setUploadingFavicon] = useState(false)
+  // Píxeles de publicidad (Meta, TikTok, Google, Pinterest): utils/pixelesDelCatalogo.
+  const [catalogPixels, setCatalogPixels] = useState({ meta: '', tiktok: '', google: '', pinterest: '' })
   const [businessHours, setBusinessHours] = useState({
     enabled: false,
     days: {
@@ -310,6 +313,7 @@ export default function Catalogo() {
     setCatalogLogoLandscape(businessData.catalogLogoLandscape || '')
     setCatalogPageTitle(businessData.catalogPageTitle || '')
     setCatalogFaviconUrl(businessData.catalogFaviconUrl || '')
+    setCatalogPixels({ meta: '', tiktok: '', google: '', pinterest: '', ...(businessData.catalogPixels || {}) })
     setCatalogShowAllPrices(businessData.catalogShowAllPrices !== false)
     setCatalogAllowTakeaway(businessData.catalogAllowTakeaway !== false)
     setCatalogAllowDelivery(businessData.catalogAllowDelivery !== false)
@@ -572,6 +576,7 @@ export default function Catalogo() {
       catalogLogoLandscape: catalogLogoLandscape || null,
       catalogPageTitle: (catalogPageTitle || '').trim() || null,
       catalogFaviconUrl: catalogFaviconUrl || null,
+      catalogPixels: normalizarPixeles(catalogPixels),
       // La cantidad minima por nivel de precio se configura AHORA EN
       // CADA PRODUCTO (useAutoPriceByQty + priceMinQtys). El campo del
       // negocio ya no se escribe desde aca: el valor que tengan los
@@ -1679,6 +1684,47 @@ export default function Catalogo() {
                         }}
                       />
                     </div>
+                  </div>
+                </div>
+
+                {/* Píxeles de publicidad: Meta, TikTok, Google y Pinterest. Pedido de
+                    CITEX (14-set-2026); sirve a todos. En el catálogo se cargan solo
+                    si el comprador acepta las cookies (utils/pixelesDelCatalogo). */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                  <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100">
+                    <Megaphone className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900">Píxeles de publicidad</h3>
+                      <p className="text-xs text-gray-500">Para medir tus campañas: qué productos ven, qué agregan al carrito y qué pedidos hacen</p>
+                    </div>
+                  </div>
+                  <div className="px-5 py-5 space-y-4">
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      {[
+                        ['meta', 'Meta Pixel (Facebook e Instagram)', 'Ej. 123456789012345'],
+                        ['tiktok', 'TikTok Pixel', 'Ej. C1ABCDEFGHIJKLMNOPQR'],
+                        ['google', 'Google Analytics 4', 'Ej. G-ABC123DEF4'],
+                        ['pinterest', 'Pinterest Tag', 'Ej. 2612345678901'],
+                      ].map(([clave, etiqueta, ejemplo]) => (
+                        <div key={clave} className="space-y-1.5">
+                          <label htmlFor={`pixel-${clave}`} className="block text-sm font-medium text-gray-800">{etiqueta}</label>
+                          <input
+                            id={`pixel-${clave}`}
+                            type="text"
+                            maxLength={40}
+                            value={catalogPixels[clave] || ''}
+                            onChange={(e) => setCatalogPixels((p) => ({ ...p, [clave]: e.target.value }))}
+                            placeholder={ejemplo}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Pega solo el ID que te da cada plataforma, no el código completo. El catálogo les avisa cuando alguien entra,
+                      mira un producto, lo agrega al carrito, abre el carrito para pedir y envía el pedido. Por la ley de datos
+                      personales, antes de activarlos le pregunta al comprador si acepta las cookies.
+                    </p>
                   </div>
                 </div>
 

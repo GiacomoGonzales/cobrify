@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { useSearchParams, Navigate } from 'react-router-dom'
 import { getResellerByHostname, getResellerBranding, DEFAULT_BRANDING } from '@/services/brandingService'
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore'
@@ -8,6 +8,10 @@ import LandingPageV2 from '@/pages/LandingPageV2'
 import ResellerLandingPage from '@/pages/ResellerLandingPage'
 import CatalogoPublico from '@/pages/CatalogoPublico'
 import { Loader2 } from 'lucide-react'
+
+// El Libro de Reclamaciones de un catálogo con dominio propio (/reclamos):
+// bajo demanda, para no cargarlo en la landing de todos.
+const LibroReclamaciones = lazy(() => import('@/pages/LibroReclamaciones'))
 
 /**
  * Detecta si la app está corriendo como PWA instalada (standalone)
@@ -55,7 +59,13 @@ function updatePageBranding(brandName, logoUrl, primaryColor) {
  *
  * Si es PWA instalada, redirige a login o dashboard según autenticación
  */
-export default function LandingRouter() {
+/**
+ * @param {object} p
+ * @param {'catalogo'|'reclamos'|null} [p.subpagina] Con dominio propio de catálogo,
+ *   /tienda y /legal/... son páginas del catálogo y /reclamos su libro. En cualquier
+ *   otro dominio esas rutas no existen y vuelven al inicio.
+ */
+export default function LandingRouter({ subpagina = null }) {
   const [loading, setLoading] = useState(true)
   const [reseller, setReseller] = useState(null)
   const [catalogDomain, setCatalogDomain] = useState(null) // hostname del dominio personalizado de catálogo
@@ -201,13 +211,28 @@ export default function LandingRouter() {
 
   // Si hay reseller, mostrar su landing personalizada
   if (reseller) {
-    return <ResellerLandingPage reseller={reseller} />
+    return subpagina ? <Navigate to="/" replace /> : <ResellerLandingPage reseller={reseller} />
   }
 
-  // Si es dominio personalizado de catálogo, mostrar catálogo directamente
+  // Si es dominio personalizado de catálogo, mostrar catálogo directamente.
+  // El catálogo lee la ruta para saber qué página pintar (inicio, tienda, legal).
   if (catalogDomain) {
+    if (subpagina === 'reclamos') {
+      const slugReclamos = catalogBusinessData?.complaintsBookEnabled === true
+        ? catalogBusinessData?.complaintsBookSlug
+        : null
+      if (!slugReclamos) return <Navigate to="/" replace />
+      return (
+        <Suspense fallback={<div className="min-h-screen bg-white" />}>
+          <LibroReclamaciones slugFijo={slugReclamos} />
+        </Suspense>
+      )
+    }
     return <CatalogoPublico customDomain={catalogDomain} isRestaurantMenu={catalogIsRestaurant} preloadedBusiness={catalogBusinessData} />
   }
+
+  // Estas páginas solo existen dentro de un catálogo con dominio propio.
+  if (subpagina) return <Navigate to="/" replace />
 
   // Si no hay reseller ni catálogo, mostrar landing de Cobrify
   return <LandingPageV2 />
