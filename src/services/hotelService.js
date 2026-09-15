@@ -1,4 +1,5 @@
 import { db } from '@/lib/firebase'
+import { puedeReprogramarse, datosDeReprogramacion, moverNochesPagadas, fechaDeHoyLima } from '@/utils/reprogramacionHotel'
 import {
   collection,
   addDoc,
@@ -8,6 +9,7 @@ import {
   updateDoc,
   deleteDoc,
   setDoc,
+  writeBatch,
   query,
   where,
   orderBy,
@@ -346,6 +348,96 @@ const getNightDateRange = (checkInStr, checkOutStr) => {
     cur.setDate(cur.getDate() + 1)
   }
   return dates
+}
+
+// =====================
+// REPROGRAMACIÓN CON FECHA ABIERTA (utils/reprogramacionHotel)
+// =====================
+
+/**
+ * Reprograma una reserva confirmada con fecha abierta: la cabaña se libera, lo
+ * facturado se conserva y queda la fecha límite (pedido de San Ignacio Bamboo
+ * Lodge, 15-set-2026). Las noches y la estadía por hora SIN facturar se borran,
+ * porque no hubo estadía; las facturadas se quedan hasta asignar fechas nuevas.
+ */
+export const reprogramarReserva = async (businessId, reservationId, { limite } = {}) => {
+  try {
+    const reservationRef = doc(db, 'businesses', businessId, 'hotelReservations', reservationId)
+    const snap = await getDoc(reservationRef)
+    if (!snap.exists()) return { success: false, error: 'Reserva no encontrada' }
+    const reserva = snap.data()
+    if (!puedeReprogramarse(reserva)) {
+      return { success: false, error: 'Solo se puede reprogramar una reserva confirmada que todavía no llegó' }
+    }
+    const cargos = await getChargesByReservation(businessId, reservationId)
+    for (const c of cargos.data || []) {
+      if ((c.chargeType === 'room_night' || c.chargeType === 'room_hourly') && !c.invoiceId) {
+        await deleteDoc(doc(db, 'businesses', businessId, 'hotelFolioCharges', c.id))
+      }
+    }
+    await updateDoc(reservationRef, {
+      ...datosDeReprogramacion(reserva, { limite, hoy: fechaDeHoyLima() }),
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al reprogramar la reserva:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Asigna las nuevas fechas a una reserva reprogramada. Las noches ya facturadas
+ * pasan a las nuevas fechas con el ID de cada noche (reserva_fecha), así el
+ * check-in, la auditoría y la boleta por adelantado no las vuelven a crear ni a
+ * cobrar. Después va la edición de siempre y la reserva vuelve a "Confirmada".
+ */
+export const asignarFechasReprogramadas = async (businessId, reservationId, updates) => {
+  try {
+    const nuevoIn = updates.checkIn || updates.checkInDate
+    const nuevoOut = updates.checkOut || updates.checkOutDate
+    if (!nuevoIn || !nuevoOut) return { success: false, error: 'Faltan las nuevas fechas' }
+    const cargos = (await getChargesByReservation(businessId, reservationId)).data || []
+    const chargesRef = collection(db, 'businesses', businessId, 'hotelFolioCharges')
+
+    if (updates.pricingMode === 'hourly') {
+      // La estadía por hora ya facturada pasa a la nueva fecha de entrada.
+      for (const c of cargos) {
+        if (c.chargeType === 'room_hourly' && c.invoiceId && c.date !== nuevoIn) {
+          await updateDoc(doc(chargesRef, c.id), { date: nuevoIn })
+        }
+      }
+    } else {
+      const { movimientos } = moverNochesPagadas(cargos, getNightDateRange(nuevoIn, nuevoOut))
+      if (movimientos.length > 0) {
+        const porId = Object.fromEntries(cargos.map((c) => [c.id, c]))
+        const batch = writeBatch(db)
+        // Primero se borran todas las noches que cambian de fecha y después se
+        // crean con su ID nuevo: si una toma el ID viejo de otra, el borrado no
+        // la alcanza, porque el lote aplica las escrituras en orden.
+        movimientos.forEach((m) => batch.delete(doc(chargesRef, m.id)))
+        movimientos.forEach((m) => {
+          const datos = { ...porId[m.id] }
+          delete datos.id
+          batch.set(doc(chargesRef, `${reservationId}_${m.hasta}`), {
+            ...datos,
+            date: m.hasta,
+            description: String(datos.description || `Noche ${m.hasta}`).replace(/\d{4}-\d{2}-\d{2}/, m.hasta),
+          })
+        })
+        await batch.commit()
+      }
+    }
+
+    return await updateReservation(businessId, reservationId, {
+      ...updates,
+      status: 'confirmed',
+      'reprogramacion.fechasAsignadasEl': fechaDeHoyLima(),
+    })
+  } catch (error) {
+    console.error('Error al asignar las nuevas fechas:', error)
+    return { success: false, error: error.message }
+  }
 }
 
 // Genera los cargos de la estadia (noches o estadia por hora) en el folio sin hacer

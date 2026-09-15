@@ -30,6 +30,8 @@ const ESTADOS_HOTEL = {
   checked_out: { label: 'Estadía finalizada', tone: 'gray' },
   cancelled: { label: 'Cancelada', tone: 'red' },
   no_show: { label: 'No presentado', tone: 'gray' },
+  // Con fecha abierta (utils/reprogramacionHotel): lo pagado queda guardado.
+  rescheduled: { label: 'Reprogramada: el hotel te guarda lo pagado hasta que elijas nuevas fechas', tone: 'amber' },
 }
 const TONOS = {
   amber: 'bg-amber-50 text-amber-800 border-amber-200',

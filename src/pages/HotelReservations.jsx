@@ -21,6 +21,7 @@ import { Check,
   Trash2,
   Receipt,
   X,
+  CalendarClock,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -49,9 +50,13 @@ import {
   getReservationTotal,
   getServices,
   deleteCharge,
+  reprogramarReserva,
+  asignarFechasReprogramadas,
 } from '@/services/hotelService'
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import { upsertCustomerFromSale, getProducts, getCustomerByDocumentNumber } from '@/services/firestoreService'
+import ReprogramarReservaModal from '@/components/hotel/ReprogramarReservaModal'
+import { ESTADO_REPROGRAMADA, puedeReprogramarse, textoDelLimite, fechaDeHoyLima } from '@/utils/reprogramacionHotel'
 
 // Schema
 const reservationSchema = z.object({
@@ -84,12 +89,15 @@ const STATUS_CONFIG = {
   checked_out: { label: 'Check-out', variant: 'default' },
   cancelled: { label: 'Cancelada', variant: 'danger' },
   no_show: { label: 'No show', variant: 'warning' },
+  // Con fecha abierta: la cabaña queda libre y lo pagado se guarda (utils/reprogramacionHotel).
+  rescheduled: { label: 'Reprogramada', variant: 'warning' },
 }
 
 const TABS = [
   { key: 'all', label: 'Todas' },
   { key: 'requested', label: 'Solicitudes' },
   { key: 'confirmed', label: 'Confirmadas' },
+  { key: 'rescheduled', label: 'Reprogramadas' },
   { key: 'checked_in', label: 'Check-in' },
   { key: 'checked_out', label: 'Check-out' },
   { key: 'cancelled', label: 'Canceladas' },
@@ -180,6 +188,11 @@ export default function HotelReservations() {
 
   // Processing actions
   const [processingId, setProcessingId] = useState(null)
+
+  // Reprogramación con fecha abierta (utils/reprogramacionHotel)
+  const [reprogramando, setReprogramando] = useState(null)
+  const [isReprogramming, setIsReprogramming] = useState(false)
+  const hoyLima = fechaDeHoyLima()
 
   // Document lookup
   const [isLookingUp, setIsLookingUp] = useState(false)
@@ -564,6 +577,14 @@ export default function HotelReservations() {
       }
     }
 
+    // Reserva reprogramada: avisar si las fechas nuevas pasan su fecha límite.
+    const asignandoFechas = editingReservation?.status === ESTADO_REPROGRAMADA
+    const limiteReprogramacion = editingReservation?.reprogramacion?.limite
+    if (asignandoFechas && limiteReprogramacion && data.checkInDate > limiteReprogramacion
+      && !window.confirm(`La nueva fecha de entrada pasa la fecha límite de la reprogramación (${formatDate(limiteReprogramacion)}). ¿Asignarla igual?`)) {
+      return
+    }
+
     setIsSaving(true)
     try {
       const businessId = getBusinessId()
@@ -630,7 +651,10 @@ export default function HotelReservations() {
       }
 
       let result
-      if (editingReservation) {
+      if (asignandoFechas) {
+        // Las noches ya facturadas pasan a las nuevas fechas y la reserva vuelve a "Confirmada".
+        result = await asignarFechasReprogramadas(businessId, editingReservation.id, payload)
+      } else if (editingReservation) {
         result = await updateReservation(businessId, editingReservation.id, payload)
       } else {
         result = await createReservation(businessId, { ...payload, userId: user.uid })
@@ -648,7 +672,9 @@ export default function HotelReservations() {
             phone: data.phone || '',
           }).catch(err => console.warn('No se pudo sincronizar huésped:', err))
         }
-        toast.success(editingReservation ? 'Reserva actualizada' : 'Reserva creada')
+        toast.success(asignandoFechas
+          ? 'Fechas asignadas: la reserva vuelve a estar confirmada'
+          : editingReservation ? 'Reserva actualizada' : 'Reserva creada')
         setIsModalOpen(false)
         loadData()
       } else {
@@ -721,6 +747,29 @@ export default function HotelReservations() {
       toast.error('No se pudo rechazar')
     } finally {
       setProcessingId(null)
+    }
+  }
+
+  // Reprogramar con fecha abierta: la cabaña se libera y lo facturado se guarda.
+  const handleReprogramar = async (limite) => {
+    const reserva = reprogramando
+    if (!reserva) return
+    if (isDemoMode) { toast.error('No disponible en modo demo'); return }
+    setIsReprogramming(true)
+    try {
+      const result = await reprogramarReserva(getBusinessId(), reserva.id, { limite })
+      if (result.success) {
+        toast.success(`Reserva de ${reserva.guestName} reprogramada. La cabaña quedó libre.`)
+        setReprogramando(null)
+        loadData()
+      } else {
+        toast.error(result.error || 'No se pudo reprogramar')
+      }
+    } catch (error) {
+      console.error('Error al reprogramar:', error)
+      toast.error('No se pudo reprogramar')
+    } finally {
+      setIsReprogramming(false)
     }
   }
 
@@ -1345,6 +1394,10 @@ export default function HotelReservations() {
                         <span>{formatDate(reservation.checkInDate)} - {formatDate(reservation.checkOutDate)}</span>
                       )}
                     </div>
+                    {reservation.status === ESTADO_REPROGRAMADA && (() => {
+                      const limite = textoDelLimite(reservation.reprogramacion, hoyLima)
+                      return <p className={`text-xs mt-1 ${limite.vencida ? 'text-red-600' : 'text-amber-700'}`}>{limite.texto}</p>
+                    })()}
                     <div className="flex items-center justify-between mt-2">
                       <span className="text-sm font-medium text-gray-900">
                         {reservation.pricingMode === 'hourly'
@@ -1388,6 +1441,16 @@ export default function HotelReservations() {
                             disabled={processingId === reservation.id}
                           >
                             <LogOut className="w-3 h-3" />
+                          </Button>
+                        )}
+                        {puedeReprogramarse(reservation) && (
+                          <Button size="sm" variant="outline" onClick={() => setReprogramando(reservation)} title="Reprogramar con fecha abierta">
+                            <CalendarClock className="w-3 h-3" />
+                          </Button>
+                        )}
+                        {reservation.status === ESTADO_REPROGRAMADA && (
+                          <Button size="sm" onClick={() => openEditModal(reservation)} title="Asignar nuevas fechas">
+                            <CalendarDays className="w-3 h-3" />
                           </Button>
                         )}
                         <Button size="sm" variant="outline" onClick={() => openFolio(reservation)}>
@@ -1442,6 +1505,10 @@ export default function HotelReservations() {
                           <div>
                             <p>{reservation.guestName}</p>
                             <p className="text-xs text-gray-500">{reservation.documentType} {reservation.documentNumber}</p>
+                            {reservation.status === ESTADO_REPROGRAMADA && (() => {
+                              const limite = textoDelLimite(reservation.reprogramacion, hoyLima)
+                              return <p className={`text-xs mt-0.5 font-normal ${limite.vencida ? 'text-red-600' : 'text-amber-700'}`}>{limite.texto}</p>
+                            })()}
                           </div>
                         </TableCell>
                         <TableCell>{reservation.roomName || reservation.roomNumber || '-'}</TableCell>
@@ -1518,6 +1585,16 @@ export default function HotelReservations() {
                                 )}
                               </Button>
                             )}
+                            {puedeReprogramarse(reservation) && (
+                              <Button size="sm" variant="outline" onClick={() => setReprogramando(reservation)} title="Reprogramar con fecha abierta">
+                                <CalendarClock className="w-3 h-3 mr-1" /> Reprogramar
+                              </Button>
+                            )}
+                            {reservation.status === ESTADO_REPROGRAMADA && (
+                              <Button size="sm" onClick={() => openEditModal(reservation)}>
+                                <CalendarDays className="w-3 h-3 mr-1" /> Asignar fechas
+                              </Button>
+                            )}
 
                             {/* Folio (siempre disponible) */}
                             <Button size="sm" variant="outline" onClick={() => openFolio(reservation)}>
@@ -1555,10 +1632,19 @@ export default function HotelReservations() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => !isSaving && setIsModalOpen(false)}
-        title={editingReservation ? 'Editar Reserva' : 'Nueva Reserva'}
+        title={editingReservation
+          ? (editingReservation.status === ESTADO_REPROGRAMADA ? 'Asignar nuevas fechas' : 'Editar Reserva')
+          : 'Nueva Reserva'}
         size="lg"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {editingReservation?.status === ESTADO_REPROGRAMADA && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+              Reserva reprogramada
+              {editingReservation.reprogramacion?.limite ? `, con fecha límite ${formatDate(editingReservation.reprogramacion.limite)}` : ''}.
+              {' '}Elige las nuevas fechas y guarda: la reserva vuelve a quedar confirmada y lo ya facturado pasa a las nuevas noches.
+            </div>
+          )}
           {/* Guest info */}
           <div className="space-y-3">
             <h4 className="text-sm font-semibold text-gray-700">Datos del huésped</h4>
@@ -2162,6 +2248,15 @@ export default function HotelReservations() {
           </div>
         )}
       </Modal>
+
+      {/* Reprogramar con fecha abierta (utils/reprogramacionHotel) */}
+      <ReprogramarReservaModal
+        isOpen={!!reprogramando}
+        reservation={reprogramando}
+        onClose={() => !isReprogramming && setReprogramando(null)}
+        onConfirmar={handleReprogramar}
+        procesando={isReprogramming}
+      />
     </div>
   )
 }

@@ -38,6 +38,16 @@ export const GUIDE_CATEGORIES = [
 
 export const GUIDES = [
   {
+    id: 'reservas-hotel',
+    route: '/app/reservas',
+    title: 'Reservas del hotel',
+    category: 'Operación',
+    description: 'Crear y confirmar reservas, check-in y check-out, y reprogramar con fecha abierta cuando el huésped no puede venir.',
+    keywords: 'reserva reservas hotel hospedaje cabaña cabana habitacion huesped check-in check-out folio reprogramar reprogramacion fecha abierta limite seis meses postergar cambiar fechas',
+    modos: ['hotel'],
+    load: () => import('./reservas-hotel.js'),
+  },
+  {
     id: 'flujo-insumos',
     route: null, // recorrido: no pertenece a una pantalla
     title: 'Manejar el stock de tus insumos',

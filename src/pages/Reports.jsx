@@ -39,6 +39,7 @@ import { documentLabel, esRuc } from '@/utils/documentType'
 import { getDocumentTotalInBase, convertToBase, getReportsCurrency, resolveReportsRate, convertBaseToDisplay } from '@/utils/currency'
 import Modal from '@/components/ui/Modal'
 import { detalleDeUtilidad } from '@/utils/detalleDeUtilidad'
+import { ocupaFechas } from '@/utils/reprogramacionHotel'
 import { getInvoices, getRecentInvoices, getCustomersWithStats, getProducts, getProductCategories, getProductBrands, getPurchases, getFinancialMovements, getAllCashMovements } from '@/services/firestoreService'
 import { getRecipes } from '@/services/recipeService'
 import { getActiveBranches } from '@/services/branchService'
@@ -6628,6 +6629,7 @@ function ReportsGeneral() {
           checked_out: completedRes.length,
           cancelled: filteredRes.filter(r => r.status === 'cancelled').length,
           no_show: filteredRes.filter(r => r.status === 'no_show').length,
+          rescheduled: filteredRes.filter(r => r.status === 'rescheduled').length,
         }
 
         // ===== Base POR NOCHE: cada noche cuenta en SU fecha =====
@@ -6647,7 +6649,10 @@ function ReportsGeneral() {
           const res = resById[c.reservationId]
           // Cargo huérfano de una reserva ELIMINADA: no cuenta (la reserva ya no existe).
           if (c.reservationId && !res) return
-          if (res && (res.status === 'cancelled' || res.status === 'no_show')) return
+          // Cancelada, no show o reprogramada con fecha abierta: sus noches no se
+          // cuentan; las ya pagadas de una reprogramada esperan sus nuevas fechas
+          // (utils/reprogramacionHotel).
+          if (res && !ocupaFechas(res)) return
           // Reprogramación: ignorar noches SIN facturar que quedaron fuera del rango
           // actual de la reserva (cargos huérfanos de fechas viejas).
           if (res && c.chargeType === 'room_night' && !c.invoiceId) {
@@ -6675,7 +6680,7 @@ function ReportsGeneral() {
 
         // Reservas activas sin cargos aún → proyectar sus noches (cada una en su fecha).
         hotelReservations.forEach(res => {
-          if (res.status === 'cancelled' || res.status === 'no_show') return
+          if (!ocupaFechas(res)) return
           if (chargedResIds.has(res.id)) return
           const ci = res.checkIn || res.checkInDate
           const co = res.checkOut || res.checkOutDate
@@ -6896,6 +6901,7 @@ function ReportsGeneral() {
                     { label: 'Check-out', count: statusCounts.checked_out, color: 'bg-gray-100 text-gray-700' },
                     { label: 'Canceladas', count: statusCounts.cancelled, color: 'bg-red-100 text-red-700' },
                     { label: 'No Show', count: statusCounts.no_show, color: 'bg-yellow-100 text-yellow-700' },
+                    { label: 'Reprogramadas', count: statusCounts.rescheduled, color: 'bg-amber-100 text-amber-700' },
                   ].map(item => (
                     <div key={item.label} className={`rounded-lg p-3 text-center ${item.color}`}>
                       <p className="text-2xl font-bold">{item.count}</p>

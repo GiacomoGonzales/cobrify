@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, Download, CalendarDays } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
+import { ocupaFechas } from '@/utils/reprogramacionHotel'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
@@ -48,9 +49,10 @@ export default function HotelWeeklyView({ rooms = [], reservations = [] }) {
     [rooms]
   )
 
-  // Reservas relevantes (no canceladas ni no-show).
+  // Reservas que ocupan sus fechas: sin canceladas, no show ni reprogramadas
+  // (utils/reprogramacionHotel).
   const relevant = useMemo(
-    () => reservations.filter(r => !['cancelled', 'no_show'].includes(r.status)),
+    () => reservations.filter(ocupaFechas),
     [reservations]
   )
 

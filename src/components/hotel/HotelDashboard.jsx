@@ -18,6 +18,7 @@ import Badge from '@/components/ui/Badge'
 import { formatCurrency } from '@/lib/utils'
 import { getRooms, getReservations } from '@/services/hotelService'
 import { getRecentInvoices } from '@/services/firestoreService'
+import { ocupaFechas } from '@/utils/reprogramacionHotel'
 
 const STATUS_LABELS = {
   confirmed: 'Confirmada',
@@ -25,6 +26,7 @@ const STATUS_LABELS = {
   checked_out: 'Check-out',
   cancelled: 'Cancelada',
   no_show: 'No show',
+  rescheduled: 'Reprogramada',
 }
 
 const STATUS_VARIANTS = {
@@ -33,6 +35,7 @@ const STATUS_VARIANTS = {
   checked_out: 'default',
   cancelled: 'danger',
   no_show: 'warning',
+  rescheduled: 'warning',
 }
 
 const ROOM_STATUS_COLORS = {
@@ -104,8 +107,9 @@ export default function HotelDashboard({ getBusinessId, getRoutePrefix, isDemoMo
   const occupiedRooms = rooms.filter(r => r.status === 'occupied').length
   const occupancyPct = totalRooms > 0 ? Math.round((occupiedRooms / totalRooms) * 100) : 0
 
-  const arrivalsToday = reservations.filter(r => r.checkIn === today && r.status !== 'cancelled').length
-  const departuresToday = reservations.filter(r => r.checkOut === today && r.status !== 'cancelled').length
+  // Sin canceladas, no show ni reprogramadas: esas no llegan ni salen en su fecha (utils/reprogramacionHotel).
+  const arrivalsToday = reservations.filter(r => r.checkIn === today && ocupaFechas(r)).length
+  const departuresToday = reservations.filter(r => r.checkOut === today && ocupaFechas(r)).length
 
   const todayRevenue = todayInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0)
 
