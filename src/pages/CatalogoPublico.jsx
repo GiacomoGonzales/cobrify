@@ -1459,18 +1459,25 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       || (isRestaurantMenu
         ? `Menú digital de ${businessName}. Mira la carta y haz tu pedido desde tu celular.`
         : `Catálogo de productos de ${businessName}. Mira los productos y haz tu pedido.`)
-    const origen = customDomain ? `https://${customDomain}` : 'https://cobrifyperu.com'
-    const rutaCanonica = (customDomain
-      ? location.pathname
-      : `/${isRestaurantMenu ? 'menu' : 'catalogo'}/${slug}${location.pathname.slice(base.length)}`
-    ).replace(/\/+$/, '') || '/'
+    // La dirección canónica es la que de verdad sirve la tienda. En su dominio,
+    // la de la barra: Vercel puede servir citex.pe en www.citex.pe (citex.pe
+    // responde 308) y una canónica que apunta a una redirección confunde a
+    // Google. Un diseño a medida con dominio propio (CITEX) apunta a ese
+    // dominio también desde cobrifyperu.com/catalogo/..., para que Google no
+    // tome las dos direcciones por dos tiendas con el mismo texto.
+    const resto = location.pathname.slice(base.length).replace(/\/+$/, '')
+    const urlCanonica = customDomain
+      ? `${window.location.origin}${resto || '/'}`
+      : seoReplica?.origen
+        ? `${seoReplica.origen}${resto || '/'}`
+        : `https://cobrifyperu.com/${isRestaurantMenu ? 'menu' : 'catalogo'}/${slug}${resto}`
     if (isDemo || !businessName) {
       if (businessName) document.title = tituloPorDefecto
     } else {
       aplicarSeoDePagina({
         titulo: seoReplica?.titulo || tituloPorDefecto,
         descripcion: seoReplica?.descripcion || descripcionPorDefecto,
-        url: `${origen}${rutaCanonica}`,
+        url: urlCanonica,
         imagen: business.catalogSocialImage || business.catalogLogoUrl || business.logoUrl || '',
         tipo: seoReplica?.tipo || 'website',
         nombreDelSitio: businessName,

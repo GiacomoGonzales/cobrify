@@ -1,5 +1,14 @@
 // Vercel Edge Middleware para meta tags dinámicos
 // Este middleware intercepta TODAS las requests antes de llegar a la app
+import {
+  esBuscador,
+  buscarTiendaPorDominio,
+  paginaPedida,
+  etiquetasDeTienda,
+  inyectarCabecera,
+  robotsDeTienda,
+  sitemapDeTienda,
+} from './src/utils/cabeceraDeTienda.js'
 
 // Solo los bots de vista previa, que leen etiquetas sin ejecutar JavaScript.
 // Google, Bing y Apple SÍ lo ejecutan: a ellos les conviene la aplicación de
@@ -86,7 +95,69 @@ const META_CHAT = `<!DOCTYPE html>
 <body>Cobrify Chat</body>
 </html>`
 
-export default function middleware(request) {
+const hostLimpio = (hostname) => String(hostname || '').toLowerCase().split(':')[0]
+
+/**
+ * Una tienda con dominio propio, para un buscador: la aplicación de siempre
+ * (index.html) con la cabecera de la tienda en lugar de la de Cobrify
+ * (utils/cabeceraDeTienda). Responde en la MISMA dirección, sin redirigir:
+ * redirigir a /api/ es justo lo que robots.txt prohíbe leer, y así Google
+ * mostraba "No hay información disponible sobre esta página" (15-set-2026).
+ * Si algo falla devuelve null y el buscador recibe la aplicación tal cual.
+ */
+async function paginaParaBuscadores(request, hostname, parametros) {
+  const control = new AbortController()
+  const reloj = setTimeout(() => control.abort(), 4000)
+  try {
+    const host = hostLimpio(hostname)
+    const [tienda, index] = await Promise.all([
+      buscarTiendaPorDominio(host),
+      fetch(new URL('/index.html', request.url), { headers: { 'user-agent': 'CobrifyMeta/1.0' }, signal: control.signal }),
+    ])
+    if (!tienda || !index.ok) return null
+    const etiquetas = etiquetasDeTienda({ business: tienda, origen: `https://${host}`, pagina: paginaPedida(parametros || {}) })
+    const html = inyectarCabecera(await index.text(), etiquetas)
+    if (!html) return null
+    return new Response(html, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'public, max-age=0, must-revalidate',
+      },
+    })
+  } catch {
+    return null
+  } finally {
+    clearTimeout(reloj)
+  }
+}
+
+/**
+ * robots.txt y sitemap.xml de una tienda con dominio propio. Sin esto cada
+ * tienda servía los de Cobrify, que mandan a Google al sitemap de
+ * cobrifyperu.com. null si el dominio no es de una tienda (un reseller): ahí
+ * sigue el archivo de siempre.
+ */
+async function archivoDeTienda(pathname, hostname) {
+  try {
+    const host = hostLimpio(hostname)
+    const tienda = await buscarTiendaPorDominio(host)
+    if (!tienda) return null
+    const origen = `https://${host}`
+    const esRobots = pathname === '/robots.txt'
+    return new Response(esRobots ? robotsDeTienda(origen) : sitemapDeTienda(tienda, origen), {
+      status: 200,
+      headers: {
+        'Content-Type': esRobots ? 'text/plain; charset=utf-8' : 'application/xml; charset=utf-8',
+        'Cache-Control': 'public, max-age=3600',
+      },
+    })
+  } catch {
+    return null
+  }
+}
+
+export default async function middleware(request) {
   const url = new URL(request.url)
   const hostname = request.headers.get('host') || ''
   const userAgent = request.headers.get('user-agent') || ''
@@ -112,6 +183,26 @@ export default function middleware(request) {
     url.pathname = '/api/manifest'
     url.searchParams.set('host', normalizedHost)
     return Response.redirect(url.toString(), 307)
+  }
+
+  // robots.txt y sitemap.xml de una tienda con dominio propio (cualquiera los pide).
+  if ((pathname === '/robots.txt' || pathname === '/sitemap.xml') && isResellerDomain(hostname)) {
+    const archivo = await archivoDeTienda(pathname, hostname)
+    if (archivo) return archivo
+    return // Reseller: el archivo estático de siempre
+  }
+
+  // Buscadores en las páginas de una tienda con dominio propio: la aplicación
+  // con la cabecera de la tienda. Va ANTES del filtro de bots sociales porque
+  // Google no es uno de ellos.
+  if (esBuscador(userAgent) && isResellerDomain(hostname)) {
+    const segmentos = pathname.split('/').filter(Boolean)
+    const pagina = paginaDeCatalogo(segmentos)
+    if (segmentos.length === 0 || pagina) {
+      const respuesta = await paginaParaBuscadores(request, hostname, pagina)
+      if (respuesta) return respuesta
+    }
+    return // Continuar normalmente
   }
 
   // Solo interceptar para bots sociales
@@ -177,5 +268,5 @@ export default function middleware(request) {
 }
 
 export const config = {
-  matcher: ['/', '/tienda', '/legal/:path*', '/reclamos', '/manifest.json', '/manifest.webmanifest', '/catalogo/:path*', '/menu/:path*']
+  matcher: ['/', '/tienda', '/legal/:path*', '/reclamos', '/robots.txt', '/sitemap.xml', '/manifest.json', '/manifest.webmanifest', '/catalogo/:path*', '/menu/:path*']
 }

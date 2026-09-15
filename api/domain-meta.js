@@ -3,154 +3,25 @@
 //
 // Desde el 15-set-2026 un catálogo con dominio propio puede tener varias
 // PÁGINAS (pedido de CITEX): la raíz, /tienda, /legal/<política> y /reclamos.
-// El rewrite de vercel.json manda a los bots de cada una acá con `pagina`
-// (y `legal` para las políticas), y cada página sale con su título, su
-// descripción y su dirección. El diseño a medida de CITEX tiene los suyos en
-// src/components/catalog/aMedida/citex/seo.js, los mismos que pone la app.
-import { seoDePaginaCitex } from '../src/components/catalog/aMedida/citex/seo.js'
+// El middleware y los rewrites de vercel.json mandan acá a los bots de vista
+// previa de cada una con `pagina` (y `legal` para las políticas), y cada página
+// sale con su título, su descripción y su dirección. La búsqueda de la tienda
+// y el SEO de cada página viven en src/utils/cabeceraDeTienda.js, que también
+// arma la cabecera que ven los buscadores: la app, el middleware y estas
+// funciones dicen lo mismo.
+import { buscarTiendaPorDominio, paginaPedida, seoGenerico, escapar } from '../src/utils/cabeceraDeTienda.js'
 
-const FIREBASE_PROJECT_ID = 'cobrify-395fe'
+// api/catalog-meta los importa de acá.
+export { paginaPedida, seoGenerico }
 
-async function findBusinessByDomain(domain) {
-  try {
-    const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents:runQuery`
-
-    const query = {
-      structuredQuery: {
-        from: [{ collectionId: 'businesses' }],
-        where: {
-          compositeFilter: {
-            op: 'AND',
-            filters: [
-              {
-                fieldFilter: {
-                  field: { fieldPath: 'customDomain' },
-                  op: 'EQUAL',
-                  value: { stringValue: domain }
-                }
-              },
-              {
-                fieldFilter: {
-                  field: { fieldPath: 'catalogEnabled' },
-                  op: 'EQUAL',
-                  value: { booleanValue: true }
-                }
-              }
-            ]
-          }
-        },
-        limit: 1
-      }
-    }
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(query)
-    })
-
-    if (!response.ok) {
-      console.error('Firestore API error:', response.status)
-      return null
-    }
-
-    const results = await response.json()
-
-    if (!results || results.length === 0 || !results[0].document) {
-      return null
-    }
-
-    const fields = results[0].document.fields || {}
-    const texto = (campo) => fields[campo]?.stringValue || null
-
-    return {
-      name: texto('name'),
-      businessName: texto('businessName'),
-      businessMode: texto('businessMode'),
-      companySlogan: texto('companySlogan'),
-      catalogTagline: texto('catalogTagline'),
-      catalogWelcome: texto('catalogWelcome'),
-      catalogColor: texto('catalogColor'),
-      catalogSocialImage: texto('catalogSocialImage'),
-      catalogLogoUrl: texto('catalogLogoUrl'),
-      catalogFaviconUrl: texto('catalogFaviconUrl'),
-      logoUrl: texto('logoUrl'),
-      customDomain: texto('customDomain'),
-      // El título de la pestaña que eligió el negocio (Apariencia) y su tema:
-      // un diseño a medida trae el SEO de cada página.
-      catalogPageTitle: texto('catalogPageTitle'),
-      catalogTheme: texto('catalogTheme'),
-    }
-  } catch (error) {
-    console.error('Error fetching from Firestore:', error)
-    return null
-  }
-}
-
-const LEGALES = {
-  'politica-privacidad': 'Política de privacidad',
-  'politica-cambios-devoluciones': 'Política de cambios y devoluciones',
-  'politica-envios': 'Política de envíos',
-  'terminos-condiciones': 'Términos y condiciones',
-}
-
-/** La página que pidió el bot: su ruta y la clave que entiende el SEO a medida. */
-export function paginaPedida(query = {}) {
-  const pagina = String(query.pagina || '').toLowerCase()
-  const legal = String(query.legal || '').toLowerCase().replace(/[^a-z0-9-]/g, '')
-  if (pagina === 'tienda') return { clave: 'tienda', ruta: '/tienda' }
-  if (pagina === 'legal' && legal) return { clave: `legal/${legal}`, ruta: `/legal/${legal}`, legal }
-  if (pagina === 'reclamos') return { clave: 'reclamos', ruta: '/reclamos' }
-  return { clave: 'inicio', ruta: '' }
-}
-
-/** Título, descripción y tipo de una página, para cualquier negocio. */
-export function seoGenerico(business, pagina, { esRestaurante = false } = {}) {
-  const businessName = business.name || business.businessName || 'Catálogo'
-  if (business.catalogTheme === 'citex') {
-    const seo = seoDePaginaCitex(pagina.clave)
-    return { titulo: seo.titulo, descripcion: seo.descripcion, tipo: seo.tipo || 'website' }
-  }
-  const slogan = (business.catalogTagline || business.companySlogan || business.catalogWelcome || '').trim()
-  if (pagina.clave === 'tienda') {
-    return {
-      titulo: business.catalogPageTitle || `Tienda en línea | ${businessName}`,
-      descripcion: slogan || `Compra en la tienda en línea de ${businessName}. Mira los productos y haz tu pedido.`,
-      tipo: 'website',
-    }
-  }
-  if (pagina.legal) {
-    const titulo = LEGALES[pagina.legal] || 'Información legal'
-    return { titulo: `${titulo} | ${businessName}`, descripcion: `${titulo} de ${businessName}.`, tipo: 'article' }
-  }
-  if (pagina.clave === 'reclamos') {
-    return {
-      titulo: `Libro de Reclamaciones | ${businessName}`,
-      descripcion: `Registra tu reclamo o queja en el Libro de Reclamaciones de ${businessName} y consulta su estado.`,
-      tipo: 'website',
-    }
-  }
-  const tagline = slogan || (esRestaurante ? `¡Haz tu pedido en ${businessName}!` : `¡Visita el catálogo de ${businessName}!`)
-  return {
-    titulo: business.catalogPageTitle || (esRestaurante ? `${businessName} — Menú Digital 🍽️` : `${businessName} — Catálogo`),
-    descripcion: esRestaurante
-      ? `${tagline} — Menú digital de ${businessName}. Mira nuestra carta y pide desde tu mesa.`
-      : `${tagline} — Catálogo de ${businessName}. Mira nuestros productos y haz tu pedido.`,
-    tipo: 'website',
-  }
-}
-
-// Va dentro de atributos HTML: comillas y signos de menor se escapan.
-const escapar = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
-
-function generateHTML(business, domain, pagina) {
+function generateHTML(business, domain, pagina, origen) {
   const businessName = business.name || business.businessName || domain
   const isRestaurant = business.businessMode === 'restaurant'
   const seo = seoGenerico(business, pagina, { esRestaurante: isRestaurant })
-  const logoUrl = business.catalogFaviconUrl || business.catalogLogoUrl || business.logoUrl || `https://${domain}/logo.png`
+  const logoUrl = business.catalogFaviconUrl || business.catalogLogoUrl || business.logoUrl || `${origen}/logo.png`
   const themeColor = business.catalogColor || '#10B981'
-  const url = `https://${domain}${pagina.ruta}`
-  const socialImageUrl = business.catalogSocialImage || business.logoUrl || `https://${domain}/socialmedia.jpeg`
+  const url = `${origen}${pagina.ruta}`
+  const socialImageUrl = business.catalogSocialImage || business.logoUrl || `${origen}/socialmedia.jpeg`
   const title = escapar(seo.titulo)
   const description = escapar(seo.descripcion)
 
@@ -210,8 +81,8 @@ const esDominioDeCobrify = (host) => {
 }
 
 // Solo los bots de vista previa (WhatsApp, Facebook, LinkedIn...), que no
-// ejecutan JavaScript. Google y Bing sí lo ejecutan: a ellos les conviene la
-// aplicación de verdad, con la página entera y el título que pone la app.
+// ejecutan JavaScript. Google y Bing sí lo ejecutan: a ellos el middleware les
+// sirve la aplicación con la cabecera de la tienda (utils/cabeceraDeTienda).
 const BOTS_SOCIALES = [
   'facebookexternalhit', 'facebot', 'linkedinbot', 'twitterbot', 'whatsapp',
   'telegrambot', 'slackbot', 'discordbot', 'pinterest', 'cobrifychat',
@@ -254,6 +125,10 @@ export default async function handler(req, res) {
   // Vercel sirve la web en www.citex.pe.
   const domain = String(req.query.domain || req.headers.host || '').toLowerCase().replace(/^www\./, '').split(':')[0]
   const pagina = paginaPedida(req.query)
+  // La dirección que de verdad sirve la tienda es el host por el que entró el
+  // bot (www.citex.pe); el dominio guardado responde 308 hacia allá.
+  const hostReal = String(req.headers.host || '').toLowerCase().split(':')[0]
+  const origen = hostReal && !esDominioDeCobrify(hostReal) ? `https://${hostReal}` : `https://${domain}`
 
   console.log(`[DomainMeta] domain=${domain}, pagina=${pagina.clave}, UA=${userAgent.substring(0, 50)}`)
 
@@ -272,10 +147,10 @@ export default async function handler(req, res) {
   }
 
   // Primero buscar como dominio de catálogo de negocio
-  const business = await findBusinessByDomain(domain)
+  const business = await buscarTiendaPorDominio(domain)
 
   if (business) {
-    const html = generateHTML(business, domain, pagina)
+    const html = generateHTML(business, domain, pagina, origen)
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
     res.setHeader('Cache-Control', 'public, max-age=300')
     return res.status(200).send(html)

@@ -74,8 +74,17 @@ const friendlyAuthError = (error) => {
       return 'Demasiados intentos. Espera un momento e inténtalo de nuevo.'
     case 'auth/network-request-failed':
       return 'Sin conexión. Revisa tu internet.'
+    // Ingreso con Google todavía no habilitado en el proyecto, o este dominio
+    // sin autorizar: el comprador puede seguir con su correo.
+    case 'auth/operation-not-allowed':
+    case 'auth/admin-restricted-operation':
+    case 'auth/unauthorized-domain':
+      return 'El ingreso con Google no está disponible en esta tienda por ahora. Entra con tu correo y contraseña.'
     default:
-      return error?.message || 'No se pudo completar la operación'
+      // Nada de "Firebase: Error (auth/...)" en la pantalla del comprador: el
+      // código queda en la consola para quien lo investigue.
+      console.warn('Ingreso del catálogo:', error?.code || error?.message || error)
+      return 'No se pudo completar la operación. Vuelve a intentarlo.'
   }
 }
 
