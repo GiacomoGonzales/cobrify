@@ -1,11 +1,13 @@
 import { useEffect, lazy, Suspense } from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { BrandingProvider } from './contexts/BrandingContext'
 import { ToastProvider } from './contexts/ToastContext'
 import AppLifecycleManager from './components/AppLifecycleManager'
 import MainLayout from './layouts/MainLayout'
 import LandingRouter from './components/LandingRouter'
+import EsperaDeArranque from './components/EsperaDeArranque'
+import { esRutaDeLaApp } from '@/utils/pantallaDeEspera'
 import { esDominioDelChat } from '@/utils/dominioChat'
 import { esDominioDeRegistro } from '@/utils/dominioRegistro'
 import { Capacitor } from '@capacitor/core'
@@ -236,7 +238,22 @@ const RUTAS_DEMO = (
  * conexiones normales, pero tiene que existir: sin fallback, React lanza un
  * error al suspender.
  */
+/**
+ * Lo que se ve mientras baja el código de una pantalla.
+ *
+ * Las navegaciones dentro de la app van en transición (v7_startTransition), así
+ * que la pantalla anterior se queda hasta que llega la nueva y esto casi no se
+ * ve. Donde SÍ se ve es en la primera carga: ahí, en la app y su login, va la
+ * espera con marca —la misma que sigue después mientras entra la sesión—, y
+ * la primera carga deja de ser blanco o un punto girando solo. En catálogos,
+ * menús y páginas públicas se mantiene el spinner neutro: ahí la marca es de
+ * otro.
+ */
 function PantallaCargando() {
+  const { pathname } = useLocation()
+  if (esRutaDeLaApp(pathname)) {
+    return <EsperaDeArranque texto="Cargando..." />
+  }
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />

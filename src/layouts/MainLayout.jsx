@@ -3,7 +3,7 @@ import DemoAccountBanner from '@/components/DemoAccountBanner'
 import { Outlet, Navigate, useLocation, Link } from 'react-router-dom'
 import { useAppPath } from '@/hooks/useAppNavigate'
 import { Capacitor } from '@capacitor/core'
-import SplashMarca from '@/components/SplashMarca'
+import EsperaDeArranque from '@/components/EsperaDeArranque'
 import { useAuth } from '@/contexts/AuthContext'
 import { useBranding } from '@/contexts/BrandingContext'
 import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore'
@@ -574,15 +574,13 @@ export default function MainLayout() {
     return escucharMantenimiento(setMantenimiento)
   }, [isAuthenticated])
 
-  // Splash mientras carga la sesión (solo en móvil) — pieza única SplashMarca:
-  // marca del reseller en su dominio, Cobrify solo en los propios.
-  if (isLoading && Capacitor.isNativePlatform()) {
-    return <SplashMarca />
-  }
-
-  // En web, mostrar loading simple mientras carga
+  // La espera del arranque, con marca y con voz (EsperaDeArranque). En la web
+  // esto devolvía null: la persona veía la página EN BLANCO todo lo que
+  // tardara la sesión —en una conexión lenta, veinte segundos o más— sin saber
+  // si se había colgado (video de MULTIMARC, 15-set-2026). En la app pintaba
+  // el splash azul entero, sin decir nada.
   if (isLoading) {
-    return null
+    return <EsperaDeArranque texto="Entrando..." />
   }
 
   // Redirigir a login si no está autenticado

@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { Capacitor } from '@capacitor/core'
-import SplashMarca from '@/components/SplashMarca'
+import EsperaDeArranque from '@/components/EsperaDeArranque'
 import { esDominioReseller } from '@/utils/resellerDomain'
 import { esDominioDelChat, MARCA_CHAT } from '@/utils/dominioChat'
 import { useAuth } from '@/contexts/AuthContext'
@@ -130,16 +129,13 @@ export default function Login() {
   // Mostrar splash mientras carga el branding o auth está procesando
   const showSplash = isLoadingBranding || isAuthLoading || isAuthenticated || isLoading
 
-  // Este splash aparece DOS veces en el recorrido nativo: al montar (mientras
-  // carga la marca) y tras enviar las credenciales (mientras redirige). Era la
-  // ultima copia con Cobrify cableado — la que sobrevivio al reporte de QAMIR.
-  if (showSplash && Capacitor.isNativePlatform()) {
-    return <SplashMarca />
-  }
-
-  // En web, esperar sin mostrar nada mientras carga
+  // Esta espera aparece DOS veces en el recorrido: al montar (mientras carga
+  // la marca) y tras enviar las credenciales (mientras AuthContext resuelve la
+  // sesión y redirige). En la web devolvía null: al dar "Iniciar sesión" el
+  // formulario desaparecía y quedaba la página en blanco hasta entrar; con
+  // mala conexión, varios segundos sin saber si había pasado algo.
   if (showSplash) {
-    return null
+    return <EsperaDeArranque texto="Entrando..." />
   }
 
   // Si hay branding personalizado (reseller), usar esos valores
