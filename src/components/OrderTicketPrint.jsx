@@ -1,4 +1,5 @@
 import { forwardRef } from 'react'
+import { textoDeEntrega, textoDeComprobante } from '@/utils/entregaDelPedido'
 
 /**
  * Ticket imprimible para pedido online (tienda virtual retail).
@@ -138,6 +139,19 @@ const OrderTicketPrint = forwardRef(({ order, companySettings }, ref) => {
         <div style={{ marginTop: '2px' }}>
           <div>Dirección:</div>
           <div style={{ fontSize: '11px', paddingLeft: '4px' }}>{order.customerAddress}</div>
+        </div>
+      )}
+      {/* Entrega y comprobante que eligió el comprador (utils/entregaDelPedido) */}
+      {order.entrega && (
+        <div style={{ marginTop: '2px' }}>
+          <div>Entrega:</div>
+          <div className="ot-bold" style={{ fontSize: '11px', paddingLeft: '4px' }}>{textoDeEntrega(order.entrega)}</div>
+        </div>
+      )}
+      {order.comprobante && (
+        <div style={{ marginTop: '2px' }}>
+          <div>Comprobante:</div>
+          <div style={{ fontSize: '11px', paddingLeft: '4px' }}>{textoDeComprobante(order.comprobante)}</div>
         </div>
       )}
 

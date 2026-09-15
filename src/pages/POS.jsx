@@ -2449,9 +2449,12 @@ export default function POS() {
         pendingStockCheckRef.current = true
       }
 
-      // Cargar datos del cliente (siempre inline — son datos del catálogo público)
+      // Cargar datos del cliente (siempre inline — son datos del catálogo público).
+      // Si pidió boleta o factura en el catálogo trae el documento: DNI para la
+      // boleta; RUC y razón social para la factura (utils/entregaDelPedido).
       if (info.customer) {
         const c = info.customer
+        const tipoDocumento = c.documentNumber ? inferDocumentType(c.documentType, c.documentNumber) : ''
         setCustomerData(prev => ({
           ...prev,
           name: c.name || '',
@@ -2459,17 +2462,24 @@ export default function POS() {
           phone: c.phone || '',
           address: c.address || '',
           customerCoords: c.coords || null,
+          ...(c.documentNumber && { documentType: tipoDocumento, documentNumber: c.documentNumber }),
+          ...(c.businessName && { businessName: c.businessName }),
         }))
         setSelectedCustomer({
           id: null,
           name: c.name || '',
-          businessName: '',
-          documentType: c.documentType || 'dni',
+          businessName: c.businessName || '',
+          documentType: tipoDocumento || c.documentType || 'dni',
           documentNumber: c.documentNumber || '',
           email: c.email || '',
           phone: c.phone || '',
           address: c.address || '',
         })
+      }
+
+      // El comprobante que pidió el comprador (boleta o factura) queda elegido.
+      if (info.comprobante?.tipo === 'factura' || info.comprobante?.tipo === 'boleta') {
+        setDocumentType(info.comprobante.tipo)
       }
 
       if (info.notes) {

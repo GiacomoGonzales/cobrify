@@ -9,13 +9,15 @@ import { updateOrderStatus } from '@/services/orderService'
 import { getCompanySettings } from '@/services/firestoreService'
 import { generateOrderPDF } from '@/utils/orderPdfGenerator'
 import OrderTicketPrint from '@/components/OrderTicketPrint'
+import { ENTREGA, textoDeEntrega, textoDeComprobante, clienteDelPedido } from '@/utils/entregaDelPedido'
 import { useReactToPrint } from 'react-to-print'
 import { useNewOrderAlert } from '@/hooks/useNewOrderAlert'
 import {
   MessageCircle, CheckCircle, XCircle, Clock, MapPin, Phone,
   User, ChevronDown, ChevronUp, Package, Search, Loader2,
   AlertCircle, Smartphone, Mail, Printer, FileText, ShoppingCart,
-  PackageCheck, ThumbsUp, Ban, DollarSign, Calendar, Inbox, Archive, Sparkles
+  PackageCheck, ThumbsUp, Ban, DollarSign, Calendar, Inbox, Archive, Sparkles,
+  Store, Truck, Receipt
 } from 'lucide-react'
 import Card, { CardContent } from '@/components/ui/Card'
 import Input from '@/components/ui/Input'
@@ -235,15 +237,12 @@ export default function OnlineOrders() {
             variantAttributes: item.variantAttributes,
           }),
         })),
-        customer: {
-          name: order.customerName || '',
-          email: order.customerEmail || '',
-          phone: order.customerPhone || '',
-          address: order.customerAddress || '',
-          // La ubicación que el comprador marcó en el catálogo: viaja hasta el
-          // envío para que el repartidor la abra en el mapa.
-          coords: order.customerCoords || null,
-        },
+        // El cliente, con el documento del comprobante que pidió el comprador
+        // (utils/entregaDelPedido). La ubicación que marcó en el catálogo viaja
+        // hasta el envío para que el repartidor la abra en el mapa.
+        customer: clienteDelPedido(order),
+        // Boleta o factura, como la pidió: el POS la deja elegida.
+        comprobante: order.comprobante || null,
         notes: order.notes || '',
       },
     })
@@ -273,12 +272,8 @@ export default function OnlineOrders() {
             variantAttributes: item.variantAttributes,
           }),
         })),
-        prefilledCustomer: {
-          name: order.customerName || '',
-          email: order.customerEmail || '',
-          phone: order.customerPhone || '',
-          address: order.customerAddress || '',
-        },
+        // Con factura, la cotización sale a nombre de la razón social.
+        prefilledCustomer: clienteDelPedido(order),
         prefilledNotes: order.notes || '',
       },
     })
@@ -921,6 +916,21 @@ function OrderCard({ order, customerBadge, isExpanded, onToggleExpand, onChangeS
               </div>
             </div>
           )}
+          {/* Entrega y comprobante que eligió el comprador (utils/entregaDelPedido) */}
+          {order.entrega && (
+            <div className="flex items-start gap-2 text-gray-700 sm:col-span-2">
+              {order.entrega.modo === ENTREGA.RECOJO
+                ? <Store className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                : <Truck className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />}
+              <span className="break-words">{textoDeEntrega(order.entrega)}</span>
+            </div>
+          )}
+          {order.comprobante && (
+            <div className="flex items-start gap-2 text-gray-700 sm:col-span-2">
+              <Receipt className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+              <span className="break-words">{textoDeComprobante(order.comprobante)}</span>
+            </div>
+          )}
         </div>
 
         {order.notes && (
@@ -1274,6 +1284,20 @@ function OrderDetailModal({ isOpen, order, customerBadge, onClose, onChangeStatu
                     </a>
                   )}
                 </div>
+              </div>
+            )}
+            {order.entrega && (
+              <div className="flex items-start gap-2">
+                {order.entrega.modo === ENTREGA.RECOJO
+                  ? <Store className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                  : <Truck className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />}
+                <span className="break-words">{textoDeEntrega(order.entrega)}</span>
+              </div>
+            )}
+            {order.comprobante && (
+              <div className="flex items-start gap-2">
+                <Receipt className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                <span className="break-words">{textoDeComprobante(order.comprobante)}</span>
               </div>
             )}
           </div>

@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf'
 import { preloadLogo } from '@/utils/pdfGenerator'
 import { Capacitor } from '@capacitor/core'
+import { textoDeEntrega, textoDeComprobante } from '@/utils/entregaDelPedido'
 
 /**
  * Genera un PDF de nota de pedido (tienda virtual retail).
@@ -138,6 +139,9 @@ export async function generateOrderPDF(order, companySettings = {}, opts = {}) {
   addClientLine('Teléfono', order.customerPhone)
   addClientLine('Email', order.customerEmail)
   addClientLine('Dirección', order.customerAddress)
+  // Entrega elegida y comprobante pedido en el catálogo (utils/entregaDelPedido).
+  addClientLine('Entrega', textoDeEntrega(order.entrega))
+  addClientLine('Comprobante', textoDeComprobante(order.comprobante))
 
   if (order.customerCoords) {
     doc.setFont('helvetica', 'italic')

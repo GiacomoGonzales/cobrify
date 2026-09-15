@@ -1,6 +1,8 @@
 // Carrito lateral + checkout del catálogo público, modal de cuenta de mesa y
 // tipos de orden (mesa/llevar/delivery). Crea pedidos REALES en
 // businesses/{id}/orders (source 'menu_digital') y arma el mensaje de WhatsApp.
+// Una tienda (no restaurante) elige además cómo recibe el pedido y si quiere
+// boleta o factura: utils/entregaDelPedido.
 // Extraído de CatalogoPublico.jsx (F1.3 del plan de rediseño) SIN cambios de
 // lógica; solo se hicieron explícitos los imports.
 import { useState, useEffect } from 'react'
@@ -22,6 +24,21 @@ import {
 import { validateCoupon, normalizeCouponCode } from '@/services/couponService'
 import { idDeFidelizacion } from '@/utils/businessGroup'
 import { eventoDePixel } from '@/utils/pixelesDelCatalogo'
+import {
+  ENTREGA,
+  COMPROBANTE,
+  BOLETA_CON_DOCUMENTO_DESDE,
+  opcionesDeEntrega,
+  entregaConfigurada,
+  puntosDeRecojo,
+  agenciasDeEnvio,
+  tipoDePedido,
+  problemaDeEntrega,
+  entregaDelPedido,
+  comprobanteDelPedido,
+  tituloDeWhatsApp,
+  lineasDeWhatsApp,
+} from '@/utils/entregaDelPedido'
 import {
   X,
   Plus,
@@ -45,6 +62,9 @@ import {
   Mail,
   ArrowRight,
   ChevronDown,
+  Store,
+  Truck,
+  Receipt,
 } from 'lucide-react'
 
 // Tipos de orden para restaurante
@@ -53,6 +73,9 @@ export const ORDER_TYPES = [
   { id: 'takeaway', label: 'Para llevar', icon: ShoppingCart, color: 'blue' },
   { id: 'delivery', label: 'Delivery', icon: Bike, color: 'orange' },
 ]
+
+// Los campos nuevos del checkout, con el mismo aspecto que los de siempre.
+const CAMPO = 'w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-gray-400'
 
 // Modal de cuenta activa de la mesa
 export function TableAccountModal({ isOpen, onClose, activeTableOrder, business, onAddMore }) {
@@ -268,13 +291,56 @@ export default function CartDrawer({
   useEffect(() => {
     if (cart.length === 0) { setAppliedCoupon(null); setCouponInput(''); setCouponError('') }
   }, [cart.length])
-  // Estados para modo restaurante / tienda virtual retail
-  // Retail: siempre 'delivery' (siempre pide dirección, no hay toggle)
+  // ENTREGA de una tienda (no restaurante): envío a domicilio, recojo en uno
+  // de sus locales o envío a provincia por agencia, según lo que prendió el
+  // negocio (utils/entregaDelPedido). Quien no configuró nada tiene una sola
+  // opción, el envío a domicilio de siempre, y su checkout no cambia.
+  const opcionesEntrega = isRestaurantMenu ? [] : opcionesDeEntrega(business)
+  const clavesEntrega = opcionesEntrega.map(o => o.id).join(',')
+  const entregaPropia = !isRestaurantMenu && entregaConfigurada(business)
+  const puntosRecojo = isRestaurantMenu ? [] : puntosDeRecojo(business)
+  const agencias = isRestaurantMenu ? [] : agenciasDeEnvio(business)
+  const primeraEntrega = opcionesEntrega[0]?.id || ENTREGA.DOMICILIO
+  const [modoEntrega, setModoEntrega] = useState(primeraEntrega)
+  const [puntoRecojoId, setPuntoRecojoId] = useState('')
+  // Con un solo local no hay nada que elegir; con varios, elige el comprador.
+  const puntoElegido = puntosRecojo.find(p => p.id === puntoRecojoId) || (puntosRecojo.length === 1 ? puntosRecojo[0] : null)
+  const [agencia, setAgencia] = useState('')
+  const [destino, setDestino] = useState('')
+  const [dniRecoge, setDniRecoge] = useState('')
+  // COMPROBANTE: boleta o factura, si el negocio lo pide (catalogAskReceipt).
+  const pideComprobante = business?.catalogAskReceipt === true
+  const [tipoComprobante, setTipoComprobante] = useState(COMPROBANTE.BOLETA)
+  const [dniBoleta, setDniBoleta] = useState('')
+  const [rucFactura, setRucFactura] = useState('')
+  const [razonSocial, setRazonSocial] = useState('')
+  const [direccionFiscal, setDireccionFiscal] = useState('')
+  // Lo que quedó guardado con el pedido: la pantalla de éxito y el WhatsApp.
+  const [pedidoConfirmado, setPedidoConfirmado] = useState(null)
+  // SUNAT pide el DNI en boletas desde S/ 700: el total del pedido en soles.
+  const totalEnSoles = catalogCurrency === 'USD' ? totalConCupon * (catalogExchangeRate || 1) : totalConCupon
+
+  // Estados para modo restaurante / tienda virtual retail.
+  // Tienda: el tipo de pedido sale de la entrega (recojo = para llevar; el resto, envío).
   const defaultOrderType = isRestaurantMenu
     ? (initialTableNumber ? 'dine_in'
       : (business?.catalogAllowTakeaway !== false ? 'takeaway' : business?.catalogAllowDelivery !== false ? 'delivery' : 'takeaway'))
-    : 'delivery'
+    : tipoDePedido(primeraEntrega)
   const [orderType, setOrderType] = useState(defaultOrderType)
+  const elegirEntrega = (id) => {
+    setModoEntrega(id)
+    setOrderType(tipoDePedido(id))
+    setOrderError('')
+  }
+  // Si la tienda cambia sus opciones (o llegan después que el carrito), la
+  // entrega elegida tiene que seguir existiendo.
+  useEffect(() => {
+    if (isRestaurantMenu) return
+    if (!clavesEntrega.split(',').includes(modoEntrega)) {
+      setModoEntrega(primeraEntrega)
+      setOrderType(tipoDePedido(primeraEntrega))
+    }
+  }, [isRestaurantMenu, clavesEntrega, modoEntrega, primeraEntrega])
   const [tableNumber, setTableNumber] = useState(initialTableNumber)
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
@@ -333,6 +399,15 @@ export default function CartDrawer({
       if (!customerEmail && data.customerEmail) setCustomerEmail(data.customerEmail)
       if (!customerAddress && data.customerAddress) setCustomerAddress(data.customerAddress)
       if (!customerCoords && data.customerCoords) setCustomerCoords(data.customerCoords)
+      // El comprobante y la agencia del pedido anterior: no hay que volver a escribirlos.
+      if (data.tipoComprobante === COMPROBANTE.FACTURA || data.tipoComprobante === COMPROBANTE.BOLETA) setTipoComprobante(data.tipoComprobante)
+      if (!dniBoleta && data.dniBoleta) setDniBoleta(data.dniBoleta)
+      if (!rucFactura && data.rucFactura) setRucFactura(data.rucFactura)
+      if (!razonSocial && data.razonSocial) setRazonSocial(data.razonSocial)
+      if (!direccionFiscal && data.direccionFiscal) setDireccionFiscal(data.direccionFiscal)
+      if (!destino && data.destino) setDestino(data.destino)
+      if (!dniRecoge && data.dniRecoge) setDniRecoge(data.dniRecoge)
+      if (!agencia && data.agencia && (agencias.length === 0 || agencias.includes(data.agencia))) setAgencia(data.agencia)
     } catch (e) {
       console.warn('No se pudo cargar info guardada del cliente:', e)
     }
@@ -358,6 +433,25 @@ export default function CartDrawer({
       }, 300)
     }
   }, [isOpen, orderSuccess, initialTableNumber])
+
+  // Tras un pedido, la entrega y el comprobante también vuelven a empezar (lo
+  // escrito se vuelve a precargar desde este equipo al abrir el carrito).
+  useEffect(() => {
+    if (isOpen || !orderSuccess) return
+    setTimeout(() => {
+      setModoEntrega(primeraEntrega)
+      setPuntoRecojoId('')
+      setAgencia('')
+      setDestino('')
+      setDniRecoge('')
+      setTipoComprobante(COMPROBANTE.BOLETA)
+      setDniBoleta('')
+      setRucFactura('')
+      setRazonSocial('')
+      setDireccionFiscal('')
+      setPedidoConfirmado(null)
+    }, 300)
+  }, [isOpen, orderSuccess, primeraEntrega])
 
   // Obtener siguiente número de orden
   const getDailyOrderNumber = async (businessId) => {
@@ -408,16 +502,50 @@ export default function CartDrawer({
       setOrderError('Ingresa tu nombre')
       return
     }
-    if (orderType === 'delivery' && !customerPhone.trim()) {
+    // En una tienda el teléfono va siempre: con recojo es por donde se avisa que está listo.
+    if ((orderType === 'delivery' || !isRestaurantMenu) && !customerPhone.trim()) {
       setPaso('datos')
-      setOrderError('Ingresa tu teléfono para delivery')
+      setOrderError(isRestaurantMenu ? 'Ingresa tu teléfono para delivery' : 'Ingresa tu teléfono')
       return
     }
-    if (orderType === 'delivery' && !customerAddress.trim()) {
+    if (isRestaurantMenu && orderType === 'delivery' && !customerAddress.trim()) {
       setPaso('entrega')
       setOrderError('Ingresa tu dirección para delivery')
       return
     }
+    // Tienda: lo que pide la entrega elegida (dirección, local o agencia).
+    if (!isRestaurantMenu) {
+      const problema = problemaDeEntrega({ modo: modoEntrega, direccion: customerAddress, punto: puntoElegido, agencia, destino, dniRecoge })
+      if (problema) {
+        setPaso('entrega')
+        setOrderError(problema)
+        return
+      }
+    }
+    // Boleta o factura, si el negocio la pide (en la mesa se resuelve en caja).
+    let comprobanteGuardado = null
+    if (pideComprobante && orderType !== 'dine_in') {
+      const { problema, comprobante } = comprobanteDelPedido({
+        tipo: tipoComprobante,
+        numero: tipoComprobante === COMPROBANTE.FACTURA ? rucFactura : dniBoleta,
+        razonSocial,
+        direccionFiscal,
+      }, { totalEnSoles })
+      if (problema) {
+        setPaso('datos')
+        setOrderError(problema)
+        return
+      }
+      comprobanteGuardado = comprobante
+    }
+    // La entrega tal como queda en el pedido: solo si el negocio configuró algo
+    // más que el envío de siempre (los pedidos de los demás no cambian).
+    const entregaGuardada = entregaPropia
+      ? entregaDelPedido({ opcion: opcionesEntrega.find(o => o.id === modoEntrega), punto: puntoElegido, agencia, destino, dniRecoge })
+      : null
+    // Solo el envío a domicilio lleva dirección: con recojo o agencia, una
+    // dirección precargada de otro pedido confundiría a quien lo prepara.
+    const conDireccion = isRestaurantMenu || modoEntrega === ENTREGA.DOMICILIO
 
     setSubmitting(true)
     setOrderError('')
@@ -429,6 +557,7 @@ export default function CartDrawer({
         setOrderNumber('#DEMO')
         setOrderConfirmItems([...cart])
         setOrderConfirmCoupon(appliedCoupon ? { ...appliedCoupon } : null)
+        setPedidoConfirmado({ entrega: entregaGuardada, comprobante: comprobanteGuardado })
         setOrderSuccess(true)
         cart.forEach(item => onRemove(item.cartItemId || item.id))
         return
@@ -578,9 +707,14 @@ export default function CartDrawer({
         // Info del cliente
         ...(customerName && { customerName: customerName.trim() }),
         ...(customerPhone && { customerPhone: customerPhone.trim() }),
-        ...(customerAddress && { customerAddress: customerAddress.trim() }),
-        ...(customerCoords && { customerCoords }),
+        ...(conDireccion && customerAddress && { customerAddress: customerAddress.trim() }),
+        ...(conDireccion && customerCoords && { customerCoords }),
         ...(customerEmail && { customerEmail: customerEmail.trim() }),
+
+        // Entrega elegida y comprobante pedido (utils/entregaDelPedido): Pedidos
+        // Online los muestra y el POS hereda el comprobante al cobrar.
+        ...(entregaGuardada && { entrega: entregaGuardada }),
+        ...(comprobanteGuardado && { comprobante: comprobanteGuardado }),
 
         // Items
         items,
@@ -739,6 +873,19 @@ export default function CartDrawer({
             customerEmail: customerEmail.trim(),
             customerAddress: customerAddress.trim(),
             customerCoords: customerCoords || null,
+            // Comprobante y agencia: el próximo pedido ya los trae.
+            ...(comprobanteGuardado && {
+              tipoComprobante: comprobanteGuardado.tipo,
+              dniBoleta: dniBoleta.trim(),
+              rucFactura: rucFactura.trim(),
+              razonSocial: razonSocial.trim(),
+              direccionFiscal: direccionFiscal.trim(),
+            }),
+            ...(entregaGuardada?.modo === ENTREGA.AGENCIA && {
+              agencia: entregaGuardada.agencia,
+              destino: entregaGuardada.destino,
+              dniRecoge: entregaGuardada.dniRecoge,
+            }),
             savedAt: Date.now(),
           }))
         }
@@ -749,6 +896,7 @@ export default function CartDrawer({
       setOrderNumber(orderNum)
       setOrderConfirmItems([...cart])
         setOrderConfirmCoupon(appliedCoupon ? { ...appliedCoupon } : null)
+      setPedidoConfirmado({ entrega: entregaGuardada, comprobante: comprobanteGuardado })
       setOrderSuccess(true)
       avisarPedidoAPixeles(orderNum)
 
@@ -807,6 +955,10 @@ export default function CartDrawer({
             <p className="text-sm text-gray-500 mb-8">
               {orderType === 'dine_in'
                 ? `Mesa ${tableNumber} - Te llevaremos tu pedido pronto`
+                : pedidoConfirmado?.entrega?.modo === ENTREGA.RECOJO
+                ? `Te avisaremos cuando esté listo para recoger en ${pedidoConfirmado.entrega.puntoRecojo?.nombre || pedidoConfirmado.entrega.puntoRecojo?.direccion || 'la tienda'}`
+                : pedidoConfirmado?.entrega?.modo === ENTREGA.AGENCIA
+                ? `Te contactaremos para coordinar el envío por ${pedidoConfirmado.entrega.agencia}`
                 : orderType === 'takeaway'
                 ? 'Te avisaremos cuando esté listo para recoger'
                 : 'Te contactaremos para confirmar la entrega'}
@@ -858,7 +1010,7 @@ export default function CartDrawer({
                               : orderConfirmCoupon.value),
                         totalDisplay)
                     : 0
-                  let msg = `🛒 *¡Hola! He hecho un pedido ${orderType === 'delivery' ? 'DELIVERY' : 'PARA RECOGER'}*\n\n`
+                  let msg = `🛒 *¡Hola! He hecho un pedido ${tituloDeWhatsApp({ entrega: pedidoConfirmado?.entrega, orderType })}*\n\n`
                   msg += `📋 *Pedido ${orderNumber}*\n${orderItems}\n\n`
                   if (showTotal && orderConfirmCoupon) {
                     msg += `🎟️ *Cupón ${orderConfirmCoupon.id}:* − ${formatCurrency(cuponDesc, catalogCurrency)}\n`
@@ -868,10 +1020,13 @@ export default function CartDrawer({
                   } else {
                     msg += `💰 *Total: A consultar*\n\n`
                   }
+                  // Con recojo o agencia la dirección no va: el pedido no viaja a ella.
+                  const conDireccionEnMensaje = !pedidoConfirmado?.entrega || pedidoConfirmado.entrega.modo === ENTREGA.DOMICILIO
                   if (customerName) msg += `👤 *Nombre:* ${customerName}\n`
                   if (customerPhone) msg += `📱 *Teléfono:* ${customerPhone}\n`
-                  if (customerAddress) msg += `📍 *Dirección:* ${customerAddress}\n`
-                  if (customerCoords) msg += `🗺️ *Ubicación:* https://www.google.com/maps?q=${customerCoords.lat},${customerCoords.lng}\n`
+                  if (conDireccionEnMensaje && customerAddress) msg += `📍 *Dirección:* ${customerAddress}\n`
+                  if (conDireccionEnMensaje && customerCoords) msg += `🗺️ *Ubicación:* https://www.google.com/maps?q=${customerCoords.lat},${customerCoords.lng}\n`
+                  for (const linea of lineasDeWhatsApp(pedidoConfirmado || {})) msg += `${linea}\n`
                   if (notes) msg += `📝 *Notas:* ${notes}\n`
                   return `https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`
                 })()}
@@ -1260,8 +1415,8 @@ export default function CartDrawer({
                       />
                     </div>
                   )}
-                  {/* Teléfono (para delivery / retail) */}
-                  {orderType === 'delivery' && (
+                  {/* Teléfono (para delivery; en una tienda, siempre) */}
+                  {(orderType === 'delivery' || !isRestaurantMenu) && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         <Phone className="w-4 h-4 inline mr-1" />
@@ -1290,6 +1445,83 @@ export default function CartDrawer({
                         placeholder="tu@email.com"
                         className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-gray-400"
                       />
+                    </div>
+                  )}
+                  {/* Boleta o factura (utils/entregaDelPedido): el POS la hereda al cobrar. */}
+                  {pideComprobante && orderType !== 'dine_in' && (
+                    <div>
+                      <p className="block text-sm font-medium text-gray-700 mb-2">
+                        <Receipt className="w-4 h-4 inline mr-1" />
+                        Comprobante
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: COMPROBANTE.BOLETA, etiqueta: 'Boleta' },
+                          { id: COMPROBANTE.FACTURA, etiqueta: 'Factura' },
+                        ].map((op) => {
+                          const activo = tipoComprobante === op.id
+                          return (
+                            <button
+                              key={op.id}
+                              type="button"
+                              aria-pressed={activo}
+                              onClick={() => { setTipoComprobante(op.id); setOrderError('') }}
+                              className={`py-2.5 rounded-xl border-2 text-sm font-medium transition-colors ${activo ? '' : 'border-gray-200 hover:border-gray-300'}`}
+                              style={activo ? { borderColor: getCatalogAccent(business), backgroundColor: `${getCatalogAccent(business)}14`, color: getCatalogAccent(business) } : undefined}
+                            >
+                              {op.etiqueta}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      {tipoComprobante === COMPROBANTE.FACTURA ? (
+                        <div className="space-y-2 mt-3">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={11}
+                            value={rucFactura}
+                            onChange={(e) => setRucFactura(e.target.value.replace(/\D/g, ''))}
+                            placeholder="RUC (11 dígitos)"
+                            aria-label="RUC"
+                            className={CAMPO}
+                          />
+                          <input
+                            type="text"
+                            value={razonSocial}
+                            onChange={(e) => setRazonSocial(e.target.value)}
+                            placeholder="Razón social"
+                            aria-label="Razón social"
+                            className={CAMPO}
+                          />
+                          <input
+                            type="text"
+                            value={direccionFiscal}
+                            onChange={(e) => setDireccionFiscal(e.target.value)}
+                            placeholder="Dirección fiscal (opcional)"
+                            aria-label="Dirección fiscal"
+                            className={CAMPO}
+                          />
+                        </div>
+                      ) : (
+                        <div className="mt-3">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={12}
+                            value={dniBoleta}
+                            onChange={(e) => setDniBoleta(e.target.value)}
+                            placeholder={totalEnSoles >= BOLETA_CON_DOCUMENTO_DESDE ? 'DNI' : 'DNI (opcional)'}
+                            aria-label="DNI"
+                            className={CAMPO}
+                          />
+                          <p className="text-xs text-gray-500 mt-1.5">
+                            {totalEnSoles >= BOLETA_CON_DOCUMENTO_DESDE
+                              ? `Desde S/ ${BOLETA_CON_DOCUMENTO_DESDE} la boleta lleva tu DNI.`
+                              : 'Escríbelo si quieres la boleta a tu nombre.'}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
                   </div>
@@ -1362,8 +1594,128 @@ export default function CartDrawer({
                       )}
                     </>
                   ) : null}
-                  {/* Dirección (para delivery / retail) */}
-                  {orderType === 'delivery' && (
+                  {/* Tienda: cómo recibe el pedido (utils/entregaDelPedido) */}
+                  {!isRestaurantMenu && opcionesEntrega.length > 1 && (
+                    <div>
+                      <p className="block text-sm font-medium text-gray-700 mb-2">¿Cómo quieres recibirlo?</p>
+                      <div className="space-y-2">
+                        {opcionesEntrega.map((op) => {
+                          const Icono = op.id === ENTREGA.RECOJO ? Store : op.id === ENTREGA.AGENCIA ? Truck : Bike
+                          const activo = modoEntrega === op.id
+                          return (
+                            <button
+                              key={op.id}
+                              type="button"
+                              aria-pressed={activo}
+                              onClick={() => elegirEntrega(op.id)}
+                              className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-colors ${activo ? '' : 'border-gray-200 hover:border-gray-300'}`}
+                              style={activo ? { borderColor: getCatalogAccent(business), backgroundColor: `${getCatalogAccent(business)}14` } : undefined}
+                            >
+                              <Icono className="w-5 h-5 flex-shrink-0" style={activo ? { color: getCatalogAccent(business) } : undefined} />
+                              <span className="text-sm font-medium">{op.etiqueta}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {/* Recojo: en cuál de los locales */}
+                  {!isRestaurantMenu && modoEntrega === ENTREGA.RECOJO && (
+                    <div>
+                      <p className="block text-sm font-medium text-gray-700 mb-2">
+                        <Store className="w-4 h-4 inline mr-1" />
+                        {puntosRecojo.length > 1 ? '¿En cuál de nuestros locales lo recoges?' : 'Lo recoges en'}
+                      </p>
+                      <div className="space-y-2">
+                        {puntosRecojo.map((p) => {
+                          const activo = puntoElegido?.id === p.id
+                          return (
+                            <label
+                              key={p.id}
+                              className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${activo ? '' : 'border-gray-200 hover:border-gray-300'}`}
+                              style={activo ? { borderColor: getCatalogAccent(business) } : undefined}
+                            >
+                              <input
+                                type="radio"
+                                name="punto-de-recojo"
+                                className="mt-1 flex-shrink-0"
+                                checked={activo}
+                                onChange={() => { setPuntoRecojoId(p.id); setOrderError('') }}
+                              />
+                              <span className="min-w-0">
+                                <span className="block text-sm font-medium">{p.nombre || p.direccion}</span>
+                                {p.nombre && p.direccion && <span className="block text-xs text-gray-500 mt-0.5">{p.direccion}</span>}
+                              </span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {/* Agencia: cuál, a qué ciudad y quién recoge */}
+                  {!isRestaurantMenu && modoEntrega === ENTREGA.AGENCIA && (
+                    <div className="space-y-4">
+                      <div>
+                        <label htmlFor="checkout-agencia" className="block text-sm font-medium text-gray-700 mb-2">
+                          <Truck className="w-4 h-4 inline mr-1" />
+                          Agencia
+                        </label>
+                        {agencias.length > 0 ? (
+                          <select
+                            id="checkout-agencia"
+                            value={agencia}
+                            onChange={(e) => { setAgencia(e.target.value); setOrderError('') }}
+                            className={CAMPO}
+                          >
+                            <option value="">Elige la agencia</option>
+                            {agencias.map((a) => <option key={a} value={a}>{a}</option>)}
+                          </select>
+                        ) : (
+                          <input
+                            id="checkout-agencia"
+                            type="text"
+                            value={agencia}
+                            onChange={(e) => setAgencia(e.target.value)}
+                            placeholder="Ej: Shalom"
+                            className={CAMPO}
+                          />
+                        )}
+                      </div>
+                      <div>
+                        <label htmlFor="checkout-destino" className="block text-sm font-medium text-gray-700 mb-2">
+                          <MapPin className="w-4 h-4 inline mr-1" />
+                          Ciudad de destino
+                        </label>
+                        <input
+                          id="checkout-destino"
+                          type="text"
+                          value={destino}
+                          onChange={(e) => setDestino(e.target.value)}
+                          placeholder="Ej: Arequipa, Arequipa"
+                          className={CAMPO}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="checkout-dni-recoge" className="block text-sm font-medium text-gray-700 mb-2">
+                          <User className="w-4 h-4 inline mr-1" />
+                          DNI de quien recoge en la agencia
+                        </label>
+                        <input
+                          id="checkout-dni-recoge"
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={12}
+                          value={dniRecoge}
+                          onChange={(e) => setDniRecoge(e.target.value)}
+                          placeholder="8 dígitos"
+                          className={CAMPO}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500">El costo del envío se coordina por WhatsApp.</p>
+                    </div>
+                  )}
+                  {/* Dirección (para delivery / envío a domicilio de la tienda) */}
+                  {(isRestaurantMenu ? orderType === 'delivery' : modoEntrega === ENTREGA.DOMICILIO) && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         <MapPin className="w-4 h-4 inline mr-1" />
@@ -1446,7 +1798,7 @@ export default function CartDrawer({
                     <textarea
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
-                      placeholder="Sin cebolla, extra salsa, etc."
+                      placeholder={isRestaurantMenu ? 'Sin cebolla, extra salsa, etc.' : 'Referencias, horario para recibirlo, etc.'}
                       rows={2}
                       className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-gray-400 focus:border-gray-400 resize-none"
                     />

@@ -36,6 +36,8 @@ import {
 } from 'lucide-react'
 import QRCode from 'qrcode'
 import { normalizarPixeles } from '@/utils/pixelesDelCatalogo'
+import { limpiarPuntosDeRecojo, separarAgencias } from '@/utils/entregaDelPedido'
+import EntregaDelCatalogo from '@/components/settings/EntregaDelCatalogo'
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { limpiarSlug, problemaDelSlug } from '@/utils/catalogSlug'
@@ -222,6 +224,22 @@ export default function Catalogo() {
   const [catalogShowAllPrices, setCatalogShowAllPrices] = useState(true)
   const [catalogAllowTakeaway, setCatalogAllowTakeaway] = useState(true)
   const [catalogAllowDelivery, setCatalogAllowDelivery] = useState(true)
+  // Entrega y comprobante del checkout de una tienda (utils/entregaDelPedido).
+  // Todo nace apagado: quien no toca nada sigue con el checkout de siempre.
+  const [catalogDeliveryLabel, setCatalogDeliveryLabel] = useState('')
+  const [catalogPickupEnabled, setCatalogPickupEnabled] = useState(false)
+  const [catalogPickupPoints, setCatalogPickupPoints] = useState([])
+  const [catalogAgencyEnabled, setCatalogAgencyEnabled] = useState(false)
+  const [catalogAgencies, setCatalogAgencies] = useState('') // el texto con comas del campo
+  const [catalogAskReceipt, setCatalogAskReceipt] = useState(false)
+  const cambiarEntrega = (campo, valor) => ({
+    allowDelivery: setCatalogAllowDelivery,
+    deliveryLabel: setCatalogDeliveryLabel,
+    pickupEnabled: setCatalogPickupEnabled,
+    pickupPoints: setCatalogPickupPoints,
+    agencyEnabled: setCatalogAgencyEnabled,
+    agencies: setCatalogAgencies,
+  })[campo]?.(valor)
   const [catalogGroupByCategory, setCatalogGroupByCategory] = useState(false)
   const [catalogOnlyCarousels, setCatalogOnlyCarousels] = useState(false)
   const [catalogQrDataUrl, setCatalogQrDataUrl] = useState('')
@@ -317,6 +335,12 @@ export default function Catalogo() {
     setCatalogShowAllPrices(businessData.catalogShowAllPrices !== false)
     setCatalogAllowTakeaway(businessData.catalogAllowTakeaway !== false)
     setCatalogAllowDelivery(businessData.catalogAllowDelivery !== false)
+    setCatalogDeliveryLabel(businessData.catalogDeliveryLabel || '')
+    setCatalogPickupEnabled(businessData.catalogPickupEnabled === true)
+    setCatalogPickupPoints(Array.isArray(businessData.catalogPickupPoints) ? businessData.catalogPickupPoints : [])
+    setCatalogAgencyEnabled(businessData.catalogAgencyEnabled === true)
+    setCatalogAgencies(separarAgencias(businessData.catalogAgencies).join(', '))
+    setCatalogAskReceipt(businessData.catalogAskReceipt === true)
     setCatalogGroupByCategory(businessData.catalogGroupByCategory || false)
     setCatalogOnlyCarousels(businessData.catalogOnlyCarousels || false)
     if (businessData.businessHours) {
@@ -584,6 +608,12 @@ export default function Catalogo() {
       catalogShowAllPrices,
       catalogAllowTakeaway,
       catalogAllowDelivery,
+      catalogDeliveryLabel: (catalogDeliveryLabel || '').trim() || null,
+      catalogPickupEnabled,
+      catalogPickupPoints: limpiarPuntosDeRecojo(catalogPickupPoints),
+      catalogAgencyEnabled,
+      catalogAgencies: separarAgencias(catalogAgencies),
+      catalogAskReceipt,
       catalogGroupByCategory,
       catalogOnlyCarousels: catalogGroupByCategory ? catalogOnlyCarousels : false,
       businessHours,
@@ -992,6 +1022,20 @@ export default function Catalogo() {
                     />
                   </label>
 
+                  {/* Boleta o factura en el checkout (utils/entregaDelPedido) */}
+                  <label className="flex items-center justify-between cursor-pointer p-3 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                    <div className="flex-1 pr-3">
+                      <span className="text-sm font-medium text-gray-900 block">Pedir boleta o factura</span>
+                      <span className="text-xs text-gray-500">El cliente elige su comprobante al pedir: boleta con su DNI, o factura con RUC y razón social. Al cobrar el pedido en el POS, el comprobante y el cliente ya vienen elegidos.</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={catalogAskReceipt}
+                      onChange={(e) => setCatalogAskReceipt(e.target.checked)}
+                      className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    />
+                  </label>
+
 {/* Tipos de pedido en menú digital (solo restaurante) */}
                   {businessMode === 'restaurant' && (
                     <div className="space-y-2">
@@ -1034,6 +1078,20 @@ export default function Catalogo() {
                     </div>
                   </div>
                   <div className="px-5 py-5 space-y-5">
+                  {/* Envío a domicilio, recojo en tienda y envío por agencia (tiendas) */}
+                  {businessMode !== 'restaurant' && (
+                    <EntregaDelCatalogo
+                      valor={{
+                        allowDelivery: catalogAllowDelivery,
+                        deliveryLabel: catalogDeliveryLabel,
+                        pickupEnabled: catalogPickupEnabled,
+                        pickupPoints: catalogPickupPoints,
+                        agencyEnabled: catalogAgencyEnabled,
+                        agencies: catalogAgencies,
+                      }}
+                      onCambio={cambiarEntrega}
+                    />
+                  )}
                   {/* Costos de envío: existe en shopifree, en Cobrify todavia no.
                       Se muestra DESHABILITADO y etiquetado para que nadie
                       lo configure creyendo que ya funciona. */}

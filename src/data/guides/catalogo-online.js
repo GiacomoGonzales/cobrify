@@ -122,7 +122,15 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Con **Activar recepción de pedidos** el catálogo deja de ser solo una vitrina: el cliente arma su pedido y te llega al sistema. Puedes habilitar **Permitir pedidos Delivery** y **Permitir pedidos Para Llevar** según lo que hagas.',
+          text: 'Con **Recibir pedidos desde el catálogo** el catálogo deja de ser solo una vitrina: el cliente arma su pedido y te llega al sistema. Si eres restaurante, habilitas **Permitir pedidos Delivery** y **Permitir pedidos Para Llevar** según lo que hagas.',
+        },
+        {
+          type: 'texto',
+          text: 'En una tienda, **Entrega y envío** define cómo recibe el cliente su pedido: **envío a domicilio** (con el nombre que quieras, por ejemplo "Envío en Lima"), **recojo en tienda** (el cliente elige en cuál de tus locales) y **envío a provincia por agencia** (elige la agencia de tu lista y escribe la ciudad de destino y el DNI de quien recoge). El costo del envío se coordina por WhatsApp.',
+        },
+        {
+          type: 'texto',
+          text: 'Con **Pedir boleta o factura** el cliente elige su comprobante al hacer el pedido: boleta con su DNI (obligatorio desde S/ 700) o factura con RUC y razón social. En **Pedidos Online** ves la entrega y el comprobante de cada pedido, y al **Cobrar en POS** el comprobante y el cliente ya vienen elegidos.',
         },
         {
           type: 'texto',
