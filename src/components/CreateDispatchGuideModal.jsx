@@ -1,4 +1,5 @@
 import { textoDelBien } from '@/utils/bienDeLaGuia'
+import { codigoParaCitar, origenInterno } from '@/utils/guiaDesdeDocumento'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { X, Truck, MapPin, User, Package, Calendar, FileText, Plus, Trash2, ChevronDown, ChevronUp, Store, Search, Loader2, AlertTriangle } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
@@ -576,12 +577,12 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
           supplierName: supplier?.name || '',
           supplierAddress: supplier?.address || '',
         }])
-      } else if (referenceInvoice.number && referenceInvoice.documentType !== 'cotizacion') {
-        // Para ventas: agregar nuestra factura/boleta
-        const docType = referenceInvoice.documentType === 'factura' ? '01' : '03'
+      } else if (referenceInvoice.number && codigoParaCitar(referenceInvoice)) {
+        // Para ventas: agregar nuestra factura/boleta. Una nota de venta no se
+        // cita: no es un comprobante de SUNAT (utils/guiaDesdeDocumento).
         setRelatedDocuments([{
           id: 1,
-          type: docType,
+          type: codigoParaCitar(referenceInvoice),
           series: referenceInvoice.number.split('-')[0] || '',
           number: referenceInvoice.number.split('-')[1] || '',
         }])
@@ -1747,26 +1748,22 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
       const dispatchGuide = {
         // Para ventas: referencia a nuestra factura/boleta
         // Para compras: no hay factura propia, la del proveedor va en relatedDocuments
-        referencedInvoice: referenceInvoice && referenceInvoice.id && referenceInvoice.documentType !== 'cotizacion' && !referenceInvoice.isPurchase ? {
+        // Solo una factura o una boleta nuestra (utils/guiaDesdeDocumento).
+        referencedInvoice: referenceInvoice?.id && codigoParaCitar(referenceInvoice) ? {
           id: referenceInvoice.id,
-          documentType: referenceInvoice.documentType === 'factura' ? '01' : '03',
+          documentType: codigoParaCitar(referenceInvoice),
           series: referenceInvoice.number?.split('-')[0] || '',
           number: referenceInvoice.number?.split('-')[1] || '',
           fullNumber: referenceInvoice.number,
         } : null,
 
-        // De qué cotización salió. Va en un campo NUESTRO y no en
-        // `referencedInvoice` ni en `relatedDocuments`: esos dos se validan
-        // contra el catálogo SUNAT de comprobantes, y una cotización no lo es
-        // — meterla ahí hace que SUNAT rechace la guía. Por eso hasta ahora el
-        // vínculo se descartaba del todo y la guía quedaba huérfana.
-        ...(referenceInvoice?.documentType === 'cotizacion' && referenceInvoice.id && {
-          convertedFrom: {
-            type: 'quotation',
-            id: referenceInvoice.id,
-            number: referenceInvoice.number || '',
-          },
-        }),
+        // De qué cotización o nota de venta salió. Va en un campo NUESTRO y no
+        // en `referencedInvoice` ni en `relatedDocuments`: esos dos se validan
+        // contra el catálogo SUNAT de comprobantes, y ninguna de las dos lo es.
+        // Citarlas hace que SUNAT rechace la guía: con una nota de venta, error
+        // 3441 (FERRORAMOS, 15-set-2026). La guía sale sin documento relacionado,
+        // que SUNAT no exige en una guía por venta.
+        ...(origenInterno(referenceInvoice) && { convertedFrom: origenInterno(referenceInvoice) }),
 
         relatedDocuments: relatedDocuments.filter(doc => doc.series && doc.number).map(doc => ({
           type: doc.type,
@@ -3561,9 +3558,13 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
                   <span className="text-xs text-gray-700">Descontar stock del almacén</span>
                 </label>
               )}
-              {/* Aviso si el stock ya fue descontado por la factura */}
+              {/* Aviso si el stock ya fue descontado por la venta (factura, boleta o nota de venta) */}
               {selectedWarehouseId && referenceInvoice?.id && !referenceInvoice?.isPurchase && (
-                <p className="text-xs text-gray-500 italic">El stock ya fue descontado al generar la factura/boleta.</p>
+                <p className="text-xs text-gray-500 italic">
+                  {referenceInvoice.documentType === 'nota_venta'
+                    ? 'El stock ya fue descontado al registrar la nota de venta.'
+                    : 'El stock ya fue descontado al generar la factura/boleta.'}
+                </p>
               )}
             </div>
             <div className="grid grid-cols-3 gap-2 w-full sm:flex sm:w-auto sm:items-center [&>button]:w-full sm:[&>button]:w-auto">

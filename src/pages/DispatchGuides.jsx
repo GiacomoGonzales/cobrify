@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Truck, Plus, FileText, Package, MapPin, User, Eye, Download, Send, Loader2, AlertCircle, AlertTriangle, X, Calendar, Hash, Pencil, Store, Code, Share2, Printer, MoreVertical, FileCheck, Receipt, Ban, ShoppingCart, Copy, RotateCcw, Trash2 } from 'lucide-react'
+import { vinculoDe } from '@/utils/documentLinks'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { useAppContext } from '@/hooks/useAppContext'
@@ -2123,10 +2124,11 @@ export default function DispatchGuides() {
                       </p>
                     </div>
                   )}
-                  {selectedGuide.convertedFrom?.number && (
+                  {/* Cotización o nota de venta de origen: vínculo interno, no va a SUNAT (utils/guiaDesdeDocumento) */}
+                  {vinculoDe(selectedGuide.convertedFrom)?.numero && (
                     <div>
                       <span className="text-gray-500">Viene de:</span>
-                      <p className="font-medium">Cotización {selectedGuide.convertedFrom.number}</p>
+                      <p className="font-medium">{vinculoDe(selectedGuide.convertedFrom).etiqueta}</p>
                     </div>
                   )}
                 </div>
