@@ -1520,6 +1520,8 @@ private struct BurbujaMensaje: View {
                     }
                 }
                 .fullScreenCover(isPresented: $verAdjunto) { visor }
+            case "document" where mensaje.media?.url != nil:
+                burbujaDocumento
             case "video", "document":
                 HStack(spacing: 8) {
                     Image(systemName: icono)
@@ -1555,6 +1557,23 @@ private struct BurbujaMensaje: View {
 
     private func abrirFoto() {
         if let alAbrirFoto { alAbrirFoto() } else { verAdjunto = true }
+    }
+
+    /// El documento con su tarjeta y, debajo, el pie. El pie es el texto de
+    /// una respuesta rápida con PDF: antes no se dibujaba y parecía que solo
+    /// había salido el archivo. Va fuera del `switch` para no cargarle más al
+    /// compilador, que ya se rindió una vez con esta burbuja.
+    @ViewBuilder private var burbujaDocumento: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let media = mensaje.media {
+                TarjetaDocumento(media: media) { verAdjunto = true }
+            }
+            if !mensaje.texto.isEmpty {
+                Text(TextoWhatsapp.atribuido(mensaje.texto))
+                    .frame(maxWidth: TarjetaDocumento.ancho, alignment: .leading)
+            }
+        }
+        .fullScreenCover(isPresented: $verAdjunto) { visor }
     }
 
     private var visor: some View {

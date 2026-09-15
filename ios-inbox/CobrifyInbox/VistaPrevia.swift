@@ -145,6 +145,15 @@ enum VistaPrevia {
             ])
         }
 
+        /// Un PDF, con o sin pie: el caso de la respuesta rápida de los planes.
+        func documento(_ i: Int, _ direccion: String, _ url: String, _ nombre: String, _ texto: String = "") -> Mensaje {
+            Mensaje(id: "vp-doc-\(i)", data: [
+                "direccion": direccion, "tipo": "document", "texto": texto, "estado": "read",
+                "timestamp": Timestamp(date: ahora.addingTimeInterval(Double(i - 10) * 60)),
+                "media": ["url": url, "mimeType": "application/pdf", "filename": nombre],
+            ])
+        }
+
         // Tandas de fotos, para ver los álbumes de 2, 3 y 5.
         let tandaDeCinco = (0..<5).map { k in
             foto(-30 + k, "saliente", "album\(k)", 900 + k * 40, 1200)
@@ -188,6 +197,15 @@ enum VistaPrevia {
             // Tres números de formas distintas, y un RUC y un DNI que NO son
             // teléfonos: tienen que quedar como texto.
             m(7, "entrante", "El de mi contador es +51 912-345-678 y el de la tienda 944555666. Mi hermano en Miami: +1 (305) 555-1234. RUC 20512345678, DNI 45678912"),
+            documento(8, "entrante", "https://pdfobject.com/pdf/sample.pdf", "Ficha RUC.pdf"),
+            documento(9, "saliente", "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+                      "Planes Cobrify 2026.pdf", """
+                Perfecto! Te cuento qué incluye Cobrify para tu negocio:
+
+                ✅ Boletas, facturas, notas y guías de remisión
+                ✅ Datos de cliente automáticos por DNI y RUC
+                ✅ Envío por WhatsApp en 1 clic
+                """),
         ]
     }
 
