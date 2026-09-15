@@ -16147,6 +16147,47 @@ export const completarAlta = onRequest(
       await ref.update({ uid }).catch(() => {})
       console.log(`🌱 Alta ${codigo} completada: ${usuario.email} (${uid})`)
 
+      // LA CONVERSACIÓN QUEDA VINCULADA A LA CUENTA NUEVA. El alta se mandó
+      // desde una conversación de la bandeja (web o iPhone), y sin esto seguía
+      // como lead para siempre: el webhook intenta vincular UNA vez por
+      // conversación, y esta ya lo había intentado cuando el lead escribió por
+      // primera vez. La ficha del chat solo ofrece "Convertir en cuenta real"
+      // (prueba → plan) y emitir su comprobante si está vinculada (pedido de
+      // Giacomo, 14-set-2026). No pisa un vínculo con OTRA cuenta: uno puesto
+      // a mano manda. Su celular entra además al índice de teléfonos si no
+      // estaba, para que una conversación nueva desde ese número se reconozca
+      // sola. Nada de esto puede costar el alta, que ya está hecha.
+      if (alta.conversationId) {
+        try {
+          const convRef = db.collection('whatsappConversations').doc(String(alta.conversationId))
+          const convSnap = await convRef.get()
+          const conv = convSnap.exists ? convSnap.data() : null
+          if (conv && (!conv.linkedBusinessId || conv.linkedBusinessId === uid)) {
+            await convRef.set({
+              linkedBusinessId: uid,
+              linkedBusinessName: datos.businessName || null,
+              linkedBy: 'alta',
+              linkAttempted: true,
+              updatedAt: FieldValue.serverTimestamp(),
+            }, { merge: true })
+            console.log(`[Alta] Conversación ${alta.conversationId} vinculada a ${uid}`)
+          }
+          const cel = celularDeWaId(conv?.waId || alta.waId || '')
+          if (cel) {
+            const indiceRef = db.collection('whatsappPhoneIndex').doc(cel)
+            if (!(await indiceRef.get()).exists) {
+              await indiceRef.set({
+                businessId: uid,
+                businessName: datos.businessName || null,
+                updatedAt: FieldValue.serverTimestamp(),
+              })
+            }
+          }
+        } catch (e) {
+          console.error('[Alta] No se pudo vincular la conversación (la cuenta SÍ quedó creada):', e.message)
+        }
+      }
+
       // El mes de quien lo trajo. Va DESPUÉS de que la cuenta ya está creada y
       // cobrada, y no bloquea la respuesta: un problema con el premio jamás debe
       // costar el alta, que es lo que sí se pagó. La propia función se traga sus
