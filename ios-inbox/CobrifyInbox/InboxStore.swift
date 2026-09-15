@@ -32,7 +32,10 @@ final class InboxStore: ObservableObject {
         listener = Firestore.firestore()
             .collection("whatsappConversations")
             .order(by: "ultimoMensajeAt", descending: true)
-            .limit(to: 200)
+            // Eran 200 y se escondían conversaciones: tras la campaña del
+            // cambio de número había 613 (15-set-2026). Mismo tope que la web
+            // (MAXIMO_CONVERSACIONES en whatsappChatService.js).
+            .limit(to: 1000)
             .addSnapshotListener { [weak self] snap, err in
                 guard let self else { return }
                 if let err {

@@ -14,6 +14,7 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  writeBatch,
   where,
 } from 'firebase/firestore'
 import { auth, db } from '@/lib/firebase'
@@ -40,6 +41,16 @@ const SEND_URL = import.meta.env.VITE_WHATSAPP_SEND_URL
 export const VENTANA_24H_MS = 24 * 60 * 60 * 1000
 
 /**
+ * Cuántas conversaciones trae la bandeja. Eran 200 y, con la campaña del cambio
+ * de número (una conversación por cliente), el 15-set-2026 había 613: las demás
+ * no se veían, las pestañas contaban mal y el buscador no las encontraba
+ * (reporte de Giacomo). Con 1000 entran todas; si algún día se pasan, toca
+ * "cargar más" y buscar en el servidor. La app del iPhone usa el mismo tope
+ * (InboxStore).
+ */
+export const MAXIMO_CONVERSACIONES = 1000
+
+/**
  * Escucha la lista de conversaciones, la más reciente primero.
  * @returns {function} para dejar de escuchar
  */
@@ -47,7 +58,7 @@ export const suscribirConversaciones = (onChange, onError) => {
   const q = query(
     collection(db, 'whatsappConversations'),
     orderBy('ultimoMensajeAt', 'desc'),
-    limit(200),
+    limit(MAXIMO_CONVERSACIONES),
   )
   return onSnapshot(
     q,
@@ -271,6 +282,47 @@ export const cambiarEstado = (conversationId, estado) =>
     estado,
     updatedAt: serverTimestamp(),
   })
+
+// Respuestas que solo acusan recibo de una campaña: el botón "Entendido" de la
+// plantilla y parecidos. Se comparan sin tildes, mayúsculas ni signos.
+const ACUSES = new Set(['entendido', 'ok', 'okey', 'oki', 'gracias', 'muchas gracias', 'ok gracias', 'listo', 'perfecto', '👍'])
+const sinAdornos = (t) => String(t || '').toLowerCase().normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '').replace(/[.,;:!¡?¿]+/g, '').trim()
+const aMs = (t) => t?.toMillis?.() ?? (t instanceof Date ? t.getTime() : (typeof t === 'number' ? t : 0))
+
+/**
+ * ¿Esta conversación abierta solo tiene el mensaje de una campaña? Se le mandó
+ * una plantilla, después no le escribimos nada a mano y el cliente no contestó,
+ * o contestó solo "Entendido" (el botón) o un "gracias".
+ *
+ * Si el cliente venía conversando la semana anterior a la plantilla, NO entra:
+ * puede haber algo sin atender, y esa la revisa Giacomo. Completar es
+ * reversible de todos modos: si el cliente escribe, el webhook la reabre.
+ */
+export const soloTieneLaCampana = (c) => {
+  if (estadoDe(c) !== 'abierta') return false
+  const plantillaAt = aMs(c.ultimaPlantillaAt)
+  if (!plantillaAt) return false
+  const ultimoAt = aMs(c.ultimoMensajeAt)
+  if (c.ultimaDireccion === 'saliente') {
+    // Lo último que salió fue la plantilla, no un mensaje escrito a mano.
+    if (ultimoAt - plantillaAt > 60 * 1000) return false
+    const ultimoDelClienteAt = c.ventanaVenceAt ? aMs(c.ventanaVenceAt) - VENTANA_24H_MS : 0
+    return !ultimoDelClienteAt || plantillaAt - ultimoDelClienteAt > 7 * 86400000
+  }
+  return ultimoAt > plantillaAt && (c.sinLeer || 0) <= 1 && ACUSES.has(sinAdornos(c.ultimoMensaje))
+}
+
+/** Pasa varias conversaciones a Completadas, de a 400 por escritura. */
+export const completarVarias = async (ids) => {
+  for (let i = 0; i < ids.length; i += 400) {
+    const lote = writeBatch(db)
+    for (const id of ids.slice(i, i + 400)) {
+      lote.update(doc(db, 'whatsappConversations', id), { estado: 'completada', updatedAt: serverTimestamp() })
+    }
+    await lote.commit()
+  }
+}
 
 export const alternarEtiqueta = (conversationId, tagId, tiene) =>
   updateDoc(doc(db, 'whatsappConversations', conversationId), {

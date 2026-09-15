@@ -86,6 +86,9 @@ import {
   revertirBaja,
   suscribirAutomaticos,
   fichasPorNegocio,
+  soloTieneLaCampana,
+  completarVarias,
+  MAXIMO_CONVERSACIONES,
 } from '@/services/whatsappChatService'
 import { buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 
@@ -796,6 +799,23 @@ export default function Chat() {
     return lista
   }, [conversaciones, tab, mundo, filtroEtiqueta, buscando, buscablePorConversacion, soloSinRespuesta, ahora])
 
+  // Limpieza después de una campaña: las abiertas que solo tienen su mensaje
+  // (whatsappChatService.soloTieneLaCampana). El botón pide confirmar antes.
+  const deCampana = useMemo(() => conversaciones.filter(soloTieneLaCampana), [conversaciones])
+  const [confirmarCampana, setConfirmarCampana] = useState(false)
+  const [completandoCampana, setCompletandoCampana] = useState(false)
+  const completarLasDeCampana = async () => {
+    setCompletandoCampana(true)
+    try {
+      await completarVarias(deCampana.map((c) => c.id))
+      setConfirmarCampana(false)
+    } catch (e) {
+      toast.error(e.message || 'No se pudieron completar')
+    } finally {
+      setCompletandoCampana(false)
+    }
+  }
+
   const etiquetaPorId = useMemo(() => {
     const m = new Map()
     for (const e of etiquetas) m.set(e.id, e)
@@ -1326,6 +1346,49 @@ export default function Chat() {
                       ? 'Todavía no completaste ninguna conversación.'
                       : 'Todavía no hay conversaciones. Aparecerán acá apenas alguien te escriba.'}
               </p>
+            </div>
+          )}
+
+          {!cargando && conversaciones.length >= MAXIMO_CONVERSACIONES && (
+            <p className="px-3 pt-2 text-center text-[11px] text-gray-400">
+              Se muestran las {MAXIMO_CONVERSACIONES} conversaciones más recientes.
+            </p>
+          )}
+
+          {tab === 'abierta' && !buscando && deCampana.length > 0 && (
+            <div className="mx-3 mt-3 mb-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5">
+              <p className="text-[12px] leading-snug text-gray-700">
+                {deCampana.length === 1
+                  ? '1 conversación solo tiene el mensaje de una campaña.'
+                  : `${deCampana.length} conversaciones solo tienen el mensaje de una campaña.`}
+                {' '}Si el cliente escribe, vuelve sola a Abiertas.
+              </p>
+              {confirmarCampana ? (
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    onClick={completarLasDeCampana}
+                    disabled={completandoCampana}
+                    className="rounded-md bg-gray-900 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+                  >
+                    {completandoCampana ? 'Completando…' : `Sí, completar ${deCampana.length}`}
+                  </button>
+                  <button
+                    onClick={() => setConfirmarCampana(false)}
+                    disabled={completandoCampana}
+                    className="rounded-md px-2.5 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-100"
+                  >
+                    No
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmarCampana(true)}
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  <CheckCheck className="w-3 h-3" />
+                  Completarlas
+                </button>
+              )}
             </div>
           )}
 
