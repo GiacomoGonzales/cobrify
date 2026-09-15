@@ -1,6 +1,11 @@
 // Vercel Edge Middleware para meta tags dinámicos
 // Este middleware intercepta TODAS las requests antes de llegar a la app
 
+// Solo los bots de vista previa, que leen etiquetas sin ejecutar JavaScript.
+// Google, Bing y Apple SÍ lo ejecutan: a ellos les conviene la aplicación de
+// verdad, con la página entera. Mandarlos a la página de metas les daba un
+// HTML vacío que se redirigía a sí mismo (15-set-2026). Misma lista que los
+// rewrites de vercel.json y que api/domain-meta, api/catalog-meta.
 const SOCIAL_BOT_USER_AGENTS = [
   'facebookexternalhit',
   'Facebot',
@@ -11,9 +16,7 @@ const SOCIAL_BOT_USER_AGENTS = [
   'Slackbot',
   'Discordbot',
   'Pinterest',
-  'Googlebot',
-  'bingbot',
-  'Applebot'
+  'CobrifyChat',
 ]
 
 const IGNORED_DOMAINS = [
@@ -35,6 +38,17 @@ function isResellerDomain(hostname) {
   if (!hostname) return false
   const h = hostname.toLowerCase().replace(/^www\./, '')
   return !IGNORED_DOMAINS.some(ignored => h.includes(ignored))
+}
+
+// Las páginas de un catálogo con diseño a medida (hoy CITEX): la tienda, las
+// políticas y el libro de reclamaciones (pedido del 14-set-2026). Devuelve los
+// parámetros que entienden api/domain-meta y api/catalog-meta, o null si es la
+// raíz del catálogo.
+function paginaDeCatalogo(segmentos) {
+  if (segmentos[0] === 'tienda') return { pagina: 'tienda' }
+  if (segmentos[0] === 'legal' && segmentos[1]) return { pagina: 'legal', legal: segmentos[1] }
+  if (segmentos[0] === 'reclamos') return { pagina: 'reclamos' }
+  return null
 }
 
 // El subdominio del chat (chat.cobrifyperu.com) es la MISMA app servida por
@@ -117,13 +131,16 @@ export default function middleware(request) {
     })
   }
 
-  // Caso 1: Catálogo público (/catalogo/:slug)
+  // Caso 1: Catálogo público (/catalogo/:slug, y sus páginas /tienda y /legal/...)
   if (pathname.startsWith('/catalogo/')) {
-    const slug = pathname.replace('/catalogo/', '').split('/')[0]
+    const segmentos = pathname.split('/').filter(Boolean) // ['catalogo', slug, ...]
+    const slug = segmentos[1]
     if (slug) {
       // Reescribir a la API de catálogo
       url.pathname = '/api/catalog-meta'
       url.searchParams.set('slug', slug)
+      const pagina = paginaDeCatalogo(segmentos.slice(2))
+      if (pagina) for (const [k, v] of Object.entries(pagina)) url.searchParams.set(k, v)
       return Response.redirect(url.toString(), 307)
     }
   }
@@ -139,14 +156,20 @@ export default function middleware(request) {
     }
   }
 
-  // Caso 3: Dominio personalizado (ruta raíz de dominio externo)
+  // Caso 3: Dominio personalizado (raíz de un dominio externo, o una de las
+  // páginas de su catálogo: /tienda, /legal/..., /reclamos).
   // Puede ser catálogo de negocio o landing de reseller
-  if (pathname === '/' && isResellerDomain(hostname)) {
-    const normalizedHost = hostname.toLowerCase().replace(/^www\./, '').split(':')[0]
-    // Redirigir a domain-meta que busca catálogos, con fallback a reseller-meta
-    url.pathname = '/api/domain-meta'
-    url.searchParams.set('domain', normalizedHost)
-    return Response.redirect(url.toString(), 307)
+  if (isResellerDomain(hostname)) {
+    const segmentos = pathname.split('/').filter(Boolean)
+    const pagina = paginaDeCatalogo(segmentos)
+    if (segmentos.length === 0 || pagina) {
+      const normalizedHost = hostname.toLowerCase().replace(/^www\./, '').split(':')[0]
+      // Redirigir a domain-meta que busca catálogos, con fallback a reseller-meta
+      url.pathname = '/api/domain-meta'
+      url.searchParams.set('domain', normalizedHost)
+      if (pagina) for (const [k, v] of Object.entries(pagina)) url.searchParams.set(k, v)
+      return Response.redirect(url.toString(), 307)
+    }
   }
 
   // Continuar normalmente para otros casos
@@ -154,5 +177,5 @@ export default function middleware(request) {
 }
 
 export const config = {
-  matcher: ['/', '/manifest.json', '/manifest.webmanifest', '/catalogo/:path*', '/menu/:path*']
+  matcher: ['/', '/tienda', '/legal/:path*', '/reclamos', '/manifest.json', '/manifest.webmanifest', '/catalogo/:path*', '/menu/:path*']
 }

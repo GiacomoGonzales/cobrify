@@ -13,9 +13,9 @@ const SOCIAL_BOT_USER_AGENTS = [
   'Slackbot',
   'Discordbot',
   'Pinterest',
-  'Googlebot',
-  'bingbot',
-  'Applebot'
+  'CobrifyChat',
+  // Google, Bing y Apple ejecutan JavaScript y ven la aplicación de verdad
+  // (misma lista que middleware.js y api/domain-meta).
 ]
 
 // Dominios que NO son de resellers

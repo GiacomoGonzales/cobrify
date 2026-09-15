@@ -222,11 +222,37 @@ const esBotSocial = (userAgent) => {
   return !!ua && BOTS_SOCIALES.some(bot => ua.includes(bot))
 }
 
+/**
+ * A quien NO es bot de vista previa —una persona, o Google, que ejecuta
+ * JavaScript— se le sirve la aplicación tal cual, SIN redirigir. Si algo lo
+ * trajo acá (el middleware, un rewrite, una caché) y se lo devolviera a la
+ * misma dirección, volvería a entrar y así hasta que el navegador se rinda:
+ * pasó el 15-set-2026 con Googlebot en todos los dominios propios.
+ */
+async function servirLaApp(req, res) {
+  try {
+    const host = req.headers.host
+    const r = await fetch(`https://${host}/index.html`, { headers: { 'user-agent': 'CobrifyMeta/1.0' } })
+    if (r.ok) {
+      const html = await r.text()
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate')
+      return res.status(200).send(html)
+    }
+  } catch (error) {
+    console.warn('[DomainMeta] no se pudo servir index.html:', error?.message)
+  }
+  // Un archivo estático, que ninguna regla vuelve a tocar: no hay bucle posible.
+  return res.redirect(302, '/index.html')
+}
+
 export default async function handler(req, res) {
   const userAgent = req.headers['user-agent'] || ''
-  // El dominio llega por query cuando alguien llama a la función a mano, y por
-  // el header Host cuando entra por el rewrite de la raíz.
-  const domain = req.query.domain || req.headers.host
+  // El dominio llega por query cuando alguien llama a la función a mano (o
+  // desde el middleware), y por el header Host cuando entra por el rewrite.
+  // Sin `www.` ni puerto: el negocio guarda el dominio pelado (citex.pe) y
+  // Vercel sirve la web en www.citex.pe.
+  const domain = String(req.query.domain || req.headers.host || '').toLowerCase().replace(/^www\./, '').split(':')[0]
   const pagina = paginaPedida(req.query)
 
   console.log(`[DomainMeta] domain=${domain}, pagina=${pagina.clave}, UA=${userAgent.substring(0, 50)}`)
@@ -241,10 +267,8 @@ export default async function handler(req, res) {
     return res.redirect(302, '/index.html')
   }
 
-  // A una persona no se le sirve esto: se la deja seguir a la aplicación.
-  // Tampoco hay bucle — el rewrite solo trae acá a los bots.
   if (!esBotSocial(userAgent)) {
-    return res.redirect(302, pagina.ruta || '/')
+    return servirLaApp(req, res)
   }
 
   // Primero buscar como dominio de catálogo de negocio
