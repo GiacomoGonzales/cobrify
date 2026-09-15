@@ -126,30 +126,37 @@
         try {
           var hosts = ['chat.cobrifyperu.com', 'chat.cobrify.com', 'chat.localhost'];
           var host = window.location.hostname.toLowerCase();
-          var esChat = hosts.indexOf(host) !== -1;
+          var ruta = window.location.pathname.replace(/\/+$/, '') || '/';
+          var enLaBandeja = ruta === '/chat' || ruta.indexOf('/chat/') === 0;
+          // La marca la manda la PAGINA, no la puerta: la bandeja y su entrada
+          // (el login, y en el subdominio la raiz) van como Cobrify Chat; el
+          // resto —el panel que abre "Ver ficha completa"— es el sistema de
+          // facturacion aunque se abra desde el chat. Espejado en
+          // `estaEnElChat` de src/utils/dominioChat.js.
+          var porElSubdominio = hosts.indexOf(host) !== -1;
           // Modo de prueba en local: localhost:3000/?chat=1 (ver
           // src/utils/dominioChat.js — chat.localhost no sirve porque la llave
           // de Firebase bloquea ese origen).
-          if (!esChat && (host === 'localhost' || host === '127.0.0.1')) {
+          if (!porElSubdominio && (host === 'localhost' || host === '127.0.0.1')) {
             try {
               if (window.location.search.indexOf('chat=1') !== -1) sessionStorage.setItem('modoChat', '1');
-              esChat = sessionStorage.getItem('modoChat') === '1';
+              porElSubdominio = sessionStorage.getItem('modoChat') === '1';
             } catch (e) { /* sin sessionStorage: sin modo de prueba */ }
           }
-          // Entrando por la RUTA /chat en un dominio nuestro (no de reseller):
-          // ahi la pestana quedaba con el favicon del sistema de facturacion.
-          // Espejado en `estaEnElChat` de src/utils/dominioChat.js.
-          if (!esChat) {
+          var esChat = false;
+          if (porElSubdominio) {
+            esChat = enLaBandeja || ruta === '/' || ruta === '/login';
+          } else {
             var propios = ['cobrifyperu.com', 'www.cobrifyperu.com', 'app.cobrifyperu.com',
                            'cobrify.com', 'www.cobrify.com', 'app.cobrify.com',
                            'localhost', '127.0.0.1'];
             if (propios.indexOf(host) !== -1) {
               try {
-                if (window.location.pathname.replace(/\/+$/, '').indexOf('/chat') === 0) {
-                  sessionStorage.setItem('modoChat', '1');
-                }
-                esChat = sessionStorage.getItem('modoChat') === '1';
-              } catch (e) { /* sin sessionStorage: manda el host */ }
+                // Se anota en la pestana SOLO para el login que sigue a la
+                // bandeja cuando no hay sesion.
+                if (enLaBandeja) sessionStorage.setItem('modoChat', '1');
+                esChat = enLaBandeja || (ruta === '/login' && sessionStorage.getItem('modoChat') === '1');
+              } catch (e) { esChat = enLaBandeja; }
             }
           }
           if (!esChat) return;

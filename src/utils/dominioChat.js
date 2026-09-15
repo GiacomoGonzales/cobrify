@@ -78,29 +78,38 @@ const HOSTS_PROPIOS = [
 ]
 
 /**
- * ¿Se esta VIENDO la bandeja del chat, sin importar por donde se entro?
+ * ¿Se esta VIENDO la bandeja del chat (o su pantalla de entrada)?
  *
- * `esDominioDelChat` responde por el host, y con eso alcanzaba mientras el chat
- * vivia solo en chat.cobrifyperu.com. Pero la ruta /chat existe en cualquier
- * host, asi que entrando por cobrifyperu.com/chat la pestana quedaba con el
- * favicon y el titulo del sistema de facturacion.
+ * Decide la marca de la PESTANA (titulo, favicon y pantalla de carga): la
+ * manda la PAGINA, no la puerta por la que se entro.
+ *  - La bandeja: /chat en un dominio nuestro, o la raiz del subdominio del chat.
+ *  - Su entrada: el login al que manda la bandeja sin sesion (y en el
+ *    subdominio, tambien la raiz).
+ *  - Todo lo demas —el panel que abre "Ver ficha completa", por ejemplo— es el
+ *    sistema de facturacion y lleva su marca, aunque se abra desde el chat o en
+ *    chat.cobrifyperu.com (reporte de Giacomo, 15-set-2026: el admin salia con
+ *    el favicon del chat).
  *
- * La ruta sola no basta como regla: en el dominio de un reseller mandaria su
- * marca, no la nuestra. Por eso se exige ademas que el host sea de Cobrify.
+ * La anotacion de la pestana (`modoChat`) existe porque al entrar a /chat sin
+ * sesion la app manda a /login, y ahi la ruta ya no dice /chat. Solo vale para
+ * ese login.
+ *
+ * La ruta sola no basta: en el dominio de un reseller mandaria su marca, no la
+ * nuestra. Por eso fuera del subdominio se exige ademas que el host sea de
+ * Cobrify. Espejado en el <head> de index.html.
  */
 export const estaEnElChat = () => {
-  if (esDominioDelChat()) return true
   try {
+    const ruta = String(window.location.pathname || '/').replace(/\/+$/, '') || '/'
+    const enLaBandeja = ruta === '/chat' || ruta.startsWith('/chat/')
+    if (esDominioDelChat()) return enLaBandeja || ruta === '/' || ruta === '/login'
     const host = String(window.location.hostname || '').toLowerCase()
     if (!HOSTS_PROPIOS.includes(host)) return false
-    if (window.location.pathname.replace(/\/+$/, '').startsWith('/chat')) {
-      // Se anota para el resto de la pestana: al entrar sin sesion la app
-      // manda a /login, y ahi la ruta ya no dice /chat. Sin esto, el login de
-      // la bandeja aparecia con el favicon del sistema de facturacion.
+    if (enLaBandeja) {
       sessionStorage.setItem('modoChat', '1')
       return true
     }
-    return sessionStorage.getItem('modoChat') === '1'
+    return ruta === '/login' && sessionStorage.getItem('modoChat') === '1'
   } catch {
     return false
   }

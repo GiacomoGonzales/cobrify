@@ -1,6 +1,6 @@
 import AuthShell from '@/components/AuthShell'
 import { esDominioReseller } from '@/utils/resellerDomain'
-import { esDominioDelChat, MARCA_CHAT } from '@/utils/dominioChat'
+import { estaEnElChat, MARCA_CHAT } from '@/utils/dominioChat'
 import { leerMarcaCache } from '@/utils/marcaCache'
 
 /**
@@ -58,7 +58,9 @@ export default function SplashMarca({ mensaje = null, aviso = false, onReintenta
     )
   }
 
-  if (esDominioDelChat()) {
+  // Con la misma regla que la pestaña (utils/dominioChat): la bandeja carga
+  // con el chat y el panel abierto desde ella, con la marca de Cobrify.
+  if (estaEnElChat()) {
     return (
       <AuthShell tono="chat" className="max-w-sm">
         <div className="text-center">

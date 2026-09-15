@@ -216,6 +216,11 @@ export function BrandingProvider({ children }) {
       return
     }
 
+    // Si la pestaña venía de la bandeja (de /chat al panel sin recargar), el
+    // <head> todavía tiene el manifiesto del chat: vuelve el del sistema.
+    const manifiesto = document.querySelector('link[rel="manifest"]')
+    if (manifiesto?.getAttribute('href') === MARCA_CHAT.manifiesto) manifiesto.setAttribute('href', '/manifest.json')
+
     // El título de la pestaña: dónde estás y de quién es el sistema.
     //
     // Fuera del sistema (la landing) NO se toca el título largo: ese es el que
