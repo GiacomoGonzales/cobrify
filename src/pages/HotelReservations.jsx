@@ -22,6 +22,8 @@ import { Check,
   Receipt,
   X,
   CalendarClock,
+  ClipboardList,
+  FileSpreadsheet,
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -56,6 +58,8 @@ import {
 import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import { upsertCustomerFromSale, getProducts, getCustomerByDocumentNumber } from '@/services/firestoreService'
 import ReprogramarReservaModal from '@/components/hotel/ReprogramarReservaModal'
+import RegistroHuespedesModal from '@/components/hotel/RegistroHuespedesModal'
+import { tieneRegistro, filasDelRegistro } from '@/utils/registroDeHuespedes'
 import { ESTADO_REPROGRAMADA, puedeReprogramarse, textoDelLimite, fechaDeHoyLima } from '@/utils/reprogramacionHotel'
 
 // Schema
@@ -148,7 +152,7 @@ function isToday(date) {
 }
 
 export default function HotelReservations() {
-  const { user, getBusinessId, isDemoMode, demoData } = useAppContext()
+  const { user, getBusinessId, isDemoMode, demoData, businessSettings } = useAppContext()
   const toast = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const appNavigate = useAppNavigate()
@@ -193,6 +197,18 @@ export default function HotelReservations() {
   const [reprogramando, setReprogramando] = useState(null)
   const [isReprogramming, setIsReprogramming] = useState(false)
   const hoyLima = fechaDeHoyLima()
+
+  // Registro de huéspedes (utils/registroDeHuespedes)
+  const [registroReservation, setRegistroReservation] = useState(null)
+  const [exportRegistroOpen, setExportRegistroOpen] = useState(false)
+  const [exportando, setExportando] = useState(false)
+  // Por defecto, el mes en curso.
+  const [exportDesde, setExportDesde] = useState(() => `${hoyLima.slice(0, 8)}01`)
+  const [exportHasta, setExportHasta] = useState(() => {
+    const [y, m] = hoyLima.split('-').map(Number)
+    return `${hoyLima.slice(0, 8)}${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`
+  })
+  const nombreNegocio = businessSettings?.name || businessSettings?.businessName || ''
 
   // Document lookup
   const [isLookingUp, setIsLookingUp] = useState(false)
@@ -750,6 +766,36 @@ export default function HotelReservations() {
     }
   }
 
+  // La reserva que cambió en el modal del registro (su enlace o su registro) se ve en la lista.
+  const actualizarReservaEnLista = (reservaActualizada) => {
+    setReservations(prev => prev.map(r => (r.id === reservaActualizada.id ? { ...r, ...reservaActualizada } : r)))
+    setRegistroReservation(prev => (prev && prev.id === reservaActualizada.id ? { ...prev, ...reservaActualizada } : prev))
+  }
+
+  // Excel del registro de huéspedes por fechas. El generador se carga recién al pedirlo.
+  const exportarRegistro = async () => {
+    if (!exportDesde || !exportHasta || exportDesde > exportHasta) {
+      toast.error('Revisa las fechas: "Desde" no puede ser posterior a "Hasta"')
+      return
+    }
+    if (filasDelRegistro(reservations, { desde: exportDesde, hasta: exportHasta }).length === 0) {
+      toast.error('No hay estadías entre esas fechas')
+      return
+    }
+    setExportando(true)
+    try {
+      const { descargarRegistroDeHuespedes } = await import('@/services/registroHuespedesExcel')
+      const filas = await descargarRegistroDeHuespedes({ reservas: reservations, desde: exportDesde, hasta: exportHasta, negocio: nombreNegocio })
+      toast.success(`Registro de huéspedes descargado: ${filas} fila${filas === 1 ? '' : 's'}`)
+      setExportRegistroOpen(false)
+    } catch (error) {
+      console.error('Error al generar el registro de huéspedes:', error)
+      toast.error('No se pudo generar el Excel')
+    } finally {
+      setExportando(false)
+    }
+  }
+
   // Reprogramar con fecha abierta: la cabaña se libera y lo facturado se guarda.
   const handleReprogramar = async (limite) => {
     const reserva = reprogramando
@@ -1244,6 +1290,10 @@ export default function HotelReservations() {
               Semana
             </button>
           </div>
+          <Button variant="outline" onClick={() => setExportRegistroOpen(true)} title="Registro de huéspedes en Excel">
+            <FileSpreadsheet className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Registro de huéspedes</span>
+          </Button>
           <Button onClick={openCreateModal}>
             <Plus className="w-4 h-4 mr-2" />
             Nueva Reserva
@@ -1453,6 +1503,17 @@ export default function HotelReservations() {
                             <CalendarDays className="w-3 h-3" />
                           </Button>
                         )}
+                        {!['cancelled', 'no_show'].includes(reservation.status) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setRegistroReservation(reservation)}
+                            title={tieneRegistro(reservation) ? 'Registro de huéspedes completo' : 'Registro de huéspedes pendiente'}
+                            className={tieneRegistro(reservation) ? '!text-green-700 !border-green-300' : ''}
+                          >
+                            <ClipboardList className="w-3 h-3" />
+                          </Button>
+                        )}
                         <Button size="sm" variant="outline" onClick={() => openFolio(reservation)}>
                           <Eye className="w-3 h-3" />
                         </Button>
@@ -1593,6 +1654,19 @@ export default function HotelReservations() {
                             {reservation.status === ESTADO_REPROGRAMADA && (
                               <Button size="sm" onClick={() => openEditModal(reservation)}>
                                 <CalendarDays className="w-3 h-3 mr-1" /> Asignar fechas
+                              </Button>
+                            )}
+
+                            {/* Registro de huéspedes: en verde cuando ya está completo */}
+                            {!['cancelled', 'no_show'].includes(reservation.status) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setRegistroReservation(reservation)}
+                                title={tieneRegistro(reservation) ? 'Registro de huéspedes completo' : 'Registro de huéspedes pendiente'}
+                                className={tieneRegistro(reservation) ? '!text-green-700 !border-green-300' : ''}
+                              >
+                                <ClipboardList className="w-3 h-3 mr-1" /> Registro
                               </Button>
                             )}
 
@@ -2257,6 +2331,63 @@ export default function HotelReservations() {
         onConfirmar={handleReprogramar}
         procesando={isReprogramming}
       />
+
+      {/* Registro de huéspedes de una reserva (utils/registroDeHuespedes) */}
+      <RegistroHuespedesModal
+        isOpen={!!registroReservation}
+        reservation={registroReservation}
+        businessId={isDemoMode ? null : getBusinessId()}
+        negocio={nombreNegocio}
+        isDemoMode={isDemoMode}
+        onClose={() => setRegistroReservation(null)}
+        onActualizada={actualizarReservaEnLista}
+      />
+
+      {/* Excel del registro de huéspedes por fechas */}
+      <Modal
+        isOpen={exportRegistroOpen}
+        onClose={() => !exportando && setExportRegistroOpen(false)}
+        title="Registro de huéspedes en Excel"
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Una fila por huésped de cada estadía entre estas fechas. Las reservas que todavía no tienen registro salen con su titular y como Pendiente.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="registro-desde" className="block text-sm font-medium text-gray-700 mb-1">Desde</label>
+              <input
+                id="registro-desde"
+                type="date"
+                value={exportDesde}
+                onChange={(e) => setExportDesde(e.target.value)}
+                className="w-full h-10 px-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label htmlFor="registro-hasta" className="block text-sm font-medium text-gray-700 mb-1">Hasta</label>
+              <input
+                id="registro-hasta"
+                type="date"
+                value={exportHasta}
+                onChange={(e) => setExportHasta(e.target.value)}
+                className="w-full h-10 px-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+            <Button variant="outline" onClick={() => setExportRegistroOpen(false)} disabled={exportando} className="w-full sm:w-auto">
+              Cancelar
+            </Button>
+            <Button onClick={exportarRegistro} disabled={exportando} className="w-full sm:w-auto">
+              {exportando
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <><FileSpreadsheet className="w-4 h-4 mr-1" /> Descargar Excel</>}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

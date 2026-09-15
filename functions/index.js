@@ -8274,6 +8274,9 @@ export { onNewHotelReservation } from './notifications/onNewHotelReservation.js'
 export { getPublicHotelRooms, requestPublicHotelReservation } from './booking/publicHotel.js'
 // Pagina publica 'mi reserva': estado y cancelacion por token, sin cuenta.
 export { getPublicBooking, cancelPublicBooking } from './booking/publicStatus.js'
+// Registro de huespedes de una reserva de hotel, con el mismo token: el huesped
+// lo llena desde un enlace, sin cuenta. Ver functions/booking/publicRegistro.js.
+export { getPublicGuestRegistry, savePublicGuestRegistry } from './booking/publicRegistro.js'
 export { onPaymentNotification } from './notifications/onPaymentNotification.js'
 
 // Import and re-export migration function

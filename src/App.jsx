@@ -158,6 +158,7 @@ const VeterinaryAgenda = lazy(() => import('./pages/VeterinaryAgenda'))
 // Public catalog
 const CatalogoPublico = lazy(() => import('./pages/CatalogoPublico'))
 const MiReserva = lazy(() => import('./pages/MiReserva'))
+const RegistroHuespedes = lazy(() => import('./pages/RegistroHuespedes'))
 // Public complaints book
 const LibroReclamaciones = lazy(() => import('./pages/LibroReclamaciones'))
 const RegistroFidelidad = lazy(() => import('./pages/RegistroFidelidad'))
@@ -399,6 +400,9 @@ function App() {
             {/* Estado y cancelacion de reservas del catalogo (cita u hotel),
                 por token. Publica: el enlace ES la credencial. */}
             <Route path="/mi-reserva/:businessId/:token" element={<MiReserva />} />
+            {/* Registro de huéspedes de una reserva de hotel, con el mismo token.
+                Pública: el enlace ES la credencial (functions/booking/publicRegistro.js). */}
+            <Route path="/registro-huespedes/:businessId/:token" element={<RegistroHuespedes />} />
 
             {/* Catálogo Demo */}
             <Route path="/demo/catalogo" element={<CatalogoPublico isDemo />} />

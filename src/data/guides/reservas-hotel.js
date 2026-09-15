@@ -15,6 +15,32 @@ export default {
 
   sections: [
     {
+      id: 'registro-huespedes',
+      title: 'Registro de huéspedes con enlace',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Cada reserva tiene su propio **registro de huéspedes**. En vez de un formulario aparte, le mandas al huésped un enlace: lo abre en su celular, ve su habitación, sus fechas y la tarifa ya puestas, y solo llena la hora de llegada, el motivo del viaje, los menores y los datos de cada persona (nombres, apellidos, documento, sexo, fecha de nacimiento, país y ciudad, más el celular y el correo del titular).',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'En la reserva, toca **Registro**.',
+            'Toca **Enviar por WhatsApp**: se abre el chat con el mensaje y el enlace listos. También puedes **Copiar enlace**.',
+            'Cuando el huésped lo envía, te llega un aviso y el botón **Registro** se pone en verde. Ahí ves a cada huésped con su edad.',
+          ],
+        },
+        {
+          type: 'texto',
+          text: 'Si el huésped llega sin haberlo llenado, toca **Llenarlo yo** y regístralo tú. Para el registro del mes, toca **Registro de huéspedes** arriba de la lista, elige las fechas y descarga un Excel con una fila por huésped; las reservas que todavía no se registraron salen como Pendiente.',
+        },
+        {
+          type: 'ojo',
+          text: 'El enlace es la llave de esa reserva: quien lo tiene puede ver y corregir su registro hasta que la estadía termine. Mándalo solo al titular.',
+        },
+      ],
+    },
+    {
       id: 'reprogramar',
       title: 'Reprogramar con fecha abierta',
       blocks: [

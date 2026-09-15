@@ -182,6 +182,16 @@ export default function MiReserva() {
 
               {error && <p className="text-sm text-red-600 text-center">{error}</p>}
 
+              {/* Registro de huéspedes de la reserva (pages/RegistroHuespedes), con el mismo enlace */}
+              {!esCita && ['requested', 'confirmed', 'checked_in', 'rescheduled'].includes(reserva.status) && (
+                <a
+                  href={`/registro-huespedes/${businessId}/${token}`}
+                  className="block w-full py-2.5 rounded-xl bg-gray-900 text-white text-sm font-medium text-center hover:bg-gray-800"
+                >
+                  Registrar a los huéspedes
+                </a>
+              )}
+
               {reserva.puedeCancelar && (
                 confirmandoCancel ? (
                   <div className="border border-red-200 bg-red-50 rounded-xl p-4 space-y-3">

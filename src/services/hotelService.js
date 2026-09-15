@@ -1,5 +1,6 @@
 import { db } from '@/lib/firebase'
 import { puedeReprogramarse, datosDeReprogramacion, moverNochesPagadas, fechaDeHoyLima } from '@/utils/reprogramacionHotel'
+import { tokenNuevo } from '@/utils/registroDeHuespedes'
 import {
   collection,
   addDoc,
@@ -436,6 +437,45 @@ export const asignarFechasReprogramadas = async (businessId, reservationId, upda
     })
   } catch (error) {
     console.error('Error al asignar las nuevas fechas:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// =====================
+// REGISTRO DE HUÉSPEDES (utils/registroDeHuespedes)
+// =====================
+
+/**
+ * El enlace secreto de la reserva: el que ya tiene (las del catálogo nacen con
+ * él) o uno nuevo. Se lee del documento y no de la lista en pantalla, para no
+ * pisar un enlace que ya se mandó desde otro equipo.
+ */
+export const asegurarTokenPublico = async (businessId, reservation) => {
+  try {
+    const reservationRef = doc(db, 'businesses', businessId, 'hotelReservations', reservation.id)
+    const snap = await getDoc(reservationRef)
+    if (!snap.exists()) return { success: false, error: 'Reserva no encontrada' }
+    const actual = snap.data().publicToken
+    if (actual) return { success: true, token: actual }
+    const token = tokenNuevo()
+    await updateDoc(reservationRef, { publicToken: token, updatedAt: serverTimestamp() })
+    return { success: true, token }
+  } catch (error) {
+    console.error('Error al preparar el enlace de la reserva:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/** Guarda el registro que llenó el hotel, ya validado con normalizarRegistro. */
+export const guardarRegistroHuespedes = async (businessId, reservationId, registro) => {
+  try {
+    await updateDoc(doc(db, 'businesses', businessId, 'hotelReservations', reservationId), {
+      registroHuespedes: { ...registro, registradoPor: 'hotel', registradoAt: serverTimestamp() },
+      updatedAt: serverTimestamp(),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al guardar el registro de huéspedes:', error)
     return { success: false, error: error.message }
   }
 }
