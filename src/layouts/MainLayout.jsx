@@ -6,7 +6,7 @@ import { Capacitor } from '@capacitor/core'
 import EsperaDeArranque from '@/components/EsperaDeArranque'
 import { useAuth } from '@/contexts/AuthContext'
 import { useBranding } from '@/contexts/BrandingContext'
-import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore'
+import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '@/lib/firebase'
 import { getVendedor } from '@/services/vendedorService'
@@ -48,8 +48,6 @@ export default function MainLayout() {
   // Qué app es esta y qué build: el mantenimiento puede cerrar SOLO a las
   // apps instaladas que quedaron viejas (ver mantenimientoAplica).
   const appInstalada = useAppInstalada()
-  const [hasBusiness, setHasBusiness] = useState(null)
-  const [checkingBusiness, setCheckingBusiness] = useState(false)
   const { branding } = useBranding()
   const [vendedorWhatsApp, setVendedorWhatsApp] = useState(null)
   const location = useLocation()
@@ -506,65 +504,10 @@ export default function MainLayout() {
     }
   }, [])
 
-  // Verificar si el usuario tiene un negocio creado
-  useEffect(() => {
-    let isMounted = true
-    let timeoutId
-
-    const checkBusiness = async () => {
-      if (!user?.uid) {
-        if (isMounted) {
-          setCheckingBusiness(false)
-          setHasBusiness(null)
-        }
-        return
-      }
-
-      if (isMounted) setCheckingBusiness(true)
-
-      // Timeout de seguridad
-      timeoutId = setTimeout(() => {
-        if (isMounted) {
-          console.warn('⚠️ Business check timeout - continuando sin datos')
-          setCheckingBusiness(false)
-          setHasBusiness(true) // Asumir que existe para no bloquear
-        }
-      }, 5000)
-
-      try {
-        const businessId = getBusinessId() || user.uid
-        const businessRef = doc(db, 'businesses', businessId)
-        const businessDoc = await getDoc(businessRef)
-
-        if (isMounted) {
-          clearTimeout(timeoutId)
-          setHasBusiness(businessDoc.exists())
-        }
-      } catch (error) {
-        console.error('Error al verificar negocio:', error)
-        if (isMounted) {
-          clearTimeout(timeoutId)
-          setHasBusiness(true) // Asumir que existe en caso de error
-        }
-      } finally {
-        if (isMounted) {
-          setCheckingBusiness(false)
-        }
-      }
-    }
-
-    if (isAuthenticated && user) {
-      checkBusiness()
-    } else {
-      setCheckingBusiness(false)
-      setHasBusiness(null)
-    }
-
-    return () => {
-      isMounted = false
-      if (timeoutId) clearTimeout(timeoutId)
-    }
-  }, [user?.uid, isAuthenticated])
+  // Acá había una lectura de businesses/{id} para saber si el negocio existía
+  // (`hasBusiness`). Nadie la usaba desde que se comentó la redirección a
+  // "crear negocio", y AuthContext ya trae ese documento al arrancar: era un
+  // viaje a Firestore de más en cada entrada. Se quitó el 15-set-2026.
 
   // Mantenimiento, en vivo: al apagarlo las pantallas vuelven solas. Solo se
   // escucha con sesión iniciada: sin ella las reglas rechazan la lectura y

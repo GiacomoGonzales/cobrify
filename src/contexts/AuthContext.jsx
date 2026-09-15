@@ -28,6 +28,7 @@ const enIframe = () => {
 import { isUserAdmin, isBusinessAdmin, setAsBusinessOwner } from '@/services/adminService'
 import { getSubscription, hasActiveAccess } from '@/services/subscriptionService'
 import { getUserData } from '@/services/userManagementService'
+import { idsDelNegocio } from '@/utils/arranqueDeSesion'
 import { getEmisores } from '@/services/emisoresService'
 import { MODOS_NEGOCIO } from '@/utils/businessModes'
 import { getActiveBranches } from '@/services/branchService'
@@ -138,6 +139,7 @@ export const AuthProvider = ({ children }) => {
       try {
         if (firebaseUser) {
           // Usuario autenticado
+          const inicioArranque = performance.now()
           const userData = {
             uid: firebaseUser.uid,
             email: firebaseUser.email,
@@ -147,7 +149,8 @@ export const AuthProvider = ({ children }) => {
           setUser(userData)
           setIsAuthenticated(true)
 
-          // ── PRIMERA TANDA: las cuatro preguntas del arranque, a la vez ──
+          // ── PRIMERA TANDA: las preguntas del arranque, a la vez, y por
+          //    adelantado lo del dueño (ver más abajo) ──
           //
           // Estas cuatro consultas dependen SOLO del uid (y del correo): qué
           // rol tiene la persona y qué dice su ficha. Iban una detrás de otra,
@@ -178,6 +181,40 @@ export const AuthProvider = ({ children }) => {
           // pide una sola vez y se usa en los dos sitios.
           const pedidoFicha = enCurso(getUserData(firebaseUser.uid))
 
+          // La búsqueda de reseller por correo (para quien tiene el doc con
+          // otro id) esperaba a saber que no existía por uid: un viaje más, en
+          // fila, para TODOS los que no son resellers. Sale ahora con el resto
+          // y abajo solo se espera si hace falta.
+          const pedidoResellerPorCorreo = enCurso(
+            firebaseUser.email
+              ? getDocs(query(collection(db, 'resellers'), where('email', '==', firebaseUser.email)))
+              : Promise.resolve({ empty: true, docs: [] })
+          )
+
+          // Plan, negocio y sucursales de un negocio. Sin tope acá: el tope se
+          // pone al ESPERAR, así el presupuesto de 5 s cuenta desde donde
+          // siempre contó aunque la lectura haya salido antes.
+          const pedirLoDelNegocio = (idDelNegocio, idParaElPlan) => ({
+            idDelNegocio,
+            idParaElPlan,
+            plan: enCurso(getSubscription(idParaElPlan)),
+            negocio: enCurso(getDoc(doc(db, 'businesses', idDelNegocio))),
+            sucursales: enCurso(getActiveBranches(idDelNegocio)),
+          })
+
+          // ── POR ADELANTADO, como si fuera dueño ──
+          //
+          // Plan, negocio y sucursales dependen de QUIÉN es la persona, y eso
+          // recién se sabe con la primera tanda: eran una segunda tanda en
+          // fila. Pero casi todos los que entran son dueños, y para un dueño
+          // los tres cuelgan de su propio uid: se piden YA, junto con todo lo
+          // demás, y si al final resulta ser sub-usuario se descartan y se
+          // piden con el ownerId. Un dueño pasa de dos tandas a una; en la
+          // conexión lenta del video de MULTIMARC (15-set-2026) eso son
+          // segundos. Para un sub-usuario son tres lecturas de más que vuelven
+          // vacías (o con permiso denegado, que `enCurso` deja pasar callado).
+          const adelantado = pedirLoDelNegocio(firebaseUser.uid, firebaseUser.uid)
+
           // Verificar si es SUPER ADMIN (giiacomo@gmail.com)
           let superAdminStatus = false
           try {
@@ -199,12 +236,9 @@ export const AuthProvider = ({ children }) => {
               if (resellerDoc.exists()) {
                 resellerDocId = firebaseUser.uid
               } else {
-                // Si no existe por UID, buscar por email
-                const resellersQuery = query(
-                  collection(db, 'resellers'),
-                  where('email', '==', firebaseUser.email)
-                )
-                const resellersSnapshot = await getDocs(resellersQuery)
+                // Si no existe por UID, por correo: esa lectura ya salió con
+                // la primera tanda, acá solo se espera.
+                const resellersSnapshot = await pedidoResellerPorCorreo
                 if (!resellersSnapshot.empty) {
                   resellerDoc = resellersSnapshot.docs[0]
                   resellerDocId = resellerDoc.id
@@ -351,21 +385,20 @@ export const AuthProvider = ({ children }) => {
             console.log('👑 Business Owner o Admin - Acceso total a todos los almacenes')
           }
 
-          // ── SEGUNDA TANDA: plan, negocio y sucursales, a la vez ──────────
+          // ── PLAN, NEGOCIO Y SUCURSALES ──
           //
-          // Con el rol ya resuelto sabemos de qué negocio estamos hablando, y
-          // las tres consultas que faltan dependen solo de eso. No se necesitan
-          // entre ellas, así que tampoco tienen por qué hacer cola.
-          //
-          // Con esto el arranque pasa de SIETE viajes en fila a dos tandas.
-          const idDelNegocio = (businessOwnerStatus || superAdminStatus)
-            ? firebaseUser.uid
-            : (subUserOwnerId || firebaseUser.uid)
-          const idParaElPlan = subUserOwnerId || firebaseUser.uid
-
-          const pedidoPlan = enCurso(conTope(getSubscription(idParaElPlan), 5000, 'Subscription'))
-          const pedidoNegocio = enCurso(getDoc(doc(db, 'businesses', idDelNegocio)))
-          const pedidoSucursales = enCurso(getActiveBranches(idDelNegocio))
+          // Con el rol resuelto se sabe de qué negocio se habla (la decisión
+          // vive en utils/arranqueDeSesion.js). Si es el propio uid —dueño o
+          // admin— SIRVE lo pedido por adelantado y no hay segunda tanda; si
+          // es un sub-usuario, se piden ahora con el ownerId, como siempre.
+          const { idDelNegocio, idParaElPlan, esElPropio } = idsDelNegocio({
+            uid: firebaseUser.uid, superAdminStatus, businessOwnerStatus, subUserOwnerId,
+          })
+          const pedidos = esElPropio ? adelantado : pedirLoDelNegocio(idDelNegocio, idParaElPlan)
+          const pedidoPlan = pedidos.plan
+          const pedidoNegocio = pedidos.negocio
+          const pedidoSucursales = pedidos.sucursales
+          console.log(`⏱️ Arranque: roles en ${Math.round(performance.now() - inicioArranque)} ms; ${esElPropio ? 'una tanda, lo adelantado sirvió' : 'segunda tanda (sub-usuario)'}`)
 
           // Obtener suscripción con timeout
           try {
@@ -375,7 +408,7 @@ export const AuthProvider = ({ children }) => {
 
             console.log(`📋 Usuario: ${isSubUser ? 'Sub-usuario (owner: ' + ownerIdForSubscription + ')' : 'Principal'}`)
 
-            let userSubscription = await pedidoPlan
+            let userSubscription = await conTope(pedidoPlan, 5000, 'Subscription')
 
             // Sin suscripción: SOLO se intenta el rescate de sub-usuario (usar
             // la del dueño si el doc trae ownerId). NUNCA se crea un trial.
@@ -585,6 +618,7 @@ export const AuthProvider = ({ children }) => {
           // para algo que no tiene nada que ver con entrar al sistema.
           //
           // Se lanza y sigue: cuando el token llegue se guarda solo.
+          console.log(`⏱️ Sesión lista en ${Math.round(performance.now() - inicioArranque)} ms`)
           initializePushNotifications(firebaseUser.uid).catch((error) => {
             console.error('Error al inicializar notificaciones push:', error)
           })
