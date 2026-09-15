@@ -152,6 +152,9 @@ service cloud.firestore {
                     // ("Secretaria", "Contador"). Una empresa puede tener
                     // varios numeros escribiendo por ella.
                     'rolContacto',
+                    // vendedorContactoId: el vendedor de Cobrify que es este
+                    // contacto, para ver su cartera en la ficha (15-set-2026).
+                    'vendedorContactoId',
                     'linkAttempted', 'optOut', 'optOutAt', 'updatedAt']);
       allow create, delete: if false;
 

@@ -32,6 +32,11 @@ import {
   otrosContactosDelNegocio,
   agregarComprobantes,
   formatearNumero,
+  carteraDeLaCuenta,
+  carteraDelVendedor,
+  listarVendedores,
+  vendedorPorTelefono,
+  asignarVendedorALaConversacion,
 } from '@/services/whatsappChatService'
 import { registerPayment, suspendUser, reactivateUser, PLANS } from '@/services/subscriptionService'
 import { METODOS_DE_COBRO as METODOS } from '@/services/comprobanteChatService'
@@ -105,8 +110,13 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
   // cuadro seguía la de la conversación anterior, se pedía SU ficha, y si esa
   // respuesta llegaba última aparecía en otra conversación (14-set-2026).
   const vistaValida = cuentaVista && cuentas.includes(cuentaVista) ? cuentaVista : null
-  const enLista = cuentas.length > 1 && !vistaValida
-  const businessId = vistaValida || (cuentas.length === 1 ? cuentas[0] : null)
+  // Un cliente de la cartera (de un reseller o de un vendedor) se abre en esta
+  // misma ficha, con vuelta atrás: mientras tanto, todo lo de abajo trabaja
+  // sobre él. { id, tipo, nombre }
+  const [carteraAbierta, setCarteraAbierta] = useState(null)
+  const enLista = !carteraAbierta && cuentas.length > 1 && !vistaValida
+  const cuentaDeLaConversacion = vistaValida || (cuentas.length === 1 ? cuentas[0] : null)
+  const businessId = carteraAbierta?.id || cuentaDeLaConversacion
 
   // Los nombres para el selector: la ficha abierta solo trae la suya.
   useEffect(() => {
@@ -138,6 +148,35 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
     return () => { vivo = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId, conversacion?.id])
+
+  // Si cambia la cuenta de la conversación, se vuelve a ella.
+  useEffect(() => { setCarteraAbierta(null) }, [cuentaDeLaConversacion])
+
+  // La cartera de la cuenta vinculada: si es la principal de un reseller, sus
+  // clientes; si es el usuario de un vendedor, sus cuentas.
+  const [cartera, setCartera] = useState(null)
+  useEffect(() => {
+    setCartera(null)
+    if (!cuentaDeLaConversacion) return undefined
+    let vivo = true
+    carteraDeLaCuenta(cuentaDeLaConversacion)
+      .then((c) => { if (vivo) setCartera(c) })
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [cuentaDeLaConversacion])
+
+  // Y la del vendedor que se le asignó a este contacto, si tiene uno.
+  const vendedorAsignado = conversacion?.vendedorContactoId || null
+  const [carteraVendedor, setCarteraVendedor] = useState(null)
+  useEffect(() => {
+    setCarteraVendedor(null)
+    if (!vendedorAsignado) return undefined
+    let vivo = true
+    carteraDelVendedor(vendedorAsignado)
+      .then((c) => { if (vivo) setCarteraVendedor(c) })
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [vendedorAsignado])
 
   // Que el catálogo de fichas ya esté bajado cuando se escriba el primer
   // carácter: la primera búsqueda tardaba varios segundos sin avisar.
@@ -214,18 +253,22 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
   return (
     <aside className="w-full sm:w-80 bg-white border-l border-gray-200 flex flex-col h-full">
       <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2">
-        {cuentas.length > 1 && !enLista && (
+        {(carteraAbierta || (cuentas.length > 1 && !enLista)) && (
           <button
-            onClick={() => setCuentaVista(null)}
+            onClick={() => (carteraAbierta ? setCarteraAbierta(null) : setCuentaVista(null))}
             className="-ml-1 p-1 text-gray-500 hover:text-gray-900"
-            title="Volver a las cuentas"
-            aria-label="Volver a las cuentas"
+            title={carteraAbierta ? `Volver a ${carteraAbierta.nombre}` : 'Volver a las cuentas'}
+            aria-label={carteraAbierta ? 'Volver a la cartera' : 'Volver a las cuentas'}
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
         )}
         <h3 className="flex-1 min-w-0 truncate font-semibold text-gray-900 text-[13px]">
-          {enLista ? `Cuentas del cliente (${cuentas.length})` : 'Ficha del cliente'}
+          {enLista
+            ? `Cuentas del cliente (${cuentas.length})`
+            : carteraAbierta
+              ? `${carteraAbierta.tipo === 'reseller' ? 'Cliente de' : 'Cuenta de'} ${carteraAbierta.nombre}`
+              : 'Ficha del cliente'}
         </h3>
         <button onClick={onCerrar} className="flex-none text-gray-400 hover:text-gray-600" aria-label="Cerrar ficha">
           <X className="w-5 h-5" />
@@ -356,6 +399,12 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
 
         {businessId && !cargando && ficha && (
           <div className="space-y-4">
+            {carteraAbierta && (
+              <p className="rounded-md bg-gray-50 px-3 py-2 text-[11.5px] text-gray-600">
+                {carteraAbierta.tipo === 'reseller' ? 'Cliente del reseller' : 'Cuenta del vendedor'}{' '}
+                {carteraAbierta.nombre}. No está vinculada a esta conversación.
+              </p>
+            )}
             <div>
               <p className="text-[14px] font-semibold text-gray-900 leading-snug">{ficha.nombre || 'Negocio'}</p>
               <p className="text-[11.5px] text-gray-500 mt-0.5">
@@ -372,7 +421,7 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
 
             {/* Quien escribe NO siempre es el titular. Sin esto, en el chat de
                 la secretaria se leia el nombre del dueno y se la saludaba mal. */}
-            {(conversacion.linkedBy === 'manual' || conversacion.rolContacto || otros.length > 0) && (
+            {!carteraAbierta && (conversacion.linkedBy === 'manual' || conversacion.rolContacto || otros.length > 0) && (
               <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5">
                 <p className="text-[11px] text-gray-500">Te escribe</p>
                 <p className="text-[13px] font-medium text-gray-900 truncate">
@@ -564,7 +613,7 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
             {/* Agregar y quitar empresas se hace en la lista de cuentas, no
                 aca. La excepcion es el contacto con UNA sola: no tiene lista,
                 y sin este boton no habria como sumarle la segunda. */}
-            {cuentas.length === 1 && (
+            {cuentas.length === 1 && !carteraAbierta && (
               <Boton className="w-full" onClick={() => setGestorAbierto(true)}>
                 Agregar otra empresa
               </Boton>
@@ -636,6 +685,7 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
               </button>
             )}
 
+            {!carteraAbierta && (
             <button
               onClick={async () => {
                 try {
@@ -650,6 +700,7 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
               <Link2Off className="w-3.5 h-3.5" />
               Desvincular
             </button>
+            )}
           </div>
         )}
 
@@ -657,6 +708,30 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
           <div className="text-center py-6">
             <Link2 className="w-8 h-8 text-gray-300 mx-auto mb-2" />
             <p className="text-[13px] text-gray-500">El negocio vinculado ya no existe.</p>
+          </div>
+        )}
+
+        {/* La cartera: los clientes del reseller o las cuentas del vendedor
+            (por su cuenta vinculada o porque se le asignó a este contacto), y
+            qué vendedor es. No va dentro de un cliente de la cartera ni en la
+            lista de varias empresas. */}
+        {!enLista && !carteraAbierta && !cargando && (cartera || carteraVendedor || isAdmin) && (
+          <div className="mt-6 space-y-5 border-t border-gray-100 pt-4">
+            {cartera && (
+              <CarteraDelContacto
+                key={`${cartera.tipo}-${cartera.id}`}
+                cartera={cartera}
+                onAbrir={(id) => setCarteraAbierta({ id, tipo: cartera.tipo, nombre: cartera.nombre })}
+              />
+            )}
+            {carteraVendedor && !(cartera?.tipo === 'vendedor' && cartera.id === carteraVendedor.id) && (
+              <CarteraDelContacto
+                key={`vendedor-${carteraVendedor.id}`}
+                cartera={carteraVendedor}
+                onAbrir={(id) => setCarteraAbierta({ id, tipo: 'vendedor', nombre: carteraVendedor.nombre })}
+              />
+            )}
+            {isAdmin && <VendedorDelContacto conversacion={conversacion} />}
           </div>
         )}
       </div>
@@ -1131,5 +1206,167 @@ function GestorDeCuentas({ conversacion, cuentas, nombres, onCerrar }) {
         )}
       </div>
     </Modal>
+  )
+}
+
+/** Cómo se lee el vencimiento de una cuenta de la cartera. */
+const estadoDeVencimiento = (c) => {
+  if (c.bloqueada) return { texto: 'Bloqueada', clase: 'text-red-700' }
+  if (c.nuncaVence) return { texto: 'Sin vencimiento', clase: 'text-gray-500' }
+  if (!c.vence) return { texto: 'Sin fecha', clase: 'text-gray-500' }
+  const fecha = c.vence.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' })
+  if (c.diasParaVencer < 0) return { texto: `Venció el ${fecha}`, clase: 'text-red-700' }
+  if (c.diasParaVencer <= 7) return { texto: `Vence en ${c.diasParaVencer} día${c.diasParaVencer === 1 ? '' : 's'}`, clase: 'text-amber-700' }
+  return { texto: `Vence el ${fecha}`, clase: 'text-gray-500' }
+}
+
+/**
+ * La cartera de un reseller o de un vendedor: sus cuentas con el vencimiento,
+ * primero las que piden atención (bloqueadas, vencidas, las que vencen esta
+ * semana). Cada una se abre en la misma ficha.
+ */
+function CarteraDelContacto({ cartera, onAbrir }) {
+  const [verTodas, setVerTodas] = useState(false)
+  const { cuentas } = cartera
+  const vencidas = cuentas.filter((c) => c.diasParaVencer !== null && c.diasParaVencer < 0).length
+  const porVencer = cuentas.filter((c) => c.diasParaVencer !== null && c.diasParaVencer >= 0 && c.diasParaVencer <= 7).length
+  const visibles = verTodas ? cuentas : cuentas.slice(0, 8)
+  const aviso = [
+    vencidas > 0 && `${vencidas} vencida${vencidas === 1 ? '' : 's'}`,
+    porVencer > 0 && `${porVencer} vence${porVencer === 1 ? '' : 'n'} esta semana`,
+  ].filter(Boolean).join(' · ')
+
+  return (
+    <div>
+      <p className="text-[12px] font-medium text-gray-700">
+        {cartera.tipo === 'reseller' ? 'Sus clientes' : 'Sus cuentas'} ({cuentas.length})
+      </p>
+      <p className="text-[11.5px] text-gray-500 mb-1.5 truncate">
+        {cartera.tipo === 'reseller' ? 'Reseller' : 'Vendedor'} · {cartera.nombre}
+        {aviso && <span className="text-red-700"> · {aviso}</span>}
+      </p>
+      {cuentas.length === 0 ? (
+        <p className="text-[12px] text-gray-500">Todavía no tiene cuentas.</p>
+      ) : (
+        <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 overflow-hidden">
+          {visibles.map((c) => {
+            const v = estadoDeVencimiento(c)
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => onAbrir(c.id)}
+                className="w-full text-left px-3 py-2 hover:bg-primary-50 transition-colors"
+              >
+                <p className="text-[13px] text-gray-800 truncate">{c.nombre}</p>
+                <p className="text-[11.5px] truncate">
+                  <span className="text-gray-500">{c.plan || 'Sin plan'}</span>
+                  <span className="text-gray-300"> · </span>
+                  <span className={v.clase}>{v.texto}</span>
+                </p>
+              </button>
+            )
+          })}
+        </div>
+      )}
+      {cuentas.length > 8 && (
+        <button
+          type="button"
+          onClick={() => setVerTodas((x) => !x)}
+          className="mt-1.5 text-[11.5px] text-primary-700 hover:underline"
+        >
+          {verTodas ? 'Ver menos' : `Ver todas (${cuentas.length})`}
+        </button>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Qué vendedor de Cobrify es este contacto. Hay vendedores que escriben sin
+ * cuenta propia o desde otro número: anotarlo trae su cartera a la ficha. Si el
+ * número es el de un vendedor registrado, se propone.
+ */
+function VendedorDelContacto({ conversacion }) {
+  const toast = useToast()
+  const [vendedores, setVendedores] = useState(null)
+  const [editando, setEditando] = useState(false)
+  const [elegido, setElegido] = useState('')
+  const [guardando, setGuardando] = useState(false)
+  const actual = conversacion.vendedorContactoId || ''
+
+  useEffect(() => {
+    let vivo = true
+    listarVendedores()
+      .then((l) => { if (vivo) setVendedores(l) })
+      .catch(() => { if (vivo) setVendedores([]) })
+    return () => { vivo = false }
+  }, [])
+
+  if (!vendedores || vendedores.length === 0) return null
+  const nombreDe = (id) => vendedores.find((v) => v.id === id)?.nombre || 'Vendedor'
+  const sugerido = !actual ? vendedorPorTelefono(vendedores, conversacion.waId) : null
+
+  const guardar = async (id) => {
+    setGuardando(true)
+    try {
+      await asignarVendedorALaConversacion(conversacion.id, id)
+      setEditando(false)
+    } catch {
+      toast.error('No se pudo guardar el vendedor')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  if (editando) {
+    return (
+      <div className="space-y-1.5">
+        <p className="text-[12px] font-medium text-gray-700">Vendedor de Cobrify</p>
+        <div className="flex items-center gap-1.5">
+          <Selector value={elegido} onChange={(e) => setElegido(e.target.value)} className="flex-1 min-w-0">
+            <option value="">No es vendedor</option>
+            {vendedores.filter((v) => v.activo || v.id === actual).map((v) => (
+              <option key={v.id} value={v.id}>{v.nombre}</option>
+            ))}
+          </Selector>
+          <Boton variante="primario" tamano="sm" onClick={() => guardar(elegido || null)} disabled={guardando}>
+            Guardar
+          </Boton>
+        </div>
+        <button type="button" onClick={() => setEditando(false)} className="text-[11.5px] text-gray-500 hover:underline">
+          Cancelar
+        </button>
+      </div>
+    )
+  }
+
+  if (actual) {
+    return (
+      <p className="text-[12px] text-gray-600">
+        Es vendedor de Cobrify: <span className="font-medium text-gray-900">{nombreDe(actual)}</span>
+        {' · '}
+        <button type="button" onClick={() => { setElegido(actual); setEditando(true) }} className="text-primary-700 hover:underline">
+          Cambiar
+        </button>
+      </p>
+    )
+  }
+
+  if (sugerido) {
+    return (
+      <p className="text-[12px] text-gray-600">
+        Su número es el de <span className="font-medium text-gray-900">{sugerido.nombre}</span>, vendedor de Cobrify.{' '}
+        <button type="button" onClick={() => guardar(sugerido.id)} disabled={guardando} className="text-primary-700 hover:underline">
+          Asignarlo
+        </button>
+      </p>
+    )
+  }
+
+  return (
+    <button type="button" onClick={() => { setElegido(''); setEditando(true) }} className="text-[11.5px] text-primary-700 hover:underline">
+      ¿Es vendedor de Cobrify? Asignarlo
+    </button>
   )
 }

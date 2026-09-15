@@ -568,6 +568,98 @@ export const sugerirCuentasDelContacto = async (idsActuales) => {
   return [...encontradas.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
 }
 
+// ── Cartera de un reseller o de un vendedor ──────────────────────────────────
+// Pedido de Giacomo (15-set-2026): en la ficha del reseller, sus clientes con
+// sus vencimientos; lo mismo con los vendedores. Un reseller es un usuario de
+// Cobrify con `resellers/{uid}`, y sus clientes llevan `resellerId`; un
+// vendedor vive en `vendedores` (con `linkedUserId` si tiene usuario propio) y
+// sus cuentas llevan `vendedorId`.
+
+/** Lo que se ve de cada cuenta de la cartera sin abrir su ficha. */
+const filaDeCartera = (d) => {
+  const s = d.data()
+  const interna = nuncaVence(s)
+  const vence = interna ? null : (s.currentPeriodEnd?.toDate?.() || null)
+  return {
+    id: d.id,
+    nombre: s.businessName || s.email || d.id,
+    plan: s.planName || s.plan || null,
+    vence,
+    diasParaVencer: vence ? Math.ceil((vence.getTime() - Date.now()) / 86400000) : null,
+    nuncaVence: interna,
+    bloqueada: s.accessBlocked === true,
+  }
+}
+
+/** Primero lo que pide atención: bloqueadas y vencidas, luego las que vencen antes. */
+const pesoDeCartera = (c) => {
+  if (c.bloqueada || (c.diasParaVencer !== null && c.diasParaVencer < 0)) return 0
+  if (c.diasParaVencer !== null && c.diasParaVencer <= 7) return 1
+  return c.diasParaVencer !== null ? 2 : 3
+}
+const ordenarCartera = (cuentas) => cuentas.sort((a, b) =>
+  pesoDeCartera(a) - pesoDeCartera(b)
+  || (a.diasParaVencer ?? Infinity) - (b.diasParaVencer ?? Infinity)
+  || a.nombre.localeCompare(b.nombre, 'es'))
+
+const cuentasDe = async (campo, id) => {
+  const snap = await getDocs(query(collection(db, 'subscriptions'), where(campo, '==', id), limit(500)))
+  return ordenarCartera(snap.docs.map(filaDeCartera))
+}
+
+/**
+ * Si esta cuenta es la principal de un reseller, sus clientes; si es el
+ * usuario de un vendedor, sus cuentas. Si no es ninguna de las dos, null.
+ * @returns {Promise<null|{tipo: 'reseller'|'vendedor', id: string, nombre: string, cuentas: object[]}>}
+ */
+export const carteraDeLaCuenta = async (businessId) => {
+  if (!businessId) return null
+  const [reseller, vendedor] = await Promise.all([
+    getDoc(doc(db, 'resellers', businessId)).catch(() => null),
+    getDocs(query(collection(db, 'vendedores'), where('linkedUserId', '==', businessId), limit(1))).catch(() => null),
+  ])
+  if (reseller?.exists()) {
+    const r = reseller.data()
+    return { tipo: 'reseller', id: businessId, nombre: r.companyName || r.email || 'Reseller', cuentas: await cuentasDe('resellerId', businessId) }
+  }
+  const v = vendedor?.docs?.[0]
+  if (v) return { tipo: 'vendedor', id: v.id, nombre: v.data().name || 'Vendedor', cuentas: await cuentasDe('vendedorId', v.id) }
+  return null
+}
+
+/** La cartera del vendedor asignado a una conversación (`vendedorContactoId`). */
+export const carteraDelVendedor = async (vendedorId) => {
+  if (!vendedorId) return null
+  const v = await getDoc(doc(db, 'vendedores', vendedorId))
+  if (!v.exists()) return null
+  return { tipo: 'vendedor', id: v.id, nombre: v.data().name || 'Vendedor', cuentas: await cuentasDe('vendedorId', v.id) }
+}
+
+/** Los vendedores de Cobrify, para decir que un contacto es uno de ellos. */
+export const listarVendedores = async () => {
+  const snap = await getDocs(query(collection(db, 'vendedores'), orderBy('name', 'asc')))
+  return snap.docs.map((d) => ({
+    id: d.id,
+    nombre: d.data().name || d.id,
+    telefono: d.data().phone || '',
+    activo: d.data().isActive !== false,
+  }))
+}
+
+/** El vendedor cuyo teléfono es este número (se comparan los 9 últimos dígitos). */
+export const vendedorPorTelefono = (vendedores, waId) => {
+  const fin = String(waId || '').replace(/\D/g, '').slice(-9)
+  if (fin.length < 9) return null
+  return vendedores.find((v) => String(v.telefono || '').replace(/\D/g, '').slice(-9) === fin) || null
+}
+
+/** Anota (o quita, con null) qué vendedor de Cobrify es este contacto. */
+export const asignarVendedorALaConversacion = (conversationId, vendedorId) =>
+  updateDoc(doc(db, 'whatsappConversations', conversationId), {
+    vendedorContactoId: vendedorId || null,
+    updatedAt: serverTimestamp(),
+  })
+
 /**
  * Catalogo liviano de negocios para el buscador del chat.
  *
