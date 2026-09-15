@@ -43,10 +43,11 @@ import { useGrabadora, relojDeGrabacion } from '@/components/chat/grabadoraDeVoz
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { MARCA_CHAT } from '@/utils/dominioChat'
+import { useActualizacion } from '@/contexts/ActualizacionContext'
 import { useAvisosDelChat } from '@/hooks/useAvisosDelChat'
 import { useTema } from '@/utils/temaOscuro'
 import { azulLeido, colorTenue, estiloBurbuja, estiloFondo, useApariencia } from '@/utils/aparienciaChat'
-import { PencilLine, Upload } from 'lucide-react'
+import { PencilLine, Upload, RefreshCw } from 'lucide-react'
 import BotonTema from '@/components/BotonTema'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
@@ -151,6 +152,9 @@ export default function Chat() {
   const [fichas, setFichas] = useState(() => new Map())
   // Organización (Fase 1): pestaña por estado, filtro por etiqueta, catálogo.
   const [tab, setTab] = useState('abierta')
+  // Versión nueva de la web: su botón va en la cabecera de la bandeja.
+  const actualizacion = useActualizacion()
+  const hayVersionNueva = actualizacion.hay && actualizacion.tipo === 'web'
   // Los dos mundos: todos / clientes (vinculados a un negocio) / leads.
   const [mundo, setMundo] = useState('todos')
   const [fichaVisible, setFichaVisible] = useState(false)
@@ -1137,7 +1141,20 @@ export default function Chat() {
                 icono es el mismo de la app de iOS. */}
             <img src={MARCA_CHAT.iconoChico} alt="" className="w-6 h-6 rounded-md flex-none" />
             <h1 className="font-semibold text-gray-900">{MARCA_CHAT.nombre}</h1>
-            <BotonTema tema={tema} onCambiar={cambiarTema} className="ml-auto" />
+            {/* Versión nueva. El chat no tiene el menú lateral del sistema, donde
+                vive ese aviso. Pasivo como aquel: no tapa nada ni se va solo. */}
+            {hayVersionNueva && (
+              <button
+                onClick={actualizacion.actualizar}
+                disabled={actualizacion.actualizando}
+                title="Hay una versión nueva de Cobrify. Se recargará la página."
+                className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              >
+                <RefreshCw className={`w-3 h-3 ${actualizacion.actualizando ? 'animate-spin' : ''}`} />
+                {actualizacion.actualizando ? 'Actualizando…' : 'Actualizar'}
+              </button>
+            )}
+            <BotonTema tema={tema} onCambiar={cambiarTema} className={hayVersionNueva ? '' : 'ml-auto'} />
             <button
               onClick={() => { setConfigAbierta(true); setActivaId(null) }}
               className={`p-1.5 rounded-lg hover:bg-gray-100 ${configAbierta ? 'text-primary-600' : 'text-gray-400 hover:text-gray-600'}`}

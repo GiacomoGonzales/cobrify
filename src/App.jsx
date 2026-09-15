@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { BrandingProvider } from './contexts/BrandingContext'
 import { ToastProvider } from './contexts/ToastContext'
+import { ActualizacionProvider } from './contexts/ActualizacionContext'
 import AppLifecycleManager from './components/AppLifecycleManager'
 import MainLayout from './layouts/MainLayout'
 import LandingRouter from './components/LandingRouter'
@@ -115,6 +116,15 @@ const DispatchGuides = lazy(() => import('./pages/DispatchGuides'))
 const CarrierDispatchGuides = lazy(() => import('./pages/CarrierDispatchGuides'))
 const TermsAndConditions = lazy(() => import('./pages/TermsAndConditions'))
 const Chat = lazy(() => import('./pages/Chat'))
+// La bandeja vive fuera de MainLayout, que es donde se monta
+// ActualizacionProvider: sin este envoltorio, en el chat no se buscaban
+// versiones nuevas ni había botón para actualizar, y quien atiende ahí todo el
+// día se quedaba con la versión vieja (reporte de Giacomo, 15-set-2026).
+const ChatConAvisos = () => (
+  <ActualizacionProvider>
+    <Chat />
+  </ActualizacionProvider>
+)
 const Pricing = lazy(() => import('./pages/Pricing'))
 const PublicManual = lazy(() => import('./pages/PublicManual'))
 const MigratePurchases = lazy(() => import('./pages/MigratePurchases'))
@@ -325,7 +335,7 @@ function App() {
               path="/"
               element={
                 esDominioDelChat()
-                  ? <Chat />
+                  ? <ChatConAvisos />
                   : isNative
                     ? <Navigate to="/app/dashboard" replace />
                     : <LandingRouter />
@@ -358,7 +368,7 @@ function App() {
             {/* En el subdominio del chat esta ruta manda a la raiz: una sola
                 direccion para la bandeja y no dos. En los demas dominios
                 —cobrifyperu.com/chat y la app nativa— sigue siendo la puerta. */}
-            <Route path="/chat" element={esDominioDelChat() ? <Navigate to="/" replace /> : <Chat />} />
+            <Route path="/chat" element={esDominioDelChat() ? <Navigate to="/" replace /> : <ChatConAvisos />} />
             <Route path="/pricing" element={<Pricing />} />
             {/* Manual PUBLICO: se comparte por WhatsApp y abre sin sesion.
                 Ver el porque en src/pages/PublicManual.jsx */}
