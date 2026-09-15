@@ -8,6 +8,11 @@ struct FichaClienteView: View {
     /// La conversación desde la que se abrió, para excluirla de la lista de
     /// "también escriben" y poder saltar a las otras.
     var conversacionId: String? = nil
+    /// Volver a la conversación cerrando todo de una vez. Lo pasa la hoja de
+    /// cuentas: al terminar bien una renovación, un +500 o una reactivación se
+    /// cierran juntas las tres ventanas encimadas. Antes había que tocar
+    /// "Cerrar" tres veces para salir (pedido de Giacomo, 14-set-2026).
+    var alTerminar: (() -> Void)? = nil
     @StateObject private var store = FichaStore()
     @StateObject private var otros = OtrosContactosStore()
     @State private var mostrarRenovar = false
@@ -35,17 +40,17 @@ struct FichaClienteView: View {
             }
             .sheet(isPresented: $mostrarRenovar) {
                 if store.ficha != nil {
-                    RenovarSheet(store: store)
+                    RenovarSheet(store: store, alTerminar: alTerminar)
                 }
             }
             .sheet(isPresented: $mostrarAddon) {
                 if store.ficha != nil {
-                    AddonSheet(store: store)
+                    AddonSheet(store: store, alTerminar: alTerminar)
                 }
             }
             .sheet(isPresented: $mostrarReactivar) {
                 if store.ficha != nil {
-                    ReactivarSheet(store: store)
+                    ReactivarSheet(store: store, alTerminar: alTerminar)
                 }
             }
         }
@@ -59,7 +64,7 @@ struct FichaClienteView: View {
         List {
             Section {
                 LabeledContent("Negocio", value: f.nombre ?? "—")
-                if let ruc = f.ruc { LabeledContent("RUC", value: ruc) }
+                if let ruc = f.ruc, !ruc.isEmpty { FilaCopiable(etiqueta: "RUC", valor: ruc) }
                 if let email = f.email { LabeledContent("Correo", value: email) }
                 if let registro = f.registradoEl {
                     LabeledContent("Cliente desde") {
@@ -287,6 +292,8 @@ struct FichaClienteView: View {
 /// Toca dinero y fechas de un cliente real: nunca de un solo tap.
 struct RenovarSheet: View {
     @ObservedObject var store: FichaStore
+    /// Volver a la conversación al terminar bien (ver FichaClienteView).
+    var alTerminar: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var monto = ""
     @State private var metodo = "Transferencia"
@@ -368,7 +375,7 @@ struct RenovarSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(listo == nil ? "Cancelar" : "Cerrar") { dismiss() }
+                    Button(listo == nil ? "Cancelar" : "Cerrar") { if listo == nil { dismiss() } else { terminar() } }
                 }
                 if listo == nil {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -401,6 +408,7 @@ struct RenovarSheet: View {
                 if let v = store.ficha?.vence { fecha = max(v, Date()) }
             }
         }
+        .sensoryFeedback(.success, trigger: listo) { _, nuevo in nuevo != nil }
         .interactiveDismissDisabled(trabajando)
     }
 
@@ -442,15 +450,32 @@ struct RenovarSheet: View {
             let r = await store.renovar(monto: m, metodo: metodo, planId: planId,
                                         fechaPersonalizada: fechaPropia ? fecha : nil)
             trabajando = false
-            if r.ok { listo = r.nuevoVencimiento }
+            if r.ok { listo = r.nuevoVencimiento; volverTrasUnMomento() }
             else { error = r.error }
         }
+    }
+
+    /// Tras terminar bien, el "listo" se ve un momento y se vuelve solo a la
+    /// conversación. Si antes se toca "Cerrar", pasa lo mismo.
+    private func volverTrasUnMomento() {
+        Task {
+            try? await Task.sleep(for: .seconds(1.4))
+            terminar()
+        }
+    }
+
+    /// Con quien lo pida, cierra todo hasta la conversación; si no, solo esta
+    /// ventana.
+    private func terminar() {
+        if let alTerminar { alTerminar() } else { dismiss() }
     }
 }
 
 /// El paquete +500 comprobantes: monto, confirmación y listo. No toca fechas.
 struct AddonSheet: View {
     @ObservedObject var store: FichaStore
+    /// Volver a la conversación al terminar bien (ver FichaClienteView).
+    var alTerminar: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var monto = "10"
     @State private var metodo = "Transferencia"
@@ -504,7 +529,7 @@ struct AddonSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(listo ? "Cerrar" : "Cancelar") { dismiss() }
+                    Button(listo ? "Cerrar" : "Cancelar") { if listo { terminar() } else { dismiss() } }
                 }
                 if !listo {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -523,6 +548,7 @@ struct AddonSheet: View {
                 Button("Cancelar", role: .cancel) {}
             }
         }
+        .sensoryFeedback(.success, trigger: listo) { _, nuevo in nuevo }
         .interactiveDismissDisabled(trabajando)
     }
 
@@ -532,8 +558,23 @@ struct AddonSheet: View {
         Task {
             let e = await store.agregarComprobantes(monto: m, metodo: metodo)
             trabajando = false
-            if let e { error = e } else { listo = true }
+            if let e { error = e } else { listo = true; volverTrasUnMomento() }
         }
+    }
+
+    /// Tras terminar bien, el "listo" se ve un momento y se vuelve solo a la
+    /// conversación. Si antes se toca "Cerrar", pasa lo mismo.
+    private func volverTrasUnMomento() {
+        Task {
+            try? await Task.sleep(for: .seconds(1.4))
+            terminar()
+        }
+    }
+
+    /// Con quien lo pida, cierra todo hasta la conversación; si no, solo esta
+    /// ventana.
+    private func terminar() {
+        if let alTerminar { alTerminar() } else { dismiss() }
     }
 }
 
@@ -605,6 +646,8 @@ struct HistorialPagosView: View {
 /// Reactivar el acceso con días de gracia, calcado de reactivateUser web.
 struct ReactivarSheet: View {
     @ObservedObject var store: FichaStore
+    /// Volver a la conversación al terminar bien (ver FichaClienteView).
+    var alTerminar: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var dias = 30
     @State private var confirmando = false
@@ -656,7 +699,7 @@ struct ReactivarSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(listo == nil ? "Cancelar" : "Cerrar") { dismiss() }
+                    Button(listo == nil ? "Cancelar" : "Cerrar") { if listo == nil { dismiss() } else { terminar() } }
                 }
                 if listo == nil {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -675,6 +718,7 @@ struct ReactivarSheet: View {
                 Button("Cancelar", role: .cancel) {}
             }
         }
+        .sensoryFeedback(.success, trigger: listo) { _, nuevo in nuevo != nil }
         .interactiveDismissDisabled(trabajando)
     }
 
@@ -689,8 +733,23 @@ struct ReactivarSheet: View {
         Task {
             let r = await store.reactivar(dias: dias)
             trabajando = false
-            if r.ok { listo = r.nuevoVencimiento }
+            if r.ok { listo = r.nuevoVencimiento; volverTrasUnMomento() }
             else { error = r.error }
         }
+    }
+
+    /// Tras terminar bien, el "listo" se ve un momento y se vuelve solo a la
+    /// conversación. Si antes se toca "Cerrar", pasa lo mismo.
+    private func volverTrasUnMomento() {
+        Task {
+            try? await Task.sleep(for: .seconds(1.4))
+            terminar()
+        }
+    }
+
+    /// Con quien lo pida, cierra todo hasta la conversación; si no, solo esta
+    /// ventana.
+    private func terminar() {
+        if let alTerminar { alTerminar() } else { dismiss() }
     }
 }

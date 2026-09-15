@@ -34,7 +34,10 @@ struct GrupoCuentasView: View {
                 get: { fichaDe.map { IdFicha(id: $0) } },
                 set: { fichaDe = $0?.id }
             )) { f in
-                FichaClienteView(businessId: f.id, conversacionId: conv.id)
+                // Al terminar bien una renovación (o +500, o reactivar), la
+                // ficha pide cerrar ESTA hoja, y con ella se va todo lo que
+                // tiene encima: se vuelve directo a la conversación.
+                FichaClienteView(businessId: f.id, conversacionId: conv.id, alTerminar: { dismiss() })
             }
             .sheet(isPresented: $mostrarBuscar) {
                 AgregarCuentaSheet(conversationId: conv.id, sugeridas: grupo.sugeridas)

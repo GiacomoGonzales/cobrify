@@ -97,6 +97,14 @@ final class FichaStore: ObservableObject {
     @Published var error: String?
 
     func cargar(businessId: String) async {
+        #if DEBUG
+        // Vista previa (simulador sin sesión): una ficha de mentira.
+        if VistaPrevia.activa, let deMentira = VistaPrevia.ficha(businessId) {
+            ficha = deMentira
+            cargando = false
+            return
+        }
+        #endif
         cargando = true
         error = nil
         let db = Firestore.firestore()
@@ -152,6 +160,14 @@ final class FichaStore: ObservableObject {
         guard let f = ficha, let planNuevo = PlanCatalogo.plan(planId), planNuevo.meses > 0 else {
             return (false, nil, "Ese plan se gestiona desde la web.")
         }
+        #if DEBUG
+        // Vista previa: la renovación "sale" sin tocar Firestore, para probar
+        // en el simulador lo que pasa después (volver a la conversación).
+        if VistaPrevia.activa {
+            try? await Task.sleep(for: .seconds(0.6))
+            return (true, Calendar.current.date(byAdding: .month, value: planNuevo.meses, to: Date()), nil)
+        }
+        #endif
         let db = Firestore.firestore()
         let ref = db.collection("subscriptions").document(f.businessId)
         let ahora = Date()

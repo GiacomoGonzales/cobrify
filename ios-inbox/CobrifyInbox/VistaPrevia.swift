@@ -41,9 +41,57 @@ enum VistaPrevia {
         }
     }
 
+    /// `-ficha` abre la ficha de un cliente de mentira en prueba gratis: para
+    /// mirar la fila del RUC con su botón de copiar y "Convertir en cuenta
+    /// real" sin sesión.
+    static let soloFicha = ProcessInfo.processInfo.arguments.contains("-ficha")
+
+    /// El papel de la conversación en `-ficha`: presenta la ficha como hoja,
+    /// igual que la app, para ver que al renovar se cierra todo y se vuelve
+    /// acá de una sola vez.
+    struct AnfitrionDeFicha: View {
+        @State private var abierta = true
+        var body: some View {
+            VStack(spacing: 12) {
+                Text(abierta ? "Conversación" : "De vuelta en la conversación")
+                    .font(.headline)
+                Button("Abrir la ficha") { abierta = true }
+            }
+            .sheet(isPresented: $abierta) {
+                FichaClienteView(businessId: "vp-negocio", alTerminar: { abierta = false })
+            }
+        }
+    }
+
+    /// La ficha que devuelve `FichaStore` en vista previa, para cualquier
+    /// negocio: el simulador no puede leer Firestore sin sesión.
+    static func ficha(_ businessId: String) -> FichaCliente? {
+        FichaCliente(
+            businessId: businessId,
+            nombre: "Pollería El Buen Sabor SAC",
+            ruc: "20512345678",
+            email: "compras@elbuensabor.pe",
+            plan: "trial",
+            planName: "Prueba gratuita",
+            vence: Date().addingTimeInterval(5 * 86400),
+            renewalPrice: nil,
+            accessBlocked: false,
+            monthlyPrice: nil,
+            pagos: [],
+            tieneRenewalPrice: false,
+            comprobantesUsados: 12,
+            comprobantesLimite: 50,
+            registradoEl: Date().addingTimeInterval(-2 * 86400),
+            blockReason: nil,
+            blockedAt: nil
+        )
+    }
+
     @MainActor @ViewBuilder static var pantalla: some View {
         if soloSplash {
             SplashView()
+        } else if soloFicha {
+            AnfitrionDeFicha()
         } else if enBandeja {
             // La app entera: sirve para la bandeja, las carpetas y tambien
             // para Ajustes (apariencia, respuestas rapidas).
