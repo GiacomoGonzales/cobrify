@@ -17,6 +17,8 @@ struct ConversationListView: View {
 
     enum AccionMasiva { case leidas, completadas }
     @State private var confirmarMasivo: AccionMasiva?
+    /// La conversación que se desliza a la derecha para meterla en carpetas.
+    @State private var moverDe: Conversacion?
 
     private var textoMasivo: String {
         let activas = inbox.conversaciones.filter { $0.estado != "completada" }.count
@@ -108,6 +110,13 @@ struct ConversationListView: View {
                                     }.tint(.orange)
                                 }
                             }
+                            // Deslizar a la derecha: meterla en una carpeta sin
+                            // mantener presionado (pedido de Giacomo, 15-set-2026).
+                            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                Button { moverDe = conv } label: {
+                                    Label("Mover a", systemImage: "folder")
+                                }.tint(.indigo)
+                            }
                         }
                     }
                     .listStyle(.plain)
@@ -148,6 +157,11 @@ struct ConversationListView: View {
                     ejecutarMasivo()
                 }
                 Button("Cancelar", role: .cancel) { confirmarMasivo = nil }
+            }
+            .sheet(item: $moverDe) { conv in
+                MoverACarpetaSheet(conversacionId: conv.id, nombre: conv.titulo,
+                                   etiquetasIniciales: conv.etiquetas)
+                    .presentationDetents([.medium, .large])
             }
             .navigationDestination(for: String.self) { id in
                 if let conv = inbox.conversaciones.first(where: { $0.id == id }) {
