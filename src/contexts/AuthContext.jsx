@@ -29,6 +29,7 @@ import { isUserAdmin, isBusinessAdmin, setAsBusinessOwner } from '@/services/adm
 import { getSubscription, hasActiveAccess } from '@/services/subscriptionService'
 import { getUserData } from '@/services/userManagementService'
 import { idsDelNegocio } from '@/utils/arranqueDeSesion'
+import { alcanceInicial, claveDelAlcance } from '@/utils/branchScope'
 import { getEmisores } from '@/services/emisoresService'
 import { MODOS_NEGOCIO } from '@/utils/businessModes'
 import { getActiveBranches } from '@/services/branchService'
@@ -575,23 +576,22 @@ export const AuthProvider = ({ children }) => {
               const branchList = branchesResult.success ? (branchesResult.data || []) : []
               setBranches(branchList)
 
-              // Selección inicial del selector global: localStorage > sucursal del sub-usuario restringido > Todas.
-              let initialScope = 'all'
-              try {
-                const stored = localStorage.getItem(`factuya_branch_scope_${businessId}`)
-                if (stored === 'all' || stored === 'main' || branchList.some(b => b.id === stored)) {
-                  initialScope = stored
-                } else {
-                  // Back-compat: clave antigua que guardaba solo el branchId activo.
-                  const legacy = localStorage.getItem(`factuya_active_branch_${businessId}`)
-                  if (legacy && branchList.some(b => b.id === legacy)) initialScope = legacy
-                }
-              } catch (e) { /* localStorage no disponible */ }
-              // Sub-usuario restringido sin acceso a Principal → su primera sucursal permitida.
-              if (initialScope === 'all' && subUserAllowedBranches.length > 0 && !subUserAllowedBranches.includes('main')) {
-                const firstAllowed = branchList.find(b => subUserAllowedBranches.includes(b.id))
-                if (firstAllowed) initialScope = firstAllowed.id
+              // Selección inicial del selector global: lo que recordaba el navegador
+              // (de este usuario, o lo que quedó del negocio) SOLO si este usuario
+              // puede verlo; si no, Todas, o su primera sucursal si no tiene la
+              // Principal. Antes se aceptaba cualquier sucursal del negocio y a una
+              // sub-usuaria le quedaba Ventas vacía (FERRORAMOS, 15/09/2026).
+              const leerRecordado = (clave) => {
+                try { return localStorage.getItem(clave) } catch { return null /* localStorage no disponible */ }
               }
+              const initialScope = alcanceInicial({
+                recordado: leerRecordado(claveDelAlcance(businessId, firebaseUser.uid)),
+                recordadoDelNegocio: leerRecordado(`factuya_branch_scope_${businessId}`),
+                // Back-compat: clave antigua que guardaba solo el branchId activo.
+                recordadoViejo: leerRecordado(`factuya_active_branch_${businessId}`),
+                sucursales: branchList.map(b => b.id),
+                permitidas: subUserAllowedBranches,
+              })
               setBranchScopeState(initialScope)
             } catch (branchError) {
               console.error('Error al cargar sucursales:', branchError)
@@ -1014,15 +1014,16 @@ export const AuthProvider = ({ children }) => {
     return user.uid
   }
 
-  // Cambiar la sucursal activa (selector global). Persiste por negocio en localStorage.
+  // Cambiar la sucursal activa (selector global). scope: 'all' | 'main' | <branchId>.
   // El modo de negocio efectivo deriva de la sucursal activa (ver effectiveBusinessMode).
-  // Cambiar la selección global de sucursal. scope: 'all' | 'main' | <branchId>. Persiste por negocio.
+  // Se recuerda por negocio Y por usuario: en una PC donde entran varias personas,
+  // la elección de una no le queda a la siguiente (utils/branchScope.claveDelAlcance).
   const setBranchScope = (scope) => {
     const s = scope || 'all'
     setBranchScopeState(s)
     try {
       const bid = getBusinessId()
-      if (bid) localStorage.setItem(`factuya_branch_scope_${bid}`, s)
+      if (bid && user?.uid) localStorage.setItem(claveDelAlcance(bid, user.uid), s)
     } catch (e) { /* localStorage no disponible */ }
   }
   // Compat: callers antiguos (p. ej. POS) pasan un branchId|null. null/'' → Principal ('main').

@@ -80,3 +80,47 @@ export function nombreDeSucursal(branchId, branches = [], nombrePrincipal = 'Pri
   const b = (branches || []).find(x => x.id === branchId)
   return b?.name || nombrePrincipal
 }
+
+/**
+ * Clave con la que el navegador recuerda el selector del header: por negocio Y
+ * por usuario. Antes era solo por negocio, y en una PC donde entran varias
+ * personas la elección de una le quedaba a la siguiente (FERRORAMOS, 15/09/2026).
+ */
+export function claveDelAlcance(businessId, uid) {
+  return `factuya_branch_scope_${businessId}_${uid}`
+}
+
+/**
+ * Con qué alcance arranca el selector del header al entrar.
+ *
+ * Toma lo que el navegador recordaba, en este orden: lo de este usuario, lo que
+ * quedó guardado para el negocio (la clave de antes, compartida por todos los
+ * que entran en ese navegador) y la clave más antigua, que solo guardaba una
+ * sucursal. Pero SOLO si el usuario puede ver ese alcance: antes se aceptaba
+ * cualquier sucursal del negocio, y a una sub-usuaria de la Principal le quedaba
+ * Ventas filtrada a otra sucursal, vacía y sin selector para cambiarla.
+ *
+ * @param recordado            lo guardado para este usuario
+ * @param recordadoDelNegocio  lo guardado para el negocio (la clave compartida de antes)
+ * @param recordadoViejo       la clave más antigua: solo vale si es una sucursal
+ * @param sucursales           ids de las sucursales del negocio
+ * @param permitidas           allowedBranches del sub-usuario ([] = sin restricción; 'main' = la Principal)
+ * @returns 'all' | 'main' | <branchId>
+ */
+export function alcanceInicial({ recordado, recordadoDelNegocio, recordadoViejo, sucursales = [], permitidas = [] } = {}) {
+  const restringido = Array.isArray(permitidas) && permitidas.length > 0
+  const existe = (id) => sucursales.includes(id)
+  const puedeVer = (alcance) => {
+    if (alcance === 'all') return true
+    if (alcance === 'main') return !restringido || permitidas.includes('main')
+    return existe(alcance) && (!restringido || permitidas.includes(alcance))
+  }
+  const candidatos = [recordado, recordadoDelNegocio, existe(recordadoViejo) ? recordadoViejo : null]
+  let alcance = candidatos.find((c) => c && puedeVer(c)) || 'all'
+  // Sub-usuario restringido sin acceso a la Principal: su primera sucursal permitida.
+  if (alcance === 'all' && restringido && !permitidas.includes('main')) {
+    const primera = sucursales.find((id) => permitidas.includes(id))
+    if (primera) alcance = primera
+  }
+  return alcance
+}
