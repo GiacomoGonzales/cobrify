@@ -34,7 +34,7 @@
  * congela el RESULTADO.
  */
 
-import { esParteDeNota } from './notaPorPartes'
+import { esParteDeNota, convertidaDeUnaVez } from './notaPorPartes'
 
 /** Cómo se calcula la comisión de un vendedor. */
 export const COMMISSION_TYPES = [
@@ -198,6 +198,10 @@ export const getInvoiceCommission = (invoice, { sellersById, totalInBase, costIn
   // la nota, que la congeló entera al venderse (utils/notaPorPartes). La parte
   // no trae comisión congelada y sin esto se recalcularía: pagaría dos veces.
   if (esParteDeNota(invoice)) return null
+  // Y una nota convertida de UNA vez tampoco: la venta pasa a su boleta o
+  // factura, que congela su propia comisión al emitirse. Reportes ya la dejaba
+  // fuera; la liquidación no, y pagaba la nota y después también la boleta.
+  if (convertidaDeUnaVez(invoice)) return null
   const frozen = invoice?.commission
   // Una comisión por producto NO tiene tasa única, así que la congelada se
   // reconoce por el importe y no por la tasa. Exigir `rate` la mandaba a

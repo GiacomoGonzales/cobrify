@@ -129,7 +129,7 @@ import { computeSaleCommission } from '@/utils/commissions'
 import { getSellers } from '@/services/sellerService'
 import { markOrderAsPaid, updateOrder, updateOrderStatus, claimOrderForInvoicing, releaseOrderInvoicingClaim, markOrderInvoiced } from '@/services/orderService'
 import { cerrarVinculoDeOrigen } from '@/services/documentLinking'
-import { motivoParaNoFacturarPorPartes, cantidadesPendientes, esNotaPorPartes, esParteDeNota } from '@/utils/notaPorPartes'
+import { motivoParaNoFacturarPorPartes, cantidadesPendientes, esNotaPorPartes, esParteDeNota, notaCobrada } from '@/utils/notaPorPartes'
 import { completeAppointment } from '@/services/appointmentService'
 import { programarRecordatoriosDeVenta } from '@/services/veterinaryService'
 import { crearPaquetesDeVenta } from '@/services/packageService'
@@ -1743,9 +1743,12 @@ export default function POS() {
   // Guardar borrador en localStorage cuando cambian los datos importantes
   useEffect(() => {
     if (!user?.uid || !draftLoadedRef.current) return
-    // Una PARTE de una nota no se guarda como borrador: al recargar volvería
-    // como una venta suelta, que descontaría stock y no se anotaría en la nota.
-    if (parteDeNota) {
+    // Una venta que viene de OTRO documento no se guarda como borrador: al
+    // recargar volvería como una venta suelta, sin su origen. Una nota (entera
+    // o una parte) o una guía que ya descontó stock lo descontarían otra vez, y
+    // la nota o la cotización quedarían sin marcar como convertidas. Mejor un
+    // POS vacío y volver a Ventas o Cotizaciones a convertirla de nuevo.
+    if (parteDeNota || pendingNotaVentaIds?.length > 0 || pendingQuotation || sourceDispatchGuide) {
       localStorage.removeItem(getDraftKey())
       return
     }
@@ -1786,7 +1789,7 @@ export default function POS() {
     }, 500) // Esperar 500ms antes de guardar
 
     return () => clearTimeout(timeoutId)
-  }, [cart, customerData, documentType, payments, discountAmount, discountPercentage, orderType, selectedSeller, currency, exchangeRate, exchangeRateSource, user, parteDeNota])
+  }, [cart, customerData, documentType, payments, discountAmount, discountPercentage, orderType, selectedSeller, currency, exchangeRate, exchangeRateSource, user, parteDeNota, pendingNotaVentaIds, pendingQuotation, sourceDispatchGuide])
 
   // Función para limpiar el borrador del localStorage
   const clearDraft = () => {
@@ -1831,9 +1834,12 @@ export default function POS() {
 
   const holdCurrentSale = () => {
     if (cart.length === 0) return
-    // Una parte de una nota no se deja en espera: al retomarla ya no sería la parte.
-    if (parteDeNota) {
-      toast.error('Una parte de una nota no se puede dejar en espera: emítela o vuelve a Ventas.')
+    // Una venta que viene de una nota (entera o una parte) o de una guía que ya
+    // descontó stock no se deja en espera: la venta aparcada no guarda su
+    // origen, y al retomarla volvería como venta suelta —descontaría el stock
+    // otra vez y no marcaría la nota—.
+    if (parteDeNota || pendingNotaVentaIds?.length > 0 || sourceDispatchGuide?.stockAlreadyDeducted) {
+      toast.error('Una venta que viene de una nota o de una guía no se puede dejar en espera: emítela o vuelve a cargarla después.')
       return
     }
     if (heldSales.length >= 10) {
@@ -5625,6 +5631,19 @@ export default function POS() {
     onlineOrderLoadedRef.current = false
     orderLoadedRef.current = false
     tableLoadedRef.current = false
+    // Y soltar la NOTA DE VENTA (entera o una parte), la cotización y la guía
+    // cargadas, por la misma razón: sin esto, "Limpiar" vaciaba el carrito pero
+    // la siguiente venta —armada a mano, de otro cliente— salía con el vínculo
+    // de la nota: no descontaba stock y marcaba como convertida una nota que no
+    // era la suya.
+    setPendingNotaVentaIds(null)
+    setPendingNotaVentaNumber('')
+    setParteDeNota(null)
+    setPendingQuotation(null)
+    setSourceDispatchGuide(null)
+    notaVentaLoadedRef.current = false
+    quotationLoadedRef.current = false
+    dispatchGuideLoadedRef.current = false
     avisoFaltantesRef.current = ''
     // Resetear al default del negocio, pero respetando los tipos permitidos del
     // usuario logueado. Si el default no está en allowedDocumentTypes (típico en
@@ -6823,19 +6842,36 @@ ${textoDeErrores(revision.errores)}`, 9000)
       }
     }
 
-    // Conversión de siempre: si mientras tanto la nota empezó a facturarse por
-    // partes (otra pestaña, otro usuario), convertirla entera la facturaría dos
-    // veces. Si no se puede leer, la venta sigue como hasta hoy.
+    // Conversión de siempre: se relee la nota antes de tomar correlativo. Si
+    // mientras tanto empezó a facturarse por partes, se convirtió o se anuló
+    // (otra pestaña, otro usuario), convertirla entera la facturaría dos veces.
+    // De paso se anota si la plata YA había entrado con la nota: es lo que la
+    // caja usa para no volver a sumarla el día que se convierte
+    // (utils/notaPorPartes.cuentaEnCaja). Si no se puede leer, la venta sigue
+    // como hasta hoy, sin la marca.
+    let _cobradaEnNota = null
     if (!parteDeNota && pendingNotaVentaIds?.length > 0) {
       try {
         const { doc, getDoc } = await import('firebase/firestore')
         const { db } = await import('@/lib/firebase')
         const snaps = await Promise.all(pendingNotaVentaIds.map(id => getDoc(doc(db, 'businesses', businessId, 'invoices', id))))
-        const conPartes = snaps.find(s => s.exists() && esNotaPorPartes(s.data()))
+        const notas = snaps.map(s => (s.exists() ? { id: s.id, ...s.data() } : null))
+        const conPartes = notas.find(n => n && esNotaPorPartes(n))
         if (conPartes) {
-          abortCheckout(`La nota ${conPartes.data().number || ''} se está facturando por partes: sigue desde Ventas con "Facturar otra parte".`, 9000)
+          abortCheckout(`La nota ${conPartes.number || ''} se está facturando por partes: sigue desde Ventas con "Facturar otra parte".`, 9000)
           return
         }
+        const yaConvertida = notas.find(n => n && n.convertedTo)
+        if (yaConvertida) {
+          abortCheckout(`La nota ${yaConvertida.number || ''} ya se convirtió en ${yaConvertida.convertedTo.number || 'un comprobante'}.`, 9000)
+          return
+        }
+        const anulada = notas.find(n => n && (n.status === 'cancelled' || n.status === 'voided'))
+        if (anulada) {
+          abortCheckout(`La nota ${anulada.number || ''} está anulada y no se puede convertir.`, 9000)
+          return
+        }
+        _cobradaEnNota = notas.every(n => n && notaCobrada(n))
       } catch (errorNotas) {
         console.warn('No se pudo revisar las notas a convertir:', errorNotas)
       }
@@ -7933,8 +7969,8 @@ ${textoDeErrores(revision.errores)}`, 9000)
               }
             : pendingNotaVentaIds.length === 1
               // Con su número: sin él, "Doc. origen" salía en blanco en el comprobante.
-              ? { type: 'nota_venta', id: pendingNotaVentaIds[0], ...(pendingNotaVentaNumber && { number: pendingNotaVentaNumber }) }
-              : { type: 'nota_venta', ids: pendingNotaVentaIds },
+              ? { type: 'nota_venta', id: pendingNotaVentaIds[0], ...(pendingNotaVentaNumber && { number: pendingNotaVentaNumber }), ...(_cobradaEnNota != null && { cobradaEnNota: _cobradaEnNota }) }
+              : { type: 'nota_venta', ids: pendingNotaVentaIds, ...(_cobradaEnNota != null && { cobradaEnNota: _cobradaEnNota }) },
         }),
         // De qué cotización salió. Mismo shape que las notas de venta y las
         // guías: sin esto, desde el comprobante era imposible saberlo.
@@ -9262,7 +9298,7 @@ ${textoDeErrores(revision.errores)}`, 9000)
                       lineas: (_parteDeNota.lineas || []).map(({ i, cantidad, itemDiscount }) => ({ i, cantidad, itemDiscount })),
                       descuentoGeneral: Number(_parteDeNota.descuentoGeneral) || 0,
                     }
-                  : { type: 'nota_venta', ids: _pendingNotaVentaIds },
+                  : { type: 'nota_venta', ids: _pendingNotaVentaIds, ...(_cobradaEnNota != null && { cobradaEnNota: _cobradaEnNota }) },
                 documentType: bgDocumentType,
                 invoiceId: bgInvoiceId,
                 invoiceNumber: bgNumberResult.number,

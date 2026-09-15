@@ -12,7 +12,7 @@ import {
 import CommissionPayoutModal from '@/components/CommissionPayoutModal'
 import MonthSelect from '@/components/MonthSelect'
 import { getDocumentTotalInBase } from '@/utils/currency'
-import { convertidaDeUnaVez, ventaPendienteDe } from '@/utils/notaPorPartes'
+import { convertidaDeUnaVez, ventaPendienteDe, notasDeOrigen } from '@/utils/notaPorPartes'
 import { getInvoices, getRecentInvoices, getInvoicesBySeller } from '@/services/firestoreService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { sucursalesDelVendedor, etiquetaSucursales } from '@/utils/sellerBranches'
@@ -286,6 +286,9 @@ export default function Sellers() {
       const ventas = []
       for (const invoice of res.data || []) {
         if (liquidadas.has(invoice.id)) continue
+        // Convertido desde una nota que YA se liquidó: esa venta se pagó con la
+        // nota. La boleta traía su propia comisión y se pagaba otra vez.
+        if (notasDeOrigen(invoice).some(id => liquidadas.has(id))) continue
         if (!ventaComisionable(invoice)) continue
         if (!ventaCobrada(invoice)) continue
 

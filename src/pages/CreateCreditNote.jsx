@@ -1357,9 +1357,12 @@ export default function CreateCreditNote() {
         // Idempotencia (Fase 2): si el stock ya se restauró antes (anulación previa),
         // NO volver a devolverlo.
         const stockReturnCodes = ['01', '06', '07']
-        // Una parte de una nota facturada por partes no descontó stock: lo
-        // descontó la nota, que sigue vigente. No hay nada que devolver.
-        if (stockReturnCodes.includes(formData.discrepancyCode) && selectedInvoice.stockRestored !== true && !esParteDeNota(selectedInvoice)) {
+        // Un comprobante que NO descontó stock (convertido desde una nota de
+        // venta, una parte, o desde una guía que ya lo descontó) no tiene nada
+        // que devolver: el stock salió con el documento de origen, que sigue
+        // vigente. Devolverlo acá inflaba el inventario y, si después se anulaba
+        // la nota, volvía a entrar. Igual que la baja en SUNAT.
+        if (stockReturnCodes.includes(formData.discrepancyCode) && selectedInvoice.stockRestored !== true && selectedInvoice.skipStockDeduction !== true) {
           try {
             const { updateWarehouseStock, createStockMovement } = await import('@/services/warehouseService')
             const { getProducts, updateProduct } = await import('@/services/firestoreService')

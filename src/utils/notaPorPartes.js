@@ -24,6 +24,11 @@
  *
  * Una parte anulada queda en la lista marcada `anulada`, para que se vea que
  * existió, y deja de contar: su monto y sus cantidades vuelven a la nota.
+ *
+ * El Convertir de siempre (la nota entera en UN comprobante) comparte lo que
+ * tiene sentido compartir: la caja cuenta al documento con el que entró la
+ * plata (`cuentaEnCaja`), los productos del turno y el stock son de la nota
+ * (`vieneDeUnaNota`) y la comisión pasa al comprobante (utils/commissions).
  */
 
 const DECIMALES_CANTIDAD = 4
@@ -52,6 +57,24 @@ export function esNotaPorPartes(doc) {
 /** ¿Este comprobante es una parte de una nota de venta? */
 export function esParteDeNota(doc) {
   return doc?.convertedFrom?.type === 'nota_venta' && doc.convertedFrom.porPartes === true
+}
+
+/** ¿Este comprobante salió de una nota de venta (entera o por partes)? */
+export function vieneDeUnaNota(doc) {
+  return doc?.convertedFrom?.type === 'nota_venta'
+}
+
+/** Ids de las notas de las que salió este comprobante (una, varias o ninguna). */
+export function notasDeOrigen(doc) {
+  if (!vieneDeUnaNota(doc)) return []
+  const cf = doc.convertedFrom
+  return Array.isArray(cf.ids) ? cf.ids.filter(Boolean) : (cf.id ? [cf.id] : [])
+}
+
+/** ¿La nota ya está cobrada completa? (sin `paymentStatus` = venta al contado de antes) */
+export function notaCobrada(doc) {
+  if (doc?.status !== 'paid') return false
+  return doc.paymentStatus !== 'pending' && doc.paymentStatus !== 'partial'
 }
 
 /**
@@ -94,9 +117,30 @@ export function factorDeVenta(doc) {
   return fraccionPendiente(doc)
 }
 
-/** ¿Este comprobante cuenta en la CAJA? Las partes no: el dinero entró con la nota. */
+/**
+ * ¿Este comprobante cuenta en la CAJA?
+ *
+ * El dinero de una venta entra UNA vez. Cuando una nota se convierte en boleta
+ * o factura, la caja cuenta al documento con el que entró la plata:
+ *   - Una parte de una nota: no cuenta, entró con la nota.
+ *   - Convertido de una nota que YA estaba cobrada: no cuenta, por lo mismo. Lo
+ *     dice la marca `cobradaEnNota`, que el POS pone al convertir. Sin marca
+ *     —una conversión anterior a esta regla, o una nota al crédito que recién
+ *     se cobró al convertirla— cuenta él, como siempre.
+ *   - Una nota convertida: cuenta si su plata entró con ella (misma marca en
+ *     `convertedTo`, o completada por partes). Si no, cuenta su comprobante.
+ * Así una nota cobrada en una caja ya cerrada no vuelve a sumar en la caja del
+ * día en que se convierte.
+ */
 export function cuentaEnCaja(doc) {
-  return !esParteDeNota(doc)
+  if (!doc) return false
+  if (vieneDeUnaNota(doc)) {
+    return doc.convertedFrom.porPartes !== true && doc.convertedFrom.cobradaEnNota !== true
+  }
+  if (doc.documentType === 'nota_venta' && doc.convertedTo) {
+    return doc.convertedTo.porPartes === true || doc.convertedTo.cobradaEnNota === true
+  }
+  return true
 }
 
 /** Cantidad que falta facturar de cada línea de la nota (mismo orden que `items`). */
@@ -264,9 +308,7 @@ export function motivoParaNoFacturarPorPartes(nota) {
   // El POS no hereda la moneda de la nota al convertir: una nota en dólares
   // saldría facturada en soles y la cuenta de lo pendiente no cerraría.
   if (nota.currency && nota.currency !== 'PEN') return 'Por ahora solo se facturan por partes las notas en soles.'
-  if (nota.status !== 'paid' || nota.paymentStatus === 'pending' || nota.paymentStatus === 'partial') {
-    return 'Por ahora solo se facturan por partes las notas cobradas completas.'
-  }
+  if (!notaCobrada(nota)) return 'Por ahora solo se facturan por partes las notas cobradas completas.'
   return null
 }
 

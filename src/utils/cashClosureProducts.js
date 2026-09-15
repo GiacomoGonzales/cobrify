@@ -11,7 +11,7 @@
  * que decir lo mismo.
  */
 
-import { esParteDeNota } from './notaPorPartes'
+import { vieneDeUnaNota } from './notaPorPartes'
 
 /** Cantidad sin ceros de relleno: 2 -> "2", 1.5 -> "1.5". */
 const cantidadCorta = (n) => {
@@ -70,9 +70,11 @@ const cuenta = (inv) => {
   if (st === 'cancelled' || st === 'voided') return false
   const ss = inv?.sunatStatus
   if (ss === 'voided' || ss === 'voiding') return false
-  // Una parte de una nota facturada por partes no es otra venta del turno: los
-  // productos salieron con la nota (utils/notaPorPartes).
-  if (esParteDeNota(inv)) return false
+  // Un comprobante convertido desde una nota de venta —entero o una parte— no
+  // es otra venta del turno: los productos salieron con la nota, que es la que
+  // cuenta (utils/notaPorPartes). Antes, si caían en el mismo turno, se
+  // listaban los dos.
+  if (vieneDeUnaNota(inv)) return false
   return true
 }
 

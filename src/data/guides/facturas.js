@@ -201,7 +201,11 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Si vendiste con nota de venta y después el cliente pide su boleta o factura, usa **Convertir a Comprobante**: se abre el POS con los productos ya cargados para que emitas el documento formal. La nota original queda marcada como convertida y no vuelve a sumar en tus totales.',
+          text: 'Si vendiste con nota de venta y después el cliente pide su boleta o factura, usa **Convertir a Comprobante**: se abre el POS con los productos ya cargados para que emitas el documento formal. La nota original queda marcada como convertida y no vuelve a sumar en tus ventas.',
+        },
+        {
+          type: 'texto',
+          text: 'En la **caja** pasa al revés: si la nota ya estaba cobrada, la plata entró con ella, así que el comprobante nuevo no vuelve a sumar en la caja del día en que lo emites (ni en el Flujo de Caja). El **stock** y los productos del cierre también son de la nota, y la **comisión** del vendedor se cuenta una sola vez. Si la nota estaba al crédito y recién la cobras al convertirla, ahí sí suma el comprobante.',
         },
         {
           type: 'texto',

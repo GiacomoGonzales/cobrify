@@ -17,7 +17,8 @@ import { markNotaVentaAsConverted, registrarParteDeNota, anularParteDeNota } fro
 /**
  * @param {object} p
  * @param {string} p.businessId
- * @param {object} p.convertedFrom  `{ type, id }` o `{ type, ids: [...] }`
+ * @param {object} p.convertedFrom  `{ type, id }` o `{ type, ids: [...] }`; una nota trae
+ *                                  además `cobradaEnNota` si su plata ya había entrado (la caja lo lee)
  * @param {string} p.documentType   tipo del comprobante EMITIDO
  * @param {string} p.invoiceId      id del comprobante emitido
  * @param {string} p.invoiceNumber  número legible del comprobante emitido
@@ -70,7 +71,9 @@ export async function cerrarVinculoDeOrigen({
       // que markQuotationAsConverted. Normalizarlo acá es media razón de ser
       // de esta función.
       await Promise.all(ids.map(id =>
-        markNotaVentaAsConverted(businessId, id, documentType, invoiceId, invoiceNumber)
+        markNotaVentaAsConverted(businessId, id, documentType, invoiceId, invoiceNumber, {
+          cobradaEnNota: convertedFrom.cobradaEnNota,
+        })
       ))
       return { ok: true, marcados: ids.length }
     }

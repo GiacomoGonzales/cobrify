@@ -1804,7 +1804,7 @@ export const convertNotaVentaToBoleta = convertNotaVentaToComprobante
 /**
  * Marcar una nota de venta como convertida a comprobante
  */
-export const markNotaVentaAsConverted = async (businessId, notaVentaId, comprobanteType, comprobanteId, comprobanteNumber) => {
+export const markNotaVentaAsConverted = async (businessId, notaVentaId, comprobanteType, comprobanteId, comprobanteNumber, extra = {}) => {
   try {
     const notaRef = doc(db, 'businesses', businessId, 'invoices', notaVentaId)
     await updateDoc(notaRef, {
@@ -1812,6 +1812,9 @@ export const markNotaVentaAsConverted = async (businessId, notaVentaId, comproba
         type: comprobanteType,
         id: comprobanteId,
         number: comprobanteNumber,
+        // `cobradaEnNota`: la plata ya había entrado con la nota. Lo lee la
+        // caja para saber cuál de los dos documentos cuenta (utils/notaPorPartes).
+        ...(typeof extra.cobradaEnNota === 'boolean' && { cobradaEnNota: extra.cobradaEnNota }),
         convertedAt: serverTimestamp(),
       },
       updatedAt: serverTimestamp(),

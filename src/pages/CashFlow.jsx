@@ -454,8 +454,9 @@ export default function CashFlow() {
       // Archivadas no suman a ingresos
       if (inv.archived === true) return false
 
-      // Una parte de una nota facturada por partes no es plata nueva: entró con
-      // la nota (utils/notaPorPartes).
+      // Nota convertida en boleta o factura (entera o por partes): la plata
+      // entró UNA vez, y cuenta el documento con el que entró. Antes sumaban la
+      // nota y también su boleta (utils/notaPorPartes).
       if (!cuentaEnCaja(inv)) return false
 
       // Una factura se considera como ingreso si:
