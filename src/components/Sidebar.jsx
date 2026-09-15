@@ -2570,9 +2570,14 @@ function Sidebar() {
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar. Pegado arriba y abajo de lo visible (inset-y-0) en vez de
+          darle un alto: con `h-screen` + `h-[100dvh]` ganaba el que Tailwind
+          escribe después en el CSS (h-screen, 100vh), y en Chrome del celular
+          100vh incluye la barra del navegador: el pie con "Cerrar sesión"
+          quedaba debajo de la pantalla (15/09/2026). Así mide lo que se ve en
+          cualquier navegador, sepa o no de dvh. */}
       <aside
-        className={`fixed left-0 top-0 h-screen h-[100dvh] bg-white border-r border-gray-200 transition-all duration-300 z-50 w-64 ${sidebarCollapsed ? 'md:w-16' : ''} sidebar-ios flex flex-col overflow-hidden
+        className={`fixed inset-y-0 left-0 bg-white border-r border-gray-200 transition-all duration-300 z-50 w-64 ${sidebarCollapsed ? 'md:w-16' : ''} sidebar-ios flex flex-col overflow-hidden
           ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
           md:translate-x-0`}
       >
