@@ -1448,14 +1448,16 @@ export default function HotelReservations() {
                       const limite = textoDelLimite(reservation.reprogramacion, hoyLima)
                       return <p className={`text-xs mt-1 ${limite.vencida ? 'text-red-600' : 'text-amber-700'}`}>{limite.texto}</p>
                     })()}
-                    <div className="flex items-center justify-between mt-2">
+                    {/* Con nombre en los botones nuevos la fila puede no entrar al lado del
+                        precio en un celular angosto: los botones bajan a su propia línea. */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
                       <span className="text-sm font-medium text-gray-900">
                         {reservation.pricingMode === 'hourly'
                           ? `${reservation.hours || 0} hora${(reservation.hours || 0) !== 1 ? 's' : ''}`
                           : `${reservation.nights || calculateNights(reservation.checkInDate, reservation.checkOutDate)} noches`}
                         {' - '}{formatCurrency(reservation.total || 0)}
                       </span>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-wrap items-center justify-end gap-1.5 ml-auto">
                         {reservation.status === 'requested' && (
                           <>
                             <Button
@@ -1493,14 +1495,16 @@ export default function HotelReservations() {
                             <LogOut className="w-3 h-3" />
                           </Button>
                         )}
+                        {/* Con nombre y no solo ícono: en táctil no hay texto al pasar el dedo y
+                            la dueña de Bamboo no encontraba "Reprogramar" (15/09/2026). */}
                         {puedeReprogramarse(reservation) && (
                           <Button size="sm" variant="outline" onClick={() => setReprogramando(reservation)} title="Reprogramar con fecha abierta">
-                            <CalendarClock className="w-3 h-3" />
+                            <CalendarClock className="w-3 h-3 mr-1" /> Reprogramar
                           </Button>
                         )}
                         {reservation.status === ESTADO_REPROGRAMADA && (
                           <Button size="sm" onClick={() => openEditModal(reservation)} title="Asignar nuevas fechas">
-                            <CalendarDays className="w-3 h-3" />
+                            <CalendarDays className="w-3 h-3 mr-1" /> Asignar fechas
                           </Button>
                         )}
                         {!['cancelled', 'no_show'].includes(reservation.status) && (
@@ -1511,7 +1515,7 @@ export default function HotelReservations() {
                             title={tieneRegistro(reservation) ? 'Registro de huéspedes completo' : 'Registro de huéspedes pendiente'}
                             className={tieneRegistro(reservation) ? '!text-green-700 !border-green-300' : ''}
                           >
-                            <ClipboardList className="w-3 h-3" />
+                            <ClipboardList className="w-3 h-3 mr-1" /> Registro
                           </Button>
                         )}
                         <Button size="sm" variant="outline" onClick={() => openFolio(reservation)}>
