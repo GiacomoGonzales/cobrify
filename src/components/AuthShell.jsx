@@ -1,3 +1,7 @@
+import { useEffect } from 'react'
+import { Capacitor } from '@capacitor/core'
+import { StatusBar, Style } from '@capacitor/status-bar'
+
 /**
  * AuthShell — Fondo y estilo de la landing (Cobrify) para páginas de autenticación.
  * Reutilizable para ir actualizando el estilo de Login, Register, etc. de forma consistente.
@@ -27,6 +31,18 @@ const TONOS = {
 
 export default function AuthShell({ children, className = 'max-w-md', tono = 'cobrify' }) {
   const t = TONOS[tono] || TONOS.cobrify
+
+  // En la app nativa la barra de estado lleva texto blanco (App.jsx), porque
+  // dentro de la app la franja de arriba es del color de la marca. Sobre este
+  // fondo claro el texto blanco desaparece: la hora y la batería no se ven en
+  // el login ni en la espera del arranque. Mientras esta cáscara esté montada
+  // va oscuro y al salir vuelve a blanco. Mismo patrón que Chat y AdminLayout.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return undefined
+    StatusBar.setStyle({ style: Style.Light }).catch(() => {})
+    return () => { StatusBar.setStyle({ style: Style.Dark }).catch(() => {}) }
+  }, [])
+
   return (
     <div className="auth-shell relative min-h-screen flex items-center justify-center p-4">
       <style>{`

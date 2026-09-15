@@ -16,7 +16,10 @@ const config: CapacitorConfig = {
     SplashScreen: {
       launchShowDuration: 2000,
       launchAutoHide: true,
-      backgroundColor: '#2563EB',
+      // El fondo claro del login (#F4F8FF): el lienzo azul entero era muy
+      // fuerte y ademas desentonaba con la pantalla de espera clara que sigue.
+      // Las imagenes splash.png de android/ y iOS llevan el mismo fondo.
+      backgroundColor: '#F4F8FF',
       showSpinner: false,
       launchFadeOutDuration: 300,
       splashFullScreen: true,
