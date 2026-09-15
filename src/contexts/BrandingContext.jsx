@@ -14,6 +14,7 @@ import {
 } from '@/services/brandingService'
 import { useLocation } from 'react-router-dom'
 import { estaEnElChat, MARCA_CHAT } from '@/utils/dominioChat'
+import { pestanaDeLaTienda } from '@/utils/pestanaDelCatalogo'
 import { seccionDeLaRuta, recordarTitulo } from '@/utils/tituloDePestana'
 
 const BrandingContext = createContext({
@@ -187,9 +188,11 @@ export function BrandingProvider({ children }) {
   useEffect(() => {
     if (!brandingLoaded) return
 
-    // No pisar título/favicon en rutas públicas de catálogo/menú (lo maneja CatalogoPublico)
+    // No pisar título/favicon en rutas públicas de catálogo/menú (lo maneja CatalogoPublico),
+    // ni en una tienda con dominio propio, que vive en "/", "/tienda", "/legal/..." y
+    // "/reclamos" (utils/pestanaDelCatalogo).
     const path = window.location.pathname
-    if (path.startsWith('/catalogo/') || path.startsWith('/menu/')) return
+    if (path.startsWith('/catalogo/') || path.startsWith('/menu/') || pestanaDeLaTienda()) return
 
     // La bandeja del chat tiene marca propia y no la resuelve este contexto:
     // sin esta salida, al terminar de cargar la marca por defecto se volvia a

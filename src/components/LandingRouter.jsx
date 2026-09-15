@@ -8,6 +8,7 @@ import LandingPageV2 from '@/pages/LandingPageV2'
 import ResellerLandingPage from '@/pages/ResellerLandingPage'
 import CatalogoPublico from '@/pages/CatalogoPublico'
 import { Loader2 } from 'lucide-react'
+import { tomarLaPestana } from '@/utils/pestanaDelCatalogo'
 
 // El Libro de Reclamaciones de un catálogo con dominio propio (/reclamos):
 // bajo demanda, para no cargarlo en la landing de todos.
@@ -168,11 +169,14 @@ export default function LandingRouter({ subpagina = null }) {
             const bizData = { id: bizDoc.id, ...bizDoc.data() }
             console.log('✅ LandingRouter: Found catalog domain:', normalizedHost, '| mode:', bizData.businessMode)
 
-            // Actualizar título y favicon inmediatamente con datos del negocio
-            const businessName = bizData.businessName || bizData.name || normalizedHost
-            const logoUrl = bizData.catalogLogoUrl || bizData.logoUrl || null
+            // Título e ícono de inmediato con los datos de la tienda (después
+            // CatalogoPublico pone los de cada página). Nombre comercial primero y
+            // sin "Sistema de Facturación": esta es su tienda, no el sistema.
+            const businessName = bizData.name || bizData.businessName || normalizedHost
+            const logoUrl = bizData.catalogFaviconUrl || bizData.catalogLogoUrl || bizData.logoUrl || null
             const catalogColor = bizData.catalogColor || null
-            updatePageBranding(businessName, logoUrl, catalogColor)
+            updatePageBranding(null, logoUrl, catalogColor)
+            document.title = businessName
 
             setCatalogDomain(normalizedHost)
             setCatalogBusinessData(bizData)
@@ -192,6 +196,24 @@ export default function LandingRouter({ subpagina = null }) {
 
     detectReseller()
   }, [searchParams])
+
+  // Con dominio propio la pestaña es de la tienda en todas sus páginas: sin
+  // esto, BrandingContext le volvía a poner el título y el ícono de Cobrify en
+  // cada cambio de página (utils/pestanaDelCatalogo).
+  useEffect(() => {
+    if (catalogDomain) return tomarLaPestana()
+    return undefined
+  }, [catalogDomain])
+
+  // El Libro de Reclamaciones no es CatalogoPublico: su título y su ícono los
+  // pone esto, con el mismo ícono que el resto de la tienda.
+  useEffect(() => {
+    if (!catalogDomain || subpagina !== 'reclamos' || !catalogBusinessData) return
+    const nombre = catalogBusinessData.name || catalogBusinessData.businessName || catalogDomain
+    const icono = catalogBusinessData.catalogFaviconUrl || catalogBusinessData.catalogLogoUrl || catalogBusinessData.logoUrl
+    document.title = `Libro de Reclamaciones | ${nombre}`
+    if (icono) updatePageBranding(null, icono, null)
+  }, [catalogDomain, subpagina, catalogBusinessData])
 
   // Mostrar loading mientras detectamos (neutro para no mostrar branding de Cobrify)
   if (loading) {

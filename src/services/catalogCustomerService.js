@@ -17,6 +17,7 @@
 import {
   GoogleAuthProvider,
   signInWithPopup,
+  browserPopupRedirectResolver,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
@@ -85,7 +86,11 @@ export const catalogSignInWithGoogle = async (businessId) => {
     // Forzar el selector de cuenta: en un equipo compartido (bodega, tablet)
     // no queremos que entre solo con la última cuenta usada.
     provider.setCustomParameters({ prompt: 'select_account' })
-    const result = await signInWithPopup(catalogAuth, provider)
+    // catalogAuth nace con initializeAuth sin popupRedirectResolver (lib/firebase)
+    // y, sin él, signInWithPopup corta con auth/argument-error antes de abrir la
+    // ventana: el botón de Google no funcionaba en ninguna tienda (reporte de
+    // CITEX, 15-set-2026). Se lo pasamos aquí.
+    const result = await signInWithPopup(catalogAuth, provider, browserPopupRedirectResolver)
     await ensureCatalogCustomerProfile(businessId, result.user)
     return { success: true, user: result.user }
   } catch (error) {
