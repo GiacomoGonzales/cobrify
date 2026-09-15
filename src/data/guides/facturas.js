@@ -18,7 +18,7 @@
  */
 export default {
   id: 'facturas',
-  actualizado: '14/09/2026',
+  actualizado: '15/09/2026',
   intro:
     'Ventas es el historial de todo lo que emitiste: facturas, boletas, notas de venta, notas de crédito y de débito. Desde acá consultas, cobras lo pendiente, corriges errores, reimprimes y descargas. Es la página a la que vuelves cuando algo de una venta pasada necesita atención.',
 
@@ -230,6 +230,7 @@ export default {
           type: 'pasos',
           items: [
             'Cada parte se lleva la misma proporción de cada producto y de los descuentos. La última toma exactamente lo que falta, así la nota cierra sin céntimos sueltos.',
+            'Si la nota va en unidades enteras, con **Cantidades enteras** marcado la parte también: se redondea sin pasarse del monto que escribiste y la ventana te muestra el total real de la parte. Lo que no entra queda para las próximas. Desmárcalo si prefieres la proporción exacta con decimales.',
             'En el POS la parte sale tal cual y al contado: no se cambian productos, cantidades, precios ni el descuento. Solo eliges Boleta o Factura y emites.',
             'La nota muestra sus comprobantes, cuánto se facturó y cuánto falta. Cuando se completa, queda como facturada en partes.',
             'El stock y la caja no se mueven: los movió la nota cuando se vendió. Las partes no vuelven a entrar a la caja, y la comisión del vendedor sigue siendo la de la nota.',

@@ -226,6 +226,21 @@ export function ventaPendienteDe(doc) {
   return copia
 }
 
+/** ¿Esta línea de la nota va en unidades enteras, y lo que falta de ella también? */
+const lineaEntera = (it, pendiente) => {
+  const q = Number(it?.quantity) || 0
+  return q > 0 && Number.isInteger(q) && Number.isInteger(pendiente)
+}
+
+/**
+ * ¿Alguna línea de la nota va en unidades enteras? Es cuando tiene sentido que
+ * las partes también: nadie factura 32.2034 tubos (FERRORAMOS, 15/09/2026).
+ */
+export function admiteCantidadesEnteras(nota) {
+  const pendientes = cantidadesPendientes(nota)
+  return itemsDe(nota).some((it, i) => lineaEntera(it, pendientes[i]) && pendientes[i] > 0)
+}
+
 /**
  * Las líneas de la PRÓXIMA parte, para un monto pedido.
  *
@@ -235,38 +250,78 @@ export function ventaPendienteDe(doc) {
  * nota cierra sin céntimos sueltos. El descuento de una línea se reparte igual
  * que su cantidad, y el descuento general igual que el monto.
  *
+ * Con `enteras`, las líneas que van en unidades enteras llevan unidades
+ * enteras: se toma la parte entera de cada tajada y se suma una unidad a las
+ * que más cerca estaban de la siguiente, mientras el total no pase del monto
+ * pedido. La parte queda un poco por debajo del monto, nunca por encima, y el
+ * descuento general se reparte según lo que de verdad lleva. Las líneas con
+ * decimales siguen en proporción y la última parte no cambia.
+ *
  * El total real de la parte lo calcula el POS con estas líneas; puede diferir
  * del monto pedido en algún céntimo por el redondeo del IGV.
  *
- * @returns {{ lineas: Array<{i: number, cantidad: number, itemDiscount: number}>, ultima: boolean, descuentoGeneral: number }}
+ * @returns {{ lineas: Array<{i: number, cantidad: number, itemDiscount: number}>, ultima: boolean, descuentoGeneral: number, enteras: boolean }}
  */
-export function lineasDeLaParte(nota, monto) {
+export function lineasDeLaParte(nota, monto, { enteras = false } = {}) {
   const items = itemsDe(nota)
   const total = Number(nota?.total) || 0
   const pendientes = cantidadesPendientes(nota)
   const pedido = redondear(monto)
   const ultima = pedido >= montoPendiente(nota)
   const factor = total > 0 ? pedido / total : 0
-
-  const lineas = []
-  items.forEach((it, i) => {
-    const q = Number(it.quantity) || 0
-    if (q <= 0) return
-    const cantidad = ultima ? pendientes[i] : Math.min(pendientes[i], redondear(q * factor, DECIMALES_CANTIDAD))
-    if (cantidad <= 0) return
-    const descuento = Number(it.itemDiscount) || 0
-    const itemDiscount = descuento <= 0 ? 0
-      : ultima ? Math.max(0, redondear(descuento - descuentoFacturado(nota, i)))
-        : redondear(descuento * cantidad / q)
-    lineas.push({ i, cantidad, itemDiscount })
-  })
-
   const general = Number(nota?.globalDiscount) || 0
-  const descuentoGeneral = general <= 0 ? 0
+
+  // Cantidad de cada línea de la nota en esta parte (0 = no va).
+  const cantidades = items.map((it, i) => {
+    const q = Number(it.quantity) || 0
+    if (q <= 0) return 0
+    return ultima ? pendientes[i] : Math.min(pendientes[i], redondear(q * factor, DECIMALES_CANTIDAD))
+  })
+  const descuentoDeLinea = (i, cantidad) => {
+    const q = Number(items[i].quantity) || 0
+    const descuento = Number(items[i].itemDiscount) || 0
+    if (descuento <= 0 || cantidad <= 0) return 0
+    return ultima ? Math.max(0, redondear(descuento - descuentoFacturado(nota, i)))
+      : redondear(descuento * cantidad / q)
+  }
+
+  let descuentoGeneral = general <= 0 ? 0
     : ultima ? Math.max(0, redondear(general - descuentoGeneralFacturado(nota)))
       : redondear(general * factor)
 
-  return { lineas, ultima, descuentoGeneral }
+  const esEntera = items.map((it, i) => lineaEntera(it, pendientes[i]))
+  const usarEnteras = enteras && !ultima && esEntera.some(Boolean)
+  if (usarEnteras) {
+    // Lo que vale la nota antes del descuento general, para repartirlo según lo que lleve la parte.
+    const brutoNota = items.reduce((s, it) => s + precioDe(it) * (Number(it.quantity) || 0) - (Number(it.itemDiscount) || 0), 0)
+    const totalCon = (cant) => {
+      const bruto = cant.reduce((s, c, i) => s + (c > 0 ? precioDe(items[i]) * c - descuentoDeLinea(i, c) : 0), 0)
+      const dg = general > 0 && brutoNota > 0 ? redondear(general * bruto / brutoNota) : 0
+      return { total: redondear(bruto - dg), dg }
+    }
+    const exactas = cantidades.slice()
+    esEntera.forEach((entera, i) => {
+      if (entera) cantidades[i] = Math.min(pendientes[i], Math.floor(exactas[i] + 1e-9))
+    })
+    // Una unidad más a las que más cerca estaban de la siguiente, sin pasarse del monto.
+    const candidatas = items.map((_, i) => i)
+      .filter((i) => esEntera[i] && cantidades[i] < pendientes[i] && exactas[i] - cantidades[i] > 1e-9)
+      .sort((a, b) => (exactas[b] - cantidades[b]) - (exactas[a] - cantidades[a]) || a - b)
+    for (const i of candidatas) {
+      const conUnaMas = cantidades.slice()
+      conUnaMas[i] += 1
+      if (totalCon(conUnaMas).total <= pedido + 0.005) cantidades[i] = conUnaMas[i]
+    }
+    descuentoGeneral = totalCon(cantidades).dg
+  }
+
+  const lineas = []
+  cantidades.forEach((cantidad, i) => {
+    if (cantidad <= 0) return
+    lineas.push({ i, cantidad, itemDiscount: descuentoDeLinea(i, cantidad) })
+  })
+
+  return { lineas, ultima, descuentoGeneral, enteras: usarEnteras }
 }
 
 /**
@@ -276,10 +331,11 @@ export function lineasDeLaParte(nota, monto) {
  * nada cambió; `items` son las líneas de la nota con la cantidad y el descuento
  * de esta parte, listas para el carrito. `totalEstimado` es lo que debería
  * salir: el POS lo recalcula con el IGV y puede diferir en algún céntimo.
+ * `opciones` pasa tal cual a `lineasDeLaParte` (p. ej. `{ enteras: true }`).
  */
-export function parteParaElPOS(nota, monto) {
+export function parteParaElPOS(nota, monto, opciones) {
   const items = itemsDe(nota)
-  const { lineas, ultima, descuentoGeneral } = lineasDeLaParte(nota, monto)
+  const { lineas, ultima, descuentoGeneral, enteras } = lineasDeLaParte(nota, monto, opciones)
   const conPrecio = lineas.map((l) => ({ ...l, precio: precioDe(items[l.i]) }))
   const bruto = conPrecio.reduce((s, l) => s + l.precio * l.cantidad - (Number(l.itemDiscount) || 0), 0)
   return {
@@ -293,6 +349,8 @@ export function parteParaElPOS(nota, monto) {
     descuentoGeneral,
     totalEstimado: Math.max(0, redondear(bruto - descuentoGeneral)),
     ultima,
+    // Se repartió en unidades enteras: la ventana avisa si queda por debajo del monto.
+    enteras,
     // Número de parte único aunque haya anuladas: "Parte 3" no se repite.
     parte: (Array.isArray(nota?.facturasParciales) ? nota.facturasParciales.length : 0) + 1,
   }

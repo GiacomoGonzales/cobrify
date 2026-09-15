@@ -4,7 +4,7 @@ import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import { formatCurrency } from '@/lib/utils'
-import { montoFacturado, montoPendiente, parteParaElPOS } from '@/utils/notaPorPartes'
+import { admiteCantidadesEnteras, montoFacturado, montoPendiente, parteParaElPOS } from '@/utils/notaPorPartes'
 
 /**
  * FACTURAR UNA NOTA DE VENTA POR PARTES.
@@ -87,11 +87,19 @@ export function ResumenDePartes({ nota }) {
 export default function FacturarPorPartesModal({ nota, onClose, onArmar }) {
   const pendiente = montoPendiente(nota)
   const [monto, setMonto] = useState('')
+  // Unidades enteras cuando la nota va en unidades enteras: nadie factura 32.2034 tubos.
+  const puedeEnteras = useMemo(() => admiteCantidadesEnteras(nota), [nota])
+  const [enteras, setEnteras] = useState(puedeEnteras)
   const valor = Number(String(monto).replace(',', '.'))
   const pedido = Number.isFinite(valor) && valor > 0 ? Math.min(valor, pendiente) : 0
-  const parte = useMemo(() => (pedido > 0 ? parteParaElPOS(nota, pedido) : null), [nota, pedido])
+  const parte = useMemo(
+    () => (pedido > 0 ? parteParaElPOS(nota, pedido, { enteras: puedeEnteras && enteras }) : null),
+    [nota, pedido, puedeEnteras, enteras],
+  )
   const sinLineas = !!parte && parte.lineas.length === 0
   const puedeArmar = !!parte && !sinLineas
+  // Con unidades enteras la parte queda un poco por debajo del monto escrito.
+  const quedaDistinto = !!parte && parte.enteras && Math.abs(parte.totalEstimado - pedido) >= 0.01
 
   return (
     <Modal isOpen onClose={onClose} title={`Facturar por partes · ${nota?.number || ''}`} size="lg">
@@ -117,8 +125,21 @@ export default function FacturarPorPartesModal({ nota, onClose, onArmar }) {
               Todo lo que falta
             </Button>
           </div>
+          {puedeEnteras && (
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={enteras}
+                onChange={(e) => setEnteras(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              Cantidades enteras
+            </label>
+          )}
           <p className="text-xs text-gray-500">
-            Cada producto de la nota va en la misma proporción. La última parte toma exactamente lo que falta.
+            {puedeEnteras && enteras
+              ? 'Cada producto va en unidades enteras, en proporción y sin pasarse del monto. La última parte toma exactamente lo que falta.'
+              : 'Cada producto de la nota va en la misma proporción. La última parte toma exactamente lo que falta.'}
           </p>
           {valor > pendiente + 0.004 && (
             <p className="text-xs text-amber-700">
@@ -169,13 +190,22 @@ export default function FacturarPorPartesModal({ nota, onClose, onArmar }) {
                 </tfoot>
               </table>
             </div>
+            {quedaDistinto && (
+              <p className="text-xs text-amber-700">
+                Con cantidades enteras esta parte queda en {formatCurrency(parte.totalEstimado, 'PEN')} de los {formatCurrency(pedido, 'PEN')} que escribiste. Lo que no entra queda para las próximas partes.
+              </p>
+            )}
             <p className="text-xs text-gray-500">
               El POS calcula el total exacto con el IGV y puede variar en algún céntimo. Allí solo eliges Boleta o Factura y emites.
             </p>
           </div>
         )}
         {sinLineas && (
-          <p className="text-sm text-red-600">El monto es muy chico para repartirlo entre los productos de la nota.</p>
+          <p className="text-sm text-red-600">
+            {parte?.enteras
+              ? 'Con cantidades enteras el monto no alcanza para una unidad. Escribe un monto mayor o desmarca Cantidades enteras.'
+              : 'El monto es muy chico para repartirlo entre los productos de la nota.'}
+          </p>
         )}
 
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
