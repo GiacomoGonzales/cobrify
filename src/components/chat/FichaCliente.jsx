@@ -99,8 +99,13 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
     setCuentaVista(cuentas.length === 1 ? cuentas[0] : null)
   }, [conversacion?.id, cuentas])
 
-  const enLista = cuentas.length > 1 && !cuentaVista
-  const businessId = cuentaVista || (cuentas.length === 1 ? cuentas[0] : null)
+  // La cuenta elegida solo vale si es de ESTA conversación. El efecto de
+  // arriba la pone al día, pero corre después de pintar: en ese primer
+  // cuadro seguía la de la conversación anterior, se pedía SU ficha, y si esa
+  // respuesta llegaba última aparecía en otra conversación (14-set-2026).
+  const vistaValida = cuentaVista && cuentas.includes(cuentaVista) ? cuentaVista : null
+  const enLista = cuentas.length > 1 && !vistaValida
+  const businessId = vistaValida || (cuentas.length === 1 ? cuentas[0] : null)
 
   // Los nombres para el selector: la ficha abierta solo trae la suya.
   useEffect(() => {
@@ -119,12 +124,16 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
     setComprobantesAbierto(false)
     setEmitirAbierto(false)
     setVerTodosLosPagos(false)
-    if (!businessId) return
+    if (!businessId) { setCargando(false); return undefined }
+    // Una respuesta que llega después de cambiar de conversación (o de
+    // cuenta) se descarta: antes pisaba la ficha de la que se estaba viendo.
+    let vivo = true
     setCargando(true)
     obtenerFichaCliente(businessId)
-      .then(setFicha)
-      .catch(() => toast.error('No se pudo cargar la ficha del cliente'))
-      .finally(() => setCargando(false))
+      .then((f) => { if (vivo) setFicha(f) })
+      .catch(() => { if (vivo) toast.error('No se pudo cargar la ficha del cliente') })
+      .finally(() => { if (vivo) setCargando(false) })
+    return () => { vivo = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId, conversacion?.id])
 

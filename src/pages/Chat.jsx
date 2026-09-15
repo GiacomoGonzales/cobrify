@@ -2427,7 +2427,11 @@ export default function Chat() {
           onClick={() => setFichaVisible(false)}
         >
           <div className="h-full w-full max-w-xs sm:max-w-none sm:w-auto" onClick={(e) => e.stopPropagation()}>
+            {/* Una ficha nueva por conversación: nada de lo que se hizo en la
+                anterior (la cuenta elegida, una búsqueda, un cuadro abierto)
+                se arrastra a la siguiente. */}
             <FichaCliente
+              key={activa.id}
               conversacion={activa}
               onCerrar={() => setFichaVisible(false)}
               onAbrirConversacion={(id) => setActivaId(id)}
