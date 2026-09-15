@@ -6,6 +6,7 @@ import { formatCurrency, formatDate, cleanText } from '@/lib/utils'
 import { getInvoices, getProducts, getProductCategories } from '@/services/firestoreService'
 import Modal from '@/components/ui/Modal'
 import { getInvoiceDate, parseLocalDateString } from '@/utils/invoiceDate'
+import { ventaPendienteDe } from '@/utils/notaPorPartes'
 import {
   getModifierTemplates, saveModifierTemplates, aplicarPlantillaAProductos,
 } from '@/services/modifierTemplateService'
@@ -164,8 +165,11 @@ export default function ModifiersPanel({ companySettings }) {
       }
 
       let invoiceHasMods = false
-      for (const item of inv.items || []) {
+      // Una nota facturada por partes aporta solo lo que falta facturar; lo
+      // demás lo traen sus partes (utils/notaPorPartes).
+      for (const item of ventaPendienteDe(inv).items || []) {
         if (!Array.isArray(item.modifiers) || item.modifiers.length === 0) continue
+        if (Number(item.quantity) === 0) continue
         invoiceHasMods = true
         const itemQty = Number(item.quantity) || 1
         for (const mod of item.modifiers) {

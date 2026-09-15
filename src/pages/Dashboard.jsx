@@ -18,6 +18,7 @@ import {
 import { Link, useLocation } from 'react-router-dom'
 import { collection, query, where, getAggregateFromServer, sum } from 'firebase/firestore'
 import { esDeSucursal } from '@/utils/branchScope'
+import { ventaPendienteDe } from '@/utils/notaPorPartes'
 import { getMonthSalesAggregated, getRangeSalesAggregated, getDailySalesAggregated } from '@/services/dashboardStatsService'
 import { mapaPorDia, serieUltimos7Dias } from '@/utils/ventasSemana'
 import { db } from '@/lib/firebase'
@@ -664,7 +665,9 @@ export default function Dashboard() {
       if (inv.sunatStatus === 'voiding' || inv.sunatStatus === 'voided') return false
       if (inv.archived === true) return false
       return true
-    })
+    // Una nota facturada por partes entra solo con lo que falta facturar: lo
+    // demás lo suman sus partes, cada una en su fecha (utils/notaPorPartes).
+    }).map(ventaPendienteDe)
   }, [branchFilteredInvoices])
 
   // Moneda de visualización de reportes (PEN por defecto; USD si el negocio lo eligió

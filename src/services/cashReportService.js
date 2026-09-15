@@ -10,6 +10,7 @@ import { Share } from '@capacitor/share';
 import { resumirProductosVendidos } from '@/utils/cashClosureProducts';
 import { preloadLogo } from '@/utils/pdfGenerator';
 import { getSessionMoneyTotals } from '@/utils/cashTotals'
+import { convertidaDeUnaVez, esParteDeNota } from '@/utils/notaPorPartes'
 
 /**
  * Helper para guardar y compartir archivos en móvil
@@ -740,7 +741,7 @@ export const generateCashReportExcel = async (sessionData, movements, invoices, 
       const isNC = inv.documentType === 'nota_credito'
       const isPending = inv.paymentStatus === 'pending'
       const isPartial = inv.paymentStatus === 'partial'
-      const statusText = isVoided ? 'Anulado' : (isNC ? 'Devolución' : (isPending ? 'Crédito' : (isPartial ? 'Parcial' : 'Pagado')))
+      const statusText = isVoided ? 'Anulado' : (isNC ? 'Devolución' : (esParteDeNota(inv) ? 'Parte de nota (no suma)' : (isPending ? 'Crédito' : (isPartial ? 'Parcial' : 'Pagado'))))
       const row = [
         inv.number || '-',
         docTypeLabels[inv.documentType] || inv.documentType || '-',
@@ -1626,7 +1627,9 @@ export const generateCashReportPDF = async (sessionData, movements, invoices, bu
       const isVoided = inv.status === 'cancelled' || inv.status === 'voided' || inv.sunatStatus === 'voided';
       if (isVoided) return { label: 'Anulado', color: [220, 38, 38], excluded: true };
       if (inv.documentType === 'nota_credito') return { label: 'NC', color: [234, 88, 12], excluded: true };
-      if (inv.documentType === 'nota_venta' && inv.convertedTo) return { label: 'Convertida', color: [37, 99, 235], excluded: true };
+      if (inv.documentType === 'nota_venta' && convertidaDeUnaVez(inv)) return { label: 'Convertida', color: [37, 99, 235], excluded: true };
+      // Parte de una nota facturada por partes: el dinero entró con la nota.
+      if (esParteDeNota(inv)) return { label: 'Parte NV', color: [100, 100, 100], excluded: true };
       if (inv.status === 'pending_cancellation' || inv.status === 'partial_refund_pending') return { label: 'Pend. Anul.', color: [220, 38, 38], excluded: true };
       if (inv.paymentStatus === 'pending') return { label: 'Crédito', color: [161, 98, 7], excluded: false };
       if (inv.paymentStatus === 'partial') return { label: 'Parcial', color: [180, 83, 9], excluded: false };

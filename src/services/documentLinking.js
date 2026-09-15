@@ -12,7 +12,7 @@
  * viaja dentro del propio comprobante. Los dos caminos leen el mismo dato.
  */
 import { markQuotationAsConverted } from './quotationService'
-import { markNotaVentaAsConverted } from './firestoreService'
+import { markNotaVentaAsConverted, registrarParteDeNota, anularParteDeNota } from './firestoreService'
 
 /**
  * @param {object} p
@@ -21,6 +21,7 @@ import { markNotaVentaAsConverted } from './firestoreService'
  * @param {string} p.documentType   tipo del comprobante EMITIDO
  * @param {string} p.invoiceId      id del comprobante emitido
  * @param {string} p.invoiceNumber  número legible del comprobante emitido
+ * @param {number} [p.total]        total del comprobante emitido (lo anota una parte)
  * @returns {Promise<{ok: boolean, marcados: number, error?: string}>}
  */
 export async function cerrarVinculoDeOrigen({
@@ -29,6 +30,7 @@ export async function cerrarVinculoDeOrigen({
   documentType,
   invoiceId,
   invoiceNumber = '',
+  total = 0,
 }) {
   if (!businessId || !convertedFrom || typeof convertedFrom !== 'object') {
     return { ok: true, marcados: 0 }
@@ -45,6 +47,22 @@ export async function cerrarVinculoDeOrigen({
         markQuotationAsConverted(businessId, id, invoiceId, documentType, invoiceNumber)
       ))
       return { ok: true, marcados: ids.length }
+    }
+
+    // Una PARTE no cierra la nota: se anota en ella, con lo que facturó
+    // (utils/notaPorPartes). La nota recién queda convertida con la última.
+    if (convertedFrom.type === 'nota_venta' && convertedFrom.porPartes) {
+      const r = await registrarParteDeNota(businessId, ids[0], {
+        id: invoiceId,
+        number: invoiceNumber,
+        documentType,
+        monto: Math.round((Number(total) || 0) * 100) / 100,
+        lineas: Array.isArray(convertedFrom.lineas) ? convertedFrom.lineas : [],
+        descuentoGeneral: Math.round((Number(convertedFrom.descuentoGeneral) || 0) * 100) / 100,
+        parte: convertedFrom.parte || null,
+      })
+      if (!r.success) return { ok: false, marcados: 0, error: r.error }
+      return { ok: true, marcados: 1 }
     }
 
     if (convertedFrom.type === 'nota_venta') {
@@ -64,4 +82,23 @@ export async function cerrarVinculoDeOrigen({
     console.error('Error al cerrar el vínculo con el documento de origen:', error)
     return { ok: false, marcados: 0, error: error.message }
   }
+}
+
+/**
+ * Lo inverso para una PARTE: al anular una factura o boleta que era parte de
+ * una nota (baja SUNAT, anulación o nota de crédito total), la nota recupera su
+ * monto y sus cantidades. Devuelve `{ esParte: false }` si el comprobante no
+ * era una parte, para que quien llama siga con lo de siempre.
+ *
+ * @param {object} p
+ * @param {string} p.businessId
+ * @param {object} p.convertedFrom `convertedFrom` del comprobante anulado
+ * @param {string} p.invoiceId     id del comprobante anulado
+ */
+export async function devolverParteALaNota({ businessId, convertedFrom, invoiceId }) {
+  if (!businessId || convertedFrom?.type !== 'nota_venta' || !convertedFrom.porPartes || !convertedFrom.id) {
+    return { esParte: false }
+  }
+  const r = await anularParteDeNota(businessId, convertedFrom.id, invoiceId)
+  return { esParte: true, ok: r.success, error: r.error }
 }

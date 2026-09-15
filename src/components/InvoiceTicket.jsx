@@ -9,6 +9,7 @@ import { getComprobanteBreakdown } from '@/utils/peruUtils'
 import { formatQuantity } from '@/lib/utils'
 import { getTicketFooterParts } from '@/utils/ticketFooter'
 import { vinculoDe } from '@/utils/documentLinks'
+import { partesVigentes } from '@/utils/notaPorPartes'
 import { presentacionDeLaLinea, unidadDelante, unidadJuntoALaCantidad } from '@/utils/unidadEnElTicket'
 import { lineasDelComprobante } from '@/utils/comprobantePorConsumo'
 import { clienteDelComprobante, lineasDelCliente } from '@/utils/datosDelClienteEnComprobante'
@@ -867,10 +868,17 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
         )}
         {/* El vínculo con el otro documento, en los dos sentidos: la cotización
             dice con qué se facturó y el comprobante de qué cotización salió. */}
-        {vinculoDe(invoice.convertedTo)?.numero && (
+        {vinculoDe(invoice.convertedTo)?.numero && !invoice.convertedTo?.porPartes && (
           <div className="info-row">
             <span className="info-label">Facturado con:</span>
             <span>{vinculoDe(invoice.convertedTo).numero}</span>
+          </div>
+        )}
+        {/* Nota facturada por partes: todos sus comprobantes, no solo el último. */}
+        {partesVigentes(invoice).length > 0 && (
+          <div className="info-row">
+            <span className="info-label">Facturado con:</span>
+            <span>{partesVigentes(invoice).map(p => p.number).filter(Boolean).join(', ')}</span>
           </div>
         )}
         {vinculoDe(invoice.convertedFrom)?.numero && (

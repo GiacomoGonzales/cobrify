@@ -17,6 +17,7 @@ import {
   serverTimestamp,
   runTransaction,
   onSnapshot,
+  deleteField,
 } from 'firebase/firestore'
 import { db, auth } from '@/lib/firebase'
 import { esPrueba } from '@/data/prueba'
@@ -27,6 +28,7 @@ import { esDeSucursal } from '@/utils/branchScope'
 import { revisarAntesDeEmitir, textoDeErrores } from '@/utils/sunatPreflight'
 import { emisorIdDe, esPrincipal } from '../../functions/src/utils/emisorDelComprobante.js'
 import { serieParaNumerar, correlativoSiguiente, numeroSiguiente } from '@/utils/serieParaNumerar'
+import { motivoParaNoFacturarPorPartes, cantidadesPendientes, notaConParte, notaSinParte, partesVigentes } from '@/utils/notaPorPartes'
 
 /**
  * Servicio para interactuar con Firestore
@@ -1817,6 +1819,90 @@ export const markNotaVentaAsConverted = async (businessId, notaVentaId, comproba
     return { success: true }
   } catch (error) {
     console.error('Error al marcar nota de venta como convertida:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Anota una PARTE en su nota de venta (utils/notaPorPartes).
+ *
+ * En transacción: relee la nota, confirma que todavía se puede facturar y que
+ * las cantidades de la parte no pasan de lo que falta, y recién ahí la suma. Si
+ * con esta la nota queda completa, le pone `convertedTo` con `porPartes: true`:
+ * desde ese momento todo lo que ya entendía "nota convertida" la trata como tal.
+ * Una parte que ya estaba anotada (un reintento) no se suma dos veces.
+ *
+ * @param {object} parte `{ id, number, documentType, monto, lineas, descuentoGeneral, parte }`
+ */
+export const registrarParteDeNota = async (businessId, notaId, parte) => {
+  try {
+    const notaRef = doc(db, 'businesses', businessId, 'invoices', notaId)
+    const resultado = await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(notaRef)
+      if (!snap.exists()) throw new Error('La nota de venta ya no existe.')
+      const nota = { id: snap.id, ...snap.data() }
+      if ((nota.facturasParciales || []).some(p => p && p.id === parte.id)) return { yaEstaba: true }
+
+      const motivo = motivoParaNoFacturarPorPartes(nota)
+      if (motivo) throw new Error(motivo)
+      const pendientes = cantidadesPendientes(nota)
+      const sePasa = (parte.lineas || []).some(l => (Number(l.cantidad) || 0) > (pendientes[l.i] ?? 0) + 1e-9)
+      if (sePasa) throw new Error('La parte supera lo que falta facturar de la nota.')
+
+      // `fecha` como Date y no serverTimestamp: dentro de un arreglo Firestore no lo acepta.
+      const r = notaConParte(nota, { ...parte, fecha: new Date() })
+      transaction.update(notaRef, {
+        facturasParciales: r.facturasParciales,
+        montoFacturado: r.montoFacturado,
+        // Para encontrarlas sin rango de fechas (dashboardStatsService).
+        tienePartes: true,
+        ...(r.completa && {
+          convertedTo: {
+            porPartes: true,
+            type: parte.documentType,
+            id: parte.id,
+            number: parte.number,
+            partes: partesVigentes({ facturasParciales: r.facturasParciales }).length,
+            convertedAt: serverTimestamp(),
+          },
+        }),
+        updatedAt: serverTimestamp(),
+      })
+      return { completa: r.completa, montoFacturado: r.montoFacturado }
+    })
+    return { success: true, ...resultado }
+  } catch (error) {
+    console.error('Error al anotar la parte en la nota de venta:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Anular una parte (baja SUNAT, anulación o nota de crédito total) le devuelve a
+ * la nota su monto y sus cantidades. La parte queda en la lista marcada como
+ * anulada. Si la nota estaba completa deja de estarlo: pierde `convertedTo` y
+ * vuelve a aceptar partes.
+ */
+export const anularParteDeNota = async (businessId, notaId, invoiceId) => {
+  try {
+    const notaRef = doc(db, 'businesses', businessId, 'invoices', notaId)
+    const resultado = await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(notaRef)
+      if (!snap.exists()) return { encontrada: false }
+      const nota = snap.data()
+      const r = notaSinParte(nota, invoiceId, new Date())
+      if (!r.encontrada) return { encontrada: false }
+      transaction.update(notaRef, {
+        facturasParciales: r.facturasParciales,
+        montoFacturado: r.montoFacturado,
+        ...(nota.convertedTo?.porPartes && !r.completa && { convertedTo: deleteField() }),
+        updatedAt: serverTimestamp(),
+      })
+      return { encontrada: true }
+    })
+    return { success: true, ...resultado }
+  } catch (error) {
+    console.error('Error al devolver la parte a la nota de venta:', error)
     return { success: false, error: error.message }
   }
 }

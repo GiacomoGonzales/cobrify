@@ -34,6 +34,8 @@
  * congela el RESULTADO.
  */
 
+import { esParteDeNota } from './notaPorPartes'
+
 /** Cómo se calcula la comisión de un vendedor. */
 export const COMMISSION_TYPES = [
   {
@@ -192,6 +194,10 @@ export const computeSaleCommission = (seller, totalInBase, costInBase = 0, items
  * @returns {{ amount: number, rate: number|null, type: string, estimated: boolean }|null}
  */
 export const getInvoiceCommission = (invoice, { sellersById, totalInBase, costInBase = 0, items = null } = {}) => {
+  // Una PARTE de una nota facturada por partes no comisiona: la comisión es de
+  // la nota, que la congeló entera al venderse (utils/notaPorPartes). La parte
+  // no trae comisión congelada y sin esto se recalcularía: pagaría dos veces.
+  if (esParteDeNota(invoice)) return null
   const frozen = invoice?.commission
   // Una comisión por producto NO tiene tasa única, así que la congelada se
   // reconoce por el importe y no por la tasa. Exigir `rate` la mandaba a

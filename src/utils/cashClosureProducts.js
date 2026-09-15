@@ -11,6 +11,8 @@
  * que decir lo mismo.
  */
 
+import { esParteDeNota } from './notaPorPartes'
+
 /** Cantidad sin ceros de relleno: 2 -> "2", 1.5 -> "1.5". */
 const cantidadCorta = (n) => {
   const v = Number(n) || 0
@@ -68,6 +70,9 @@ const cuenta = (inv) => {
   if (st === 'cancelled' || st === 'voided') return false
   const ss = inv?.sunatStatus
   if (ss === 'voided' || ss === 'voiding') return false
+  // Una parte de una nota facturada por partes no es otra venta del turno: los
+  // productos salieron con la nota (utils/notaPorPartes).
+  if (esParteDeNota(inv)) return false
   return true
 }
 

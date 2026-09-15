@@ -129,6 +129,7 @@ import { computeSaleCommission } from '@/utils/commissions'
 import { getSellers } from '@/services/sellerService'
 import { markOrderAsPaid, updateOrder, updateOrderStatus, claimOrderForInvoicing, releaseOrderInvoicingClaim, markOrderInvoiced } from '@/services/orderService'
 import { cerrarVinculoDeOrigen } from '@/services/documentLinking'
+import { motivoParaNoFacturarPorPartes, cantidadesPendientes, esNotaPorPartes, esParteDeNota } from '@/utils/notaPorPartes'
 import { completeAppointment } from '@/services/appointmentService'
 import { programarRecordatoriosDeVenta } from '@/services/veterinaryService'
 import { crearPaquetesDeVenta } from '@/services/packageService'
@@ -656,6 +657,13 @@ export default function POS() {
   // selector de comprobante. Se declara ACÁ, antes de `docTypeOpts`, que la lee.
   // Puede ser un string (una nota) o un array (varias).
   const [pendingNotaVentaIds, setPendingNotaVentaIds] = useState(null)
+  // Factura POR PARTES de una nota (utils/notaPorPartes): la nota se factura en
+  // varias facturas o boletas hasta completarla. Ventas arma la parte y la manda
+  // con los productos ya repartidos; acá se emite tal cual y se anota en la nota.
+  const [parteDeNota, setParteDeNota] = useState(null)
+  // Número de la nota que se convierte de una vez: sin él, el comprobante
+  // decía "Doc. origen" en blanco.
+  const [pendingNotaVentaNumber, setPendingNotaVentaNumber] = useState('')
 
   const cupo = useMemo(
     () => cupoDeComprobantes(subscription, { esAdmin: isAdmin || isDemoMode }),
@@ -1735,6 +1743,12 @@ export default function POS() {
   // Guardar borrador en localStorage cuando cambian los datos importantes
   useEffect(() => {
     if (!user?.uid || !draftLoadedRef.current) return
+    // Una PARTE de una nota no se guarda como borrador: al recargar volvería
+    // como una venta suelta, que descontaría stock y no se anotaría en la nota.
+    if (parteDeNota) {
+      localStorage.removeItem(getDraftKey())
+      return
+    }
 
     // No guardar si no hay nada significativo
     const hasData = cart.length > 0 ||
@@ -1772,7 +1786,7 @@ export default function POS() {
     }, 500) // Esperar 500ms antes de guardar
 
     return () => clearTimeout(timeoutId)
-  }, [cart, customerData, documentType, payments, discountAmount, discountPercentage, orderType, selectedSeller, currency, exchangeRate, exchangeRateSource, user])
+  }, [cart, customerData, documentType, payments, discountAmount, discountPercentage, orderType, selectedSeller, currency, exchangeRate, exchangeRateSource, user, parteDeNota])
 
   // Función para limpiar el borrador del localStorage
   const clearDraft = () => {
@@ -1817,6 +1831,11 @@ export default function POS() {
 
   const holdCurrentSale = () => {
     if (cart.length === 0) return
+    // Una parte de una nota no se deja en espera: al retomarla ya no sería la parte.
+    if (parteDeNota) {
+      toast.error('Una parte de una nota no se puede dejar en espera: emítela o vuelve a Ventas.')
+      return
+    }
     if (heldSales.length >= 10) {
       toast.error('Máximo 10 ventas en espera')
       return
@@ -2474,6 +2493,8 @@ export default function POS() {
         // Una sola nota de venta (compatibilidad)
         setPendingNotaVentaIds([notaVentaInfo.notaVentaId])
       }
+      setParteDeNota(notaVentaInfo.parteDeNota || null)
+      setPendingNotaVentaNumber(notaVentaInfo.notaVentaIds ? '' : (notaVentaInfo.notaVentaNumber || ''))
 
       // Varios RUC: la boleta o factura sale con el RUC de la nota de venta.
       setEmisorId(emisorIdDe({ emisorId: notaVentaInfo.emisorId }))
@@ -2561,7 +2582,16 @@ export default function POS() {
       // NOTA: invoice.discount incluye item discounts + global, no sirve para esto.
       // Los descuentos por ítem ya se cargan en cada item del carrito (itemDiscount).
       // Solo cargamos el descuento general si discountPercentage > 0.
-      if (notaVentaInfo.discountPercentage && notaVentaInfo.discountPercentage > 0) {
+      if (notaVentaInfo.parteDeNota) {
+        // Una parte trae su descuento general ya repartido, en soles
+        // (utils/notaPorPartes). El porcentaje de la nota no aplica.
+        const descuentoParte = Number(notaVentaInfo.parteDeNota.descuentoGeneral) || 0
+        if (descuentoParte > 0) {
+          setDiscountAmount(descuentoParte.toFixed(2))
+          setDiscountPercentage('')
+          setShowDiscountSection(true)
+        }
+      } else if (notaVentaInfo.discountPercentage && notaVentaInfo.discountPercentage > 0) {
         setDiscountPercentage(notaVentaInfo.discountPercentage.toString())
         const subtotal = (notaVentaInfo.items || []).reduce((sum, item) => sum + ((item.unitPrice || item.price || 0) * (item.quantity || 1)), 0)
         if (subtotal > 0) {
@@ -2578,7 +2608,9 @@ export default function POS() {
         }
       }
 
-      toast.success(`Nota de Venta ${notaVentaInfo.notaVentaNumber} cargada - ${notaVentaInfo.items?.length || 0} items. Selecciona Boleta o Factura y completa la venta.`)
+      toast.success(notaVentaInfo.parteDeNota
+        ? `Parte ${notaVentaInfo.parteDeNota.parte} de la Nota de Venta ${notaVentaInfo.notaVentaNumber} cargada. Selecciona Boleta o Factura y emítela.`
+        : `Nota de Venta ${notaVentaInfo.notaVentaNumber} cargada - ${notaVentaInfo.items?.length || 0} items. Selecciona Boleta o Factura y completa la venta.`)
 
       // Limpiar el state de navegación para evitar recarga
       navigate(location.pathname, { replace: true, state: null })
@@ -2734,6 +2766,14 @@ export default function POS() {
         return
       }
 
+      // Una PARTE de una nota facturada por partes no se edita: cambiarle un
+      // producto o una cantidad desarmaría la cuenta de lo que falta facturar.
+      if (esParteDeNota(invoice)) {
+        toast.error('Este comprobante es una parte de una nota de venta y no puede editarse')
+        appNavigate('facturas')
+        return
+      }
+
       // Notas de venta: mismas condiciones que muestran el botón en el listado.
       // Se repiten acá porque ocultar el botón no impide entrar por la URL —un
       // enlace guardado, un atajo— y ahí el usuario editaría algo que el negocio
@@ -2750,6 +2790,11 @@ export default function POS() {
         }
         if (cfg?.allowEditNotaVenta !== true) {
           toast.error('La edición de notas de venta está desactivada. Actívala en Configuración > Ventas.')
+          appNavigate('facturas')
+          return
+        }
+        if (esNotaPorPartes(invoice)) {
+          toast.error('Esta nota de venta se está facturando por partes y no puede editarse')
           appNavigate('facturas')
           return
         }
@@ -6094,12 +6139,14 @@ export default function POS() {
   // con el precio ya recargado, como una venta normal. Así el IGV queda correcto
   // sobre el total y no hay que declarar ningún "cargo" especial.
   const cardSurchargeFactor = React.useMemo(() => {
-    if (!cardCommissionConfig.enabled) return 1
+    // Una parte de una nota trae los precios de la nota, que ya llevan el
+    // recargo si lo tuvo: recargarla otra vez la inflaría.
+    if (!cardCommissionConfig.enabled || parteDeNota) return 1
     const rate = Number(cardCommissionConfig.rate) || 0
     if (rate <= 0) return 1
     const isCardOnly = payments.length > 0 && payments.every(p => p.method === 'CARD')
     return isCardOnly ? 1 + rate / 100 : 1
-  }, [cardCommissionConfig, payments])
+  }, [cardCommissionConfig, payments, parteDeNota])
 
   // Carrito "efectivo": el mismo carrito pero con los precios escalados por el
   // recargo de tarjeta (cuando aplica). Se usa para los totales y para los ítems
@@ -6287,6 +6334,29 @@ export default function POS() {
       CustomerDisplay.updateCart(cart, amounts)
     }
   }, [cart, amounts, companySettings?.enableCustomerDisplay, saleCompleted])
+
+  // FACTURA POR PARTES: lo que cobra la parte es exactamente su total, repartido
+  // entre los métodos de la nota en la misma proporción. El dinero ya entró con
+  // la nota (la parte no entra a caja); esto solo dice con qué se pagó la
+  // tajada, y sin cuadrar al céntimo el POS no deja emitir.
+  useEffect(() => {
+    if (!parteDeNota || saleCompleted) return
+    const total = Number(amounts.total) || 0
+    setPayments(prev => {
+      if (!Array.isArray(prev) || prev.length === 0) return prev
+      const pesos = prev.map(p => Math.max(0, parseFloat(p.amount) || 0))
+      const suma = pesos.reduce((s, v) => s + v, 0)
+      let asignado = 0
+      const nuevos = prev.map((p, k) => {
+        const monto = k === prev.length - 1
+          ? Math.round((total - asignado) * 100) / 100
+          : Math.round((suma > 0 ? total * pesos[k] / suma : 0) * 100) / 100
+        asignado += monto
+        return { ...p, amount: monto.toFixed(2) }
+      })
+      return nuevos.every((p, k) => p.amount === prev[k].amount) ? prev : nuevos
+    })
+  }, [parteDeNota, amounts.total, saleCompleted])
 
   // Anticipos aplicados a esta factura: suma de los anticipos seleccionados,
   // acotada al total de la venta (no se puede deducir más de lo que se factura).
@@ -6702,6 +6772,73 @@ ${textoDeErrores(revision.errores)}`, 9000)
       setIsProcessing(false)
       checkoutGuardRef.current = false
       return
+    }
+
+    // FACTURA POR PARTES (utils/notaPorPartes). La parte sale tal cual se armó:
+    // cambiar un producto, una cantidad o un precio desarmaría la cuenta de lo que
+    // falta facturar. Y antes de tomar correlativo se relee la nota, porque desde
+    // que se armó pudo emitirse otra parte (otra pestaña, otro usuario) o
+    // anularse la nota.
+    if (parteDeNota) {
+      const lineasParte = parteDeNota.lineas || []
+      const igualQueLaParte = cart.length === lineasParte.length && cart.every((item, k) => {
+        const l = lineasParte[k]
+        return Math.abs((Number(item.quantity) || 0) - (Number(l.cantidad) || 0)) < 1e-6 &&
+          Math.abs((Number(item.price) || 0) - (Number(l.precio) || 0)) < 0.005 &&
+          Math.abs((Number(item.itemDiscount) || 0) - (Number(l.itemDiscount) || 0)) < 0.005
+      })
+      if (!igualQueLaParte) {
+        abortCheckout('En una factura por partes no se cambian productos, cantidades ni precios. Vuelve a Ventas y arma la parte otra vez.', 8000)
+        return
+      }
+      if (Math.abs((parseFloat(discountAmount) || 0) - (Number(parteDeNota.descuentoGeneral) || 0)) > 0.005) {
+        abortCheckout('En una factura por partes no se cambia el descuento. Vuelve a Ventas y arma la parte otra vez.', 8000)
+        return
+      }
+      // La nota ya se cobró: la parte sale al contado. Al crédito quedaría como
+      // deuda en cuentas por cobrar, y un anticipo le bajaría el total.
+      if (enablePartialPayment || paymentType === 'credito' || advancesApplied > 0) {
+        abortCheckout('Una parte de una nota ya cobrada sale al contado: sin crédito, sin pago parcial y sin anticipos.', 8000)
+        return
+      }
+      try {
+        const { doc, getDoc } = await import('firebase/firestore')
+        const { db } = await import('@/lib/firebase')
+        const snapNota = await getDoc(doc(db, 'businesses', businessId, 'invoices', parteDeNota.notaId))
+        const notaFresca = snapNota.exists() ? snapNota.data() : null
+        const motivo = notaFresca ? motivoParaNoFacturarPorPartes(notaFresca) : 'La nota de venta ya no existe.'
+        if (motivo) {
+          abortCheckout(motivo, 8000)
+          return
+        }
+        const pendientes = cantidadesPendientes(notaFresca)
+        if (lineasParte.some(l => (Number(l.cantidad) || 0) > (pendientes[l.i] ?? 0) + 1e-9)) {
+          abortCheckout('Mientras armabas esta parte se facturó otra de la misma nota. Vuelve a Ventas y ármala de nuevo con lo que falta.', 9000)
+          return
+        }
+      } catch (errorNota) {
+        console.error('No se pudo releer la nota de la parte:', errorNota)
+        abortCheckout('No se pudo revisar la nota de venta. Revisa tu conexión e inténtalo de nuevo.')
+        return
+      }
+    }
+
+    // Conversión de siempre: si mientras tanto la nota empezó a facturarse por
+    // partes (otra pestaña, otro usuario), convertirla entera la facturaría dos
+    // veces. Si no se puede leer, la venta sigue como hasta hoy.
+    if (!parteDeNota && pendingNotaVentaIds?.length > 0) {
+      try {
+        const { doc, getDoc } = await import('firebase/firestore')
+        const { db } = await import('@/lib/firebase')
+        const snaps = await Promise.all(pendingNotaVentaIds.map(id => getDoc(doc(db, 'businesses', businessId, 'invoices', id))))
+        const conPartes = snaps.find(s => s.exists() && esNotaPorPartes(s.data()))
+        if (conPartes) {
+          abortCheckout(`La nota ${conPartes.data().number || ''} se está facturando por partes: sigue desde Ventas con "Facturar otra parte".`, 9000)
+          return
+        }
+      } catch (errorNotas) {
+        console.warn('No se pudo revisar las notas a convertir:', errorNotas)
+      }
     }
 
     // Barrera de stock de PRODUCTOS TERMINADOS para carritos PRECARGADOS.
@@ -7638,6 +7775,9 @@ ${textoDeErrores(revision.errores)}`, 9000)
         // puede venir en dólares. La utilidad usa el costo ya congelado de cada
         // item, así que la comisión sobre utilidad tampoco se mueve después.
         ...(() => {
+          // Una parte de una nota no comisiona: la comisión es de la nota, que
+          // la congeló entera al venderse (utils/notaPorPartes).
+          if (parteDeNota) return {}
           // Detalle por línea, para los vendedores que comisionan por producto.
           // El total de cada línea va en la moneda de la venta, así que se pasa
           // a soles con el mismo factor que ya se aplicó al total del documento
@@ -7779,9 +7919,22 @@ ${textoDeErrores(revision.errores)}`, 9000)
         // Si viene de nota(s) de venta, marcar para no descontar stock de nuevo
         ...(pendingNotaVentaIds && pendingNotaVentaIds.length > 0 && {
           skipStockDeduction: true,
-          convertedFrom: pendingNotaVentaIds.length === 1
-            ? { type: 'nota_venta', id: pendingNotaVentaIds[0] }
-            : { type: 'nota_venta', ids: pendingNotaVentaIds },
+          // Una PARTE lleva además qué parte es y qué líneas facturó: con eso se
+          // anota en la nota, y al anularla se le devuelve (utils/notaPorPartes).
+          convertedFrom: parteDeNota
+            ? {
+                type: 'nota_venta',
+                id: parteDeNota.notaId,
+                number: parteDeNota.notaNumber || '',
+                porPartes: true,
+                parte: parteDeNota.parte,
+                lineas: (parteDeNota.lineas || []).map(({ i, cantidad, itemDiscount }) => ({ i, cantidad, itemDiscount })),
+                descuentoGeneral: Number(parteDeNota.descuentoGeneral) || 0,
+              }
+            : pendingNotaVentaIds.length === 1
+              // Con su número: sin él, "Doc. origen" salía en blanco en el comprobante.
+              ? { type: 'nota_venta', id: pendingNotaVentaIds[0], ...(pendingNotaVentaNumber && { number: pendingNotaVentaNumber }) }
+              : { type: 'nota_venta', ids: pendingNotaVentaIds },
         }),
         // De qué cotización salió. Mismo shape que las notas de venta y las
         // guías: sin esto, desde el comprobante era imposible saberlo.
@@ -8241,6 +8394,7 @@ ${textoDeErrores(revision.errores)}`, 9000)
         const _markOnlineOrderCompleteOnSale = markOnlineOrderCompleteOnSale
         const _pendingQuotation = pendingQuotation
         const _pendingNotaVentaIds = pendingNotaVentaIds
+        const _parteDeNota = parteDeNota
         const _sourceDispatchGuide = sourceDispatchGuide
         const _pendingAppointmentData = pendingAppointmentData
         if (_tableData) setTableData(null)
@@ -8252,6 +8406,8 @@ ${textoDeErrores(revision.errores)}`, 9000)
         }
         if (_pendingQuotation) setPendingQuotation(null)
         if (_pendingNotaVentaIds) setPendingNotaVentaIds(null)
+        if (_pendingNotaVentaIds) setPendingNotaVentaNumber('')
+        if (_parteDeNota) setParteDeNota(null)
         if (_sourceDispatchGuide) setSourceDispatchGuide(null)
         if (_pendingAppointmentData) setPendingAppointmentData(null)
 
@@ -8335,7 +8491,8 @@ ${textoDeErrores(revision.errores)}`, 9000)
             // de fidelización"). La tarjeta se identifica por el TELÉFONO, así
             // que el mismo cliente acumula compre acá o por el catálogo online.
             // Idempotente por el ID de la factura: reprocesar no vuelve a sellar.
-            if (companySettings?.loyaltyConfig?.enabled && bgCustomerData?.phone) {
+            // Una parte de una nota no es otra compra: el sello lo dio la nota.
+            if (companySettings?.loyaltyConfig?.enabled && bgCustomerData?.phone && !_parteDeNota) {
               try {
                 const { earnStamp } = await import('@/services/loyaltyService')
                 // El grupo decide DONDE vive la tarjeta; `localId` deja
@@ -9014,8 +9171,9 @@ ${textoDeErrores(revision.errores)}`, 9000)
               }
             }
 
-            // 5.1. Actualizar métricas del vendedor
-            if (bgSelectedSeller?.id) {
+            // 5.1. Actualizar métricas del vendedor. Una parte de una nota no:
+            //      esa venta ya la sumó la nota (utils/notaPorPartes).
+            if (bgSelectedSeller?.id && !_parteDeNota) {
               try {
                 const { increment } = await import('firebase/firestore')
                 const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore')
@@ -9090,15 +9248,29 @@ ${textoDeErrores(revision.errores)}`, 9000)
               })
             }
 
-            // 6.3. Marcar la(s) nota(s) de venta como convertida(s).
+            // 6.3. Marcar la(s) nota(s) de venta como convertida(s), o anotar la
+            //      PARTE en su nota con lo que facturó de verdad (utils/notaPorPartes).
             if (_pendingNotaVentaIds && _pendingNotaVentaIds.length > 0) {
-              await cerrarVinculoDeOrigen({
+              const _vinculo = await cerrarVinculoDeOrigen({
                 businessId,
-                convertedFrom: { type: 'nota_venta', ids: _pendingNotaVentaIds },
+                convertedFrom: _parteDeNota
+                  ? {
+                      type: 'nota_venta',
+                      id: _parteDeNota.notaId,
+                      porPartes: true,
+                      parte: _parteDeNota.parte,
+                      lineas: (_parteDeNota.lineas || []).map(({ i, cantidad, itemDiscount }) => ({ i, cantidad, itemDiscount })),
+                      descuentoGeneral: Number(_parteDeNota.descuentoGeneral) || 0,
+                    }
+                  : { type: 'nota_venta', ids: _pendingNotaVentaIds },
                 documentType: bgDocumentType,
                 invoiceId: bgInvoiceId,
                 invoiceNumber: bgNumberResult.number,
+                total: bgAmounts.total,
               })
+              if (_parteDeNota && !_vinculo.ok) {
+                toast.error(`El comprobante ${bgNumberResult.number} salió, pero no se pudo anotar en la nota ${_parteDeNota.notaNumber || ''} (${_vinculo.error || 'error desconocido'}). Avisa a soporte antes de facturar otra parte.`, 12000)
+              }
 
               // NO se recrean movimientos de stock acá. Este bloque revisaba si la
               // nota original tenía movimientos y, si no los veía, los volvía a crear.
@@ -9844,11 +10016,18 @@ Gracias por tu preferencia.`
                     Mesa {tableData.tableNumber} - {tableData.orderNumber}
                   </Badge>
                 )}
+                {parteDeNota && (
+                  <Badge variant="default" className="bg-primary-600 text-white">
+                    Parte {parteDeNota.parte} de {parteDeNota.notaNumber}
+                  </Badge>
+                )}
               </div>
               <p className="text-sm text-gray-600 mt-1">
                 {editingInvoiceId
                   ? `Editando documento - Los cambios se guardarán al procesar`
-                  : tableData
+                  : parteDeNota
+                    ? `Factura por partes de ${parteDeNota.notaNumber}: los productos y cantidades no se cambian`
+                    : tableData
                     ? `Generando comprobante para Mesa ${tableData.tableNumber}`
                     : 'Selecciona productos para la venta'}
               </p>

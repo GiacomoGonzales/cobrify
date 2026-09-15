@@ -11,6 +11,7 @@ import { useLocationAccess } from '@/utils/locationAccess'
 import { isPendingInvoice, getPendingAmount } from '@/utils/receivables'
 import { esDeSucursal } from '@/utils/branchScope'
 import { repartirPorMetodo } from '@/utils/pagosDelComprobante'
+import { cuentaEnCaja } from '@/utils/notaPorPartes'
 import { almacenesDeSucursal, esDeSucursalLaCompra } from '@/utils/purchaseBranch'
 import {
   TrendingUp,
@@ -452,6 +453,10 @@ export default function CashFlow() {
 
       // Archivadas no suman a ingresos
       if (inv.archived === true) return false
+
+      // Una parte de una nota facturada por partes no es plata nueva: entró con
+      // la nota (utils/notaPorPartes).
+      if (!cuentaEnCaja(inv)) return false
 
       // Una factura se considera como ingreso si:
       // 1. Su status es 'paid' (factura/boleta normal pagada)

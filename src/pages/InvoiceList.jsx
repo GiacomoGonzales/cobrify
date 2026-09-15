@@ -61,7 +61,7 @@ import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
 import { formatCurrency, formatDate, formatDateTime, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
 import { getDocumentTotalInBase, getReportsCurrency, resolveReportsRate, convertBaseToDisplay } from '@/utils/currency'
-import { metodosRealesDelComprobante as getRealPaymentMethods, montoPorMetodoEnBase as getAmountByMethodInBase } from '@/utils/pagosDelComprobante'
+import { metodosRealesDelComprobante as getRealPaymentMethods, montoPorMetodoEnBase as getAmountByMethodInBase, repartirPorMetodo } from '@/utils/pagosDelComprobante'
 import { getInvoiceDate, getInvoiceTimeInfo } from '@/utils/invoiceDate'
 import { consumoDeModificadoresDeVarias } from '@/utils/modificadorInsumo'
 import { toDateString } from '@/utils/emissionDate'
@@ -94,6 +94,9 @@ import MonthSelect from '@/components/MonthSelect'
 import GuideLink from '@/components/guide/GuideLink'
 import { documentLabelLong } from '@/utils/documentType'
 import { vinculoDe } from '@/utils/documentLinks'
+import { esNotaPorPartes, esParteDeNota, convertidaDeUnaVez, ventaPendienteDe, montoPendiente, motivoParaNoFacturarPorPartes } from '@/utils/notaPorPartes'
+import { devolverParteALaNota } from '@/services/documentLinking'
+import FacturarPorPartesModal, { ResumenDePartes } from '@/components/FacturarPorPartesModal'
 
 /**
  * Tipo de pedido guardado en el comprobante. Solo aplica a restaurante/delivery;
@@ -167,6 +170,8 @@ export default function InvoiceList() {
   // marcadas como convertidas pero su factura fue anulada vía NC antes del fix.
   // Cuando termines de revertir las pendientes, avísame y removemos esta opción.
   const [revertingNotaId, setRevertingNotaId] = useState(null)
+  // La nota que se está por facturar por partes (ventana abierta).
+  const [partesDeNota, setPartesDeNota] = useState(null)
   const handleManualRevertNota = async (nota) => {
     if (!nota?.id || revertingNotaId) return
     if (!window.confirm(`¿Revertir la conversión de la ${nota.documentType === 'nota_venta' ? 'Nota de Venta' : 'nota'} ${nota.number}? Volverá al listado normal y podrás convertirla nuevamente.`)) {
@@ -970,9 +975,10 @@ Gracias por tu preferencia.`
       if (result.success) {
         toast.success(`${deletingInvoice.number || 'Comprobante'} eliminado`)
         // Las notas de venta que este comprobante había convertido ya quedaron
-        // libres en Firestore: reflejarlo en la lista sin recargarla.
-        const notasLiberadas = deletingInvoice.convertedFrom?.ids
-          || (deletingInvoice.convertedFrom?.id ? [deletingInvoice.convertedFrom.id] : [])
+        // libres en Firestore: reflejarlo en la lista sin recargarla. Una PARTE
+        // no libera su nota: le devolvió su monto, y esa nota ya se releyó.
+        const notasLiberadas = esParteDeNota(deletingInvoice) ? [] : (deletingInvoice.convertedFrom?.ids
+          || (deletingInvoice.convertedFrom?.id ? [deletingInvoice.convertedFrom.id] : []))
         // Una NC eliminada deja su documento original como estaba: releer solo ese.
         const original = deletingInvoice.documentType === 'nota_credito'
           ? deletingInvoice.referencedInvoiceFirestoreId
@@ -1055,7 +1061,9 @@ Gracias por tu preferencia.`
           const hasSaleMovements = invoiceMovements.some(m => m.type === 'sale')
           if (alreadyRestored) {
             toast.info('El stock de este comprobante ya había sido restaurado antes (no se duplica).')
-          } else if (!hasSaleMovements) {
+          } else if (!hasSaleMovements && !voidingInvoice.convertedFrom) {
+            // Lo convertido desde notas (y las partes) no descuenta nada: el
+            // stock salió con la nota. No es un descuadre, no se avisa.
             toast.warning(
               'La venta original no registró movimientos de stock. No se devolvió stock al anular para evitar descuadre. Revisa el inventario manualmente.',
               8000
@@ -1231,9 +1239,19 @@ Gracias por tu preferencia.`
           }
         }
 
-        // Revertir notas de venta si el comprobante fue convertido desde notas
+        // Revertir notas de venta si el comprobante fue convertido desde notas.
+        // Una PARTE no libera su nota: le devuelve su monto (utils/notaPorPartes).
         const revertedNotaIds = []
-        if (voidingInvoice.convertedFrom) {
+        let notaConParteDevuelta = null
+        if (esParteDeNota(voidingInvoice)) {
+          const devuelta = await devolverParteALaNota({
+            businessId,
+            convertedFrom: voidingInvoice.convertedFrom,
+            invoiceId: voidingInvoice.id,
+          })
+          if (devuelta.ok) notaConParteDevuelta = voidingInvoice.convertedFrom.id
+          else toast.error(`El comprobante quedó anulado, pero su monto no volvió a la nota ${voidingInvoice.convertedFrom.number || ''}. Avisa a soporte.`, 9000)
+        } else if (voidingInvoice.convertedFrom) {
           try {
             const { doc, updateDoc, deleteField } = await import('firebase/firestore')
             const { db } = await import('@/lib/firebase')
@@ -1291,7 +1309,9 @@ Gracias por tu preferencia.`
           }
         }
 
-        toast.success(`${voidingInvoice.documentType === 'nota_venta' ? 'Nota de venta anulada' : 'Documento anulado'} y stock restaurado exitosamente${voidingInvoice.convertedFrom ? '. Notas origen revertidas.' : ''}`)
+        toast.success(esParteDeNota(voidingInvoice)
+          ? `Comprobante anulado. Su monto volvió a la nota ${voidingInvoice.convertedFrom.number || ''}.`
+          : `${voidingInvoice.documentType === 'nota_venta' ? 'Nota de venta anulada' : 'Documento anulado'} y stock restaurado exitosamente${voidingInvoice.convertedFrom ? '. Notas origen revertidas.' : ''}`)
         setVoidingInvoice(null)
         setVoidReason('')
         setRefundOnVoid(true)
@@ -1309,6 +1329,7 @@ Gracias por tu preferencia.`
           }
           return inv
         }))
+        if (notaConParteDevuelta) refreshOneInvoice(notaConParteDevuelta)
       } else {
         throw new Error(result.error)
       }
@@ -1688,8 +1709,17 @@ Gracias por tu preferencia.`
       }
     }
 
-    // Revertir notas de venta si el comprobante fue convertido desde notas
-    if (invoice.convertedFrom) {
+    // Revertir notas de venta si el comprobante fue convertido desde notas.
+    // Una PARTE no libera su nota: le devuelve su monto (utils/notaPorPartes).
+    if (esParteDeNota(invoice)) {
+      const devuelta = await devolverParteALaNota({
+        businessId,
+        convertedFrom: invoice.convertedFrom,
+        invoiceId: invoice.id,
+      })
+      if (devuelta.ok) await refreshOneInvoice(invoice.convertedFrom.id)
+      else toast.error(`El monto de ${invoice.number || 'este comprobante'} no volvió a la nota ${invoice.convertedFrom.number || ''}. Avisa a soporte.`, 9000)
+    } else if (invoice.convertedFrom) {
       try {
         const { doc, updateDoc, deleteField } = await import('firebase/firestore')
         const { db } = await import('@/lib/firebase')
@@ -2063,6 +2093,11 @@ Gracias por tu preferencia.`
       toast.info('Esta función no está disponible en modo demo')
       return
     }
+    // Con partes ya no se convierte entera: se facturaría dos veces.
+    if (esNotaPorPartes(invoice)) {
+      toast.error('Esta nota se está facturando por partes: sigue con "Facturar otra parte".')
+      return
+    }
 
     setViewingInvoice(null)
 
@@ -2082,6 +2117,57 @@ Gracias por tu preferencia.`
         discount: invoice.discount || 0,
         discountPercentage: invoice.discountPercentage || 0,
       }
+    })
+  }
+
+  /**
+   * Facturar una PARTE de la nota (utils/notaPorPartes). El POS recibe la parte
+   * ya armada —productos, cantidades y descuentos en proporción— y la emite sin
+   * cambios. Los pagos se reparten con la misma regla de Ventas; el POS los
+   * cuadra al céntimo con el total real.
+   */
+  const handleFacturarParte = (nota, parte) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+    const motivo = motivoParaNoFacturarPorPartes(nota)
+    if (motivo) {
+      toast.error(motivo)
+      return
+    }
+    if (!parte || parte.lineas.length === 0) return
+    const pagos = Object.entries(repartirPorMetodo(nota, parte.totalEstimado))
+      .map(([metodo, monto]) => ({
+        method: metodo === 'Sin método' ? 'Efectivo' : metodo,
+        amount: Math.round(monto * 100) / 100,
+      }))
+    setPartesDeNota(null)
+    setViewingInvoice(null)
+    appNavigate('pos', {
+      state: {
+        fromNotaVenta: true,
+        notaVentaId: nota.id,
+        emisorId: nota.emisorId || null,
+        notaVentaNumber: nota.number,
+        items: parte.items,
+        customer: nota.customer || null,
+        paymentMethod: pagos[0]?.method || 'Efectivo',
+        payments: pagos,
+        notes: nota.notes || '',
+        sellerId: nota.sellerId || null,
+        sellerName: nota.sellerName || null,
+        // El descuento general viaja dentro de la parte, ya repartido.
+        discount: 0,
+        discountPercentage: 0,
+        parteDeNota: {
+          notaId: nota.id,
+          notaNumber: nota.number || '',
+          parte: parte.parte,
+          lineas: parte.lineas,
+          descuentoGeneral: parte.descuentoGeneral,
+        },
+      },
     })
   }
 
@@ -2216,8 +2302,11 @@ Gracias por tu preferencia.`
     const selectedInvoices = invoices.filter(inv => selectedInvoiceIds.has(inv.id))
 
     // Validar que todas sean notas de venta no convertidas y no anuladas
+    // Anuladas (con cualquiera de las dos marcas) y con partes, no: se
+    // facturarían de nuevo.
     const validNotas = selectedInvoices.filter(
-      inv => inv.documentType === 'nota_venta' && !inv.convertedTo && inv.status !== 'voided'
+      inv => inv.documentType === 'nota_venta' && !inv.convertedTo && inv.status !== 'voided' &&
+        inv.status !== 'cancelled' && !esNotaPorPartes(inv)
     )
 
     if (validNotas.length === 0) {
@@ -2425,13 +2514,17 @@ Gracias por tu preferencia.`
         );
       }
 
-      // Excluir boletas convertidas desde notas de venta (si está activado)
+      // Evitar duplicados por conversión (si está activado): de cada venta
+      // convertida queda UN documento. Antes salían los dos lados —la nota por
+      // convertida y la boleta por venir de una nota— y la venta desaparecía del
+      // Excel; y caían también las boletas hechas desde cotizaciones, que no
+      // duplican nada.
       if (exportFilters.excludeConverted) {
         filteredInvoices = filteredInvoices.filter(inv => {
-          // Excluir boletas que fueron convertidas desde nota de venta
-          if (inv.convertedFrom) return false;
-          // Excluir notas de venta que ya fueron convertidas a boleta
-          if (inv.documentType === 'nota_venta' && inv.convertedTo) return false;
+          // Nota convertida de una vez: queda su boleta o factura.
+          if (inv.documentType === 'nota_venta' && convertidaDeUnaVez(inv)) return false;
+          // Parte de una nota facturada por partes: queda la nota, entera.
+          if (esParteDeNota(inv)) return false;
           return true;
         });
       }
@@ -3069,7 +3162,8 @@ Gracias por tu preferencia.`
     total: salesInvoices.length,
     paid: salesInvoices.filter(i => i.status === 'paid').length,
     pending: salesInvoices.filter(i => i.status === 'pending').length,
-    totalAmount: salesInvoices.reduce((sum, i) => sum + getDocumentTotalInBase(i), 0),
+    // Una nota facturada por partes suma solo lo que falta facturar (utils/notaPorPartes).
+    totalAmount: salesInvoices.reduce((sum, i) => sum + getDocumentTotalInBase(ventaPendienteDe(i)), 0),
     // El "de N en total" es el universo SIN filtro de fecha, pero dentro de
     // la misma sucursal: comparar 5 de una sede contra el total de todas no
     // dice nada.
@@ -3435,17 +3529,17 @@ Gracias por tu preferencia.`
                 <span className="text-gray-600">
                   Cobrado en {filterPaymentMethod}:{' '}
                   <span className="font-semibold text-gray-900">
-                    {formatCurrency(toDisp(tableSales.reduce((sum, inv) => sum + getAmountByMethodInBase(inv, filterPaymentMethod), 0)), reportsCcy)}
+                    {formatCurrency(toDisp(tableSales.reduce((sum, inv) => sum + getAmountByMethodInBase(ventaPendienteDe(inv), filterPaymentMethod), 0)), reportsCcy)}
                   </span>
                 </span>
                 <span className="text-gray-300">|</span>
                 <span className="text-gray-500 text-xs">
-                  Total de los comprobantes: {formatCurrency(toDisp(tableSales.reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)), reportsCcy)}
+                  Total de los comprobantes: {formatCurrency(toDisp(tableSales.reduce((sum, inv) => sum + getDocumentTotalInBase(ventaPendienteDe(inv)), 0)), reportsCcy)}
                 </span>
               </>
             ) : (
               <span className="text-gray-600">
-                Total: <span className="font-semibold text-gray-900">{formatCurrency(toDisp(tableSales.reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)), reportsCcy)}</span>
+                Total: <span className="font-semibold text-gray-900">{formatCurrency(toDisp(tableSales.reduce((sum, inv) => sum + getDocumentTotalInBase(ventaPendienteDe(inv)), 0)), reportsCcy)}</span>
               </span>
             )}
             {dateFilter !== 'all' && (
@@ -3590,6 +3684,7 @@ Gracias por tu preferencia.`
                   {/* Fila extra: pago parcial/crédito + indicadores conversión */}
                   {(
                     ((invoice.documentType === 'nota_venta' || invoice.documentType === 'factura' || invoice.documentType === 'boleta') && (invoice.paymentStatus === 'partial' || invoice.paymentStatus === 'pending')) ||
+                    esNotaPorPartes(invoice) ||
                     invoice.convertedTo ||
                     invoice.convertedFrom
                   ) && (
@@ -3606,13 +3701,19 @@ Gracias por tu preferencia.`
                       {invoice.convertedTo && (
                         <span className="text-xs text-green-600 flex items-center gap-1">
                           <CheckCircle className="w-3 h-3" />
-                          Convertida
+                          {invoice.convertedTo.porPartes ? 'Facturada en partes' : 'Convertida'}
+                        </span>
+                      )}
+                      {esNotaPorPartes(invoice) && !invoice.convertedTo && (
+                        <span className="text-xs text-blue-600 flex items-center gap-1">
+                          <Receipt className="w-3 h-3" />
+                          En partes: falta {formatCurrency(montoPendiente(invoice), invoice.currency)}
                         </span>
                       )}
                       {vinculoDe(invoice.convertedFrom) && (
                         <span className="text-xs text-blue-600 flex items-center gap-1">
                           <ArrowRightCircle className="w-3 h-3" />
-                          Desde {vinculoDe(invoice.convertedFrom).nombre.toLowerCase()}
+                          Desde {vinculoDe(invoice.convertedFrom).nombre.toLowerCase()}{esParteDeNota(invoice) && invoice.convertedFrom.parte ? ` · parte ${invoice.convertedFrom.parte}` : ''}
                         </span>
                       )}
                       {(invoice.documentType === 'nota_credito' || invoice.documentType === 'nota_debito') &&
@@ -3699,14 +3800,21 @@ Gracias por tu preferencia.`
                         {invoice.convertedTo && (
                           <span className="text-xs text-green-600 flex items-center gap-1">
                             <CheckCircle className="w-3 h-3" />
-                            Convertida
+                            {invoice.convertedTo.porPartes ? 'Facturada en partes' : 'Convertida'}
+                          </span>
+                        )}
+                        {/* Facturándose por partes: cuánto falta */}
+                        {esNotaPorPartes(invoice) && !invoice.convertedTo && (
+                          <span className="text-xs text-blue-600 flex items-center gap-1">
+                            <Receipt className="w-3 h-3" />
+                            En partes: falta {formatCurrency(montoPendiente(invoice), invoice.currency)}
                           </span>
                         )}
                         {/* De qué documento salió: nota de venta, cotización o guía */}
                         {vinculoDe(invoice.convertedFrom) && (
                           <span className="text-xs text-blue-600 flex items-center gap-1">
                             <ArrowRightCircle className="w-3 h-3" />
-                            Desde {vinculoDe(invoice.convertedFrom).nombre.toLowerCase()}
+                            Desde {vinculoDe(invoice.convertedFrom).nombre.toLowerCase()}{esParteDeNota(invoice) && invoice.convertedFrom.parte ? ` · parte ${invoice.convertedFrom.parte}` : ''}
                           </span>
                         )}
                       </div>
@@ -3837,7 +3945,8 @@ Gracias por tu preferencia.`
       {selectedInvoiceIds.size > 0 && (() => {
         const selectedInvs = invoices.filter(inv => selectedInvoiceIds.has(inv.id))
         const allAreConvertibleNotas = selectedInvs.length > 0 && selectedInvs.every(
-          inv => inv.documentType === 'nota_venta' && !inv.convertedTo && inv.status !== 'voided'
+          inv => inv.documentType === 'nota_venta' && !inv.convertedTo && inv.status !== 'voided' &&
+            inv.status !== 'cancelled' && !esNotaPorPartes(inv)
         )
         const reenviablesCount = selectedInvs.filter(isReenviableASunat).length
         return (
@@ -3983,13 +4092,15 @@ Gracias por tu preferencia.`
                       pero es opcional (Configuración) y por defecto NO se puede,
                       porque al editar no se ajusta el stock.
                       Se excluyen las convertidas a comprobante (editarlas dejaría la
-                      nota y su factura diciendo cosas distintas) y las anuladas. */}
+                      nota y su factura diciendo cosas distintas) y las anuladas. Con partes,
+                      ni la nota ni sus partes. */}
                   {permisosComprobante.editar &&
                    ((invoice.documentType === 'factura' || invoice.documentType === 'boleta')
-                      ? !comprobanteYaEnviado(invoice)
+                      ? !comprobanteYaEnviado(invoice) && !esParteDeNota(invoice)
                       : invoice.documentType === 'nota_venta' &&
                         businessSettings?.allowEditNotaVenta === true &&
                         !invoice.convertedTo &&
+                        !esNotaPorPartes(invoice) &&
                         invoice.status !== 'voided' &&
                         invoice.status !== 'cancelled'
                    ) && (
@@ -4410,6 +4521,7 @@ Gracias por tu preferencia.`
                   {/* Registrar Pago - Para notas de venta y facturas al crédito con saldo pendiente */}
                   {(invoice.documentType === 'nota_venta' || invoice.documentType === 'factura' || invoice.documentType === 'boleta') &&
                    invoice.status !== 'cancelled' && invoice.status !== 'voided' &&
+                   !(invoice.documentType === 'nota_venta' && (invoice.convertedTo || esNotaPorPartes(invoice))) &&
                    (invoice.paymentStatus === 'partial' || invoice.paymentStatus === 'pending') &&
                    (invoice.balance > 0 || invoice.status === 'pending') && (
                     <>
@@ -4435,7 +4547,9 @@ Gracias por tu preferencia.`
                       hay baja que comunicar— pero antes no tenía NINGUNA opción de
                       anulación y seguía sumando en caja y ventas para siempre. */}
                   {permisosComprobante.anular &&
-                   (invoice.documentType === 'nota_venta' ||
+                   // Una nota convertida (entera o con partes) no se anula: su stock y
+                   // su dinero respaldan a los comprobantes que salieron de ella.
+                   ((invoice.documentType === 'nota_venta' && !invoice.convertedTo && !esNotaPorPartes(invoice)) ||
                     ((invoice.documentType === 'factura' || invoice.documentType === 'boleta') && invoice.sunatStatus === 'rejected')) &&
                    invoice.status !== 'cancelled' && (
                     <>
@@ -4506,7 +4620,7 @@ Gracias por tu preferencia.`
                     // Notas de venta (sin validez fiscal) se pueden eliminar si está habilitado,
                     // salvo las ya convertidas: su stock ahora respalda la factura o la boleta,
                     // y devolverlo al borrar la nota lo contaría dos veces.
-                    (invoice.documentType === 'nota_venta' && !invoice.convertedTo) ||
+                    (invoice.documentType === 'nota_venta' && !invoice.convertedTo && !esNotaPorPartes(invoice)) ||
                     // Facturas/Boletas/Notas de Crédito/Notas de Débito: solo si NO fueron aceptadas por SUNAT
                     (invoice.documentType !== 'nota_venta' && invoice.sunatStatus !== 'accepted')
                   ) && (
@@ -5104,7 +5218,17 @@ Gracias por tu preferencia.`
             )}
 
             {/* ========== CONVERSIONES ========== */}
-            {viewingInvoice.convertedTo && (
+            {/* Facturada por partes: sus comprobantes, cuánto se facturó y cuánto falta. */}
+            {viewingInvoice.documentType === 'nota_venta' && (viewingInvoice.facturasParciales || []).length > 0 && (
+              <div className="border border-gray-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Receipt className="w-4 h-4 text-gray-400" />
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Facturada por partes</h4>
+                </div>
+                <ResumenDePartes nota={viewingInvoice} />
+              </div>
+            )}
+            {viewingInvoice.convertedTo && !viewingInvoice.convertedTo.porPartes && (
               <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
                 <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
                 <div className="flex-1 min-w-0">
@@ -5140,6 +5264,7 @@ Gracias por tu preferencia.`
                   {vinculoDe(viewingInvoice.convertedFrom).numero && (
                     <p className="text-sm text-blue-700">
                       {vinculoDe(viewingInvoice.convertedFrom).nombre}: <strong>{vinculoDe(viewingInvoice.convertedFrom).numero}</strong>
+                      {esParteDeNota(viewingInvoice) && viewingInvoice.convertedFrom.parte ? ` · parte ${viewingInvoice.convertedFrom.parte}` : ''}
                     </p>
                   )}
                 </div>
@@ -5253,15 +5378,30 @@ Gracias por tu preferencia.`
                   </Button>
                 </div>
               )}
+              {/* Facturar por partes: la próxima parte de una nota cobrada (utils/notaPorPartes). */}
+              {viewingInvoice.documentType === 'nota_venta' &&
+               viewingInvoice.sunatStatus === 'not_applicable' &&
+               !isDemoMode &&
+               !motivoParaNoFacturarPorPartes(viewingInvoice) && (
+                <Button size="sm" variant="outline" className="w-full" onClick={() => setPartesDeNota(viewingInvoice)}>
+                  <Receipt className="w-4 h-4 mr-1" />
+                  {esNotaPorPartes(viewingInvoice)
+                    ? `Facturar otra parte (falta ${formatCurrency(montoPendiente(viewingInvoice), viewingInvoice.currency)})`
+                    : 'Facturar por partes'}
+                </Button>
+              )}
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" className="flex-1" onClick={() => setViewingInvoice(null)}>
                   Cerrar
                 </Button>
-                {/* Solo mostrar para notas de venta reales (no boletas/facturas mal etiquetadas) */}
+                {/* Solo mostrar para notas de venta reales (no boletas/facturas mal etiquetadas).
+                    Anulada con cualquiera de las dos marcas, o con partes, no se convierte. */}
                 {viewingInvoice.documentType === 'nota_venta' &&
                  viewingInvoice.sunatStatus === 'not_applicable' &&
                  !viewingInvoice.convertedTo &&
-                 viewingInvoice.status !== 'voided' && (
+                 !esNotaPorPartes(viewingInvoice) &&
+                 viewingInvoice.status !== 'voided' &&
+                 viewingInvoice.status !== 'cancelled' && (
                   <Button size="sm" variant="success" className="flex-1" onClick={() => handleConvertInPOS(viewingInvoice)}>
                     <Receipt className="w-4 h-4 mr-1" />
                     Convertir a Comprobante
@@ -6125,7 +6265,7 @@ Gracias por tu preferencia.`
             <div>
               <span className="text-sm font-medium text-amber-800">Evitar duplicados por conversión</span>
               <p className="text-xs text-amber-700 mt-0.5">
-                Excluye facturas y boletas generadas desde notas de venta, y las notas ya convertidas, para no contar ventas dobles. Desmárcala si quieres ver todos los documentos.
+                De cada nota de venta convertida queda un solo documento: su boleta o factura. Si la nota se facturó por partes, queda la nota. Desmárcala si quieres ver todos los documentos.
               </p>
             </div>
           </label>
@@ -6186,6 +6326,15 @@ Gracias por tu preferencia.`
           ))}
         </div>,
         document.body
+      )}
+
+      {/* Facturar una nota por partes */}
+      {partesDeNota && (
+        <FacturarPorPartesModal
+          nota={partesDeNota}
+          onClose={() => setPartesDeNota(null)}
+          onArmar={(parte) => handleFacturarParte(partesDeNota, parte)}
+        />
       )}
 
       {/* Modal para crear Guía de Remisión */}

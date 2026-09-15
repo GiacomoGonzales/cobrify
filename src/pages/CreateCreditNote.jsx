@@ -9,6 +9,8 @@ import { useInvoicePermissions } from '@/hooks/useInvoicePermissions'
 import { useLocationAccess } from '@/utils/locationAccess'
 import { estadoInicialSunat } from '@/utils/estadoInicialSunat'
 import { esNotaDeCredito, notasDeLaFactura, resumenDeNotas, motivoParaNoEmitirNota } from '@/utils/notasDeCredito'
+import { esParteDeNota } from '@/utils/notaPorPartes'
+import { devolverParteALaNota } from '@/services/documentLinking'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -1320,7 +1322,16 @@ export default function CreateCreditNote() {
         // revertir esas notas (quitar convertedTo) para que el usuario pueda volver
         // a usarlas. Si la NC es parcial, NO se revierten porque la factura sigue
         // siendo válida por el monto restante.
-        if (isFullCancellation && selectedInvoice.convertedFrom) {
+        // Una PARTE de una nota facturada por partes no libera la nota: le
+        // devuelve su monto y sus cantidades (utils/notaPorPartes).
+        if (isFullCancellation && esParteDeNota(selectedInvoice)) {
+          const devuelta = await devolverParteALaNota({
+            businessId: getBusinessId(),
+            convertedFrom: selectedInvoice.convertedFrom,
+            invoiceId: selectedInvoice.id,
+          })
+          if (!devuelta.ok) console.warn('No se pudo devolver la parte a su nota de venta:', devuelta.error)
+        } else if (isFullCancellation && selectedInvoice.convertedFrom) {
           try {
             const { doc, updateDoc, deleteField } = await import('firebase/firestore')
             const { db } = await import('@/lib/firebase')
@@ -1328,7 +1339,9 @@ export default function CreateCreditNote() {
               || (selectedInvoice.convertedFrom.id ? [selectedInvoice.convertedFrom.id] : [])
             for (const notaId of notaIds) {
               try {
-                const notaRef = doc(db, 'businesses', user.uid, 'invoices', notaId)
+                // La nota es del NEGOCIO: con `user.uid` un sub-usuario la buscaba
+                // en su propia cuenta y la nota nunca se liberaba.
+                const notaRef = doc(db, 'businesses', getBusinessId(), 'invoices', notaId)
                 await updateDoc(notaRef, { convertedTo: deleteField(), updatedAt: new Date() })
                 console.log(`✅ Nota de venta ${notaId} revertida tras NC ${creditNoteNumber}`)
               } catch (revertError) {
@@ -1344,7 +1357,9 @@ export default function CreateCreditNote() {
         // Idempotencia (Fase 2): si el stock ya se restauró antes (anulación previa),
         // NO volver a devolverlo.
         const stockReturnCodes = ['01', '06', '07']
-        if (stockReturnCodes.includes(formData.discrepancyCode) && selectedInvoice.stockRestored !== true) {
+        // Una parte de una nota facturada por partes no descontó stock: lo
+        // descontó la nota, que sigue vigente. No hay nada que devolver.
+        if (stockReturnCodes.includes(formData.discrepancyCode) && selectedInvoice.stockRestored !== true && !esParteDeNota(selectedInvoice)) {
           try {
             const { updateWarehouseStock, createStockMovement } = await import('@/services/warehouseService')
             const { getProducts, updateProduct } = await import('@/services/firestoreService')

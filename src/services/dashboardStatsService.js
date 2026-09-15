@@ -2,6 +2,7 @@ import { db } from '@/lib/firebase'
 import {
   collection, query, where, getDocs, getAggregateFromServer, sum, count,
 } from 'firebase/firestore'
+import { montoFacturado } from '@/utils/notaPorPartes'
 
 /**
  * TOTALES DEL MES SIN DESCARGAR EL MES.
@@ -61,10 +62,18 @@ const enRango = (businessId, desde, hasta) => [
 ]
 
 /**
- * Los comprobantes del rango que NO cuentan como venta.
+ * Los comprobantes del rango que NO cuentan como venta, o no enteros.
  *
  * Cinco consultas dirigidas, cada una devuelve un puñado. Se juntan sin repetir
  * porque un mismo documento puede caer en varias (una nota de crédito anulada).
+ *
+ * Y una sexta para las notas que se están facturando POR PARTES
+ * (utils/notaPorPartes): lo ya facturado lo suman sus partes, así que de la
+ * nota se resta ese monto. `soloMonto`: la nota sigue siendo una venta y no se
+ * descuenta de la cantidad. Va sin rango de fechas porque con él haría falta un
+ * índice compuesto, y son pocas; la fecha se filtra acá. Se procesa al final:
+ * si la nota ya cayó entera en otra consulta (anulada, archivada, completa),
+ * manda esa.
  */
 const traerExcluidos = async (businessId, desde, hasta) => {
   const consultas = [
@@ -75,8 +84,12 @@ const traerExcluidos = async (businessId, desde, hasta) => {
     query(...enRango(businessId, desde, hasta),
       where('documentType', '==', 'nota_venta'), where('convertedTo', '!=', null)),
   ]
+  const conPartes = query(invoicesRef(businessId), where('tienePartes', '==', true))
 
-  const resultados = await Promise.all(consultas.map(q => getDocs(q)))
+  const [resultados, snapConPartes] = await Promise.all([
+    Promise.all(consultas.map(q => getDocs(q))),
+    getDocs(conPartes),
+  ])
   const porId = new Map()
   for (const snap of resultados) {
     snap.forEach(d => {
@@ -88,6 +101,16 @@ const traerExcluidos = async (businessId, desde, hasta) => {
       })
     })
   }
+  const desdeDia = diaLima(desde)
+  const hastaDia = diaLima(hasta)
+  snapConPartes.forEach(d => {
+    if (porId.has(d.id)) return
+    const data = d.data()
+    const fecha = typeof data.emissionDate === 'string' ? data.emissionDate : null
+    if (!fecha || fecha < desdeDia || fecha >= hastaDia || data.convertedTo) return
+    const facturado = montoFacturado(data)
+    if (facturado > 0) porId.set(d.id, { total: facturado, fecha, soloMonto: true })
+  })
   return [...porId.values()]
 }
 
@@ -134,7 +157,7 @@ const agregarPorDia = async (businessId, desde, fin) => {
   // Restar lo que no cuenta, en su día y en el total.
   for (const ex of excluidos) {
     sales -= ex.total
-    cantidad -= 1
+    if (!ex.soloMonto) cantidad -= 1
     if (ex.fecha && porFecha[ex.fecha] != null) porFecha[ex.fecha] = porFecha[ex.fecha] - ex.total
   }
   // Un redondeo al final: restar decimales puede dejar -0.0000001.
@@ -195,7 +218,7 @@ export const getRangeSalesAggregated = async (businessId, desde, hasta) => {
     const d = agg.data()
     let sales = Number(d.total) || 0
     let cantidad = Number(d.n) || 0
-    for (const ex of excluidos) { sales -= ex.total; cantidad -= 1 }
+    for (const ex of excluidos) { sales -= ex.total; if (!ex.soloMonto) cantidad -= 1 }
     return { ok: true, sales: Math.round(sales * 100) / 100, count: Math.max(0, cantidad) }
   } catch (error) {
     console.warn('Agregación de rango no disponible:', error?.code || error?.message)

@@ -39,6 +39,7 @@ import CashClosureTicket from '@/components/CashClosureTicket'
 import { aplicarTamanoDeHoja } from '@/utils/printPageSize'
 import { getSessionMoneyTotals } from '@/utils/cashTotals'
 import { resumirProductosVendidos } from '@/utils/cashClosureProducts'
+import { convertidaDeUnaVez, esParteDeNota } from '@/utils/notaPorPartes'
 import { ticketProductosHtml } from '@/utils/reporteProductos'
 import { printHtmlIframe } from '@/utils/printHtmlIframe'
 import { Capacitor } from '@capacitor/core'
@@ -2024,7 +2025,13 @@ export default function CashRegister() {
       }
       // Si es una nota de venta que ya fue convertida a boleta/factura, no contar
       // (se cuenta la boleta/factura resultante en su lugar)
-      if (invoice.documentType === 'nota_venta' && invoice.convertedTo) {
+      if (invoice.documentType === 'nota_venta' && convertidaDeUnaVez(invoice)) {
+        return false
+      }
+      // Facturada POR PARTES es al revés: el dinero entró una vez, con la nota,
+      // que cuenta entera aunque esté completa, y sus partes no cuentan
+      // (utils/notaPorPartes).
+      if (esParteDeNota(invoice)) {
         return false
       }
       // Si el documento está anulado o pendiente de anulación por NC, no contar
@@ -2167,7 +2174,8 @@ export default function CashRegister() {
       if (invoice.documentType === 'nota_credito') return
       // Notas de débito pagadas ya se contaron arriba, excluir pendientes
       if (invoice.documentType === 'nota_debito') return
-      if (invoice.documentType === 'nota_venta' && invoice.convertedTo) return
+      if (invoice.documentType === 'nota_venta' && convertidaDeUnaVez(invoice)) return
+      if (esParteDeNota(invoice)) return
       if (invoice.status === 'cancelled' || invoice.status === 'voided' ||
           invoice.status === 'pending_cancellation' || invoice.status === 'partial_refund_pending') return
 
@@ -3304,7 +3312,7 @@ export default function CashRegister() {
                                 const isVoided = inv.status === 'cancelled' || inv.status === 'voided' || inv.sunatStatus === 'voided'
                                 const isNC = inv.documentType === 'nota_credito'
                                 const isND = inv.documentType === 'nota_debito'
-                                const isConverted = inv.documentType === 'nota_venta' && inv.convertedTo
+                                const isConverted = inv.documentType === 'nota_venta' && convertidaDeUnaVez(inv)
                                 const isPending = inv.paymentStatus === 'pending'
                                 const isPartial = inv.paymentStatus === 'partial'
                                 const createdAt = inv.createdAt?.toDate?.() || (inv.createdAt ? new Date(inv.createdAt) : null)
@@ -3316,6 +3324,8 @@ export default function CashRegister() {
                                   statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">Anulado</span>
                                 } else if (isNC) {
                                   statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">Devolución</span>
+                                } else if (esParteDeNota(inv)) {
+                                  statusBadge = <span className="text-xs px-2 py-0.5 rounded-full chip-neutro">Parte de nota</span>
                                 } else if (isConverted) {
                                   statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Convertida</span>
                                 } else if (isPending) {
@@ -3326,7 +3336,7 @@ export default function CashRegister() {
                                   statusBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">Pagado</span>
                                 }
 
-                                const rowClass = (isVoided || isNC || isConverted) ? 'opacity-50' : ''
+                                const rowClass = (isVoided || isNC || isConverted || esParteDeNota(inv)) ? 'opacity-50' : ''
 
                                 return (
                                   <tr key={inv.id} className={`border-b border-gray-100 hover:bg-gray-50 ${rowClass}`}>
@@ -4174,7 +4184,7 @@ export default function CashRegister() {
                             const isVoided = inv.status === 'cancelled' || inv.status === 'voided' || inv.sunatStatus === 'voided'
                             const isNC = inv.documentType === 'nota_credito'
                             const isND = inv.documentType === 'nota_debito'
-                            const isConverted = inv.documentType === 'nota_venta' && inv.convertedTo
+                            const isConverted = inv.documentType === 'nota_venta' && convertidaDeUnaVez(inv)
                             const isPending = inv.paymentStatus === 'pending'
                             const isPartial = inv.paymentStatus === 'partial'
                             const userLabel = inv.createdByName || inv.createdByEmail || 'Sin identificar'
@@ -4184,6 +4194,8 @@ export default function CashRegister() {
                               statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">Anulado</span>
                             } else if (isNC) {
                               statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">Devolución</span>
+                            } else if (esParteDeNota(inv)) {
+                              statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full chip-neutro">Parte de nota</span>
                             } else if (isConverted) {
                               statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">Convertida</span>
                             } else if (isPending) {
@@ -4194,7 +4206,7 @@ export default function CashRegister() {
                               statusBadge = <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">Pagado</span>
                             }
 
-                            const rowClass = (isVoided || isNC || isConverted) ? 'opacity-50' : ''
+                            const rowClass = (isVoided || isNC || isConverted || esParteDeNota(inv)) ? 'opacity-50' : ''
 
                             return (
                               <tr key={inv.id} className={`border-b border-gray-100 ${rowClass}`}>

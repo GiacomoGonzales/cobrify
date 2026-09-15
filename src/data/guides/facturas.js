@@ -215,6 +215,31 @@ export default {
     },
 
     {
+      id: 'facturar-por-partes',
+      title: 'Facturar una nota por partes',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Si una nota de venta se tiene que facturar en varias facturas o boletas —por ejemplo, una nota de S/ 10,000 en cinco facturas de S/ 2,000—, abre la nota y usa **Facturar por partes**. Pones el monto de esta parte y se abre el POS con la parte ya armada: los mismos productos de la nota, en proporción al monto.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Cada parte se lleva la misma proporción de cada producto y de los descuentos. La última toma exactamente lo que falta, así la nota cierra sin céntimos sueltos.',
+            'En el POS la parte sale tal cual y al contado: no se cambian productos, cantidades, precios ni el descuento. Solo eliges Boleta o Factura y emites.',
+            'La nota muestra sus comprobantes, cuánto se facturó y cuánto falta. Cuando se completa, queda como facturada en partes.',
+            'El stock y la caja no se mueven: los movió la nota cuando se vendió. Las partes no vuelven a entrar a la caja, y la comisión del vendedor sigue siendo la de la nota.',
+            'Si anulas una de las partes, su monto vuelve a la nota y lo puedes facturar otra vez.',
+          ],
+        },
+        {
+          type: 'ojo',
+          text: 'Por ahora se facturan por partes las notas en soles y cobradas completas. Mientras la nota tenga partes no se edita, no se anula, no se elimina ni se convierte entera.',
+        },
+      ],
+    },
+
+    {
       id: 'reimprimir-compartir',
       title: 'Reimprimir, descargar y enviar por WhatsApp',
       blocks: [

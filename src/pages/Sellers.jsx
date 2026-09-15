@@ -12,6 +12,7 @@ import {
 import CommissionPayoutModal from '@/components/CommissionPayoutModal'
 import MonthSelect from '@/components/MonthSelect'
 import { getDocumentTotalInBase } from '@/utils/currency'
+import { convertidaDeUnaVez, ventaPendienteDe } from '@/utils/notaPorPartes'
 import { getInvoices, getRecentInvoices, getInvoicesBySeller } from '@/services/firestoreService'
 import { useAppContext } from '@/hooks/useAppContext'
 import { sucursalesDelVendedor, etiquetaSucursales } from '@/utils/sellerBranches'
@@ -173,7 +174,10 @@ export default function Sellers() {
     return invoices.filter(invoice => {
       if (invoice.status === 'cancelled' || invoice.status === 'voided') return false
       if (invoice.sunatStatus === 'voiding' || invoice.sunatStatus === 'voided') return false
-      if (invoice.convertedTo) return false
+      // La nota convertida de una vez no: su venta la cuenta la boleta o factura.
+      // Una nota completada POR PARTES sí queda: sus ventas ya las suman las
+      // partes, pero su comisión es de ella (utils/notaPorPartes).
+      if (convertidaDeUnaVez(invoice)) return false
       if (invoice.archived === true) return false
       if (!invoice.sellerId) return false
       return true
@@ -215,7 +219,11 @@ export default function Sellers() {
       const sellerId = invoice.sellerId
       // En moneda BASE (PEN). Antes se sumaba invoice.total crudo, asi que un
       // negocio con ventas en dolares veia cifras mezcladas.
-      const total = getDocumentTotalInBase(invoice)
+      // Una nota facturada por partes vende solo lo que falta facturar (lo
+      // demás lo venden sus partes) y, completa, ya no es un pedido más. Su
+      // comisión sigue entera: es de ella (utils/notaPorPartes).
+      const total = getDocumentTotalInBase(ventaPendienteDe(invoice))
+      const pedido = invoice.convertedTo ? 0 : 1
       const invoiceDate = invoice.createdAt?.toDate
         ? invoice.createdAt.toDate()
         : new Date(invoice.createdAt || 0)
@@ -225,14 +233,14 @@ export default function Sellers() {
       }
 
       statsMap[sellerId].filteredSales += total
-      statsMap[sellerId].filteredOrders += 1
+      statsMap[sellerId].filteredOrders += pedido
 
       // Comision: la congelada en la venta manda. Las ventas anteriores al
       // congelado se recalculan con la config actual (getInvoiceCommission lo
       // marca como estimado).
       const com = getInvoiceCommission(invoice, {
         sellersById: sellerIndex,
-        totalInBase: total,
+        totalInBase: getDocumentTotalInBase(invoice),
         costInBase: (invoice.items || []).reduce(
           (c, it) => c + (Number(it.costAtSale) || 0) * (Number(it.quantity) || 0), 0
         ),
@@ -241,7 +249,7 @@ export default function Sellers() {
 
       if (invoiceDate >= today) {
         statsMap[sellerId].todaySales += total
-        statsMap[sellerId].todayOrders += 1
+        statsMap[sellerId].todayOrders += pedido
       }
       if (invoiceDate >= weekStart) {
         statsMap[sellerId].weekSales += total

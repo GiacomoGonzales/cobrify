@@ -85,6 +85,7 @@ import { printHtmlIframe } from '@/utils/printHtmlIframe'
 import { almacenesDeSucursal, esDeSucursalLaCompra } from '@/utils/purchaseBranch'
 import MonthSelect from '@/components/MonthSelect'
 import { getInvoiceCommission, buildSellerIndex, ventaCobrada } from '@/utils/commissions'
+import { ventaPendienteDe } from '@/utils/notaPorPartes'
 import { getSellers } from '@/services/sellerService'
 import GuideLink from '@/components/guide/GuideLink'
 
@@ -771,7 +772,9 @@ function ReportsGeneral() {
       }
     }
 
-    return validInvoices.filter(enElPeriodo).map(addCostCalculations)
+    // Una nota facturada por partes entra solo con lo que falta facturar: lo
+    // demás lo suman sus partes, cada una en su fecha (utils/notaPorPartes).
+    return validInvoices.filter(enElPeriodo).map(ventaPendienteDe).map(addCostCalculations)
   }, [invoices, enElPeriodo, calculateItemCost, isCustomItem, filterBranch, canAccess, canSeeSale, filterRuc])
 
   // Función helper para calcular revenue del período anterior
@@ -826,7 +829,7 @@ function ReportsGeneral() {
         if (!pasaFiltroDeRuc(invoice, filterRuc)) return false
         return invoiceDate >= startDate && invoiceDate <= endDate
       })
-      .reduce((sum, inv) => sum + getDocumentTotalInBase(inv), 0)
+      .reduce((sum, inv) => sum + getDocumentTotalInBase(ventaPendienteDe(inv)), 0)
   }, [invoices, dateRange, customStartDate, customEndDate, filterRuc])
 
   // Calcular estadísticas generales
@@ -1342,7 +1345,20 @@ function ReportsGeneral() {
     const sellers = {}
     const sellerIndex = buildSellerIndex(sellersList)
 
-    filteredInvoices.forEach(invoice => {
+    // Una nota completada POR PARTES ya no es venta —la suman sus partes—, pero
+    // su comisión es de ella: se congeló entera al venderse y las partes no
+    // comisionan (utils/notaPorPartes). Entra solo para eso, con los mismos
+    // descartes que `validInvoices`.
+    const notasCompletasPorPartes = invoices.filter(inv => (
+      inv.documentType === 'nota_venta' && inv.convertedTo?.porPartes === true
+      && canAccess(inv) && canSeeSale(inv) && inv.archived !== true
+      && !['cancelled', 'voided', 'pending_cancellation', 'partial_refund_pending'].includes(inv.status)
+      && inv.sunatStatus !== 'voiding' && inv.sunatStatus !== 'voided'
+      && esDeSucursal(inv, filterBranch) && pasaFiltroDeRuc(inv, filterRuc) && enElPeriodo(inv)
+    ))
+    const conComision = [...filteredInvoices, ...notasCompletasPorPartes]
+
+    conComision.forEach(invoice => {
       // VENDEDOR, no cuenta. El criterio vive en getSaleSeller para que esta
       // pantalla y el filtro de Ventas no puedan volver a divergir.
       const { id: sellerId, name: sellerName, email: sellerEmail, isSeller } = getSaleSeller(invoice)
@@ -1372,6 +1388,19 @@ function ReportsGeneral() {
           notasCredito: 0,
           notasDebito: 0,
         }
+      }
+
+      if (invoice.convertedTo?.porPartes === true) {
+        const com = getInvoiceCommission(invoice, {
+          sellersById: sellerIndex,
+          totalInBase: getDocumentTotalInBase(invoice),
+        })
+        if (com) {
+          sellers[sellerId].commission += com.amount
+          if (com.estimated) sellers[sellerId].commissionEstimated += com.amount
+          if (ventaCobrada(invoice)) sellers[sellerId].commissionCollected += com.amount
+        }
+        return
       }
 
       sellers[sellerId].salesCount += 1
@@ -1434,7 +1463,7 @@ function ReportsGeneral() {
         }
       })
       .sort((a, b) => b.totalRevenue - a.totalRevenue)
-  }, [filteredInvoices, notasDelPeriodo, calculateItemCost, isCustomItem, sellersList])
+  }, [filteredInvoices, notasDelPeriodo, calculateItemCost, isCustomItem, sellersList, invoices, canAccess, canSeeSale, filterBranch, filterRuc, enElPeriodo])
 
   // Estadísticas por método de pago
   const paymentMethodStats = useMemo(() => {
@@ -1767,7 +1796,7 @@ function ReportsGeneral() {
       const key = groupBy === 'day'
         ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
         : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-      buckets[key] = (buckets[key] || 0) + getDocumentTotalInBase(invoice)
+      buckets[key] = (buckets[key] || 0) + getDocumentTotalInBase(ventaPendienteDe(invoice))
     })
 
     return Object.entries(buckets)
