@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { X, Plus, Trash2, Loader2, PawPrint, Check, Clock, CalendarPlus, History, Search, Syringe, Stethoscope, ShoppingCart } from 'lucide-react'
+import { X, Plus, Trash2, Loader2, PawPrint, Check, Clock, CalendarPlus, History, Search, Syringe, Stethoscope, ShoppingCart, CalendarCheck } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
 import { db } from '@/lib/firebase'
@@ -77,10 +77,17 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
       const { collection, query, where, getDocs, orderBy } = await import('firebase/firestore')
       const { db } = await import('@/lib/firebase')
 
-      const [history, vaccines, recurring] = await Promise.all([
+      const [history, vaccines, recurring, atenciones] = await Promise.all([
         getMedicalHistory(businessId, customer.id),
         getVaccinations(businessId, customer.id),
         getRecurringServices(businessId, customer.id),
+        // Las citas completadas de la Agenda: los servicios que se hicieron
+        // (baños, cortes, consultas agendadas). Sin esto, una mascota que solo
+        // va a bañarse salía "sin historial" aunque tuviera varias atenciones
+        // (reporte de MarenPet, 15-set-2026).
+        getDocs(query(collection(db, 'businesses', businessId, 'appointments'), where('customerId', '==', customer.id)))
+          .then((s) => s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((a) => a.status === 'completed'))
+          .catch(() => []),
       ])
 
       // Cargar ventas del cliente
@@ -104,6 +111,18 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
           invoices = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
         }
 
+        // Las ventas que salieron de citas viejas se guardaban sin el
+        // cliente, y por eso no aparecían ("solo sale la de hoy"). La cita sí
+        // sabe cuál fue su venta: se traen por ahí, sin tocar el comprobante.
+        const yaEstan = new Set(invoices.map((i) => i.id))
+        const porCita = [...new Set(atenciones.map((a) => a.invoiceId).filter((id) => id && !yaEstan.has(id)))]
+        if (porCita.length) {
+          const { doc, getDoc } = await import('firebase/firestore')
+          const extra = await Promise.all(porCita.map((id) =>
+            getDoc(doc(db, 'businesses', businessId, 'invoices', id)).catch(() => null)))
+          for (const s of extra) if (s?.exists()) invoices.push({ id: s.id, ...s.data() })
+        }
+
         // Ordenar por fecha descendente
         invoices.sort((a, b) => {
           const dA = a.createdAt?.toDate?.() || new Date(0)
@@ -119,6 +138,15 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
       const unified = [
         ...history.map(r => ({ ...r, recordType: 'history', sortDate: r.date })),
         ...vaccines.map(v => ({ ...v, recordType: 'vaccine', sortDate: v.dateApplied })),
+        ...atenciones.map(a => ({
+          id: `cita-${a.id}`,
+          recordType: 'service',
+          name: a.serviceName
+            || (Array.isArray(a.services) ? a.services.map(s => s?.name).filter(Boolean).join(', ') : '')
+            || 'Servicio',
+          petName: a.petName || null,
+          sortDate: a.completedAt || a.scheduledDate,
+        })),
       ].sort((a, b) => {
         const dateA = a.sortDate?.toDate ? a.sortDate.toDate() : new Date(a.sortDate)
         const dateB = b.sortDate?.toDate ? b.sortDate.toDate() : new Date(b.sortDate)
@@ -459,27 +487,37 @@ export default function MedicalHistoryModal({ isOpen, onClose, customer }) {
                     {allRecords.length === 0 ? (
                       <div className="text-center py-6 text-gray-500">
                         <PawPrint className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-                        <p className="text-sm">Sin consultas ni vacunas registradas</p>
+                        <p className="text-sm">Sin consultas, vacunas ni servicios registrados</p>
                       </div>
                     ) : (
                       <div className="space-y-2">
                         {allRecords.slice(0, 10).map(record => (
                           <div key={record.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
-                            <div className={`p-1.5 rounded ${record.recordType === 'vaccine' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
-                              {record.recordType === 'vaccine' ? <Syringe className="w-4 h-4" /> : <Stethoscope className="w-4 h-4" />}
+                            <div className={`p-1.5 rounded ${record.recordType === 'vaccine' ? 'bg-green-100 text-green-600' : record.recordType === 'service' ? 'bg-violet-100 text-violet-600' : 'bg-blue-100 text-blue-600'}`}>
+                              {record.recordType === 'vaccine'
+                                ? <Syringe className="w-4 h-4" />
+                                : record.recordType === 'service'
+                                  ? <CalendarCheck className="w-4 h-4" />
+                                  : <Stethoscope className="w-4 h-4" />}
                             </div>
                             <div className="flex-1 min-w-0">
                               <span className="font-medium text-gray-900 text-sm">
-                                {record.recordType === 'vaccine' ? record.name : (record.diagnosis || record.type)}
+                                {record.recordType === 'history' ? (record.diagnosis || record.type) : record.name}
+                                {record.recordType === 'service' && record.petName && (
+                                  <span className="font-normal text-gray-500"> · {record.petName}</span>
+                                )}
                               </span>
                               <span className="text-xs text-gray-400 ml-2">{formatDate(record.sortDate)}</span>
                             </div>
-                            <button
-                              onClick={() => handleDeleteRecord(record)}
-                              className="p-1 text-gray-400 hover:text-red-500"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {/* Una atención de la Agenda no se borra desde acá: es la cita. */}
+                            {record.recordType !== 'service' && (
+                              <button
+                                onClick={() => handleDeleteRecord(record)}
+                                className="p-1 text-gray-400 hover:text-red-500"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>
