@@ -185,9 +185,29 @@ struct ConversationListView: View {
         .onChange(of: navegacion.abrirConversacion) { abrirPendiente() }
     }
 
-    /// Primero el filtro elegido, después la búsqueda.
+    /// Todos, Clientes o Leads, como en la web: se combina con los chips de
+    /// estado y de carpeta. Cliente es una conversación vinculada a un
+    /// negocio de Cobrify; lead, el resto. Se recuerda entre aperturas.
+    enum Mundo: String, CaseIterable {
+        case todos, clientes, leads
+        var nombre: String {
+            switch self {
+            case .todos: "Todos"
+            case .clientes: "Clientes"
+            case .leads: "Leads"
+            }
+        }
+    }
+    @AppStorage("chatMundo") private var mundo: Mundo = .todos
+
+    /// Primero el mundo, después el filtro elegido y al final la búsqueda.
     private var filtradas: [Conversacion] {
         var lista = inbox.conversaciones
+        switch mundo {
+        case .todos: break
+        case .clientes: lista = lista.filter { !$0.linkedBusinessIds.isEmpty }
+        case .leads: lista = lista.filter { $0.linkedBusinessIds.isEmpty }
+        }
         switch filtro {
         case .todas: break
         case .sinLeer: lista = lista.filter { $0.sinLeer > 0 }
@@ -207,19 +227,51 @@ struct ConversationListView: View {
     }
 
     private var barraDeFiltros: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                chip("Todas", .todas)
-                chip("Sin leer", .sinLeer)
-                chip("Abiertas", .abiertas)
-                chip("Pendientes", .pendientes)
-                chip("Completadas", .completadas)
-                ForEach(catalogo.etiquetas) { e in
-                    chipEtiqueta(e)
+        VStack(alignment: .leading, spacing: 0) {
+            pestanasDeMundo
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    chip("Todas", .todas)
+                    chip("Sin leer", .sinLeer)
+                    chip("Abiertas", .abiertas)
+                    chip("Pendientes", .pendientes)
+                    chip("Completadas", .completadas)
+                    ForEach(catalogo.etiquetas) { e in
+                        chipEtiqueta(e)
+                    }
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+        }
+    }
+
+    /// Las tres pestañas de arriba, marcadas con una línea debajo como en la
+    /// web: sin relleno, para no competir con los chips de estado.
+    private var pestanasDeMundo: some View {
+        HStack(spacing: 2) {
+            ForEach(Mundo.allCases, id: \.self) { m in
+                Button { mundo = m } label: {
+                    VStack(spacing: 7) {
+                        Text(m.nombre)
+                            .font(.subheadline.weight(mundo == m ? .semibold : .regular))
+                            .foregroundStyle(mundo == m ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                        Rectangle()
+                            .fill(mundo == m ? AnyShapeStyle(.primary) : AnyShapeStyle(.clear))
+                            .frame(height: 2)
+                    }
+                    .padding(.horizontal, 10)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .fixedSize()
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 6)
+        .padding(.top, 2)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Color(.separator)).frame(height: 0.5)
         }
     }
 

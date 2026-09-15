@@ -102,12 +102,19 @@ enum VistaPrevia {
             ("c5", "Minimarket La Esquina", "51944455566", abierta),
         ].enumerated().map { i, fila in
             let (id, nombre, waId, vence) = fila
-            return Conversacion(id: id, data: [
+            var data: [String: Any] = [
                 "nombre": nombre, "waId": waId, "ultimoMensaje": "Gracias!",
                 "ventanaVenceAt": vence, "ultimoMensajeAt": Timestamp(date: Date().addingTimeInterval(Double(-i) * 900)),
                 "sinLeer": i % 2 == 0 ? i + 1 : 0,
                 "etiquetas": [["interesados"], ["pago"], ["interesados", "seguimiento"], [], ["pago"]][i],
-            ])
+            ]
+            // Tres vinculadas a un negocio (clientes) y dos sueltas (leads),
+            // para ver el filtro Todos / Clientes / Leads de la bandeja.
+            if ["c1", "c2", "c4"].contains(id) {
+                data["linkedBusinessId"] = "negocio-\(id)"
+                data["linkedBusinessName"] = nombre
+            }
+            return Conversacion(id: id, data: data)
         }
     }
 
