@@ -6,7 +6,7 @@
  */
 export default {
   id: 'compras',
-  actualizado: '05/09/2026',
+  actualizado: '15/09/2026',
   intro:
     'Compras es por donde entra la mercadería: registras lo que le compraste a tu proveedor y el sistema suma el stock y actualiza el costo de cada producto. Es lo que hace que después tus reportes de utilidad digan la verdad.',
 
@@ -30,6 +30,10 @@ export default {
         {
           type: 'consejo',
           text: 'Puedes cargar el costo **con IGV** o **sin IGV** (**Costo c/IGV** y **Costo s/IGV**): escribe el que tengas a mano en la factura y el sistema calcula el otro.',
+        },
+        {
+          type: 'consejo',
+          text: 'Con un catálogo grande, el buscador de cada fila muestra las **primeras 60** coincidencias y abajo te dice cuántas hay en total. Escribe más letras o el código para llegar al producto.',
         },
       ],
     },

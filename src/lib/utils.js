@@ -107,12 +107,38 @@ export function buildSearchHaystack(...fields) {
  * @returns {boolean}
  */
 export function matchesPrebuilt(query, haystack) {
+  return coincidenPalabras(palabrasDeBusqueda(query), haystack)
+}
+
+/**
+ * Las palabras de una búsqueda, normalizadas (sin tildes, en minúsculas).
+ *
+ * Para filtrar miles de ítems: se prepara UNA vez por búsqueda y cada ítem se
+ * compara con `coincidenPalabras`. `matchesPrebuilt` hace lo mismo pero vuelve
+ * a normalizar la búsqueda por cada ítem, y con 4k productos en un celular eso
+ * suma.
+ *
+ * @param {string} query - Lo que escribió el usuario
+ * @returns {string[]}
+ */
+export function palabrasDeBusqueda(query) {
   const normalizedQuery = normalizeText(query).trim()
-  if (!normalizedQuery) return true
+  return normalizedQuery ? normalizedQuery.split(/\s+/).filter(Boolean) : []
+}
+
+/**
+ * `matchesPrebuilt` con la búsqueda ya preparada por `palabrasDeBusqueda`.
+ * Sin palabras, todo coincide.
+ *
+ * @param {string[]} palabras
+ * @param {string} haystack - String ya normalizado (resultado de buildSearchHaystack)
+ * @returns {boolean}
+ */
+export function coincidenPalabras(palabras, haystack) {
+  if (palabras.length === 0) return true
   if (!haystack) return false
-  const words = normalizedQuery.split(/\s+/).filter(Boolean)
-  for (let i = 0; i < words.length; i++) {
-    if (!haystack.includes(words[i])) return false
+  for (let i = 0; i < palabras.length; i++) {
+    if (!haystack.includes(palabras[i])) return false
   }
   return true
 }

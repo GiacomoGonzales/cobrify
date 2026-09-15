@@ -24,8 +24,11 @@ import { productSchema } from '@/utils/schemas'
 import { toDateInput, fromDateInput } from '@/utils/purchaseDate'
 import { UNITS, getUnitLabel, formatPresentationEquivalence } from '@/utils/units'
 import { getPresentationCostInfo } from '@/utils/presentationCost'
-import { formatCurrency, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
+import { formatCurrency, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, palabrasDeBusqueda, coincidenPalabras } from '@/lib/utils'
 import { buildProductHaystack } from '@/utils/productSearch'
+import { ordenarPorClave } from '@/utils/listasGrandes'
+import { useCoincidePantalla, PANTALLA_LG } from '@/hooks/useCoincidePantalla'
+import CampoDeBusqueda from '@/components/CampoDeBusqueda'
 import {
   getProducts,
   createProduct,
@@ -4866,10 +4869,14 @@ export default function Products() {
     })
   }
 
-  // useDeferredValue mantiene el <input> de búsqueda responsivo aunque haya
-  // miles de productos: el input se actualiza al instante con cada tecla y
-  // el re-filter se procesa "low priority" en el siguiente tick.
+  // La búsqueda llega de CampoDeBusqueda cuando se deja de teclear (cada tecla
+  // solo redibuja el input) y useDeferredValue además deja el filtrado en baja
+  // prioridad, para que la página no se trabe al recibirla.
   const deferredSearchTerm = useDeferredValue(searchTerm)
+
+  // Tarjetas (celular) o tabla (escritorio): se dibuja solo la que se ve.
+  // null = el navegador no sabe decirlo y se dibujan las dos, como antes.
+  const esPantallaAncha = useCoincidePantalla(PANTALLA_LG)
 
   // Índice de búsqueda pre-normalizado (lowercase + sin tildes) por producto.
   // Se rearma SOLO cuando cambian `products` o `categories` (no en cada tecla).
@@ -4885,10 +4892,50 @@ export default function Products() {
     return map
   }, [products, categories])
 
-  // Filtrar y ordenar productos por búsqueda y categoría (optimizado con useMemo)
+  // Orden de la lista: se arma cuando cambian los productos o el criterio de
+  // orden, NO en cada tecla. Antes se reordenaban todas las coincidencias en
+  // cada búsqueda y con la primera letra eran miles: en el celular de DHANY
+  // MEGAFIESTA (4,460 productos) las letras aparecían tarde (15/09/2026).
+  // Filtrar esta lista da el mismo orden que filtrar y después ordenar
+  // (ordenarPorClave es estable). Ver src/utils/listasGrandes.js.
+  const productosOrdenados = React.useMemo(() => {
+    const claveDe = (p) => {
+      switch (sortField) {
+        case 'sku':
+          return p.sku || ''
+        case 'code':
+          return p.code || ''
+        case 'name':
+          return p.name || ''
+        case 'price':
+          return p.hasVariants ? p.basePrice : p.price || 0
+        case 'stock': {
+          const stock = stockVisible(p)
+          return stock !== null ? stock : -1
+        }
+        case 'category':
+          return getCategoryPath(categories, p.category) || ''
+        case 'brand': {
+          // Preferimos el nombre de la marca administrada; fallback al texto libre.
+          const marca = p.brandId ? brands.find(br => br.id === p.brandId) : null
+          return marca?.name || (p.marca || '')
+        }
+        default:
+          return p.name || ''
+      }
+    }
+    return ordenarPorClave(scopedProducts, claveDe, sortDirection)
+  }, [scopedProducts, sortField, sortDirection, categories, brands, stockVisible])
+
+  // Filtrar por búsqueda, categoría, marca y vencimiento, sobre la lista ya ordenada.
   const filteredProducts = React.useMemo(() => {
-    const filtered = scopedProducts.filter(product => {
-      const matchesSearch = matchesPrebuilt(deferredSearchTerm, productSearchIndex.get(product.id) || '')
+    // La búsqueda y la rama de la categoría se preparan UNA vez, no por producto.
+    const palabras = palabrasDeBusqueda(deferredSearchTerm)
+    const idsDeLaCategoria = (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'sin-categoria')
+      ? null
+      : new Set([selectedCategoryFilter, ...getAllDescendantCategoryIds(categories, selectedCategoryFilter)])
+    return productosOrdenados.filter(product => {
+      const matchesSearch = coincidenPalabras(palabras, productSearchIndex.get(product.id) || '')
 
       // Check category filter (backward compatible with old string-based categories)
       let matchesCategory = false
@@ -4898,11 +4945,8 @@ export default function Products() {
       } else if (selectedCategoryFilter === 'sin-categoria') {
         matchesCategory = !product.category
       } else {
-        // Check if product is in selected category OR any of its descendant categories
-        const descendantIds = getAllDescendantCategoryIds(categories, selectedCategoryFilter)
-        matchesCategory =
-          product.category === selectedCategoryFilter ||
-          descendantIds.includes(product.category)
+        // En la categoría elegida o en alguna de sus subcategorías.
+        matchesCategory = idsDeLaCategoria.has(product.category)
       }
 
       // Check brand filter (managed brandId). "Sin marca" = sin brandId administrado.
@@ -4930,62 +4974,7 @@ export default function Products() {
       // La sucursal ya se aplico en scopedProducts.
       return matchesSearch && matchesCategory && matchesBrand && matchesExpiration
     })
-
-    // Ordenar productos
-    const sorted = [...filtered].sort((a, b) => {
-      let aValue, bValue
-
-      switch (sortField) {
-        case 'sku':
-          aValue = a.sku || ''
-          bValue = b.sku || ''
-          break
-        case 'code':
-          aValue = a.code || ''
-          bValue = b.code || ''
-          break
-        case 'name':
-          aValue = a.name || ''
-          bValue = b.name || ''
-          break
-        case 'price':
-          aValue = a.hasVariants ? a.basePrice : a.price || 0
-          bValue = b.hasVariants ? b.basePrice : b.price || 0
-          break
-        case 'stock':
-          const aStock = stockVisible(a)
-          const bStock = stockVisible(b)
-          aValue = aStock !== null ? aStock : -1
-          bValue = bStock !== null ? bStock : -1
-          break
-        case 'category':
-          aValue = getCategoryPath(categories, a.category) || ''
-          bValue = getCategoryPath(categories, b.category) || ''
-          break
-        case 'brand': {
-          // Preferimos el nombre de la marca administrada; fallback al texto libre.
-          const aBrand = a.brandId ? brands.find(br => br.id === a.brandId) : null
-          const bBrand = b.brandId ? brands.find(br => br.id === b.brandId) : null
-          aValue = aBrand?.name || (a.marca || '')
-          bValue = bBrand?.name || (b.marca || '')
-          break
-        }
-        default:
-          aValue = a.name || ''
-          bValue = b.name || ''
-      }
-
-      // Comparar valores
-      if (typeof aValue === 'string') {
-        const comparison = aValue.localeCompare(bValue, 'es', { sensitivity: 'base' })
-        return sortDirection === 'asc' ? comparison : -comparison
-      } else {
-        return sortDirection === 'asc' ? aValue - bValue : bValue - aValue
-      }
-    })
-
-    return sorted
-  }, [scopedProducts, deferredSearchTerm, productSearchIndex, selectedCategoryFilter, selectedBrandFilter, showExpiringOnly, categories, brands, sortField, sortDirection, stockVisible])
+  }, [productosOrdenados, deferredSearchTerm, productSearchIndex, selectedCategoryFilter, selectedBrandFilter, showExpiringOnly, categories])
 
   // Paginación de productos filtrados (optimizado con useMemo)
   const paginationData = React.useMemo(() => {
@@ -5337,11 +5326,12 @@ export default function Products() {
           <div className="flex gap-2">
             <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm flex-1">
               <Search className="w-5 h-5 text-gray-500 flex-shrink-0" />
-              <input
-                type="text"
+              {/* El texto vive en CampoDeBusqueda: cada tecla redibuja solo el
+                  input y la página se entera al dejar de teclear. */}
+              <CampoDeBusqueda
+                valor={searchTerm}
+                onCambio={setSearchTerm}
                 placeholder="Buscar por código, nombre, categoría..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
                 className="flex-1 text-sm border-none bg-transparent focus:ring-0 focus:outline-none"
               />
             </div>
@@ -5690,7 +5680,10 @@ export default function Products() {
               )}
             </div>
 
-            {/* Vista de tarjetas para móvil */}
+            {/* Vista de tarjetas para móvil. Solo se dibuja la vista que se ve
+                (useCoincidePantalla): con las dos, cada búsqueda y cada página
+                costaban el doble en el celular. */}
+            {esPantallaAncha !== true && (
             <div className="lg:hidden p-3 space-y-3 bg-gray-50">
               {paginatedProducts.map((product) => {
                 const realStock = stockVisible(product)
@@ -5899,8 +5892,10 @@ export default function Products() {
                 )
               })}
             </div>
+            )}
 
             {/* Vista de tabla para desktop */}
+            {esPantallaAncha !== false && (
             <div className="hidden lg:block overflow-x-auto">
               <Table>
               <TableHeader>
@@ -6643,6 +6638,7 @@ export default function Products() {
               </TableBody>
               </Table>
             </div>
+            )}
 
             {/* Controles de paginación */}
             {totalFilteredProducts > 0 && (

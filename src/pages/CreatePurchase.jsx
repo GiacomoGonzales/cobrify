@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from 'react'
 import { isPharmaLikeMode } from '@/utils/businessModes'
 import { getProjects } from '@/services/projectService'
 import { leerBorrador, guardarBorrador, borrarBorrador } from '@/utils/borradorLocal'
@@ -14,8 +14,9 @@ import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Alert from '@/components/ui/Alert'
-import { formatCurrency, matchesSearchQuery, buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
+import { formatCurrency, matchesSearchQuery, buildSearchHaystack, palabrasDeBusqueda, coincidenPalabras } from '@/lib/utils'
 import { buildProductHaystack, buildIngredientHaystack } from '@/utils/productSearch'
+import { primerasCoincidencias, TOPE_DE_SUGERENCIAS } from '@/utils/listasGrandes'
 import {
   isMultiCurrencyEnabled,
   getDefaultCurrency,
@@ -1032,37 +1033,64 @@ export default function CreatePurchase() {
     return map
   }, [ingredients])
 
-  // Filtrar productos e ingredientes según búsqueda y modo (flexible + sin acentos)
-  const getFilteredItems = (index) => {
-    const search = productSearches[index] || ''
+  // Lo que se escribió en cada fila, en diferido: el input muestra la tecla al
+  // instante y el desplegable se arma después, en baja prioridad.
+  const busquedasDiferidas = useDeferredValue(productSearches)
 
-    let items = []
+  // Catalogo por sucursal: comprar es cargar stock al almacen elegido, asi
+  // que se ofrecen solo los productos disponibles en la sede de ESE almacen
+  // (comprar un producto de otra sede seria crear mercaderia invisible).
+  // Sin almacen elegido (compra solo-registro) no se filtra nada.
+  const comprables = useMemo(() => (
+    selectedWarehouse
+      ? filterProductsForBranch(products, selectedWarehouse.branchId || null, businessSettings?.branchCatalogEnabled === true)
+      : products
+  ), [products, selectedWarehouse, businessSettings?.branchCatalogEnabled])
 
-    // Agregar productos si el modo lo permite
+  // Sugerencias para una búsqueda (flexible + sin acentos), según el modo:
+  // productos y después ingredientes, cada grupo con su tope y su total.
+  // Antes se dibujaban TODAS las coincidencias, dos veces (fila normal y
+  // compacta), cada una con su stock por almacén: con 4,460 productos la
+  // primera letra traía miles y el celular no alcanzaba a mostrar lo que se
+  // escribía (DHANY MEGAFIESTA, 15/09/2026). Ver src/utils/listasGrandes.js.
+  const buscarSugerencias = useCallback((search) => {
+    const palabras = palabrasDeBusqueda(search)
+    const items = []
+    let total = 0
     if (itemMode === 'products' || itemMode === 'all') {
-      // Catalogo por sucursal: comprar es cargar stock al almacen elegido, asi
-      // que se ofrecen solo los productos disponibles en la sede de ESE almacen
-      // (comprar un producto de otra sede seria crear mercaderia invisible).
-      // Sin almacen elegido (compra solo-registro) no se filtra nada.
-      const comprables = selectedWarehouse
-        ? filterProductsForBranch(products, selectedWarehouse.branchId || null, businessSettings?.branchCatalogEnabled === true)
-        : products
-      const filteredProducts = comprables.filter(product =>
-        matchesPrebuilt(search, productSearchIndex.get(product.id))
-      ).map(p => ({ ...p, itemType: 'product' }))
-      items = [...items, ...filteredProducts]
+      const deProductos = primerasCoincidencias(
+        comprables,
+        product => coincidenPalabras(palabras, productSearchIndex.get(product.id)),
+        TOPE_DE_SUGERENCIAS,
+      )
+      deProductos.items.forEach(p => items.push({ ...p, itemType: 'product' }))
+      total += deProductos.total
     }
-
-    // Agregar ingredientes si el modo lo permite
     if (itemMode === 'ingredients' || itemMode === 'all') {
-      const filteredIngredients = ingredients.filter(ing =>
-        matchesPrebuilt(search, ingredientSearchIndex.get(ing.id))
-      ).map(i => ({ ...i, itemType: 'ingredient' }))
-      items = [...items, ...filteredIngredients]
+      const deIngredientes = primerasCoincidencias(
+        ingredients,
+        ing => coincidenPalabras(palabras, ingredientSearchIndex.get(ing.id)),
+        TOPE_DE_SUGERENCIAS,
+      )
+      deIngredientes.items.forEach(i => items.push({ ...i, itemType: 'ingredient' }))
+      total += deIngredientes.total
     }
+    return { items, total }
+  }, [itemMode, comprables, productSearchIndex, ingredients, ingredientSearchIndex])
 
-    return items
-  }
+  // Una vez por búsqueda y solo para las filas con el desplegable abierto; el
+  // desplegable pedía la lista cuatro veces por dibujo.
+  const sugerenciasPorFila = useMemo(() => {
+    const salida = {}
+    for (const fila of Object.keys(showProductDropdowns)) {
+      const search = busquedasDiferidas[fila] || ''
+      if (showProductDropdowns[fila] && search) salida[fila] = buscarSugerencias(search)
+    }
+    return salida
+  }, [showProductDropdowns, busquedasDiferidas, buscarSugerencias])
+
+  // Filtrar productos e ingredientes según búsqueda y modo (flexible + sin acentos)
+  const getFilteredItems = (index) => sugerenciasPorFila[index]?.items || []
 
   // Mantener compatibilidad con nombre anterior
   const getFilteredProducts = getFilteredItems
@@ -1093,6 +1121,17 @@ export default function CreatePurchase() {
         )}
         <StockByWarehouse product={searchItem} warehouses={warehouses} className="!mt-0 !ml-0" />
       </>
+    )
+  }
+
+  /** Aviso al pie del desplegable cuando hay más coincidencias que las que se muestran. */
+  const renderAvisoDeTope = (index) => {
+    const sugerencias = sugerenciasPorFila[index]
+    if (!sugerencias || sugerencias.total <= sugerencias.items.length) return null
+    return (
+      <div className="px-3 py-2 text-xs text-gray-500 bg-gray-50 border-t border-gray-100">
+        Se muestran {sugerencias.items.length} de {sugerencias.total}. Escribe más para encontrarlo.
+      </div>
     )
   }
 
@@ -3665,7 +3704,7 @@ export default function CreatePurchase() {
                             />
                           </div>
                           {/* Dropdown de productos e ingredientes */}
-                          {showProductDropdowns[index] && productSearches[index] && !esPersonalizado(item) && (
+                          {showProductDropdowns[index] && busquedasDiferidas[index] && !esPersonalizado(item) && (
                             <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                               {getFilteredItems(index).length > 0 ? (
                                 getFilteredItems(index).map(searchItem => (
@@ -3696,6 +3735,7 @@ export default function CreatePurchase() {
                               ) : (
                                 <div className="px-3 py-2 text-sm text-gray-500">No encontrado</div>
                               )}
+                              {renderAvisoDeTope(index)}
                             </div>
                           )}
                         </div>
@@ -3986,7 +4026,7 @@ export default function CreatePurchase() {
                         }`}
                       />
                     </div>
-                    {showProductDropdowns[index] && productSearches[index] && !esPersonalizado(item) && (
+                    {showProductDropdowns[index] && busquedasDiferidas[index] && !esPersonalizado(item) && (
                       <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                         {getFilteredItems(index).length > 0 ? (
                           getFilteredItems(index).map(searchItem => (
@@ -4041,6 +4081,7 @@ export default function CreatePurchase() {
                         ) : (
                           <div className="px-3 py-2 text-sm text-gray-500">No encontrado</div>
                         )}
+                        {renderAvisoDeTope(index)}
                       </div>
                     )}
                   </div>
