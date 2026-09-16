@@ -1,4 +1,4 @@
-import { collection, getDocs, getDoc, doc, orderBy, query, where } from 'firebase/firestore'
+import { collection, getDocs, getDoc, getCountFromServer, doc, orderBy, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
 /**
@@ -27,13 +27,19 @@ export const CONVIRTIO = 'convertida'
 
 const aFecha = (v) => v?.toDate?.() || (v ? new Date(v) : null)
 
-/** ¿Hizo ALGO con la cuenta, o solo la abrió? */
-const laUso = (sub) => {
-  const u = sub?.usage || {}
-  return (u.invoicesThisMonth || 0) > 0 || (u.totalProducts || 0) > 0
-}
+/**
+ * ¿Hizo ALGO con la cuenta, o solo la abrió?
+ *
+ * OJO con `usage.invoicesThisMonth`: al convertir la prueba en cuenta real se
+ * pone en CERO, porque ahí empieza un ciclo nuevo. Quien emitió durante la
+ * prueba y después pagó aparecía entonces como si nunca la hubiera usado —le
+ * pasó a MOKA CAFETERÍA, y por eso el embudo daba 150% (16-set-2026). Se
+ * cuentan los comprobantes DE VERDAD del negocio; el contador del mes ya no
+ * decide nada acá.
+ */
+const laUso = (comprobantes, sub) => comprobantes > 0 || (sub?.usage?.totalProducts || 0) > 0
 
-function armarPrueba(id, sub, negocio) {
+function armarPrueba(id, sub, negocio, comprobantes = 0) {
   const convertida = aFecha(sub.pruebaConvertidaEn)
   // Una prueba convertida ya no tiene `trialEndsAt` (se borra al convertir),
   // así que su fecha de fin se guardó aparte en `pruebaVencia`.
@@ -55,9 +61,10 @@ function armarPrueba(id, sub, negocio) {
     estado,
     convertida,
     plan: sub.plan || null,
-    comprobantes: sub.usage?.invoicesThisMonth || 0,
+    // TODOS los que emitió, no los del mes (ver el comentario de `laUso`).
+    comprobantes,
     productos: sub.usage?.totalProducts || 0,
-    laUso: laUso(sub),
+    laUso: laUso(comprobantes, sub),
     /** Lo que pagó al convertir, si convirtió. */
     pago: convertida ? (sub.renewalPrice ?? null) : null,
   }
@@ -84,12 +91,16 @@ export async function cargarPruebas() {
   for (const d of [...enCurso.docs, ...convertidas.docs]) porId.set(d.id, d.data())
 
   const filas = await Promise.all([...porId.entries()].map(async ([id, sub]) => {
-    let negocio = null
-    try {
-      const b = await getDoc(doc(db, 'businesses', id))
-      negocio = b.exists() ? b.data() : null
-    } catch { /* una ficha sin negocio se muestra igual, con lo que haya */ }
-    return armarPrueba(id, sub, negocio)
+    // La ficha del negocio y CUÁNTOS comprobantes emitió, en paralelo. El
+    // conteo lo hace el servidor (`getCountFromServer`): no se descarga ni un
+    // comprobante, y las pruebas son pocas. Si algo falla, la fila se muestra
+    // igual con lo que haya.
+    const [fichaDelNegocio, conteo] = await Promise.all([
+      getDoc(doc(db, 'businesses', id)).catch(() => null),
+      getCountFromServer(collection(db, 'businesses', id, 'invoices')).catch(() => null),
+    ])
+    const negocio = fichaDelNegocio?.exists?.() ? fichaDelNegocio.data() : null
+    return armarPrueba(id, sub, negocio, conteo?.data()?.count || 0)
   }))
 
   // Las más recientes arriba: es lo que se mira al abrir.
@@ -101,6 +112,9 @@ export function embudo(filas) {
   const total = filas.length
   const usaron = filas.filter((f) => f.laUso).length
   const convirtieron = filas.filter((f) => f.estado === CONVIRTIO).length
+  // Las que la usaron Y ADEMÁS compraron. Es el numerador honesto del segundo
+  // porcentaje: tiene que estar dentro de su propio denominador.
+  const compraronDeLasQueUsaron = filas.filter((f) => f.laUso && f.estado === CONVIRTIO).length
   const enCurso = filas.filter((f) => f.estado === EN_CURSO).length
   // La tasa se calcula sobre las TERMINADAS, no sobre el total: una prueba que
   // todavía corre no es un fracaso, y meterla en el denominador hunde el
@@ -113,7 +127,14 @@ export function embudo(filas) {
     enCurso,
     terminadas,
     tasa: terminadas > 0 ? Math.round((convirtieron / terminadas) * 100) : null,
-    /** De las que la usaron de verdad, cuántas compraron. */
-    tasaDeLasQueUsaron: usaron > 0 ? Math.round((convirtieron / usaron) * 100) : null,
+    compraronDeLasQueUsaron,
+    /**
+     * De las que la usaron de verdad, cuántas compraron.
+     *
+     * El numerador va DENTRO del denominador. Antes dividía TODAS las que
+     * compraron entre las que la usaron —dos grupos distintos—, así que una
+     * que compró sin figurar como usuaria daba 150% (16-set-2026).
+     */
+    tasaDeLasQueUsaron: usaron > 0 ? Math.round((compraronDeLasQueUsaron / usaron) * 100) : null,
   }
 }

@@ -95,7 +95,7 @@ export default function AdminPruebas() {
               <p className="text-[19px] font-semibold text-gray-900 tabular-nums">
                 {n.tasaDeLasQueUsaron === null ? '—' : `${n.tasaDeLasQueUsaron}%`}
                 <span className="ml-1.5 text-[12px] font-normal text-gray-500">
-                  ({n.convirtieron} de {n.usaron})
+                  ({n.compraronDeLasQueUsaron} de {n.usaron})
                 </span>
               </p>
               <p className="mt-0.5 text-[11.5px] text-gray-500">
@@ -178,7 +178,7 @@ export default function AdminPruebas() {
 
       {n.total > 0 && (
         <p className="text-[11.5px] text-gray-500">
-          «La usaron» significa que emitieron algún comprobante o cargaron algún producto.
+          «La usaron» significa que emitieron algún comprobante (todos los de la cuenta, no los del mes) o cargaron algún producto.
           Todavía no se puede saber si solo entraron a mirar: el sistema no guarda la fecha
           del último acceso de nadie.
         </p>
