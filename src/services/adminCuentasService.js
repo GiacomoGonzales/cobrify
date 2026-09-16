@@ -96,6 +96,9 @@ export function armarCuenta(id, data, business = {}, userDoc = null, { resellers
     // Precio pactado (congelado en la suscripcion); la renovacion lo respeta.
     renewalPrice: data.renewalPrice ?? null,
     limits: data.limits || plan?.limits || {},
+    // La marca de que los sub-usuarios se pusieron a mano: la ficha la muestra
+    // para distinguir "5 porque lo pactamos" de "5 porque los trae el plan".
+    subUsuariosFijadosPorAdmin: data.subUsuariosFijadosPorAdmin === true,
     usage: data.usage || { invoicesThisMonth: 0 },
     paymentHistory: data.paymentHistory || [],
     blockReason: data.blockReason || null,

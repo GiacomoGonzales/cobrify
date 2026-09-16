@@ -35,6 +35,18 @@ export function tieneTopeFijado(suscripcion) {
 }
 
 /**
+ * ¿Y los sub-usuarios?
+ *
+ * El Básico trae 1, pero a algunos clientes se les ofrecen 5 o 10 como parte
+ * del trato. Es el mismo caso que el tope de comprobantes: un número pactado,
+ * no una consecuencia del plan, así que lleva su propia marca y sobrevive a
+ * las renovaciones y a los cambios de plan.
+ */
+export function tieneSubUsuariosFijados(suscripcion) {
+  return suscripcion?.subUsuariosFijadosPorAdmin === true
+}
+
+/**
  * Los `limits` que hay que guardar cuando se registra un pago.
  *
  * - **Mismo plan**: se conservan los del documento. Es lo que ya se hacía y
@@ -51,15 +63,34 @@ export function tieneTopeFijado(suscripcion) {
 export function limitesAlRegistrarPago({ suscripcion, limitesDelPlan, esMismoPlan }) {
   const delDoc = suscripcion?.limits
   if (esMismoPlan) return delDoc || limitesDelPlan
-  const base = limitesDelPlan || delDoc
-  if (!tieneTopeFijado(suscripcion)) return base
-  return {
-    ...base,
-    maxInvoicesPerMonth: elTopeMasAlto(
-      delDoc?.maxInvoicesPerMonth,
-      base?.maxInvoicesPerMonth
-    ),
+  return limitesRespetandoLoPactado({ suscripcion, limitesDelPlan: limitesDelPlan || delDoc })
+}
+
+/**
+ * Los límites del catálogo, pero sin pisar lo que el admin pactó a mano.
+ *
+ * Son dos cosas con su propia marca: el tope de comprobantes
+ * (`topeFijadoPorAdmin`) y los sub-usuarios (`subUsuariosFijadosPorAdmin`). En
+ * las dos queda el MÁS ALTO entre lo pactado y lo que da el plan nuevo: nadie
+ * pierde lo suyo al cambiar de plan, y quien sube a uno más grande aprovecha
+ * lo que acaba de pagar.
+ */
+export function limitesRespetandoLoPactado({ suscripcion, limitesDelPlan }) {
+  const delDoc = suscripcion?.limits
+  let salida = limitesDelPlan || delDoc
+  if (tieneTopeFijado(suscripcion)) {
+    salida = {
+      ...salida,
+      maxInvoicesPerMonth: elTopeMasAlto(delDoc?.maxInvoicesPerMonth, salida?.maxInvoicesPerMonth),
+    }
   }
+  if (tieneSubUsuariosFijados(suscripcion)) {
+    // Un plan SIN el campo no limita: eso es lo más alto que hay, así que el
+    // que no lo trae cuenta como ilimitado y no rebaja lo pactado.
+    const delPlan = salida?.maxSubUsers ?? -1
+    salida = { ...salida, maxSubUsers: elTopeMasAlto(delDoc?.maxSubUsers, delPlan) }
+  }
+  return salida
 }
 
 /**

@@ -369,7 +369,7 @@ export const createManagedUser = async (ownerId, userData) => {
       const actuales = await getManagedUsers(ownerId)
       if ((actuales.data || []).length >= tope) {
         const permitidos = tope === 1 ? '1 sub-usuario' : `${tope} sub-usuarios`
-        return { success: false, error: `Tu plan permite ${permitidos}. Para agregar más, cambia a un plan con más usuarios.` }
+        return { success: false, error: `Tu cuenta permite ${permitidos}. Para agregar más, escríbenos y lo ampliamos.` }
       }
     }
 

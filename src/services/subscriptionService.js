@@ -12,7 +12,7 @@ import {
   Timestamp,
   serverTimestamp
 } from 'firebase/firestore';
-import { limitesAlRegistrarPago } from '@/utils/topeDeComprobantes'
+import { limitesAlRegistrarPago, limitesRespetandoLoPactado } from '@/utils/topeDeComprobantes'
 import { validarCambioDePlan, registroDeCambioDePlan } from '@/utils/cambioDePlan'
 import { db } from '../lib/firebase';
 import { notifyPaymentReceived, notifySubscriptionRenewed, notifyPlanChanged, notifyWelcome } from './notificationService';
@@ -1036,7 +1036,9 @@ export const changePlan = async (userId, newPlan) => {
     await updateDoc(subscriptionRef, {
       plan: newPlan,
       monthlyPrice: planConfig.pricePerMonth,
-      limits: planConfig.limits,
+      // Lo pactado a mano (tope de comprobantes, sub-usuarios) no lo pisa el
+      // catálogo: se queda el más alto de los dos. Ver utils/topeDeComprobantes.
+      limits: limitesRespetandoLoPactado({ suscripcion: subscription, limitesDelPlan: planConfig.limits }),
       ...(cambiaDePlan ? { renewalPrice: null, pricingFrozenAt: null } : {}),
       updatedAt: serverTimestamp()
     });

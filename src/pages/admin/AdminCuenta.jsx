@@ -89,6 +89,8 @@ export default function AdminCuenta() {
   const [procesando, setProcesando] = useState(false)
   const [editandoLimite, setEditandoLimite] = useState(false)
   const [nuevoLimite, setNuevoLimite] = useState('')
+  const [editandoSubUsuarios, setEditandoSubUsuarios] = useState(false)
+  const [nuevoSubUsuarios, setNuevoSubUsuarios] = useState('')
   const [notas, setNotas] = useState('')
   const [guardandoNotas, setGuardandoNotas] = useState(false)
 
@@ -324,6 +326,31 @@ export default function AdminCuenta() {
     }
   }
 
+  async function guardarSubUsuarios() {
+    const texto = String(nuevoSubUsuarios).trim()
+    const valor = texto === '' || Number(texto) === -1 ? -1 : Math.max(0, parseInt(texto, 10) || 0)
+    try {
+      // Igual que el tope de comprobantes: `subUsuariosFijadosPorAdmin` dice
+      // que este número es parte del trato con el cliente, no del plan, así
+      // que ni la renovación ni el cambio de plan lo pisan.
+      await updateDoc(doc(db, 'subscriptions', id), {
+        'limits.maxSubUsers': valor,
+        subUsuariosFijadosPorAdmin: true,
+        subUsuariosFijadosEn: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+      parchar({
+        subUsuariosFijadosPorAdmin: true,
+        limits: { ...(cuenta.limits || {}), maxSubUsers: valor },
+      })
+      toast.success(valor === -1 ? 'Sub-usuarios: sin tope' : `Sub-usuarios: ${valor}`)
+      setEditandoSubUsuarios(false)
+    } catch (error) {
+      console.error('Error guardando los sub-usuarios:', error)
+      toast.error('No se pudieron guardar los sub-usuarios')
+    }
+  }
+
   async function guardarNotas() {
     setGuardandoNotas(true)
     try {
@@ -514,7 +541,14 @@ export default function AdminCuenta() {
             <Dato etiqueta="Clientes permitidos">{limite(c.limits?.maxCustomers)}</Dato>
             <Dato etiqueta="Productos permitidos">{limite(c.limits?.maxProducts)}</Dato>
             <Dato etiqueta="Sucursales permitidas">{limite(c.limits?.maxBranches ?? 1)}</Dato>
-            <Dato etiqueta="Sub-usuarios permitidos">{limite(c.limits?.maxSubUsers)}</Dato>
+            <Dato etiqueta="Sub-usuarios permitidos" recortar={false}>
+              <span className="inline-flex items-center gap-2">
+                {limite(c.limits?.maxSubUsers)}
+                {c.subUsuariosFijadosPorAdmin && (
+                  <Pastilla tono="punteado" title="Lo pusiste tú: ni la renovación ni el cambio de plan lo pisan">a mano</Pastilla>
+                )}
+              </span>
+            </Dato>
             <Dato etiqueta="Último pago">{c.lastPayment ? fecha(c.lastPayment) : null}</Dato>
             <Dato etiqueta="Último reinicio del contador">{c.lastCounterReset ? fechaHora(c.lastCounterReset) : null}</Dato>
           </ListaDatos>
@@ -527,8 +561,32 @@ export default function AdminCuenta() {
                 <Boton tamano="sm" onClick={() => setEditandoLimite(false)}>Cancelar</Boton>
               </>
             ) : (
-              <Boton tamano="sm" onClick={() => { setNuevoLimite(ilimitado ? '' : String(c.limit)); setEditandoLimite(true) }}>
+              <Boton tamano="sm" onClick={() => { setNuevoLimite(ilimitado ? '' : String(c.limit)); setEditandoSubUsuarios(false); setEditandoLimite(true) }}>
                 Cambiar límite mensual
+              </Boton>
+            )}
+
+            {/* Sub-usuarios a mano: el Básico trae 1, pero a algunos clientes
+                se les ofrecen 5 o 10 como parte del trato. Vacío o -1 = sin
+                tope; 0 = ningún sub-usuario. */}
+            {editandoSubUsuarios ? (
+              <>
+                <span className="text-gray-500">Sub-usuarios:</span>
+                <Entrada type="number" min="-1" value={nuevoSubUsuarios} onChange={e => setNuevoSubUsuarios(e.target.value)} placeholder="vacío = sin tope" className="w-36" autoFocus />
+                <Boton tamano="sm" variante="primario" onClick={guardarSubUsuarios}>Guardar</Boton>
+                <Boton tamano="sm" onClick={() => setEditandoSubUsuarios(false)}>Cancelar</Boton>
+              </>
+            ) : (
+              <Boton
+                tamano="sm"
+                onClick={() => {
+                  const actual = c.limits?.maxSubUsers
+                  setNuevoSubUsuarios(actual == null || actual === -1 ? '' : String(actual))
+                  setEditandoLimite(false)
+                  setEditandoSubUsuarios(true)
+                }}
+              >
+                Cambiar sub-usuarios
               </Boton>
             )}
           </div>
