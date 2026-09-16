@@ -205,7 +205,9 @@ export default function AdminCuenta() {
     if (!window.confirm(`¿Renovar ${c.businessName} con ${planConfig.name} por S/ ${monto}?`)) return
     setProcesando(true)
     try {
-      await registerPayment(c.id, monto, 'Admin - Renovación rápida', c.plan)
+      // "Admin - Renovación rápida" no es un método de pago: ensuciaba el
+      // desglose de Admin › Pagos con una etiqueta suelta. Queda como "otro".
+      await registerPayment(c.id, monto, 'otro', c.plan)
       toast.success('Renovación registrada')
       await cargar()
     } catch (error) {

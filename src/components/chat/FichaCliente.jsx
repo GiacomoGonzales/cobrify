@@ -41,6 +41,7 @@ import {
 } from '@/services/whatsappChatService'
 import { registerPayment, suspendUser, reactivateUser, PLANS } from '@/services/subscriptionService'
 import { convertirPruebaEnCuenta } from '@/services/adminCuentasService'
+import { claveDelMetodo } from '@/utils/metodoDePago'
 import ConvertirPruebaModal from '@/components/admin/cuenta/ConvertirPruebaModal'
 import { METODOS_DE_COBRO as METODOS } from '@/services/comprobanteChatService'
 import ModalEmitirComprobante, { ModalReenviarComprobante } from '@/components/chat/EmitirComprobante'
@@ -958,7 +959,7 @@ function ModalRenovar({ ficha, onCerrar, onRenovado }) {
   const confirmar = async () => {
     setProcesando(true)
     try {
-      const r = await registerPayment(ficha.businessId, parseFloat(monto) || 0, metodo, ficha.plan)
+      const r = await registerPayment(ficha.businessId, parseFloat(monto) || 0, claveDelMetodo(metodo), ficha.plan)
       toast.success(
         r?.newPeriodEnd
           ? `Renovado. Nuevo vencimiento: ${r.newPeriodEnd.toLocaleDateString('es-PE')}`
@@ -1106,7 +1107,7 @@ function ModalComprobantes({ ficha, onCerrar, onListo }) {
   const guardar = async () => {
     setGuardando(true)
     try {
-      const nuevoTope = await agregarComprobantes(ficha.businessId, Number(monto), metodo)
+      const nuevoTope = await agregarComprobantes(ficha.businessId, Number(monto), claveDelMetodo(metodo))
       toast.success(`Ahora puede emitir ${nuevoTope} al mes`)
       onListo()
     } catch (error) {

@@ -4,6 +4,7 @@ import { getAllPayments, getResellerDeposits, updatePayment, deletePayment } fro
 import { PLANS } from '@/services/subscriptionService'
 import { matchesPrebuilt } from '@/lib/utils'
 import { buildAccountHaystack } from '@/utils/adminSearch'
+import { METODOS_DE_PAGO, claveDelMetodo, etiquetaDelMetodo } from '@/utils/metodoDePago'
 import { useToast } from '@/contexts/ToastContext'
 import {
   Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Filtros, FiltroSelect, Buscador, Estado, Boton, Modal,
@@ -15,7 +16,10 @@ import {
 // Los totales y el CSV se calculan sobre TODOS los filtrados, no sobre la
 // pagina visible.
 
-const METODOS = { yape: 'Yape', plin: 'Plin', transferencia: 'Transferencia', efectivo: 'Efectivo', tarjeta: 'Tarjeta', otro: 'Otro', recarga: 'Recarga' }
+// Un solo criterio para todo el panel: el mismo Yape venía guardado como
+// "yape" y como "Yape", así que el desglose lo contaba dos veces y el filtro
+// dejaba fuera la mitad (reporte del 16-set-2026). Ver utils/metodoDePago.
+const METODOS = METODOS_DE_PAGO
 const ESTADOS = { completed: 'Completado', pending: 'Pendiente', failed: 'Fallido' }
 const PAGE_SIZE = 50
 
@@ -73,7 +77,7 @@ export default function AdminPayments() {
     let result = [...payments]
     // Mismo buscador que Usuarios: palabras sueltas, en cualquier orden, sin tildes
     if (searchTerm) result = result.filter(p => matchesPrebuilt(searchTerm, buildAccountHaystack(p)))
-    if (methodFilter !== 'all') result = result.filter(p => p.method === methodFilter)
+    if (methodFilter !== 'all') result = result.filter(p => claveDelMetodo(p.method) === methodFilter)
     if (origenFiltro === 'clientes') result = result.filter(p => !p.esRecarga)
     if (origenFiltro === 'resellers') result = result.filter(p => p.esRecarga)
     if (dateRange.start) result = result.filter(p => p.date >= new Date(dateRange.start))
@@ -106,7 +110,7 @@ export default function AdminPayments() {
     const total = filteredPayments.reduce((sum, p) => sum + p.amount, 0)
     const byMethod = {}
     filteredPayments.forEach(p => {
-      const m = p.method || 'otro'
+      const m = claveDelMetodo(p.method)
       byMethod[m] = (byMethod[m] || 0) + p.amount
     })
     return { total, count: filteredPayments.length, byMethod }
@@ -128,7 +132,7 @@ export default function AdminPayments() {
       p.email,
       p.businessName,
       p.amount,
-      METODOS[p.method] || p.method,
+      etiquetaDelMetodo(p.method),
       p.planName || PLANS[p.plan]?.name || p.plan,
       p.status,
       p.notes || '',
@@ -142,7 +146,9 @@ export default function AdminPayments() {
 
   function abrirEdicion(payment) {
     setEditando(payment)
-    setForm({ amount: payment.amount, method: payment.method, status: payment.status, notes: payment.notes || '', date: aFechaInput(payment.date) })
+    // El método entra normalizado: si el pago viejo decía "Plin", el selector
+    // lo encuentra igual y guardarlo lo deja ya con la clave buena.
+    setForm({ amount: payment.amount, method: claveDelMetodo(payment.method), status: payment.status, notes: payment.notes || '', date: aFechaInput(payment.date) })
   }
 
   async function guardarEdicion() {
@@ -240,7 +246,7 @@ export default function AdminPayments() {
                   <div className="min-w-0">
                     <Link to={`/app/admin/users/${p.subscriptionId}`} className="block truncate font-medium hover:underline">{p.businessName}</Link>
                     <div className="truncate text-[11.5px] text-gray-500">
-                      {fechaHora(p.date)} · {METODOS[p.method] || p.method} · {p.planName || PLANS[p.plan]?.name || p.plan}
+                      {fechaHora(p.date)} · {etiquetaDelMetodo(p.method)} · {p.planName || PLANS[p.plan]?.name || p.plan}
                     </div>
                   </div>
                   <div className="shrink-0 text-right">
@@ -301,7 +307,7 @@ export default function AdminPayments() {
                     </div>
                   </Td>
                   <Td numero className="font-medium">{moneda(p.amount)}</Td>
-                  <Td apagado>{METODOS[p.method] || p.method}</Td>
+                  <Td apagado>{etiquetaDelMetodo(p.method)}</Td>
                   <Td apagado>{p.planName || PLANS[p.plan]?.name || p.plan}</Td>
                   <Td><Estado valor={p.status} etiqueta={ESTADOS[p.status] || p.status} /></Td>
                   <Td apagado className="max-w-[240px] truncate" title={p.notes || undefined}>{p.notes || '—'}</Td>

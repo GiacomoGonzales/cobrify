@@ -17,7 +17,7 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
     SELLABLE_PLAN_IDS.includes(user.plan) ? user.plan : 'mensual'
   );
   const [paymentAmount, setPaymentAmount] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState('Transferencia');
+  const [paymentMethod, setPaymentMethod] = useState('transferencia');
   const [selectedPlan, setSelectedPlan] = useState(user.plan);
   const [addIgv, setAddIgv] = useState(false);
   // Cuando el cobro no coincide con el precio pactado, el admin decide si ese
@@ -328,12 +328,17 @@ export default function UserDetailsModal({ user, type, onClose, onRegisterPaymen
                   onChange={(e) => setPaymentMethod(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                 >
-                  <option value="Transferencia">Transferencia Bancaria</option>
-                  <option value="Efectivo">Efectivo</option>
-                  <option value="Yape">Yape</option>
-                  <option value="Plin">Plin</option>
-                  <option value="Tarjeta">Tarjeta de Crédito/Débito</option>
-                  <option value="Depósito">Depósito Bancario</option>
+                  {/* Van las CLAVES, no las etiquetas: con "Plin" y "plin"
+                      dando vueltas, el desglose de Admin › Pagos contaba cada
+                      método dos veces (16-set-2026, ver utils/metodoDePago).
+                      Depósito y transferencia son lo mismo para ese desglose,
+                      así que quedan en una sola opción. */}
+                  <option value="transferencia">Transferencia o depósito bancario</option>
+                  <option value="efectivo">Efectivo</option>
+                  <option value="yape">Yape</option>
+                  <option value="plin">Plin</option>
+                  <option value="tarjeta">Tarjeta de crédito/débito</option>
+                  <option value="otro">Otro</option>
                 </select>
               </div>
 

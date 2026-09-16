@@ -15,7 +15,12 @@ import { Modal, Campo, Entrada, Selector, Boton, Aviso } from '@/components/admi
  * congelado como su renovación.
  */
 
-/** Los mismos que usa Admin > Pagos, para que el listado no mezcle etiquetas. */
+/**
+ * Los mismos que usa Admin > Pagos, para que el listado no mezcle etiquetas.
+ * Se guarda la CLAVE ("plin"), no la etiqueta ("Plin"): con las dos formas
+ * dando vueltas, el desglose por método contaba cada uno dos veces
+ * (16-set-2026, ver utils/metodoDePago).
+ */
 const METODOS = { yape: 'Yape', plin: 'Plin', transferencia: 'Transferencia', efectivo: 'Efectivo', tarjeta: 'Tarjeta', otro: 'Otro' }
 
 export default function ConvertirPruebaModal({ cuenta, onClose, onConvertir, procesando }) {
@@ -43,7 +48,7 @@ export default function ConvertirPruebaModal({ cuenta, onClose, onConvertir, pro
           <Boton
             variante="primario"
             disabled={procesando || !planId || !monto}
-            onClick={() => onConvertir(planId, Number(monto), METODOS[metodo] || metodo)}
+            onClick={() => onConvertir(planId, Number(monto), metodo)}
           >
             {procesando ? 'Convirtiendo…' : 'Convertir'}
           </Boton>
