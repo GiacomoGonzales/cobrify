@@ -34,13 +34,25 @@ import { numeroSiguiente } from '@/utils/serieParaNumerar'
 
 // Series de un negocio nuevo. También son el piso de lectura: un tipo que no
 // exista todavía en Firestore se muestra con esta serie y el contador en 0.
+//
+// Las notas de crédito decían FN01/BN01, que fue la convención hasta junio de
+// 2026. En julio el alta de cuentas empezó a crearlas como FC01/BC01 y desde
+// agosto es lo único que recibe una cuenta nueva (medido el 16-set-2026 sobre
+// las 741 cuentas con NC configurada: FN 537 y FC 194, pero las FC son TODAS
+// de julio en adelante — 43 en julio, 86 en agosto, 65 en setiembre, contra 10
+// y 5 de FN). Mirando solo los totales parece que manda FN; es un promedio que
+// tapa el cambio.
+//
+// Cambiar el piso NO toca a las 537 cuentas FN: ellas tienen el campo guardado
+// y mandan sobre esta constante. Solo lo ven las que no tienen ese tipo, que
+// son once en toda la base.
 const defaultSeries = {
   factura: { serie: 'F001', lastNumber: 0 },
   boleta: { serie: 'B001', lastNumber: 0 },
   nota_venta: { serie: 'N001', lastNumber: 0 },
   cotizacion: { serie: 'C001', lastNumber: 0 },
-  nota_credito_factura: { serie: 'FN01', lastNumber: 0 },
-  nota_credito_boleta: { serie: 'BN01', lastNumber: 0 },
+  nota_credito_factura: { serie: 'FC01', lastNumber: 0 },
+  nota_credito_boleta: { serie: 'BC01', lastNumber: 0 },
   nota_debito_factura: { serie: 'FD01', lastNumber: 0 },
   nota_debito_boleta: { serie: 'BD01', lastNumber: 0 },
   guia_remision: { serie: 'T001', lastNumber: 0 },
