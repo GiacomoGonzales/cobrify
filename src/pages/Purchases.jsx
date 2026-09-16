@@ -943,31 +943,60 @@ export default function Purchases() {
 
   // Abrir modal de registro de pago con monto sugerido
   const openPaymentModal = (purchase) => {
-    const remaining = (purchase.total || 0) - (purchase.paidAmount || 0)
     setRegisteringPayment(purchase)
-    setPaymentAmount(remaining.toFixed(2)) // Sugerir el saldo pendiente
+    // VACÍO, no el saldo pendiente. Venía precargado con el total y era una
+    // trampa: quien abona una parte tiene que ACORDARSE de borrarlo primero.
+    // CONSORCIO ANDINA (16/09/2026) abonó S/ 2,490 de una compra de S/ 16,940,
+    // escribió el monto en "Notas" y dejó el precargado: la compra quedó
+    // marcada como pagada completa. Para pagar todo está el botón de al lado.
+    setPaymentAmount('')
     setPaymentDate((() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()) // Fecha de hoy por defecto
     setPaymentNotes('')
   }
 
   // Guardar fecha editada de un pago existente
-  const handleSavePaymentDate = async (purchase, paymentIndex, newDateStr) => {
+  const handleSavePaymentDate = async (purchase, paymentIndex, newDateStr, newAmountStr) => {
     try {
       const [year, month, day] = newDateStr.split('-').map(Number)
       const newDate = new Date(year, month - 1, day, 12, 0, 0)
 
+      // El monto puede haber cambiado: se valida acá y NO se deja pasar un
+      // abono mayor que la compra, que dejaría un saldo negativo.
+      const anterior = Number(purchase.payments?.[paymentIndex]?.amount) || 0
+      const monto = newAmountStr === undefined || newAmountStr === ''
+        ? anterior
+        : Math.round((parseFloat(newAmountStr) || 0) * 100) / 100
+      if (!(monto > 0)) {
+        toast.error('El monto del abono debe ser mayor a 0')
+        return
+      }
+
       const updatedPayments = [...(purchase.payments || [])]
       updatedPayments[paymentIndex] = {
         ...updatedPayments[paymentIndex],
-        date: newDate
+        date: newDate,
+        amount: monto,
       }
 
+      // Se recalcula desde los abonos, no se ajusta el guardado: si el monto
+      // cambia, `paidAmount` y el estado tienen que salir de la suma real, o la
+      // compra queda marcada como pagada cuando ya no lo está.
+      const nuevoPagado = Math.round(updatedPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0) * 100) / 100
+      const totalRedondeado = Math.round((purchase.total || 0) * 100) / 100
+      if (nuevoPagado > totalRedondeado + 0.001) {
+        toast.error(`La suma de los abonos (${formatCurrency(nuevoPagado, purchase.currency)}) no puede superar el total de la compra`)
+        return
+      }
+      const pagadaCompleta = nuevoPagado >= totalRedondeado
+
       const result = await updatePurchase(getBusinessId(), purchase.id, {
-        payments: updatedPayments
+        payments: updatedPayments,
+        paidAmount: nuevoPagado,
+        paymentStatus: pagadaCompleta ? 'paid' : 'pending',
       })
 
       if (result.success) {
-        toast.success('Fecha de pago actualizada')
+        toast.success('Abono actualizado')
         setEditingPaymentDate(null)
         // Actualizar el estado local para reflejar el cambio
         setViewingPayments(prev => prev ? { ...prev, payments: updatedPayments } : null)
@@ -2497,18 +2526,29 @@ export default function Purchases() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Monto del abono *
                 </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">S/</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    max={(registeringPayment.total || 0) - (registeringPayment.paidAmount || 0)}
-                    value={paymentAmount}
-                    onChange={e => setPaymentAmount(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    placeholder="0.00"
-                  />
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">S/</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      max={(registeringPayment.total || 0) - (registeringPayment.paidAmount || 0)}
+                      value={paymentAmount}
+                      onChange={e => setPaymentAmount(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  {/* El atajo para quien paga completo: antes eso era el valor
+                      por defecto y se llevaba por delante a quien abonaba una parte. */}
+                  <button
+                    type="button"
+                    onClick={() => setPaymentAmount((((registeringPayment.total || 0) - (registeringPayment.paidAmount || 0))).toFixed(2))}
+                    className="px-3 py-2 text-sm font-medium text-primary-700 border border-primary-200 bg-primary-50 rounded-lg hover:bg-primary-100 whitespace-nowrap"
+                  >
+                    Pagar todo
+                  </button>
                 </div>
               </div>
               <div>
@@ -2667,25 +2707,39 @@ export default function Purchases() {
                               onClick={() => {
                                 const pd = paymentDate instanceof Date ? paymentDate : new Date(paymentDate)
                                 const dateStr = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, '0')}-${String(pd.getDate()).padStart(2, '0')}`
-                                setEditingPaymentDate({ paymentIndex: idx, date: dateStr })
+                                setEditingPaymentDate({ paymentIndex: idx, date: dateStr, amount: String(payment.amount ?? '') })
                               }}
                               className="text-gray-400 hover:text-primary-600 p-1 rounded transition-colors"
-                              title="Editar fecha"
+                              title="Editar abono"
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
                           </div>
                         </div>
                         {isEditing && (
-                          <div className="flex items-center gap-2 pl-11">
+                          <div className="flex flex-wrap items-center gap-2 pl-11">
+                            {/* El MONTO también se edita. Antes solo la fecha, y
+                                un abono mal tipeado no había forma de corregirlo
+                                (CONSORCIO ANDINA, 16/09/2026). */}
+                            <div className="relative w-32">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">S/</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0.01"
+                                value={editingPaymentDate.amount}
+                                onChange={e => setEditingPaymentDate(prev => ({ ...prev, amount: e.target.value }))}
+                                className="w-full pl-7 pr-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              />
+                            </div>
                             <input
                               type="date"
                               value={editingPaymentDate.date}
                               onChange={e => setEditingPaymentDate(prev => ({ ...prev, date: e.target.value }))}
-                              className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              className="flex-1 min-w-[140px] px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                             />
                             <button
-                              onClick={() => handleSavePaymentDate(viewingPayments, idx, editingPaymentDate.date)}
+                              onClick={() => handleSavePaymentDate(viewingPayments, idx, editingPaymentDate.date, editingPaymentDate.amount)}
                               className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
                             >
                               Guardar

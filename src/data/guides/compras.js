@@ -6,7 +6,7 @@
  */
 export default {
   id: 'compras',
-  actualizado: '15/09/2026',
+  actualizado: '16/09/2026',
   intro:
     'Compras es por donde entra la mercadería: registras lo que le compraste a tu proveedor y el sistema suma el stock y actualiza el costo de cada producto. Es lo que hace que después tus reportes de utilidad digan la verdad.',
 
@@ -159,7 +159,11 @@ export default {
         },
         {
           type: 'texto',
-          text: 'A medida que abonas, registras los pagos y el saldo baja; el **Detalle de Abonos** guarda cada uno.',
+          text: 'A medida que abonas, registras los pagos y el saldo baja; el **Detalle de Abonos** guarda cada uno. El campo del monto nace **vacío**: escribe lo que estás pagando de verdad, o toca **Pagar todo** si cancelas el saldo completo.',
+        },
+        {
+          type: 'consejo',
+          text: 'Si te equivocaste en un abono, en el **Detalle de Abonos** toca el lápiz: puedes corregir el **monto** y la **fecha**. El saldo y el estado de la compra se recalculan solos con la suma real de los abonos.',
         },
         {
           type: 'texto',
