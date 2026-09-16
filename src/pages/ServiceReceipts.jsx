@@ -279,6 +279,14 @@ export default function ServiceReceipts() {
 
   const c = resumen.conciliacion
 
+  // Un mes sin tarifa no se puede cobrar todavía: falta cargar el recibo de la
+  // distribuidora, así que los medidores quedarían fuera y se quemarían números
+  // del talonario en un mes que no es. Al primer negocio le ofrecía emitir
+  // setiembre —solo las cuotas fijas, sin recibo cargado— mientras agosto, que
+  // sí tenía su recibo, esperaba sin lecturas.
+  const hayMedidores = suministros.some(s => s.tipo !== SIN_MEDIDOR)
+  const sinTarifa = hayMedidores && !(Number(periodo?.tarifa) > 0)
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -303,8 +311,26 @@ export default function ServiceReceipts() {
         )}
       </div>
 
+      {/* El mes todavía no tiene tarifa: no se emite nada */}
+      {sinTarifa && recibos.length === 0 && (
+        <Card>
+          <CardContent className="px-4 py-3">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+              <p className="text-sm text-amber-800">
+                {nombreDePeriodo(periodoClave)} todavía no tiene tarifa: falta cargar el recibo que
+                te llega a ti. Hazlo en{' '}
+                <Link to="/app/servicios-lecturas" className="font-semibold underline">Lecturas del mes</Link>
+                {' '}y anota las lecturas. Si emites ahora, los medidores quedan fuera y gastas
+                números del talonario en un mes que no es.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Emitir el mes */}
-      {porEmitir.length > 0 && vivos.length < porEmitir.length && (
+      {!sinTarifa && porEmitir.length > 0 && vivos.length < porEmitir.length && (
         <Card>
           <CardContent className="px-4 py-3">
             <div className="flex flex-wrap items-center gap-3">

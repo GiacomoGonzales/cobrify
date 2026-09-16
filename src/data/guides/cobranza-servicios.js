@@ -6,7 +6,7 @@
  */
 export default {
   id: 'cobranza-servicios',
-  actualizado: '11/09/2026',
+  actualizado: '16/09/2026',
   intro:
     'Para el negocio que compra un recibo de luz o agua y lo reparte entre los vecinos. Anotas la lectura de cada medidor, el sistema calcula cuánto paga cada uno, emite los recibos numerados y los vas marcando cobrados. Reemplaza el Excel y el talonario de papel. Se activa en **Configuración → Preferencias → Cobranza de servicios**.',
 
@@ -116,6 +116,10 @@ export default {
           type: 'ojo',
           text: 'Antes, una lectura que faltaba se restaba y salía un importe **negativo**. Eso ya no puede pasar: sin lectura no hay recibo, y la fila queda en la lista de lo que falta.',
         },
+        {
+          type: 'texto',
+          text: 'La columna **Anterior** es la de ese mes, no la última que anotaste: si abres un mes pasado, ves la lectura con la que se cobró ese mes. Y guardar un mes viejo ya no cambia el punto de partida del mes más reciente.',
+        },
       ],
     },
     {
@@ -157,6 +161,10 @@ export default {
         {
           type: 'consejo',
           text: 'Si vuelves a presionar **Emitir recibos** no se duplica nada: los que ya existen conservan su número y solo se agregan los nuevos. Sirve para cuando cargaste unas lecturas que faltaban.',
+        },
+        {
+          type: 'ojo',
+          text: 'Si el mes **todavía no tiene tarifa** —porque no cargaste tu recibo en Lecturas del mes— no se emite nada, ni siquiera las cuotas fijas. Los medidores quedarían fuera y gastarías números del talonario en un mes que no es. Carga primero tu recibo y las lecturas.',
         },
         {
           type: 'texto',

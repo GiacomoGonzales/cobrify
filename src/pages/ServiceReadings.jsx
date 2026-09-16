@@ -30,6 +30,7 @@ import {
   clavePeriodo, nombreDePeriodo, rangoDelPeriodo, vencimientoDelPeriodo,
   tarifaDelRecibo, revisarLectura, importeDelRecibo, conciliacionDelPeriodo,
   consumoHastaElMinimo, LECTURA_SIN_ACTUAL, LECTURA_RETROCEDE, r2,
+  periodoAnterior, lecturaAnteriorDelMes,
 } from '@/utils/cobranzaServicios'
 import { leerBorrador, guardarBorrador, borrarBorrador } from '@/utils/borradorLocal'
 import { buildSearchHaystack, matchesPrebuilt } from '@/lib/utils'
@@ -54,6 +55,11 @@ export default function ServiceReadings() {
 
   // Lo que se escribe, por suministro: { [supplyId]: { actual, medidorNuevo } }
   const [lecturas, setLecturas] = useState({})
+  // Lo ya guardado de ESTE mes y lo guardado del mes PASADO, tal como vienen:
+  // de ahí sale la lectura anterior de cada fila, que no puede salir del
+  // suministro (ver `lecturaAnteriorDelMes`).
+  const [guardadas, setGuardadas] = useState({})
+  const [previas, setPrevias] = useState({})
   const [busqueda, setBusqueda] = useState('')
   const [soloPendientes, setSoloPendientes] = useState(false)
 
@@ -75,10 +81,14 @@ export default function ServiceReadings() {
     setCargando(true)
     cargadoRef.current = false
 
-    const [rs, rp, rl] = await Promise.all([
+    // El mes pasado también: de ahí sale la lectura anterior de cada fila
+    // cuando este mes todavía no tiene nada guardado.
+    const mesPasado = periodoAnterior(periodoClave)
+    const [rs, rp, rl, rprev] = await Promise.all([
       getSupplies(businessId),
       getPeriod(businessId, periodoClave),
       getReadings(businessId, periodoClave),
+      mesPasado ? getReadings(businessId, mesPasado) : Promise.resolve({ success: true, data: {} }),
     ])
 
     if (rs.success) setSuministros(rs.data)
@@ -91,19 +101,22 @@ export default function ServiceReadings() {
     setMinimoImporte(p ? String(p.minimoImporte ?? 5) : '5')
     setCargoFijo(p ? String(p.cargoFijo ?? 0) : '0')
 
+    setGuardadas(rl.success ? rl.data : {})
+    setPrevias(rprev.success ? rprev.data : {})
+
     // Lo ya guardado en el servidor manda; encima se pone lo que quedó a medio
     // escribir en este navegador, que es más nuevo.
-    const guardadas = {}
+    const escritas = {}
     if (rl.success) {
       for (const [id, l] of Object.entries(rl.data)) {
-        guardadas[id] = {
+        escritas[id] = {
           actual: l.lecturaActual === null || l.lecturaActual === undefined ? '' : String(l.lecturaActual),
           medidorNuevo: l.medidorNuevo === true,
         }
       }
     }
     const borrador = leerBorrador(`lecturas_${businessId}_${periodoClave}`, { horas: 72 })
-    setLecturas({ ...guardadas, ...(borrador?.lecturas || {}) })
+    setLecturas({ ...escritas, ...(borrador?.lecturas || {}) })
     if (borrador?.lecturas && Object.keys(borrador.lecturas).length > 0) {
       toast.info('Se recuperaron las lecturas que quedaron sin guardar')
     }
@@ -152,14 +165,21 @@ export default function ServiceReadings() {
 
     if (s.tipo === SIN_MEDIDOR) {
       const calculo = importeDelRecibo(s, null, tarifario)
-      return { suministro: s, sinMedidor: true, revision: { ok: true, consumo: null }, calculo, escrito }
+      return { suministro: s, sinMedidor: true, anterior: null, revision: { ok: true, consumo: null }, calculo, escrito }
     }
 
+    // La anterior es la de ESTE mes, no la última que marque el suministro.
+    const anterior = lecturaAnteriorDelMes({
+      guardada: guardadas[s.id],
+      previa: previas[s.id],
+      suministro: s,
+      medidorNuevo,
+    })
     const actual = escrito.actual === '' || escrito.actual === undefined ? null : escrito.actual
-    const revision = revisarLectura(s.ultimaLectura, actual, { medidorNuevo })
+    const revision = revisarLectura(anterior, actual, { medidorNuevo })
     const calculo = importeDelRecibo(s, revision.ok ? revision.consumo : null, tarifario)
-    return { suministro: s, sinMedidor: false, revision, calculo, escrito }
-  }), [suministros, lecturas, tarifario])
+    return { suministro: s, sinMedidor: false, anterior, revision, calculo, escrito }
+  }), [suministros, lecturas, tarifario, guardadas, previas])
 
   // El texto buscable se arma una vez por suministro y no en cada tecla, con
   // el mismo criterio del resto del sistema: sin tildes y por palabras
@@ -253,10 +273,14 @@ export default function ServiceReadings() {
       .filter(f => !f.sinMedidor && f.revision.ok && f.revision.consumo !== null)
       .map(f => ({
         supplyId: f.suministro.id,
-        lecturaAnterior: f.escrito.medidorNuevo ? 0 : f.suministro.ultimaLectura ?? null,
+        lecturaAnterior: f.anterior,
         lecturaActual: Number(f.escrito.actual),
         consumo: f.revision.consumo,
         medidorNuevo: f.escrito.medidorNuevo === true,
+        // Guardar un mes VIEJO no puede mover el punto de partida del suministro:
+        // si lo moviera, el mes más reciente arrancaría de un número atrasado y
+        // cobraría ese consumo dos veces.
+        avanzarUltima: !f.suministro.ultimoPeriodo || periodoClave >= f.suministro.ultimoPeriodo,
       }))
 
     const r = await saveReadings(businessId, periodoClave, aGuardar)
@@ -484,7 +508,7 @@ export default function ServiceReadings() {
                     <div className="text-right w-20 shrink-0">
                       <span className="block text-[11px] text-gray-500">Anterior</span>
                       <span className="block text-sm text-gray-700 tabular-nums">
-                        {f.escrito.medidorNuevo ? '0.0' : (s.ultimaLectura ?? '—')}
+                        {f.anterior ?? '—'}
                       </span>
                     </div>
                     <input

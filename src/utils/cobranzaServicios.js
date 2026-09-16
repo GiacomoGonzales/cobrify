@@ -281,3 +281,39 @@ export function vencimientoDelPeriodo(clave, diaDeVencimiento = 15) {
   const mm = String(siguiente.getMonth() + 1).padStart(2, '0')
   return `${siguiente.getFullYear()}-${mm}-${String(dia).padStart(2, '0')}`
 }
+
+/** El mes anterior: "2026-01" -> "2025-12". */
+export function periodoAnterior(clave) {
+  const [a, m] = String(clave || '').split('-').map(Number)
+  if (!a || !m || m < 1 || m > 12) return null
+  return clavePeriodo(new Date(a, m - 2, 1))
+}
+
+/**
+ * De dónde sale la lectura ANTERIOR de un suministro en un mes dado.
+ *
+ * Antes se usaba siempre `suministro.ultimaLectura`, que es un solo campo del
+ * suministro y no un dato del mes. Eso rompía dos cosas: se abriera el mes que
+ * se abriera salía el mismo número, y al guardar un mes viejo se tomaba como
+ * "anterior" la lectura del mes NUEVO, así que el consumo salía en cero.
+ * Le pasó al primer negocio en setiembre de 2026: guardó setiembre, volvió a
+ * agosto y agosto quedó con anterior 138.2, actual 138.2, consumo 0.
+ *
+ * Manda, en este orden: lo que ese mes ya tenía guardado, después la lectura
+ * del mes pasado, y recién al final la última lectura del suministro —la del
+ * padrón importado, que sirve solo para el primer mes—.
+ *
+ * @param {object} guardada   La lectura ya guardada de ESE mes, si existe.
+ * @param {object} previa     La lectura del mes anterior, si existe.
+ * @param {object} suministro El suministro, por su `ultimaLectura`.
+ * @param {boolean} medidorNuevo El medidor se cambió: la cuenta arranca de cero.
+ * @returns {number|null}
+ */
+export function lecturaAnteriorDelMes({ guardada, previa, suministro, medidorNuevo = false } = {}) {
+  if (medidorNuevo) return 0
+  const deEsteMes = num(guardada?.lecturaAnterior)
+  if (deEsteMes !== null) return deEsteMes
+  const delMesPasado = num(previa?.lecturaActual)
+  if (delMesPasado !== null) return delMesPasado
+  return num(suministro?.ultimaLectura)
+}

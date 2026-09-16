@@ -309,7 +309,11 @@ export async function saveReadings(businessId, clave, lecturas) {
         )
         // Cada operación del lote cuenta: 200 lecturas son 400 escrituras, justo
         // debajo del límite de 500.
-        if (l.lecturaActual !== null && l.lecturaActual !== undefined) {
+        //
+        // `avanzarUltima: false` cuando se está guardando un mes VIEJO: su
+        // lectura no puede pisar la del mes más reciente, o el mes siguiente
+        // arrancaría de un número atrasado y cobraría el consumo dos veces.
+        if (l.avanzarUltima !== false && l.lecturaActual !== null && l.lecturaActual !== undefined) {
           lote.update(doc(db, 'businesses', businessId, 'serviceSupplies', l.supplyId), {
             ultimaLectura: r1(l.lecturaActual),
             ultimoPeriodo: clave,
