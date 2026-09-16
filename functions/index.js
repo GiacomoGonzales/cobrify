@@ -16256,8 +16256,10 @@ export const completarAlta = onRequest(
       // conversación, y esta ya lo había intentado cuando el lead escribió por
       // primera vez. La ficha del chat solo ofrece "Convertir en cuenta real"
       // (prueba → plan) y emitir su comprobante si está vinculada (pedido de
-      // Giacomo, 14-set-2026). No pisa un vínculo con OTRA cuenta: uno puesto
-      // a mano manda. Su celular entra además al índice de teléfonos si no
+      // Giacomo, 14-set-2026). Si el contacto YA tenía otra cuenta, la
+      // principal no se toca y la nueva se suma como otra empresa suya: es el
+      // cliente que ya trabaja con nosotros y paga por un segundo negocio
+      // (16-set-2026). Su celular entra además al índice de teléfonos si no
       // estaba, para que una conversación nueva desde ese número se reconozca
       // sola. Nada de esto puede costar el alta, que ya está hecha.
       if (alta.conversationId) {
@@ -16274,6 +16276,12 @@ export const completarAlta = onRequest(
               updatedAt: FieldValue.serverTimestamp(),
             }, { merge: true })
             console.log(`[Alta] Conversación ${alta.conversationId} vinculada a ${uid}`)
+          } else if (conv) {
+            await convRef.set({
+              linkedBusinessIds: FieldValue.arrayUnion(uid),
+              updatedAt: FieldValue.serverTimestamp(),
+            }, { merge: true })
+            console.log(`[Alta] Conversación ${alta.conversationId}: ${uid} sumada como otra empresa del contacto`)
           }
           const cel = celularDeWaId(conv?.waId || alta.waId || '')
           if (cel) {

@@ -37,8 +37,11 @@ import {
   listarVendedores,
   vendedorPorTelefono,
   asignarVendedorALaConversacion,
+  altaDeLaConversacion,
 } from '@/services/whatsappChatService'
 import { registerPayment, suspendUser, reactivateUser, PLANS } from '@/services/subscriptionService'
+import { convertirPruebaEnCuenta } from '@/services/adminCuentasService'
+import ConvertirPruebaModal from '@/components/admin/cuenta/ConvertirPruebaModal'
 import { METODOS_DE_COBRO as METODOS } from '@/services/comprobanteChatService'
 import ModalEmitirComprobante, { ModalReenviarComprobante } from '@/components/chat/EmitirComprobante'
 
@@ -49,6 +52,15 @@ import ModalEmitirComprobante, { ModalReenviarComprobante } from '@/components/c
  */
 const detalleDelNegocio = (n) =>
   [n.codigoCliente, n.comercial, n.ruc && `RUC ${n.ruc}`, n.email].filter(Boolean).join(' · ')
+
+/** "vence hoy", "le quedan 2 días", "venció hace 3 días". */
+const textoDeLaPrueba = (dias) => {
+  if (dias == null) return ''
+  if (dias === 0) return ' · vence hoy'
+  if (dias > 0) return ` · ${dias === 1 ? 'le queda 1 día' : `le quedan ${dias} días`}`
+  const pasados = Math.abs(dias)
+  return ` · venció hace ${pasados === 1 ? '1 día' : `${pasados} días`}`
+}
 
 /** Por donde emite la cuenta. Es la primera pregunta cuando "no puede facturar". */
 const ETIQUETA_EMISION = {
@@ -79,6 +91,8 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
   const [emitirAbierto, setEmitirAbierto] = useState(false)
   const [reenviarAbierto, setReenviarAbierto] = useState(false)
   const [altaAbierta, setAltaAbierta] = useState(false)
+  const [convertirAbierto, setConvertirAbierto] = useState(false)
+  const [convirtiendo, setConvirtiendo] = useState(false)
   const [verTodosLosPagos, setVerTodosLosPagos] = useState(false)
   const [trabajando, setTrabajando] = useState(false)
 
@@ -135,6 +149,7 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
     setComprobantesAbierto(false)
     setEmitirAbierto(false)
     setReenviarAbierto(false)
+    setConvertirAbierto(false)
     setVerTodosLosPagos(false)
     if (!businessId) { setCargando(false); return undefined }
     // Una respuesta que llega después de cambiar de conversación (o de
@@ -177,6 +192,32 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
       .catch(() => {})
     return () => { vivo = false }
   }, [vendedorAsignado])
+
+  // ¿DE ACÁ SALIÓ UN FORMULARIO DE ALTA? Solo se pregunta cuando la
+  // conversación NO está vinculada, que es justo el caso molesto: el cliente
+  // completó el formulario, su cuenta existe y quedó con otro número (o el
+  // alta es anterior al vínculo automático del 14-set-2026), así que la ficha
+  // dice "no es un cliente conocido" y no hay manera de saber cuál es la
+  // cuenta. Con esto se ve qué se le mandó y se vincula de un toque.
+  const [altaPrevia, setAltaPrevia] = useState(null)
+  const [cuentaDelAlta, setCuentaDelAlta] = useState(null)
+  useEffect(() => {
+    setAltaPrevia(null)
+    setCuentaDelAlta(null)
+    if (businessId || !isAdmin || !conversacion?.id) return undefined
+    let vivo = true
+    altaDeLaConversacion(conversacion.id)
+      .then((alta) => {
+        if (!vivo || !alta) return undefined
+        setAltaPrevia(alta)
+        if (!alta.uid) return undefined
+        return obtenerFichaCliente(alta.uid).then((f) => {
+          if (vivo && f) setCuentaDelAlta({ id: alta.uid, nombre: f.nombre || 'la cuenta que creó' })
+        })
+      })
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [businessId, isAdmin, conversacion?.id])
 
   // Que el catálogo de fichas ya esté bajado cuando se escriba el primer
   // carácter: la primera búsqueda tardaba varios segundos sin avisar.
@@ -362,6 +403,46 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
               )}
             </div>
 
+            {/* Ya se le mandó el formulario: qué se le ofreció, si lo usó y a
+                qué cuenta llegó. Es lo único que conecta esta conversación con
+                la cuenta nueva cuando el número no coincide. */}
+            {altaPrevia && (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-900">
+                <p className="text-[12.5px] font-medium">
+                  Le enviaste el formulario de alta
+                  {altaPrevia.creadaEn
+                    ? ` el ${altaPrevia.creadaEn.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })}`
+                    : ''}
+                </p>
+                <p className="text-[11.5px]">
+                  {altaPrevia.diasDePrueba
+                    ? `Prueba de ${altaPrevia.diasDePrueba} días`
+                    : (altaPrevia.planNombre || altaPrevia.plan || 'Sin plan')}
+                  {altaPrevia.estado === 'usada'
+                    ? ' · ya creó su cuenta'
+                    : altaPrevia.estado === 'abierta'
+                      ? ' · abrió el enlace y no terminó'
+                      : ' · todavía no lo abre'}
+                </p>
+                {cuentaDelAlta && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        await vincularConversacion(conversacion.id, cuentaDelAlta.id, cuentaDelAlta.nombre)
+                        toast.success(`Vinculada a ${cuentaDelAlta.nombre}`)
+                      } catch {
+                        toast.error('No se pudo vincular')
+                      }
+                    }}
+                    className="mt-2 w-full flex items-center justify-center gap-2 rounded-md border border-amber-300 bg-white px-3 py-1.5 text-[12px] font-medium text-amber-900 hover:bg-amber-100 transition-colors"
+                  >
+                    <Link2 className="w-3.5 h-3.5" />
+                    Vincular con {cuentaDelAlta.nombre}
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Lo que se hace con un lead que acaba de pagar: mandarle el
                 formulario para que se cree la cuenta él mismo, y emitirle su
                 comprobante (el RUC se escribe a mano y se completa desde SUNAT,
@@ -536,6 +617,23 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
               </div>
             )}
 
+            {/* EN PRUEBA: es lo que hay que reconocer de un vistazo. Cuando el
+                cliente escribe "ya te pagué", esta cuenta no se renueva, se
+                CONVIERTE, y antes había que adivinarlo leyendo el plan. */}
+            {ficha.plan === 'trial' && (
+              <div className="flex items-start gap-2 border rounded-lg px-3 py-2.5 bg-amber-50 text-amber-900 border-amber-200">
+                <CalendarClock className="w-4 h-4 flex-none mt-0.5" />
+                <div className="min-w-0">
+                  <p className="text-[13px] font-medium">
+                    En prueba gratuita{textoDeLaPrueba(ficha.diasParaVencer)}
+                  </p>
+                  <p className="text-[11.5px]">
+                    Todavía no es una cuenta pagada. Si ya pagó, conviértela en cuenta real.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Comprobantes del mes: es lo primero que pregunta un cliente
                 que llama porque "no puede facturar". */}
             <div className="bg-gray-50 rounded-lg p-3">
@@ -635,9 +733,25 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
               </a>
             )}
 
+            {/* En una prueba, convertir es LA acción: registrar una renovación
+                sobre un plan que nadie contrató deja la cuenta en trial. */}
+            {ficha.plan === 'trial' && (
+              <button
+                onClick={() => setConvertirAbierto(true)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-600 text-white text-[13px] font-medium rounded-md hover:bg-primary-700 transition-colors"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                Convertir en cuenta real
+              </button>
+            )}
+
             <button
               onClick={() => setRenovarAbierto(true)}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-600 text-white text-[13px] font-medium rounded-md hover:bg-primary-700 transition-colors"
+              className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-medium rounded-md transition-colors ${
+                ficha.plan === 'trial'
+                  ? 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                  : 'bg-primary-600 text-white hover:bg-primary-700'
+              }`}
             >
               <CreditCard className="w-4 h-4" />
               Registrar renovación
@@ -742,6 +856,7 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
           cuentas={cuentas}
           nombres={nombres}
           onCerrar={() => setGestorAbierto(false)}
+          onEnviarAlta={() => { setGestorAbierto(false); setAltaAbierta(true) }}
         />
       )}
 
@@ -795,6 +910,32 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
           conversacion={conversacion}
           onClose={() => setAltaAbierta(false)}
           onPonerEnElCompositor={onPonerEnElCompositor}
+        />
+      )}
+
+      {/* El mismo cuadro del panel: qué plan contrató, cuánto pagó y cómo. */}
+      {convertirAbierto && ficha && (
+        <ConvertirPruebaModal
+          cuenta={{ businessName: ficha.nombre }}
+          procesando={convirtiendo}
+          onClose={() => setConvertirAbierto(false)}
+          onConvertir={async (planId, monto, metodo) => {
+            setConvirtiendo(true)
+            try {
+              const r = await convertirPruebaEnCuenta(businessId, monto, metodo, planId)
+              toast.success(
+                r?.newPeriodEnd
+                  ? `Ya es cuenta real: ${r.planName}. Vence el ${r.newPeriodEnd.toLocaleDateString('es-PE')}`
+                  : 'Ya es cuenta real',
+              )
+              setConvertirAbierto(false)
+              await releerFicha()
+            } catch (error) {
+              toast.error(error.message || 'No se pudo convertir la prueba')
+            } finally {
+              setConvirtiendo(false)
+            }
+          }}
         />
       )}
     </aside>
@@ -1072,7 +1213,7 @@ function TarjetaCuenta({ businessId, principal, onAbrir }) {
  * para saber de quien es la conversacion, y quitarla es "desvincular", que ya
  * tiene su propio boton. Aqui se manejan las acompanantes.
  */
-function GestorDeCuentas({ conversacion, cuentas, nombres, onCerrar }) {
+function GestorDeCuentas({ conversacion, cuentas, nombres, onCerrar, onEnviarAlta }) {
   const toast = useToast()
   const [sugeridas, setSugeridas] = useState([])
   const [busqueda, setBusqueda] = useState('')
@@ -1202,6 +1343,24 @@ function GestorDeCuentas({ conversacion, cuentas, nombres, onCerrar }) {
                 </Boton>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* La segunda empresa no siempre existe todavía: un cliente que ya
+            tiene cuenta paga por otra y hay que crearla. Buscarla acá no
+            servía de nada, y el formulario de alta solo aparecía en los leads
+            (pedido de Giacomo, 16-set-2026). Al completarlo, la cuenta nueva
+            se suma sola a este mismo contacto. */}
+        {onEnviarAlta && (
+          <div className="rounded-md border border-dashed border-gray-300 px-3 py-3">
+            <p className="text-[12px] font-medium text-gray-700">¿La empresa todavía no existe?</p>
+            <p className="mt-0.5 text-[11.5px] text-gray-500">
+              Mándale el formulario de alta y, cuando lo complete, la cuenta nueva queda
+              sumada a este cliente.
+            </p>
+            <Boton className="mt-2 w-full" onClick={onEnviarAlta}>
+              Enviar formulario de alta
+            </Boton>
           </div>
         )}
       </div>

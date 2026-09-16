@@ -841,6 +841,42 @@ export const buscarNegocios = async (consulta) => {
     .map(({ businessId, nombre, comercial, ruc, email, codigoCliente }) => ({ businessId, nombre, comercial, ruc, email, codigoCliente }))
 }
 
+/**
+ * El formulario de alta que salió de ESTA conversación, si hubo uno.
+ *
+ * El caso que se repite: se le manda la prueba a un lead, el lead crea su
+ * cuenta y la conversación sigue diciendo "no es un cliente conocido" — porque
+ * el alta es anterior al vínculo automático (14-set-2026) o porque su número
+ * quedó oculto y no hay por dónde cruzarlo. Con esto la ficha puede decir qué
+ * se le mandó y, si ya lo usó, a qué cuenta llegó para vincularla de un toque.
+ *
+ * `altasPendientes` solo lo leen los admins: para los demás devuelve null y la
+ * ficha se ve igual que antes.
+ */
+export const altaDeLaConversacion = async (conversacionId) => {
+  if (!conversacionId) return null
+  const snap = await getDocs(query(
+    collection(db, 'altasPendientes'),
+    where('conversationId', '==', conversacionId),
+    limit(5),
+  ))
+  const altas = snap.docs.map((d) => ({ codigo: d.id, ...d.data() }))
+  if (!altas.length) return null
+  // A un mismo lead se le puede haber mandado dos veces: manda la última.
+  altas.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
+  const a = altas[0]
+  return {
+    codigo: a.codigo,
+    estado: a.estado || 'enviada',
+    plan: a.plan || null,
+    planNombre: a.planNombre || '',
+    diasDePrueba: a.diasDePrueba || null,
+    creadaEn: a.createdAt?.toDate?.() || null,
+    usadaEn: a.usadaEn?.toDate?.() || null,
+    uid: a.uid || null,
+  }
+}
+
 export const vincularConversacion = (conversationId, businessId, businessName) =>
   updateDoc(doc(db, 'whatsappConversations', conversationId), {
     linkedBusinessId: businessId,
