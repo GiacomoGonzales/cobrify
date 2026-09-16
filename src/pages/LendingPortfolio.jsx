@@ -34,7 +34,7 @@ import { consultarDNI, consultarRUC } from '@/services/documentLookupService'
 import GuideLink from '@/components/guide/GuideLink'
 import {
   buildStatement, statementToWhatsApp, reminderToWhatsApp, whatsAppLink,
-  fmtFecha, fmtMonto,
+  buildPortfolioSummary, fmtFecha, fmtMonto,
 } from '@/utils/lendingStatement'
 
 const toJsDate = (v) => (v?.toDate ? v.toDate() : v ? new Date(v) : null)
@@ -270,6 +270,72 @@ export default function LendingPortfolio() {
     window.open(link, '_blank')
   }
 
+  /**
+   * El RESUMEN DE CARTERA impreso: todos los préstamos activos en una hoja.
+   *
+   * Lo pidió un prestamista que llevaba la lista a mano para enviársela a su
+   * jefa. Mismas columnas que su cuaderno —vence, cliente, capital— más el
+   * saldo y el estado, que el sistema ya sabe. El saldo sale de `loanBalance`
+   * vía `buildPortfolioSummary`: acá no se calcula plata.
+   */
+  const buildPortfolioHtml = (res) => {
+    const biz = nombreDelNegocio() || 'MI NEGOCIO'
+    const th = 'text-align:left;padding:6px 4px;border-bottom:2px solid #333;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#555'
+    const td = 'padding:6px 4px;border-bottom:1px solid #eee'
+    return `<!DOCTYPE html><html><head><meta charset="utf-8">
+      <style>
+        @page { size: A4; margin: 16mm }
+        body { font-family: Arial, Helvetica, sans-serif; color:#222; font-size:13px }
+        h1 { font-size:18px; margin:0 0 2px }
+        .sub { margin:0 0 14px; color:#666; font-size:12px }
+        .totales { display:flex; gap:10px; margin:0 0 14px }
+        .caja { border:1px solid #ddd; border-radius:6px; padding:8px 12px; flex:1 }
+        .caja span { display:block; font-size:11px; color:#666; text-transform:uppercase; letter-spacing:.4px }
+        .caja strong { font-size:16px }
+        table { width:100%; border-collapse:collapse }
+        .num { text-align:right; white-space:nowrap }
+        .vencido { color:#b42d28; font-weight:700 }
+        .pie { margin-top:16px; font-size:11px; color:#777 }
+      </style></head><body>
+      <h1>${biz}</h1>
+      <p class="sub">Resumen de cartera al ${fmtFecha(res.corte)}</p>
+
+      <div class="totales">
+        <div class="caja"><span>Capital en la calle</span><strong>${fmtMonto(res.capitalEnCalle)}</strong></div>
+        <div class="caja"><span>Por cobrar</span><strong>${fmtMonto(res.porCobrar)}</strong></div>
+        <div class="caja"><span>Préstamos</span><strong>${res.activos}${res.vencidos > 0 ? ` <span style="color:#b42d28;font-size:12px">(${res.vencidos} vencidos)</span>` : ''}</strong></div>
+      </div>
+
+      <table>
+        <tr>
+          <th style="${th}">Vence</th>
+          <th style="${th}">Cliente</th>
+          <th style="${th}">Tipo</th>
+          <th style="${th};text-align:right">Tasa</th>
+          <th style="${th};text-align:right">Capital</th>
+          <th style="${th};text-align:right">Saldo</th>
+        </tr>
+        ${res.filas.map(f => `
+          <tr${f.atrasado ? ' class="vencido"' : ''}>
+            <td style="${td}">${fmtFecha(f.vence)}${f.atrasado ? ` (${f.diasAtraso}d)` : ''}</td>
+            <td style="${td}">${f.cliente}</td>
+            <td style="${td};font-size:11px;color:#666">${f.tipo}</td>
+            <td style="${td}" class="num">${f.tasa}%</td>
+            <td style="${td}" class="num">${fmtMonto(f.capital)}</td>
+            <td style="${td}" class="num">${fmtMonto(f.saldo)}</td>
+          </tr>`).join('')}
+        <tr>
+          <td style="padding:8px 4px;border-top:2px solid #333" colspan="4"><strong>TOTAL</strong></td>
+          <td style="padding:8px 4px;border-top:2px solid #333" class="num"><strong>${fmtMonto(res.capitalEnCalle)}</strong></td>
+          <td style="padding:8px 4px;border-top:2px solid #333" class="num"><strong>${fmtMonto(res.porCobrar)}</strong></td>
+        </tr>
+      </table>
+
+      ${res.sinTasa > 0 ? `<p class="pie" style="color:#b42d28">Atención: ${res.sinTasa} préstamo${res.sinTasa === 1 ? '' : 's'} está registrado con tasa 0% y no genera interés. Revísalo si no fue a propósito.</p>` : ''}
+      <p class="pie">${res.clientes} cliente${res.clientes === 1 ? '' : 's'}. El saldo incluye el interés devengado y la mora a la fecha. Documento interno, sin valor tributario.</p>
+      </body></html>`
+  }
+
   /** El estado de cuenta impreso — mismo criterio que el mensaje. */
   const buildStatementHtml = (st) => {
     const biz = nombreDelNegocio() || 'MI NEGOCIO'
@@ -456,9 +522,21 @@ export default function LendingPortfolio() {
           </div>
           <p className="text-sm text-gray-500">Tu cartera de préstamos a clientes</p>
         </div>
-        <Button onClick={() => setShowCreate(true)}>
-          <Plus className="w-4 h-4 mr-2" /> Nuevo Préstamo
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Va sobre `loans` y NO sobre `filteredLoans`: es la hoja de la
+              cartera ENTERA, la que el prestamista le manda a su jefa. Si
+              saliera lo que el buscador filtró, los totales mentirían. */}
+          <Button
+            variant="outline"
+            onClick={() => printHtmlIframe(buildPortfolioHtml(buildPortfolioSummary(loans)), 'resumen-cartera-iframe')}
+            disabled={loans.filter(l => l.status === 'active').length === 0}
+          >
+            <FileText className="w-4 h-4 mr-2" /> Resumen
+          </Button>
+          <Button onClick={() => setShowCreate(true)}>
+            <Plus className="w-4 h-4 mr-2" /> Nuevo Préstamo
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

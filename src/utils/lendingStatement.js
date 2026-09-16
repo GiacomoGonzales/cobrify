@@ -100,6 +100,62 @@ export function buildStatement(loan, asOf = new Date()) {
 }
 
 /**
+ * RESUMEN DE CARTERA — la foto de TODOS los préstamos a una fecha.
+ *
+ * Nació de un pedido concreto: el prestamista lleva su cartera a mano en un
+ * cuaderno —fecha de vencimiento, nombre, capital, y un total abajo— y se la
+ * manda a su jefa. El sistema ya tenía esos datos; lo que le faltaba era poder
+ * imprimirlos (RODRIGUEZ LUNA ENRIQUE GIOVANI, 16/09/2026).
+ *
+ * ⚠️ NO lleva una columna de interés suelta, y es a propósito: en **Cuota Fija**
+ * el interés ya está dentro de las cuotas, así que sumarlo aparte lo contaría
+ * dos veces. El saldo de cada préstamo sale de `loanBalance`, que distingue los
+ * dos tipos. Mismo criterio que el estado de cuenta: la aritmética de la plata
+ * vive en `lendingService` y acá solo se presenta.
+ */
+export function buildPortfolioSummary(loans = [], asOf = new Date()) {
+  // Atrasado se mide contra el DÍA, no contra la hora (igual que buildStatement).
+  const hoy = new Date(asOf.getFullYear(), asOf.getMonth(), asOf.getDate())
+
+  const filas = (loans || [])
+    .filter(l => l && l.status === 'active')
+    .map(l => {
+      const vence = aFecha(l.nextDueDate)
+      const diasAtraso = vence
+        ? Math.max(0, Math.floor((hoy - new Date(vence.getFullYear(), vence.getMonth(), vence.getDate())) / 86400000))
+        : 0
+      return {
+        cliente: l.customerName || '',
+        documento: l.customerDocument || '',
+        inicio: aFecha(l.startDate),
+        vence,
+        diasAtraso,
+        atrasado: diasAtraso > 0,
+        tasa: Number(l.interestRate) || 0,
+        tipo: l.amortizationType === 'fixed' ? 'Cuota fija' : 'Solo interés',
+        capital: r2(l.capitalBalance),
+        saldo: r2(loanBalance(l, asOf)),
+      }
+    })
+    // Por fecha de vencimiento, como el cuaderno: lo que vence primero, arriba.
+    .sort((a, b) => (a.vence?.getTime() || 0) - (b.vence?.getTime() || 0))
+
+  return {
+    corte: asOf,
+    filas,
+    activos: filas.length,
+    vencidos: filas.filter(f => f.atrasado).length,
+    clientes: new Set(filas.map(f => f.cliente)).size,
+    capitalEnCalle: r2(filas.reduce((s, f) => s + f.capital, 0)),
+    porCobrar: r2(filas.reduce((s, f) => s + f.saldo, 0)),
+    // Un préstamo al 0% no devenga interés nunca. Casi siempre es un dato mal
+    // cargado y en el papel pasa desapercibido, así que se cuenta para poder
+    // avisarlo (le pasó al primer negocio con uno de S/ 1,000 vencido).
+    sinTasa: filas.filter(f => f.tasa === 0).length,
+  }
+}
+
+/**
  * El estado de cuenta como mensaje de WhatsApp.
  *
  * Texto y no PDF a propósito: el prestatario lo lee en la notificación, sin

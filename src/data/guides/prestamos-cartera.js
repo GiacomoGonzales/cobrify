@@ -6,7 +6,7 @@
  */
 export default {
   id: 'prestamos-cartera',
-  actualizado: '15/08/2026',
+  actualizado: '16/09/2026',
   intro:
     'Tu cartera completa: cada préstamo con su capital vivo, su próximo vencimiento y su balance. Desde acá registras préstamos nuevos, cobras las cuotas y entregas la constancia de cada pago.',
 
@@ -94,6 +94,24 @@ export default {
         {
           type: 'ojo',
           text: 'El estado de cuenta sigue disponible cuando el préstamo ya está **cancelado**: en ese caso el mensaje dice que no queda saldo. Sirve como constancia de que terminó de pagar.',
+        },
+      ],
+    },
+    {
+      id: 'resumen-cartera',
+      title: 'El resumen de toda tu cartera',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'El botón **Resumen**, arriba junto a Nuevo Préstamo, imprime **toda tu cartera en una hoja**: cada préstamo con su fecha de vencimiento, el cliente, la tasa, el capital y el saldo, ordenados por el que vence primero, y los totales abajo. Para tenerlo en papel o mandarlo en PDF a quien te pida cuentas.',
+        },
+        {
+          type: 'ojo',
+          text: 'Sale **toda tu cartera activa**, no lo que tengas filtrado en el buscador. Si mostrara solo lo filtrado, los totales dirían menos de lo que realmente tienes en la calle.',
+        },
+        {
+          type: 'consejo',
+          text: 'Los préstamos **vencidos** salen marcados con los días de atraso. Y si alguno quedó registrado con **tasa 0%**, la hoja te lo avisa al pie: ese préstamo no genera interés, y casi siempre es un dato mal puesto al registrarlo.',
         },
       ],
     },
