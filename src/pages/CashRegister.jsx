@@ -1286,6 +1286,27 @@ export default function CashRegister() {
     return { deferred, sessionInvoices }
   }
 
+  /**
+   * Los comprobantes que le tocan a ESA caja, no los de todo el local.
+   *
+   * El historial los pide con `getInvoicesByBranch`, que trae la sucursal
+   * entera. Cuando dos cajeras comparten local, el reporte de una listaba las
+   * ventas de la otra al lado de sus propios totales —que sí son solo suyos—,
+   * y el papel no cuadraba con el cierre. Reporte de FERRORAMOS (16/09/2026):
+   * "en el reporte que él imprime sale las ventas de la srta Ana".
+   *
+   * Se cruza por `createdBy`, que es el MISMO uid que `openedByUserId` de la
+   * sesión (verificado en sus 4 cajas del 15-set: 26, 36, 30 y 17 documentos,
+   * iguales al `invoiceCount` que guardó cada cierre). Sin ese dato —cajas
+   * viejas, o un comprobante sin autor— se deja pasar: esconder una venta que
+   * sí ocurrió es peor que mostrarla de más.
+   */
+  const comprobantesDeLaCaja = (session, invoices) => {
+    const uid = session?.openedByUserId
+    if (!uid) return invoices || []
+    return (invoices || []).filter(inv => !inv.createdBy || inv.createdBy === uid)
+  }
+
   const handleDownloadExcel = async () => {
     try {
       // Obtener datos del negocio
@@ -1565,7 +1586,7 @@ export default function CashRegister() {
       // Imprimir (incluye deferredPayments — guardados o reconstruidos)
       const { deferred } = getHistoryDerived(selectedHistorySession, historyInvoices)
       const productosDeLaSesion = businessSettings?.showProductsInCashClosure === true
-        ? resumirProductosVendidos(historyInvoices)
+        ? resumirProductosVendidos(comprobantesDeLaCaja(selectedHistorySession, historyInvoices))
         : null
       const result = await printCashClosureTicket(
         selectedHistorySession,
@@ -5240,7 +5261,7 @@ export default function CashRegister() {
             hideExpected={hideExpectedForCashier}
             sessionData={printSessionData}
             movements={printMovements}
-            invoices={printSessionData === closedSessionData ? todayInvoices : historyInvoices}
+            invoices={printSessionData === closedSessionData ? todayInvoices : comprobantesDeLaCaja(selectedHistorySession, historyInvoices)}
             deferredPayments={printSessionData?.deferredPayments || (printSessionData === closedSessionData ? (totals.deferredPayments || []) : [])}
             companySettings={companySettings}
             paperWidth={printerConfig?.paperWidth || 80}
