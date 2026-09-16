@@ -666,6 +666,28 @@ export default function POS() {
   // decía "Doc. origen" en blanco.
   const [pendingNotaVentaNumber, setPendingNotaVentaNumber] = useState('')
 
+  // Una venta que viene de una nota NO se edita: los productos y el monto son
+  // los que el cliente ya pagó cuando se hizo la nota.
+  //
+  // Si se cambian, la caja se descuadra EN SILENCIO y en los dos sentidos. Si
+  // la factura sale por más, la diferencia cobrada no tiene dónde entrar; si
+  // sale por menos, la caja espera menos de lo que hay. Y nadie lo nota, porque
+  // al cobrar se mira el monto a entregar, no lo que cambió: "por lo general
+  // nos fijamos más en el monto que debe entregar" (FERRORAMOS, 16/09/2026,
+  // que lo pidió después de perseguir un faltante de S/ 412.20 durante dos días).
+  // Lo que el cliente lleve de más va en una venta aparte.
+  const vieneDeUnaNota = !!parteDeNota || pendingNotaVentaIds?.length > 0
+  /** Frena una edición del carrito cuando la venta viene de una nota. true = la frenó. */
+  const frenarEdicionDeNota = () => {
+    if (!vieneDeUnaNota) return false
+    toast.warning(
+      pendingNotaVentaNumber
+        ? `Esta venta viene de la nota ${pendingNotaVentaNumber} y sus productos no se cambian. Si el cliente lleva algo más, hazlo en una venta aparte.`
+        : 'Esta venta viene de una nota de venta y sus productos no se cambian. Si el cliente lleva algo más, hazlo en una venta aparte.',
+    )
+    return true
+  }
+
   const cupo = useMemo(
     () => cupoDeComprobantes(subscription, { esAdmin: isAdmin || isDemoMode }),
     [subscription, isAdmin, isDemoMode]
@@ -4155,6 +4177,9 @@ export default function POS() {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
       return
     }
+    // Antes de abrir cualquier selector (variante, lote, presentación): si no se
+    // puede agregar, no tiene sentido preguntar primero cuál.
+    if (frenarEdicionDeNota()) return
 
     // If product has variants, show variant selection modal
     if (product.hasVariants) {
@@ -5196,6 +5221,7 @@ export default function POS() {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
       return
     }
+    if (frenarEdicionDeNota()) return
     // Con el ajuste de preguntar, subir la cantidad por encima del stock se
     // frena aca y decide el cajero. Tiene que ser ANTES del setCart: la
     // validacion de mas abajo vive dentro de un .map(), que es una
@@ -5267,6 +5293,9 @@ export default function POS() {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
       return
     }
+    // Acá también, no solo en los botones +/-: la cantidad se puede TECLEAR en
+    // el carrito, y ese es el camino por el que se cambiaría sin querer.
+    if (frenarEdicionDeNota()) return
     // Mismo criterio que el boton +: si la cantidad tecleada se pasa del
     // stock, se pregunta en vez de rechazarla con un aviso que se va solo.
     if (preguntarSinStock && !yaConfirmado) {
@@ -5350,6 +5379,7 @@ export default function POS() {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
       return
     }
+    if (frenarEdicionDeNota()) return
     setCart(cart.filter(item => (item.cartId || item.id) !== itemId))
   }
 
@@ -5358,6 +5388,7 @@ export default function POS() {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
       return
     }
+    if (frenarEdicionDeNota()) return
     setEditingPriceItemId(itemId)
     setEditingPriceWithoutIgv(withoutIgv)
     if (withoutIgv) {
@@ -5391,6 +5422,10 @@ export default function POS() {
   }
 
   const saveEditedPrice = (itemId) => {
+    // Esta no tiene el guarda de `saleCompleted` como las demás, pero sí el de
+    // la nota: si el editor de precio quedó abierto y después se cargó una
+    // nota, guardar acá cambiaría el monto de una venta ya cobrada.
+    if (frenarEdicionDeNota()) return
     let newPrice = parseFloat(editingPrice)
 
     // El 0 SÍ es válido: poner en cero un producto del carrito es regalarlo.
@@ -5500,6 +5535,7 @@ export default function POS() {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
       return
     }
+    if (frenarEdicionDeNota()) return
     const groupIds = new Set(getSerialGroupCartIds(itemId))
     setCart(cart.filter(item => !groupIds.has(item.cartId || item.id)))
   }
@@ -5510,6 +5546,7 @@ export default function POS() {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
       return
     }
+    if (frenarEdicionDeNota()) return
     const total = parseFloat(totalValue) || 0
     const groupIds = new Set(getSerialGroupCartIds(itemId))
     const perMember = groupIds.size > 0 ? total / groupIds.size : 0
@@ -5527,6 +5564,7 @@ export default function POS() {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
       return
     }
+    if (frenarEdicionDeNota()) return
     const discount = parseFloat(discountValue) || 0
     setCart(cart.map(item => {
       const matchId = item.cartId || item.id
