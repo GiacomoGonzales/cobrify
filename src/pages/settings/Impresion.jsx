@@ -1833,6 +1833,24 @@ export default function Impresion() {
               </div>
             )}
 
+            {/* Nació al revés que las demás: encendida para todos desde el
+                10-set, porque el almacén de EDIN SOLANO no encontraba la
+                cantidad entre los números de la fila. A quien vende mostrador
+                le resulta pesada (TUEROS ORE, 16-set), así que ahora se apaga.
+                Por eso el checked es `!== false` y no `|| false`. */}
+            <Ajuste
+              id="opcion-cantidadDestacada"
+              checked={printerConfig.cantidadDestacada !== false}
+              onChange={(e) =>
+                guardarLocal(
+                  { cantidadDestacada: e.target.checked },
+                  e.target.checked ? 'Cantidad destacada en el ticket' : 'Cantidad del mismo tamaño que la fila'
+                )
+              }
+              titulo="Cantidad destacada en el ticket"
+              descripcion="Imprime la cantidad más grande y en negrita, para encontrarla de un vistazo al despachar. Apágala si prefieres que la línea salga pareja."
+            />
+
             <Ajuste
               id="opcion-simplePrint"
               checked={printerConfig.simplePrint || false}

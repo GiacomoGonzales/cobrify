@@ -1198,6 +1198,8 @@ export default function POS() {
   const [basicPrint, setBasicPrint] = useState(false)
   const [a4SheetPrint, setA4SheetPrint] = useState(false)
   const [showItemUnit, setShowItemUnit] = useState(false)
+  // Encendida salvo que el equipo la apague (ver printerConfig.cantidadDestacada).
+  const [cantidadDestacada, setCantidadDestacada] = useState(true)
   const [ticketPaperWidth, setTicketPaperWidth] = useState(80)
 
   // Price editing
@@ -1961,6 +1963,7 @@ export default function POS() {
           setBasicPrint(printerConfigResult.config.basicPrint || false)
           setA4SheetPrint(printerConfigResult.config.a4SheetPrint || false)
           setShowItemUnit(printerConfigResult.config.showItemUnit || false)
+          setCantidadDestacada(printerConfigResult.config.cantidadDestacada !== false)
           setTicketPaperWidth(printerConfigResult.config.paperWidth || 80)
         }
       } catch (error) {
@@ -15083,6 +15086,7 @@ Gracias por tu preferencia.`
             basicPrint={basicPrint}
             a4SheetPrint={a4SheetPrint}
             showItemUnit={showItemUnit}
+            cantidadDestacada={cantidadDestacada}
           />
         </div>
       )}

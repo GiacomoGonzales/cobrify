@@ -15,7 +15,7 @@
  */
 export default {
   id: 'configuracion',
-  actualizado: '11/09/2026',
+  actualizado: '16/09/2026',
   intro:
     'Configuración es donde el sistema se adapta a tu negocio: qué comprobantes emites, qué puede tocar tu cajero, qué aparece en el menú y cómo salen tus impresiones. Esta guía recorre las once pestañas y explica qué hace cada opción y qué cambia cuando la prendes.',
 
@@ -530,6 +530,7 @@ export default {
             ['Imprimir en hoja A4', 'Si imprimes en tinta o láser en vez de térmica'],
             ['Unidad de medida en el ticket', 'Pone la cantidad y la unidad o presentación delante de cada producto: 3 CAJA Galletas'],
             ['Solo delante del producto', 'Aparece con la anterior prendida. Si el nombre de tus presentaciones ya dice la unidad (SACO, CAJA), deja de repetirla junto a la cantidad. Vale para todos los equipos del negocio'],
+            ['Cantidad destacada en el ticket', 'Viene activada: imprime la cantidad más grande y en negrita para encontrarla de un vistazo al despachar. Apágala si prefieres que la línea salga pareja'],
             ['Impresión simple (sin fondos negros)', 'Quita los fondos oscuros. Úsala si tu impresora los saca borrosos o gasta mucho'],
             ['Formato básico (texto plano)', 'Una sola letra, sin negritas, fondos ni logo; solo quedan los QR. Para ticketeras que imprimen símbolos raros o líneas encimadas desde el navegador'],
             ['Ajustar la hoja al largo del ticket', 'Viene activada. El sistema le pide al navegador una hoja del largo exacto del comprobante'],

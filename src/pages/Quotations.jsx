@@ -102,6 +102,8 @@ export default function Quotations() {
   const [simplePrint, setSimplePrint] = useState(false)
   const [a4SheetPrint, setA4SheetPrint] = useState(false)
   const [showItemUnit, setShowItemUnit] = useState(false)
+  // Encendida salvo que el equipo la apague (ver printerConfig.cantidadDestacada).
+  const [cantidadDestacada, setCantidadDestacada] = useState(true)
 
   // Helper para manejar fechas de Firestore y Date objects
   const getDateFromTimestamp = (timestamp) => {
@@ -491,6 +493,7 @@ export default function Quotations() {
         setSimplePrint(fresh.config.simplePrint || false)
         setA4SheetPrint(fresh.config.a4SheetPrint || false)
         setShowItemUnit(fresh.config.showItemUnit || false)
+        setCantidadDestacada(fresh.config.cantidadDestacada !== false)
       }
     } catch (e) {
       console.error('Error releyendo config de impresora antes de imprimir:', e)
@@ -1613,6 +1616,7 @@ export default function Quotations() {
             simplePrint={simplePrint}
             a4SheetPrint={a4SheetPrint}
             showItemUnit={showItemUnit}
+            cantidadDestacada={cantidadDestacada}
           />
         </div>
       )}

@@ -598,6 +598,7 @@ const OPCIONES_DEL_TICKET = [
   'showItemUnit', 'ticketFontSize', 'webPrintLegible', 'kitchenFontSize',
   'compactPrint', 'ultraCompactKitchen', 'printMargins', 'simplePrint',
   'basicPrint', 'a4SheetPrint', 'ajustarHojaAlTicket', 'cutFeedLines',
+  'cantidadDestacada',
 ];
 
 /** Copia las opciones del ticket al negocio. No lanza: es un respaldo. */
@@ -670,6 +671,10 @@ export const savePrinterConfig = async (userId, printerConfig) => {
       ultraCompactKitchen: cfg.ultraCompactKitchen || false,
       a4SheetPrint: cfg.a4SheetPrint || false, // tinta/láser, no térmica
       showItemUnit: cfg.showItemUnit || false,
+      // Encendida salvo que se apague a propósito: nació así para todos el
+      // 10-set (el almacén de EDIN SOLANO no encontraba la cantidad), y apagarla
+      // es lo nuevo. Un negocio que nunca la tocó tiene que seguir viéndola.
+      cantidadDestacada: cfg.cantidadDestacada !== false,
       // Encendido salvo que se apague a propósito: es lo que hace que el ticket
       // no salga chiquito y centrado en una hoja A4.
       ajustarHojaAlTicket: cfg.ajustarHojaAlTicket !== false,

@@ -26,7 +26,7 @@ import { clienteDelComprobante, lineasDelCliente } from '@/utils/datosDelCliente
  * - Código QR para validación
  * - Representación impresa
  */
-const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, webPrintLegible: webPrintLegibleProp = false, ticketFontSize, compactPrint = false, printMargins = 8, simplePrint = false, a4SheetPrint = false, showItemUnit = false, basicPrint = false }, ref) => {
+const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, webPrintLegible: webPrintLegibleProp = false, ticketFontSize, compactPrint = false, printMargins = 8, simplePrint = false, a4SheetPrint = false, showItemUnit = false, cantidadDestacada = true, basicPrint = false }, ref) => {
   // Estado para detectar si el logo es cuadrado
   const [isSquareLogo, setIsSquareLogo] = React.useState(false)
 
@@ -520,8 +520,8 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
            para encontrar la que importa. Ya se había engrosado la fila entera
            (8-set); la queja siguió en el almacén (EDIN SOLANO, 10-set-2026). */
         .item-qty {
-          font-size: ${webPrintLegible ? (is58mm ? '13pt' : '14pt') : (is58mm ? '9pt' : '10.5pt')};
-          font-weight: 800;
+          font-size: ${cantidadDestacada ? (webPrintLegible ? (is58mm ? '13pt' : '14pt') : (is58mm ? '9pt' : '10.5pt')) : 'inherit'};
+          font-weight: ${cantidadDestacada ? 800 : 'inherit'};
         }
 
         .item-code {
@@ -726,7 +726,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
           font-size: ${is58mm ? '5.5pt' : '6.5pt'} !important;
         }
         .item-qty {
-          font-size: ${is58mm ? '6.5pt' : '7.5pt'} !important;
+          font-size: ${cantidadDestacada ? (is58mm ? '6.5pt' : '7.5pt') : 'inherit'} !important;
         }
         .ticket-observaciones {
           font-size: ${is58mm ? '6.5pt' : '7.5pt'} !important;
@@ -1233,7 +1233,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
               </div>
               <div className="info-row" style={{ marginBottom: '4px' }}>
                 <span className="info-label">Saldo Pendiente:</span>
-                <span style={{ fontWeight: 'bold', color: '#ff6600' }}>{formatCurrency(invoice.balance || 0)}</span>
+                <span style={{ fontWeight: 'bold', color: '#000' }}>{formatCurrency(invoice.balance || 0)}</span>
               </div>
             </>
           )}
@@ -1270,7 +1270,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
                 </div>
                 <div className="info-row" style={{ marginTop: '4px' }}>
                   <span className="info-label">Saldo Pendiente:</span>
-                  <span style={{ fontWeight: 'bold', color: '#ff6600' }}>{formatCurrency(invoice.total || 0)}</span>
+                  <span style={{ fontWeight: 'bold', color: '#000' }}>{formatCurrency(invoice.total || 0)}</span>
                 </div>
               </>
             )
@@ -1288,7 +1288,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
                 {real.pending > 0.01 && (
                   <div className="info-row" style={{ marginTop: '4px' }}>
                     <span className="info-label">Saldo Pendiente:</span>
-                    <span style={{ fontWeight: 'bold', color: '#ff6600' }}>{formatCurrency(real.pending)}</span>
+                    <span style={{ fontWeight: 'bold', color: '#000' }}>{formatCurrency(real.pending)}</span>
                   </div>
                 )}
               </>

@@ -417,6 +417,8 @@ export default function InvoiceList() {
   const [basicPrint, setBasicPrint] = useState(false)
   const [a4SheetPrint, setA4SheetPrint] = useState(false)
   const [showItemUnit, setShowItemUnit] = useState(false)
+  // Encendida salvo que el equipo la apague (ver printerConfig.cantidadDestacada).
+  const [cantidadDestacada, setCantidadDestacada] = useState(true)
   const [ticketPaperWidth, setTicketPaperWidth] = useState(80)
   // Ajustar la hoja al largo del ticket. Apagado, manda el papel elegido en
   // la ventana de imprimir (Configuración > Impresora).
@@ -439,6 +441,7 @@ export default function InvoiceList() {
         setBasicPrint(printerConfigResult.config.basicPrint || false)
         setA4SheetPrint(printerConfigResult.config.a4SheetPrint || false)
         setShowItemUnit(printerConfigResult.config.showItemUnit || false)
+        setCantidadDestacada(printerConfigResult.config.cantidadDestacada !== false)
         setTicketPaperWidth(printerConfigResult.config.paperWidth || 80)
         setAjustarHoja(printerConfigResult.config.ajustarHojaAlTicket !== false)
       }
@@ -466,6 +469,7 @@ export default function InvoiceList() {
       if (fresh.success && fresh.config) {
         const c = fresh.config
         setShowItemUnit(c.showItemUnit || false)
+        setCantidadDestacada(c.cantidadDestacada !== false)
         setWebPrintLegible(c.webPrintLegible || false)
         setTicketFontSize(c.ticketFontSize || (c.webPrintLegible ? 'medium' : 'small'))
         setCompactPrint(c.compactPrint || false)
@@ -6294,7 +6298,7 @@ Gracias por tu preferencia.`
       {/* Hidden Ticket Component for Printing - Individual (modal o fila) */}
       {(viewingInvoice || rowPrintInvoice) && (
         <div className="hidden print:block">
-          <InvoiceTicket ref={ticketRef} invoice={viewingInvoice || rowPrintInvoice} companySettings={empresaDe(viewingInvoice || rowPrintInvoice)} paperWidth={ticketPaperWidth} webPrintLegible={webPrintLegible} ticketFontSize={ticketFontSize} compactPrint={compactPrint} printMargins={printMargins} simplePrint={simplePrint} basicPrint={basicPrint} a4SheetPrint={a4SheetPrint} showItemUnit={showItemUnit} />
+          <InvoiceTicket ref={ticketRef} invoice={viewingInvoice || rowPrintInvoice} companySettings={empresaDe(viewingInvoice || rowPrintInvoice)} paperWidth={ticketPaperWidth} webPrintLegible={webPrintLegible} ticketFontSize={ticketFontSize} compactPrint={compactPrint} printMargins={printMargins} simplePrint={simplePrint} basicPrint={basicPrint} a4SheetPrint={a4SheetPrint} showItemUnit={showItemUnit} cantidadDestacada={cantidadDestacada} />
         </div>
       )}
 
@@ -6322,7 +6326,7 @@ Gracias por tu preferencia.`
             }
           `}</style>
           {invoices.filter(inv => selectedInvoiceIds.has(inv.id)).map(inv => (
-            <InvoiceTicket key={inv.id} invoice={inv} companySettings={empresaDe(inv)} paperWidth={ticketPaperWidth} webPrintLegible={webPrintLegible} ticketFontSize={ticketFontSize} compactPrint={compactPrint} printMargins={printMargins} simplePrint={simplePrint} basicPrint={basicPrint} a4SheetPrint={a4SheetPrint} showItemUnit={showItemUnit} />
+            <InvoiceTicket key={inv.id} invoice={inv} companySettings={empresaDe(inv)} paperWidth={ticketPaperWidth} webPrintLegible={webPrintLegible} ticketFontSize={ticketFontSize} compactPrint={compactPrint} printMargins={printMargins} simplePrint={simplePrint} basicPrint={basicPrint} a4SheetPrint={a4SheetPrint} showItemUnit={showItemUnit} cantidadDestacada={cantidadDestacada} />
           ))}
         </div>,
         document.body
