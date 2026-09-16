@@ -1222,20 +1222,39 @@ export default function CashRegister() {
   }
 
   // Para el historial: calcula deferredPayments y filtra invoices de la sesión.
-  // Prioriza deferredPayments guardados en la sesión cerrada; si no existen
-  // (sesiones cerradas antes del fix), los reconstruye desde paymentHistory.
+  //
+  // MANDA LO QUE LA SESIÓN GUARDÓ AL CERRAR, AUNQUE SEA CERO. Antes se exigía
+  // `length > 0`, así que una caja que cerró SIN cobros diferidos —lo normal—
+  // caía en la reconstrucción de abajo, que solo mira la ventana de tiempo y la
+  // sucursal y por eso le adjudicaba los cobros de la compañera de al lado.
+  // Pasó en FERRORAMOS (16/09/2026): el reporte de Dibar mostraba los S/ 30 que
+  // cobró Ana el día anterior. El cierre estaba bien —Dibar guardó 0 y Ana 30—;
+  // el que mentía era el reporte al reabrirlo desde el historial. Un cero
+  // guardado es un dato, no un "no sé".
   const getHistoryDerived = (session, invoices) => {
     const openedAt = session?.openedAt?.toDate ? session.openedAt.toDate() : (session?.openedAt ? new Date(session.openedAt) : null)
     const closedAt = session?.closedAt?.toDate ? session.closedAt.toDate() : (session?.closedAt ? new Date(session.closedAt) : new Date())
     const isInWindow = (d) => d && openedAt && d >= openedAt && d <= closedAt
 
+    // Solo para la reconstrucción: el pago tiene que haberlo registrado la misma
+    // persona de esta caja. `recordedBy` guarda su correo y la sesión guarda ese
+    // mismo correo en `userName`. Si a alguno le falta el dato no hay con qué
+    // distinguir, y se deja pasar para no esconder un cobro que sí ocurrió.
+    const deLaMismaCajera = (pay) => {
+      const cobro = pay?.recordedBy || pay?.recordedByName
+      const dueña = session?.userName || session?.openedByName
+      if (!cobro || !dueña) return true
+      return String(cobro).trim().toLowerCase() === String(dueña).trim().toLowerCase()
+    }
+
     let deferred = []
-    if (Array.isArray(session?.deferredPayments) && session.deferredPayments.length > 0) {
+    if (Array.isArray(session?.deferredPayments)) {
       deferred = session.deferredPayments.map(p => ({
         ...p,
         date: p.date?.toDate?.() || (p.date ? new Date(p.date) : null),
       }))
     } else {
+      // Sesiones cerradas antes de que esto se guardara, y la caja todavía abierta.
       for (const inv of invoices || []) {
         const created = inv.createdAt?.toDate?.() || (inv.createdAt ? new Date(inv.createdAt) : null)
         if (!openedAt || (created && created >= openedAt)) continue
@@ -1243,6 +1262,7 @@ export default function CashRegister() {
         for (const pay of inv.paymentHistory) {
           const pd = pay.date?.toDate?.() || (pay.date ? new Date(pay.date) : null)
           if (!isInWindow(pd)) continue
+          if (!deLaMismaCajera(pay)) continue
           deferred.push({
             invoiceId: inv.id,
             invoiceNumber: inv.number || '-',
@@ -1250,6 +1270,8 @@ export default function CashRegister() {
             customerName: inv.customer?.name || inv.customer?.businessName || inv.customerName || 'Cliente General',
             amount: parseFloat(pay.amount) || 0,
             method: pay.method,
+            recordedBy: pay.recordedBy || null,
+            recordedByName: pay.recordedByName || null,
             date: pd,
           })
         }
