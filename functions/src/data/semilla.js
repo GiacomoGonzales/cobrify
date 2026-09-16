@@ -181,17 +181,29 @@ export const SERIES_NEGOCIO = {
  * las de arriba. Esto es para cuando el cliente cree su segunda sede.
  */
 export function seriesDeSucursal(n = 1) {
-  const s = String(n).padStart(3, '0')
+  // Una serie son CUATRO caracteres (`serieValida`, en utils/emisorDelComprobante:
+  // nota_credito_factura: /^F[A-Z0-9]{3}$/). Con un padStart(3) fijo, las de dos
+  // letras salían de cinco —"FC001", "BC001", "FD001", "BD001"— y SUNAT no las
+  // acepta: eran cuatro de las nueve inválidas. El relleno tiene que depender de
+  // cuántas letras lleva cada una, igual que en `seriesSugeridas`.
+  // Y si el número no entra en los dígitos disponibles ("FC" deja dos, o sea
+  // 99), se pasa a base 36: el formato es alfanumérico, así que "FC2S" vale y
+  // "FC100" no. padStart NO recorta, de ahí venía el problema.
+  const conLetras = (letras, digitos) => {
+    const cabe = String(n).length <= digitos
+    const cuerpo = cabe ? String(n) : Number(n).toString(36).toUpperCase()
+    return letras + cuerpo.padStart(digitos, '0').slice(-digitos)
+  }
   return {
-    factura: { serie: `F${s}`, lastNumber: 0 },
-    boleta: { serie: `B${s}`, lastNumber: 0 },
-    nota_venta: { serie: `N${s}`, lastNumber: 0 },
-    cotizacion: { serie: `C${s}`, lastNumber: 0 },
-    nota_credito_factura: { serie: `FC${s}`, lastNumber: 0 },
-    nota_credito_boleta: { serie: `BC${s}`, lastNumber: 0 },
-    nota_debito_factura: { serie: `FD${s}`, lastNumber: 0 },
-    nota_debito_boleta: { serie: `BD${s}`, lastNumber: 0 },
-    guia_remision: { serie: `T${s}`, lastNumber: 0 },
+    factura: { serie: conLetras('F', 3), lastNumber: 0 },
+    boleta: { serie: conLetras('B', 3), lastNumber: 0 },
+    nota_venta: { serie: conLetras('N', 3), lastNumber: 0 },
+    cotizacion: { serie: conLetras('C', 3), lastNumber: 0 },
+    nota_credito_factura: { serie: conLetras('FC', 2), lastNumber: 0 },
+    nota_credito_boleta: { serie: conLetras('BC', 2), lastNumber: 0 },
+    nota_debito_factura: { serie: conLetras('FD', 2), lastNumber: 0 },
+    nota_debito_boleta: { serie: conLetras('BD', 2), lastNumber: 0 },
+    guia_remision: { serie: conLetras('T', 3), lastNumber: 0 },
   }
 }
 

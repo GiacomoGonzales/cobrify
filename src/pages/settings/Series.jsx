@@ -87,13 +87,37 @@ const GRUPOS_DE_DOCUMENTOS = [
 // mismo cálculo que el cobro y que el "Siguiente:" del POS.
 const getNextNumber = (serie, lastNumber) => numeroSiguiente({ serie, lastNumber })
 
-// "F001" con el número 2 → "F002"; "FN01" → "FN02". Una serie son CUATRO
+// Las series con las que se propone una SUCURSAL nueva. Son las que el sistema
+// viene usando (las sedes de JMC llevan F020/FC20 y F030/FC30); acá solo están
+// escritas en un lugar, con el número 1, para que `serieConNumero` les ponga el
+// de la sucursal sin que nadie vuelva a contar dígitos a mano.
+const SERIES_DE_SUCURSAL = {
+  factura: 'F001',
+  boleta: 'B001',
+  nota_venta: 'N001',
+  cotizacion: 'C001',
+  nota_credito_factura: 'FC01',
+  nota_credito_boleta: 'BC01',
+  nota_debito_factura: 'FD01',
+  nota_debito_boleta: 'BD01',
+  guia_remision: 'T001',
+  guia_transportista: 'V001',
+}
+
+// "F001" con el número 2 → "F002"; "FC01" → "FC02". Una serie son CUATRO
 // caracteres: las letras que la identifican y el resto en dígitos, así que el
 // relleno depende de cuántas letras trae, no de un ancho fijo.
 const serieConNumero = (base, n) => {
   const letras = String(base).replace(/[0-9]+$/, '')
   const digitos = Math.max(String(base).length - letras.length, 1)
-  return `${letras}${String(n).padStart(digitos, '0')}`
+  // Si el número no entra en los dígitos que quedan —"FC" solo deja dos, o
+  // sea 99— se pasa a base 36, que SUNAT admite porque el formato es
+  // alfanumérico (/^F[A-Z0-9]{3}$/). Sin esto, padStart NO recorta y el 100
+  // devolvía "FC100", de cinco caracteres: el mismo bug que este helper vino
+  // a arreglar, solo que más lejos.
+  const cabe = String(n).length <= digitos
+  const cuerpo = cabe ? String(n) : Number(n).toString(36).toUpperCase()
+  return `${letras}${cuerpo.padStart(digitos, '0').slice(-digitos)}`
 }
 
 // Todas las series que ya están tomadas en la cuenta. Una serie no se puede
@@ -117,10 +141,17 @@ const seriesOcupadas = ({ series, branchSeries, userSeries }, exceptoUid = null)
 
 // El primer juego de series libre: si la principal usa F001 y una sucursal
 // F002, propone F003 y no una que vaya a chocar.
-const proponerSeriesLibres = (ocupadas) => {
+//
+// Las letras salen de las series QUE EL NEGOCIO YA TIENE, no de una constante:
+// si sus notas de crédito son FC01, se le propone FC02 y no FN02. Cada cuenta
+// llegó con la convención de su época y no hay que imponerle otra.
+const proponerSeriesLibres = (ocupadas, delNegocio = {}) => {
   for (let n = 1; n <= 999; n++) {
     const candidatas = Object.fromEntries(
-      Object.entries(defaultSeries).map(([tipo, d]) => [tipo, { serie: serieConNumero(d.serie, n), lastNumber: 0 }])
+      Object.entries(defaultSeries).map(([tipo, d]) => [
+        tipo,
+        { serie: serieConNumero(delNegocio?.[tipo]?.serie || d.serie, n), lastNumber: 0 },
+      ])
     )
     const chocaAlguna = Object.values(candidatas).some((d) => ocupadas.has(d.serie.toUpperCase()))
     if (!chocaAlguna) return candidatas
@@ -430,20 +461,19 @@ export default function Series() {
   // Inicializar series de una sucursal si no existen
   const initializeBranchSeries = (branchId, branchIndex) => {
     if (!branchSeries[branchId]) {
-      // Generar series únicas basadas en el índice de la sucursal
-      const suffix = String(branchIndex + 1).padStart(3, '0')
-      const newSeries = {
-        factura: { serie: `F${suffix}`, lastNumber: 0 },
-        boleta: { serie: `B${suffix}`, lastNumber: 0 },
-        nota_venta: { serie: `N${suffix}`, lastNumber: 0 },
-        cotizacion: { serie: `C${suffix}`, lastNumber: 0 },
-        nota_credito_factura: { serie: `FC${suffix}`, lastNumber: 0 },
-        nota_credito_boleta: { serie: `BC${suffix}`, lastNumber: 0 },
-        nota_debito_factura: { serie: `FD${suffix}`, lastNumber: 0 },
-        nota_debito_boleta: { serie: `BD${suffix}`, lastNumber: 0 },
-        guia_remision: { serie: `T${suffix}`, lastNumber: 0 },
-        guia_transportista: { serie: `V${suffix}`, lastNumber: 0 },
-      }
+      // Las series de la sucursal, a partir de su índice. El relleno sale de
+      // `serieConNumero` y NO de un padStart fijo: con tres dígitos, las de
+      // dos letras salían de CINCO caracteres —"FC001", "BC001", "FD001",
+      // "BD001"— y una serie son cuatro. `serieValida` las rechaza
+      // (nota_credito_factura: /^F[A-Z0-9]{3}$/), así que eran cuatro de las
+      // diez propuestas inválidas para SUNAT. Las sucursales de JMC están a
+      // mano en FC20 y FC30, que es la forma correcta.
+      const newSeries = Object.fromEntries(
+        Object.entries(SERIES_DE_SUCURSAL).map(([tipo, base]) => [
+          tipo,
+          { serie: serieConNumero(base, branchIndex + 1), lastNumber: 0 },
+        ])
+      )
       setBranchSeries(prev => ({
         ...prev,
         [branchId]: newSeries
@@ -470,7 +500,7 @@ export default function Series() {
   const initializeUserSeries = (uid) => {
     if (!userSeries[uid]) {
       const ocupadas = seriesOcupadas({ series, branchSeries, userSeries }, uid)
-      setUserSeries(prev => ({ ...prev, [uid]: proponerSeriesLibres(ocupadas) }))
+      setUserSeries(prev => ({ ...prev, [uid]: proponerSeriesLibres(ocupadas, series) }))
     }
     setEditingUserId(uid)
   }
