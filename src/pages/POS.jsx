@@ -10015,7 +10015,13 @@ Gracias por tu preferencia.`
   }
 
   return (
-    <div className="animate-fade-in px-2 sm:px-4 lg:h-full lg:flex lg:flex-col lg:overflow-hidden">
+    // `data-ocupado` con productos en el carrito: una venta se arma a puros
+    // clics, sin escribir nada, y la actualización automática no tiene otra
+    // forma de saber que hay trabajo a medias (ver utils/actualizacionSola).
+    <div
+      data-ocupado={cart.length ? '1' : undefined}
+      className="animate-fade-in px-2 sm:px-4 lg:h-full lg:flex lg:flex-col lg:overflow-hidden"
+    >
       {companySettings?.requireOpenCashRegister && !cashRegisterOpen && (
         // Blanco con borde fino y el color solo en el ícono, como el aviso
         // de pedidos del catálogo. El amarillo a todo lo ancho, pegado a la

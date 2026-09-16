@@ -4,6 +4,7 @@ import { Capacitor } from '@capacitor/core'
 import { App as CapApp } from '@capacitor/app'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { estaEnMedioDeAlgo, marcarActualizacionAutomatica, actualizoSolaHacePoco } from '@/utils/actualizacionSola'
 
 const isNative = Capacitor.isNativePlatform()
 
@@ -38,6 +39,11 @@ const TIENDA_IOS = 'itms-apps://apps.apple.com/pe/app/cobrify-peru/id6756195760'
  *    `appConfig/version`. Actualizar abre Play Store o App Store. Este SÍ es
  *    infrecuente e importante, así que además conserva su franja.
  */
+// Cuándo la web se actualiza sola (ver el efecto más abajo): medio minuto con
+// la pestaña de fondo, o diez minutos a la vista sin que nadie toque nada.
+const OCULTA_MS = 30 * 1000
+const QUIETO_MS = 10 * 60 * 1000
+
 const ActualizacionContext = createContext(null)
 
 const SIN_ACTUALIZACION = {
@@ -211,6 +217,45 @@ export function ActualizacionProvider({ children }) {
 
   const hayTienda = isNative && (!!storeUpdate || !!obligatoria)
   const hayWeb = !isNative && !!needRefresh
+
+  // ACTUALIZARSE SOLO, sin que nadie apriete nada.
+  //
+  // El botón "Actualizar" existe, pero depende de que alguien lo vea: quien
+  // trabaja con la pestaña abierta todo el día se quedaba días atrás (el
+  // 16-set-2026 se reportó como error algo arreglado hacía dos). Ahora, con
+  // una versión esperando, se aplica sola — pero solo cuando recargar no
+  // cuesta nada: con la pestaña de fondo, o a la vista pero sin que nadie
+  // toque nada hace rato. Un cuadro abierto o algo escrito lo frenan
+  // (utils/actualizacionSola). Se vuelve a mirar cada 15 segundos.
+  useEffect(() => {
+    if (isNative || !hayWeb || actualizando) return undefined
+    let ultimaActividad = Date.now()
+    let ocultaDesde = document.visibilityState === 'hidden' ? Date.now() : 0
+    const actividad = () => { ultimaActividad = Date.now() }
+    const alCambiarVisibilidad = () => {
+      ocultaDesde = document.visibilityState === 'hidden' ? Date.now() : 0
+      actividad()
+    }
+    const EVENTOS = ['pointerdown', 'keydown', 'wheel', 'touchstart']
+    for (const nombre of EVENTOS) window.addEventListener(nombre, actividad, { passive: true })
+    document.addEventListener('visibilitychange', alCambiarVisibilidad)
+
+    const reloj = setInterval(() => {
+      const ahora = Date.now()
+      const deFondo = ocultaDesde > 0 && ahora - ocultaDesde >= OCULTA_MS
+      const sinTocar = document.visibilityState === 'visible' && ahora - ultimaActividad >= QUIETO_MS
+      if (!deFondo && !sinTocar) return
+      if (actualizoSolaHacePoco() || estaEnMedioDeAlgo()) return
+      marcarActualizacionAutomatica()
+      actualizarWeb()
+    }, 15 * 1000)
+
+    return () => {
+      clearInterval(reloj)
+      for (const nombre of EVENTOS) window.removeEventListener(nombre, actividad)
+      document.removeEventListener('visibilitychange', alCambiarVisibilidad)
+    }
+  }, [hayWeb, actualizando, actualizarWeb])
 
   const valor = useMemo(() => ({
     hay: hayWeb || hayTienda,

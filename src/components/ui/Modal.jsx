@@ -38,7 +38,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', m
   // mas robusto en navegadores moviles (evita el bug de 100vh / h-full).
   if (fullScreen) {
     return createPortal(
-      <div className="fixed inset-0 z-[9999] bg-white flex flex-col animate-fade-in">
+      <div role="dialog" aria-modal="true" className="fixed inset-0 z-[9999] bg-white flex flex-col animate-fade-in">
         {title && (
           <div
             className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200 bg-white flex-shrink-0"
@@ -60,7 +60,10 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', m
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] overflow-y-auto">
+    // `role="dialog"`, además de accesibilidad, es como la actualización
+    // automática se entera de que hay un cuadro abierto y no recarga encima
+    // (ver utils/actualizacionSola).
+    <div role="dialog" aria-modal="true" className="fixed inset-0 z-[9999] overflow-y-auto">
       {/* Overlay */}
       <div
         className={cn(

@@ -29,6 +29,7 @@ import {
   X,
 } from 'lucide-react'
 import FichaCliente from '@/components/chat/FichaCliente'
+import { conversacionParaReanudar, recordarConversacion } from '@/utils/actualizacionSola'
 import TextoWhatsapp, { TarjetaEnlace } from '@/components/chat/TextoWhatsapp'
 import { Boton, useMenuDeFila, BotonDeFila, CajaMenu, ItemMenu, SeparadorMenu } from '@/components/admin/ui'
 import MiniaturaPdf, { formatoKB } from '@/components/chat/MiniaturaPdf'
@@ -128,7 +129,10 @@ export default function Chat() {
   conversacionesRef.current = conversaciones
   const [cargando, setCargando] = useState(true)
   const [sinPermiso, setSinPermiso] = useState(false)
-  const [activaId, setActivaId] = useState(null)
+  // Si la web se recargó sola para estrenar una versión nueva, se vuelve a la
+  // conversación que estaba abierta: la actualización no se tiene que notar.
+  // Entrando al chat a mano, se empieza en la lista, como siempre.
+  const [activaId, setActivaId] = useState(conversacionParaReanudar)
   const [mensajes, setMensajes] = useState([])
   const [texto, setTexto] = useState('')
   const [enviando, setEnviando] = useState(false)
@@ -421,6 +425,9 @@ export default function Chat() {
     })
     return parar
   }, [activaId])
+
+  // Dónde estaba, por si la página se recarga sola con una versión nueva.
+  useEffect(() => { recordarConversacion(activaId) }, [activaId])
 
   // El contador de la conversacion ABIERTA se limpia siempre, no solo al
   // entrar: si llega un mensaje mientras uno la esta mirando, el servidor sube
