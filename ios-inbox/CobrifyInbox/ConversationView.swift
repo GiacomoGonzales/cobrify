@@ -379,7 +379,14 @@ struct ConversationView: View {
             .presentationDetents([.medium])
         }
         .sheet(isPresented: $mostrarFicha) {
-            GrupoCuentasView(conv: conv)
+            // Desde las cuentas del cliente también se manda el formulario de
+            // alta. Se cierra esta hoja y se abre la del alta: dos hojas a la
+            // vez no se presentan en iOS, hay que esperar a que la primera se
+            // vaya.
+            GrupoCuentasView(conv: conv, alEnviarAlta: {
+                mostrarFicha = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { mostrarAlta = true }
+            })
         }
         .sheet(isPresented: $mostrarVincular) {
             VincularSheet(conversationId: conv.id)

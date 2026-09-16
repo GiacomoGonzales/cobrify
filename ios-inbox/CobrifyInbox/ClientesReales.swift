@@ -7,6 +7,9 @@ import SwiftUI
 /// después escribe su secretaria— y si no se pregunta ahí no se anota nunca.
 struct VincularSheet: View {
     let conversationId: String
+    /// Si de acá salió un formulario de alta, la cuenta que creó es casi
+    /// siempre la que se busca: se ofrece de una en vez de hacer buscar.
+    @State private var alta: AltaDelContacto?
     @Environment(\.dismiss) private var dismiss
     @StateObject private var buscador = BuscadorNegocios()
     @State private var texto = ""
@@ -20,6 +23,7 @@ struct VincularSheet: View {
                 if let elegido { pasoDelRol(elegido) } else { pasoDeBusqueda }
             }
             .navigationTitle(elegido == nil ? "Vincular negocio" : "¿Quién te escribe?")
+            .task { alta = await BuscadorNegocios.altaDeLaConversacion(conversationId) }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -39,6 +43,33 @@ struct VincularSheet: View {
 
     private var pasoDeBusqueda: some View {
         List {
+            // Lo que conecta esta conversación con la cuenta nueva cuando el
+            // número no coincide: el formulario de alta que salió de acá.
+            if let a = alta {
+                Section {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Le enviaste el formulario de alta"
+                             + (a.creadaEn.map { " el \($0.formatted(date: .abbreviated, time: .omitted))" } ?? ""))
+                            .font(.callout.weight(.medium))
+                        Text([
+                            a.diasDePrueba.map { "Prueba de \($0) días" }
+                                ?? (a.planNombre.isEmpty ? "Sin plan" : a.planNombre),
+                            a.yaCreoSuCuenta ? "ya creó su cuenta"
+                                : (a.estado == "abierta" ? "abrió el enlace y no terminó" : "todavía no lo abre"),
+                        ].joined(separator: " · "))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let uid = a.uid, let nombre = a.nombreDeLaCuenta {
+                        Button {
+                            BuscadorNegocios.vincular(conversationId: conversationId, businessId: uid, nombre: nombre)
+                            dismiss()
+                        } label: {
+                            Label("Vincular con \(nombre)", systemImage: "link")
+                        }
+                    }
+                }
+            }
             Section {
                 TextField("Nombre, RUC o correo…", text: $texto)
                     .autocorrectionDisabled()

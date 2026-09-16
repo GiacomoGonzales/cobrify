@@ -145,6 +145,23 @@ struct FichaClienteView: View {
                         .foregroundStyle(.red)
                 }
                 LabeledContent("Plan", value: f.planName ?? "—")
+                // EN PRUEBA, dicho con todas sus letras. El botón de abajo ya
+                // cambia a "Convertir en cuenta real", pero para saber que
+                // todavía no paga había que deducirlo del nombre del plan
+                // (pedido de Giacomo, 16-set-2026).
+                if f.esPrueba {
+                    Label {
+                        Text("En prueba gratuita" + (f.diasParaVencer.map { d in
+                            d < 0 ? " · venció hace \(-d) día\(d == -1 ? "" : "s")"
+                                : d == 0 ? " · vence hoy"
+                                : " · le queda\(d == 1 ? "" : "n") \(d) día\(d == 1 ? "" : "s")"
+                        } ?? ""))
+                    } icon: {
+                        Image(systemName: "checkmark.seal.fill")
+                    }
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.orange)
+                }
                 if f.nuncaVence {
                     LabeledContent("Vencimiento", value: "Sin vencimiento (cuenta interna)")
                 }

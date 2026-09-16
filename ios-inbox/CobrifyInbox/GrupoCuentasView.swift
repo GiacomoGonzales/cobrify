@@ -4,6 +4,9 @@ import SwiftUI
 /// manejar varias; aquí se ven todas juntas y se entra a la ficha de cada una.
 struct GrupoCuentasView: View {
     let conv: Conversacion
+    /// Mandar el formulario de alta. Lo abre quien nos presenta, que es donde
+    /// vive el compositor del chat; sin esto la opción no aparece.
+    var alEnviarAlta: (() -> Void)? = nil
     @StateObject private var grupo = GrupoCuentasStore()
     @State private var fichaDe: String?
     @State private var mostrarBuscar = false
@@ -44,7 +47,7 @@ struct GrupoCuentasView: View {
                 FichaClienteView(businessId: f.id, conversacionId: conv.id, alTerminar: { dismiss() })
             }
             .sheet(isPresented: $mostrarBuscar) {
-                AgregarCuentaSheet(conversationId: conv.id, sugeridas: grupo.sugeridas)
+                AgregarCuentaSheet(conversationId: conv.id, sugeridas: grupo.sugeridas, alEnviarAlta: alEnviarAlta)
             }
             .sheet(isPresented: $eligiendoVendedor) {
                 ElegirVendedorSheet(conversationId: conv.id, vendedores: vendedores, actual: vendedorAsignado)
@@ -251,6 +254,7 @@ struct FilaCuenta: View {
 private struct AgregarCuentaSheet: View {
     let conversationId: String
     var sugeridas: [CuentaResumen] = []
+    var alEnviarAlta: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @StateObject private var buscador = BuscadorNegocios()
     @State private var texto = ""
@@ -299,6 +303,23 @@ private struct AgregarCuentaSheet: View {
                             }
                             .buttonStyle(.plain)
                         }
+                    }
+                }
+
+                // La segunda empresa no siempre existe todavía: el cliente que
+                // ya tiene cuenta paga por otro negocio y hay que crearlo.
+                // Buscarlo acá no servía, y el formulario de alta solo estaba
+                // en el menú de los leads (pedido de Giacomo, 16-set-2026).
+                if alEnviarAlta != nil {
+                    Section {
+                        Button {
+                            dismiss()
+                            alEnviarAlta?()
+                        } label: {
+                            Label("Enviar formulario de alta", systemImage: "person.badge.plus")
+                        }
+                    } footer: {
+                        Text("¿La empresa todavía no existe? Mándale el formulario y, al completarlo, la cuenta nueva queda sumada a este cliente.")
                     }
                 }
             }

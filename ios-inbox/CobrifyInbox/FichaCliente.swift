@@ -358,6 +358,19 @@ struct NegocioIndexado: Identifiable, Equatable {
 }
 
 @MainActor
+/// El formulario de alta que salió de una conversación, con la cuenta que creó
+/// si el cliente ya lo completó. Ver `BuscadorNegocios.altaDeLaConversacion`.
+struct AltaDelContacto {
+    let estado: String
+    let planNombre: String
+    let diasDePrueba: Int?
+    let creadaEn: Date?
+    let uid: String?
+    let nombreDeLaCuenta: String?
+
+    var yaCreoSuCuenta: Bool { estado == "usada" }
+}
+
 final class BuscadorNegocios: ObservableObject {
     @Published var resultados: [NegocioIndexado] = []
     @Published var buscando = false
@@ -453,6 +466,41 @@ final class BuscadorNegocios: ObservableObject {
             pagina = siguiente
         }
         if !acumulado.isEmpty { indice = acumulado }
+    }
+
+    /// El formulario de alta que salió de ESTA conversación, si hubo uno.
+    ///
+    /// El caso molesto: se le manda la prueba a un lead, el lead crea su cuenta
+    /// y la conversación sigue saliendo como desconocida — porque su número
+    /// quedó oculto, o porque el alta es anterior al vínculo automático
+    /// (14-set-2026). Con esto se ve qué se le mandó y a qué cuenta llegó.
+    /// `altasPendientes` solo lo leen los admins: si no, devuelve nil.
+    static func altaDeLaConversacion(_ conversationId: String) async -> AltaDelContacto? {
+        let db = Firestore.firestore()
+        guard let snap = try? await db.collection("altasPendientes")
+            .whereField("conversationId", isEqualTo: conversationId)
+            .limit(to: 5).getDocuments() else { return nil }
+        // A un mismo lead se le puede haber mandado dos veces: manda la última.
+        let docs = snap.documents.sorted {
+            let a = ($0.data()["createdAt"] as? Timestamp)?.dateValue() ?? .distantPast
+            let b = ($1.data()["createdAt"] as? Timestamp)?.dateValue() ?? .distantPast
+            return a > b
+        }
+        guard let d = docs.first?.data() else { return nil }
+        let uid = d["uid"] as? String
+        var nombre: String?
+        if let uid {
+            let biz = try? await db.collection("businesses").document(uid).getDocument()
+            nombre = (biz?.data()?["razonSocial"] as? String) ?? (biz?.data()?["businessName"] as? String)
+        }
+        return AltaDelContacto(
+            estado: (d["estado"] as? String) ?? "enviada",
+            planNombre: (d["planNombre"] as? String) ?? "",
+            diasDePrueba: d["diasDePrueba"] as? Int,
+            creadaEn: (d["createdAt"] as? Timestamp)?.dateValue(),
+            uid: uid,
+            nombreDeLaCuenta: nombre
+        )
     }
 
     static func vincular(conversationId: String, businessId: String, nombre: String) {
