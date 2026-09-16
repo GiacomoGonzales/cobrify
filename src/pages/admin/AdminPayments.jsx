@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getAllPayments, getResellerDeposits, updatePayment, deletePayment } from '@/services/adminStatsService'
+import { getAllPayments, getResellerDeposits, updatePayment, deletePayment, cobradoSinActivar } from '@/services/adminStatsService'
 import { PLANS } from '@/services/subscriptionService'
 import { matchesPrebuilt } from '@/lib/utils'
 import { buildAccountHaystack } from '@/utils/adminSearch'
@@ -36,6 +36,8 @@ export default function AdminPayments() {
   const [loading, setLoading] = useState(true)
   const [totalAmount, setTotalAmount] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
+  // Enlaces de alta ya cobrados que el cliente no terminó: { cantidad, total }.
+  const [porActivar, setPorActivar] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [methodFilter, setMethodFilter] = useState('all')
   const [origenFiltro, setOrigenFiltro] = useState('all')
@@ -60,9 +62,16 @@ export default function AdminPayments() {
       // Dos fuentes distintas de la MISMA plata: lo que paga un cliente directo
       // vive en su suscripcion; lo que paga un reseller es una recarga de saldo
       // y vive aparte. Ninguna de las dos incluye a la otra.
-      const [result, recargas] = await Promise.all([getAllPayments(), getResellerDeposits()])
+      // Y lo cobrado que todavía no tiene cuenta, que no entra en los totales
+      // pero tampoco puede quedar invisible. Si falla, la página sigue igual.
+      const [result, recargas, pendientes] = await Promise.all([
+        getAllPayments(),
+        getResellerDeposits(),
+        cobradoSinActivar().catch(() => null),
+      ])
       const todos = [...result.payments, ...recargas]
       setPayments(todos)
+      setPorActivar(pendientes)
       setTotalAmount(todos.reduce((t, p) => t + (Number(p.amount) || 0), 0))
       setTotalCount(todos.length)
     } catch (error) {
@@ -230,6 +239,20 @@ export default function AdminPayments() {
       {desglose.length > 1 && (
         <p className="text-[12.5px] text-gray-500">
           Por método: {desglose.map(([m, monto]) => `${METODOS[m] || m} ${moneda(monto)}`).join(' · ')}
+        </p>
+      )}
+
+      {/* Lo cobrado que todavía no tiene cuenta. Va aparte y no suma a los
+          totales de arriba: esas cuentas no existen hasta que el cliente
+          termina su formulario, y ahí el pago entra solo. */}
+      {porActivar?.cantidad > 0 && (
+        <p className="text-[12.5px] text-gray-500">
+          Además, {porActivar.cantidad === 1
+            ? 'un enlace de alta cobrado y sin activar'
+            : `${porActivar.cantidad} enlaces de alta cobrados y sin activar`} por{' '}
+          <span className="font-medium text-gray-700">{moneda(porActivar.total)}</span>: esa plata entra a los
+          totales cuando el cliente termina su formulario.{' '}
+          <Link to="/app/admin/altas" className="font-medium text-gray-700 hover:underline">Ver altas</Link>
         </p>
       )}
 

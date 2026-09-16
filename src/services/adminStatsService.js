@@ -273,6 +273,28 @@ function prepareRevenueChartData(monthlyRevenue) {
  * saldo (crear o renovar un cliente) se anota como movimiento negativo en
  * `resellerTransactions`, pero no genera un pago nuevo.
  */
+/**
+ * LA PLATA QUE YA ENTRÓ PERO TODAVÍA NO TIENE CUENTA.
+ *
+ * Un alta con precio es un cliente que YA pagó: el enlace se le manda después
+ * de cobrarle. Pero el pago recién se anota cuando él termina su formulario y
+ * nace su suscripción, así que hasta entonces ese monto no está en ningún
+ * total del panel, y puede quedarse días ahí (reporte de Giacomo, 16-set-2026:
+ * una anual de S/ 353.90 cobrada y sin terminar). No se mezcla con los pagos
+ * de verdad —esas cuentas todavía no existen—: se muestra en su propia línea.
+ */
+export async function cobradoSinActivar() {
+  const snap = await getDocs(query(collection(db, 'altasPendientes'), orderBy('createdAt', 'desc'), limit(200)))
+  const pendientes = snap.docs
+    .map(d => ({ codigo: d.id, ...d.data() }))
+    .filter(a => !a.cuentaEliminada && a.estado !== 'usada' && Number(a.precio) > 0)
+
+  return {
+    cantidad: pendientes.length,
+    total: pendientes.reduce((suma, a) => suma + Number(a.precio || 0), 0),
+  }
+}
+
 export async function getResellerDeposits() {
   const [movs, resellersSnap] = await Promise.all([
     getDocs(query(collection(db, 'resellerTransactions'), where('type', '==', 'deposit'))),
