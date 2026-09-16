@@ -14289,8 +14289,7 @@ export const sendWhatsappMessage = onRequest(
         res.status(400).json({ error: 'Faltan la conversacion o el texto' }); return
       }
 
-      const convRef = db.collection('whatsappConversations').doc(conversationId)
-      const convSnap = await convRef.get()
+      const convSnap = await db.collection('whatsappConversations').doc(conversationId).get()
       if (!convSnap.exists) {
         res.status(404).json({ error: 'La conversacion no existe' }); return
       }
@@ -14306,106 +14305,29 @@ export const sendWhatsappMessage = onRequest(
         res.status(403).json({ error: 'No tienes acceso a esta conversacion' }); return
       }
 
-      // Ventana de servicio: pasadas 24 horas desde el ultimo mensaje del
-      // cliente, WhatsApp ya no deja escribir libremente.
-      const vence = conv.ventanaVenceAt?.toMillis?.() || 0
-      if (Date.now() > vence) {
-        res.status(409).json({
-          error: 'La ventana de 24 horas se cerro. Para escribirle ahora hace falta una plantilla aprobada por Meta.',
-          ventanaCerrada: true,
-          ventanaVencioEl: vence ? new Date(vence).toISOString() : null,
+      // El envio en si —la ventana de 24 horas, la vista previa del enlace, el
+      // guardado del mensaje y la actualizacion de la conversacion— vive en
+      // `enviarTextoAConversacion`, compartido con el buzon de salida. Aca
+      // arriba queda solo lo que es propio de este camino: QUIEN pide enviar.
+      try {
+        const { waMessageId } = await enviarTextoAConversacion({
+          conversationId,
+          texto,
+          respondeA,
+          enviadoPor: decoded.uid,
         })
-        return
-      }
-
-      const cuerpo = String(texto).trim()
-
-      // ENLACES CON IMAGEN GRANDE. Los mensajes de texto de la Cloud API
-      // viajan SIN la miniatura incrustada (eso solo lo hace la app del
-      // celular al componer), asi que el WhatsApp del receptor dibuja la
-      // tarjeta compacta por buena que sea la imagen OG — verificado con
-      // rastreo fresco. La salida: si el texto trae un enlace cuya pagina
-      // tiene imagen, se envia como IMAGEN con el texto de pie. El receptor
-      // ve la foto a lo ancho con el enlace clicable debajo: mejor que la
-      // tarjeta de la app. Si algo falla (imagen webp, pagina lenta, Meta la
-      // rechaza), se cae al texto plano de siempre: el mensaje SIEMPRE sale.
-      const urlSaliente = extraerPrimeraUrl(cuerpo)
-      let vista = null
-      // 1024 = tope del pie de una imagen; mas largo que eso va como texto.
-      if (urlSaliente && cuerpo.length <= 1024) {
-        vista = await obtenerVistaPreviaDeEnlace(urlSaliente).catch(() => null)
-      }
-
-      let waMessageId = null
-      let tipoGuardado = 'text'
-      let mediaGuardada = null
-      if (vista?.imagen) {
-        try {
-          const r = await sendWhatsappMedia({
-            token: process.env.WHATSAPP_TOKEN,
-            phoneNumberId: conv.phoneNumberId,
-            to: conv.waId,
-            tipo: 'image',
-            link: vista.imagen,
-            caption: cuerpo,
+        res.status(200).json({ success: true, waMessageId })
+      } catch (error) {
+        if (error.ventanaCerrada) {
+          res.status(409).json({
+            error: error.message,
+            ventanaCerrada: true,
+            ventanaVencioEl: error.ventanaVencioEl || null,
           })
-          waMessageId = r.waMessageId
-          tipoGuardado = 'image'
-          mediaGuardada = { url: vista.imagen, mimeType: null, filename: null }
-        } catch (e) {
-          console.warn('[WhatsApp] Enlace con imagen rechazado, va como texto:', e.message)
+          return
         }
+        throw error
       }
-
-      if (!waMessageId) {
-        const r = await sendWhatsappText({
-          token: process.env.WHATSAPP_TOKEN,
-          phoneNumberId: conv.phoneNumberId,
-          to: conv.waId,
-          texto: cuerpo,
-          contextId: respondeA,
-        })
-        waMessageId = r.waMessageId
-      }
-
-      const ahora = Timestamp.now()
-      await convRef.collection('messages').doc(waMessageId).set({
-        direccion: 'saliente',
-        waMessageId,
-        waId: conv.waId,
-        tipo: tipoGuardado,
-        texto: cuerpo,
-        ...(mediaGuardada ? { media: mediaGuardada } : {}),
-        ...(vista && !mediaGuardada ? { linkPreview: vista } : {}),
-        // 'enviado' es provisional: el webhook lo va a pisar con entregado y
-        // leido a medida que Meta los informe.
-        estado: 'enviado',
-        ...(respondeA ? { respondeA } : {}),
-        enviadoPor: decoded.uid,
-        timestamp: ahora,
-        createdAt: FieldValue.serverTimestamp(),
-      })
-
-      // Enlace sin imagen o texto largo: la tarjeta para la bandeja se
-      // resuelve aparte, sin demorar la respuesta al panel.
-      if (urlSaliente && !vista) {
-        obtenerVistaPreviaDeEnlace(urlSaliente).then((vp) => {
-          if (!vp) return null
-          return convRef.collection('messages').doc(waMessageId)
-            .set({ linkPreview: vp }, { merge: true })
-        }).catch(() => {})
-      }
-
-      await convRef.set({
-        ultimoMensaje: String(texto).trim(),
-        ultimoMensajeAt: ahora,
-        ultimaDireccion: 'saliente',
-        // Responder implica haber leido: se limpia el contador.
-        sinLeer: 0,
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true })
-
-      res.status(200).json({ success: true, waMessageId })
     } catch (error) {
       console.error('[WhatsApp] Error al enviar:', error.message, error.metaCode || '')
       res.status(500).json({
@@ -14414,6 +14336,184 @@ export const sendWhatsappMessage = onRequest(
       })
     }
   }
+)
+
+/** Lo que se le dice al usuario cuando Meta ya no acepta texto libre. */
+const VENTANA_CERRADA_MSG = 'La ventana de 24 horas se cerro. Para escribirle ahora hace falta una plantilla aprobada por Meta.'
+
+/**
+ * ENVIAR UN TEXTO A UNA CONVERSACION — el camino unico.
+ *
+ * Lo usan los dos que mandan texto: el chat (sendWhatsappMessage, con el
+ * usuario autenticado) y el buzon de salida (enviarDelBuzonWhatsapp). Vive
+ * aparte para que no se separen con el tiempo: la ventana de 24 horas, la
+ * vista previa de enlaces y el guardado del mensaje son la misma regla para
+ * los dos, y el dia que cambie una, cambia para ambos.
+ *
+ * NO decide QUIEN puede enviar: eso lo resuelve cada llamador antes (el chat
+ * verifica el id token; al buzon solo se escribe con credencial de servidor).
+ *
+ * @param {string} p.enviadoPor uid del usuario, o 'claude'/'auto' si no lo hay.
+ * @returns {Promise<{waMessageId: string}>}
+ * @throws Error con `ventanaCerrada: true` si pasaron las 24 horas.
+ */
+async function enviarTextoAConversacion({ conversationId, texto, respondeA = null, enviadoPor }) {
+  const cuerpo = String(texto || '').trim()
+  if (!conversationId || !cuerpo) throw new Error('Faltan la conversacion o el texto')
+
+  const convRef = db.collection('whatsappConversations').doc(conversationId)
+  const convSnap = await convRef.get()
+  if (!convSnap.exists) throw new Error('La conversacion no existe')
+  const conv = convSnap.data()
+
+  const vence = conv.ventanaVenceAt?.toMillis?.() || 0
+  if (Date.now() > vence) {
+    const err = new Error(VENTANA_CERRADA_MSG)
+    err.ventanaCerrada = true
+    err.ventanaVencioEl = vence ? new Date(vence).toISOString() : null
+    throw err
+  }
+
+  // ENLACES CON IMAGEN GRANDE. Los mensajes de texto de la Cloud API viajan
+  // SIN la miniatura incrustada (eso solo lo hace la app del celular al
+  // componer), asi que el WhatsApp del receptor dibuja la tarjeta compacta por
+  // buena que sea la imagen OG — verificado con rastreo fresco. La salida: si
+  // el texto trae un enlace cuya pagina tiene imagen, se envia como IMAGEN con
+  // el texto de pie. El receptor ve la foto a lo ancho con el enlace clicable
+  // debajo: mejor que la tarjeta de la app. Si algo falla (imagen webp, pagina
+  // lenta, Meta la rechaza), se cae al texto plano de siempre: el mensaje
+  // SIEMPRE sale.
+  const urlSaliente = extraerPrimeraUrl(cuerpo)
+  let vista = null
+  if (urlSaliente && cuerpo.length <= 1024) {
+    vista = await obtenerVistaPreviaDeEnlace(urlSaliente).catch(() => null)
+  }
+
+  let waMessageId = null
+  let tipoGuardado = 'text'
+  let mediaGuardada = null
+  if (vista?.imagen) {
+    try {
+      const r = await sendWhatsappMedia({
+        token: process.env.WHATSAPP_TOKEN,
+        phoneNumberId: conv.phoneNumberId,
+        to: conv.waId,
+        tipo: 'image',
+        link: vista.imagen,
+        caption: cuerpo,
+      })
+      waMessageId = r.waMessageId
+      tipoGuardado = 'image'
+      mediaGuardada = { url: vista.imagen, mimeType: null, filename: null }
+    } catch (e) {
+      console.warn('[WhatsApp] Enlace con imagen rechazado, va como texto:', e.message)
+    }
+  }
+
+  if (!waMessageId) {
+    const r = await sendWhatsappText({
+      token: process.env.WHATSAPP_TOKEN,
+      phoneNumberId: conv.phoneNumberId,
+      to: conv.waId,
+      texto: cuerpo,
+      contextId: respondeA,
+    })
+    waMessageId = r.waMessageId
+  }
+
+  const ahora = Timestamp.now()
+  await convRef.collection('messages').doc(waMessageId).set({
+    direccion: 'saliente',
+    waMessageId,
+    waId: conv.waId,
+    tipo: tipoGuardado,
+    texto: cuerpo,
+    ...(mediaGuardada ? { media: mediaGuardada } : {}),
+    ...(vista && !mediaGuardada ? { linkPreview: vista } : {}),
+    estado: 'enviado',
+    ...(respondeA ? { respondeA } : {}),
+    enviadoPor,
+    timestamp: ahora,
+    createdAt: FieldValue.serverTimestamp(),
+  })
+
+  if (urlSaliente && !vista) {
+    obtenerVistaPreviaDeEnlace(urlSaliente).then((vp) => {
+      if (!vp) return null
+      return convRef.collection('messages').doc(waMessageId)
+        .set({ linkPreview: vp }, { merge: true })
+    }).catch(() => {})
+  }
+
+  await convRef.set({
+    ultimoMensaje: cuerpo,
+    ultimoMensajeAt: ahora,
+    ultimaDireccion: 'saliente',
+    sinLeer: 0,
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true })
+
+  return { waMessageId }
+}
+
+// ============================================================
+// BUZON DE SALIDA — responderle a un cliente sin pasar por el chat.
+//
+// POR QUE EXISTE: el asistente (Claude) trabaja las peticiones de los
+// clientes leyendo la bandeja, pero para contestar habia que copiar y pegar
+// el texto a mano. Escribir el endpoint del chat no le sirve: pide un id
+// token de Firebase, que se saca iniciando sesion con contrasena. Con el
+// buzon solo hace falta escribir un documento, que es acceso que ya tiene, y
+// el token de Meta NO se mueve del servidor.
+//
+// ESCRIBIR ACA ENVIA DE VERDAD. No hay un paso de aprobacion en el medio: la
+// decision se toma antes de escribir. Por eso las reglas de Firestore no
+// dejan escribir esta coleccion desde el navegador (ver firestore.rules), y
+// cada envio queda con quien lo puso, el texto y lo que respondio Meta.
+//
+// La ventana de 24 horas la sigue cuidando `enviarTextoAConversacion`: fuera
+// de ella el documento queda en estado 'error' y no se manda nada.
+// ============================================================
+export const enviarDelBuzonWhatsapp = onDocumentCreated(
+  {
+    document: 'whatsappOutbox/{envioId}',
+    region: 'us-central1',
+    timeoutSeconds: 60,
+    memory: '256MiB',
+    secrets: ['WHATSAPP_TOKEN'],
+  },
+  async (event) => {
+    const snap = event.data
+    if (!snap) return
+    const envio = snap.data() || {}
+
+    // Solo lo que nace pendiente. Asi un reintento o una edicion posterior no
+    // vuelven a mandar el mismo mensaje.
+    if (envio.estado !== 'pendiente') return
+
+    try {
+      const { waMessageId } = await enviarTextoAConversacion({
+        conversationId: envio.conversationId,
+        texto: envio.texto,
+        respondeA: envio.respondeA || null,
+        enviadoPor: envio.puestoPor || 'buzon',
+      })
+      await snap.ref.set({
+        estado: 'enviado',
+        waMessageId,
+        enviadoAt: FieldValue.serverTimestamp(),
+      }, { merge: true })
+      console.log(`[WhatsApp] Buzon: enviado ${waMessageId} a ${envio.conversationId}`)
+    } catch (error) {
+      await snap.ref.set({
+        estado: 'error',
+        error: error.message || 'No se pudo enviar',
+        ventanaCerrada: error.ventanaCerrada === true,
+        erroneoAt: FieldValue.serverTimestamp(),
+      }, { merge: true })
+      console.error('[WhatsApp] Buzon: fallo el envio:', error.message)
+    }
+  },
 )
 
 // ============================================================

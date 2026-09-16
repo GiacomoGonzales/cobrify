@@ -170,6 +170,20 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // ============================================
+    // BUZON DE SALIDA — mensajes puestos en cola fuera del chat.
+    //
+    // Escribir acá ENVIA un WhatsApp de verdad: un disparador
+    // (enviarDelBuzonWhatsapp) lo toma y lo manda por la Cloud API. Por eso
+    // desde el navegador NADIE escribe, ni siquiera el admin, que para eso
+    // tiene el chat. Solo entran documentos puestos con credencial de
+    // servidor. Se puede leer para revisar qué salió y con qué resultado.
+    // ============================================
+    match /whatsappOutbox/{envioId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // Campañas de plantillas: las crea y avanza el servidor; la pantalla solo
     // sigue el progreso.
     match /whatsappCampaigns/{campaignId} {
