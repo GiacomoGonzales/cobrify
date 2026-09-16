@@ -12,7 +12,7 @@ import { db } from '@/lib/firebase'
  *
  * @param {string|null} businessId
  * @param {boolean} [activo]  apagado (demo, sin negocio) no escucha nada
- * @returns {{series: object, branchSeries: object, warehouseSeries: object, emisorSeries: object} | null}
+ * @returns {{series: object, userSeries: object, branchSeries: object, warehouseSeries: object, emisorSeries: object} | null}
  *   null mientras no hay nada que mostrar: cargando, sin permiso o sin el doc
  */
 export function useSeriesEnVivo(businessId, activo = true) {
@@ -30,6 +30,7 @@ export function useSeriesEnVivo(businessId, activo = true) {
           de: businessId,
           series: d && {
             series: d.series || {},
+            userSeries: d.userSeries || {},
             branchSeries: d.branchSeries || {},
             warehouseSeries: d.warehouseSeries || {},
             emisorSeries: d.emisorSeries || {},

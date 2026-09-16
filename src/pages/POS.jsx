@@ -830,9 +830,13 @@ export default function POS() {
           emisorId: emisorElegido?.id,
           branchId: selectedBranch?.id,
           warehouseId: selectedWarehouse?.id,
+          // El mismo `user.uid` que se graba como `createdBy` al cobrar: si a
+          // esta persona le asignaron una serie propia, el aviso tiene que
+          // decir la suya y no la del negocio.
+          userId: user?.uid,
         })
       : null),
-    [seriesEnVivo, documentType, emisorElegido?.id, selectedBranch?.id, selectedWarehouse?.id]
+    [seriesEnVivo, documentType, emisorElegido?.id, selectedBranch?.id, selectedWarehouse?.id, user?.uid]
   )
 
   // Precios por sucursal (businessSettings.branchPricingEnabled): `products` es la

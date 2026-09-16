@@ -10,9 +10,18 @@
  *  1. Varios RUC: un comprobante de otro RUC numera SOLO con las series de ese
  *     RUC (`emisorSeries`); nunca cae a las del negocio ni a las de una sede,
  *     porque dos RUC no pueden compartir correlativo.
- *  2. La serie de la sucursal (`branchSeries`).
- *  3. La del almacén (`warehouseSeries`, compatibilidad hacia atrás).
- *  4. La del negocio (`series`).
+ *  2. La serie del USUARIO que emite (`userSeries`), para dos personas que
+ *     venden desde el MISMO punto de venta con series distintas (pedido de
+ *     NOVAKENE, 16-set-2026: "cada una de las series será asignada a un
+ *     usuario"). Va encima de la sucursal porque es lo más específico: la
+ *     persona lleva su serie donde venda. Antes esto solo se lograba
+ *     inventando una sucursal por persona.
+ *  3. La serie de la sucursal (`branchSeries`).
+ *  4. La del almacén (`warehouseSeries`, compatibilidad hacia atrás).
+ *  5. La del negocio (`series`).
+ *
+ * `userSeries` nace vacío en todas las cuentas: sin nadie asignado, la regla
+ * es exactamente la de siempre.
  *
  * Manda la primera que aparece. Si le falta la serie está mal configurada y
  * cuenta como "sin serie": pasar a la siguiente numeraría con el correlativo
@@ -23,17 +32,22 @@ import { esPrincipal } from '../../functions/src/utils/emisorDelComprobante.js'
 const elegir = (datos, ruta) => (datos?.serie ? { datos, ruta } : null)
 
 /**
- * @param {object} negocio  el doc del negocio (o sus cuatro mapas de series)
- * @param {{documentType: string, emisorId?: string, branchId?: string, warehouseId?: string}} opciones
+ * @param {object} negocio  el doc del negocio (o sus cinco mapas de series)
+ * @param {{documentType: string, emisorId?: string, branchId?: string, warehouseId?: string, userId?: string}} opciones
+ *   `userId` es quien emite (el `createdBy` del comprobante), no el vendedor
+ *   de las comisiones: la serie va con la cuenta desde la que se vende.
  * @returns {{datos: {serie: string, lastNumber: number}, ruta: string} | null}
  *   `ruta` es el campo del contador en el doc del negocio; null si no hay serie
  */
-export function serieParaNumerar(negocio, { documentType, emisorId = null, branchId = null, warehouseId = null } = {}) {
+export function serieParaNumerar(negocio, { documentType, emisorId = null, branchId = null, warehouseId = null, userId = null } = {}) {
   if (!negocio || !documentType) return null
 
   if (!esPrincipal(emisorId)) {
     return elegir(negocio.emisorSeries?.[emisorId]?.[documentType], `emisorSeries.${emisorId}.${documentType}`)
   }
+
+  const delUsuario = userId ? negocio.userSeries?.[userId]?.[documentType] : null
+  if (delUsuario) return elegir(delUsuario, `userSeries.${userId}.${documentType}`)
 
   const deSucursal = branchId ? negocio.branchSeries?.[branchId]?.[documentType] : null
   if (deSucursal) return elegir(deSucursal, `branchSeries.${branchId}.${documentType}`)

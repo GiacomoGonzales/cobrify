@@ -227,9 +227,14 @@ export const leerComprobante = async (uid, invoiceId) => {
  * de la serie global (el emisor no numera por sucursal), con la misma regla
  * que el cobro (utils/serieParaNumerar.js); si alguien emite desde el POS en
  * ese mismo instante, el real será el siguiente.
+ *
+ * `autorId` es quien emite: el mismo uid que este servicio graba en
+ * `createdBy`. Si le asignaron una serie propia, el comprobante va a salir con
+ * la suya, así que el aviso tiene que decir esa misma — o anunciaría un número
+ * y saldría otro, que es exactamente lo que este módulo existe para evitar.
  */
-export const numeroProbable = (ajustes, tipo) => {
-  const elegida = serieParaNumerar(ajustes, { documentType: tipo })
+export const numeroProbable = (ajustes, tipo, autorId = null) => {
+  const elegida = serieParaNumerar(ajustes, { documentType: tipo, userId: autorId })
   return elegida ? numeroSiguiente(elegida.datos) : '—'
 }
 

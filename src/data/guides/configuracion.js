@@ -57,7 +57,7 @@ export default {
             ['Preferencias', 'Qué módulos aparecen en el menú, y ajustes de productos e IGV'],
             ['Ventas', 'La pestaña más grande: casi todo lo que cambia el Punto de Venta'],
             ['Documentos', 'Cómo salen los PDF y los tickets, envío a SUNAT y privacidad de datos'],
-            ['Series', 'La serie y numeración de cada tipo de comprobante, por almacén'],
+            ['Series', 'La serie y numeración de cada tipo de comprobante, por sucursal o por persona'],
             ['Impresora', 'La ticketera térmica y qué impresora imprime qué'],
             ['Seguridad', 'Correo y contraseña de la cuenta'],
             ['Notificaciones', 'Qué avisos quieres recibir'],
@@ -498,11 +498,36 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'Acá defines la serie de cada tipo de comprobante (B001 para boletas, F001 para facturas, y así) y desde qué número sigue la numeración. Las series se manejan **por almacén**, así que si tienes varios locales cada uno puede llevar la suya.',
+          text: 'Acá defines la serie de cada tipo de comprobante (B001 para boletas, F001 para facturas, y así) y desde qué número sigue la numeración. Cada **sucursal** puede llevar las suyas, independientes de las globales del negocio.',
+        },
+        {
+          type: 'texto',
+          text: 'Y si necesitas que **dos personas emitan con series distintas desde el mismo punto de venta**, usa **Series por persona**: le asignas a cada una la suya y, cuando vende, el sistema numera con esa. No hace falta inventar una sucursal por persona.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Baja hasta **Series por persona**: salen el dueño de la cuenta y cada usuario que hayas creado.',
+            'En la persona que quieras, presiona **Asignarle una serie**.',
+            'El sistema le propone un juego libre (si el negocio ya usa F001, le propone F002). Revísalo y ajústalo.',
+            'Presiona **Guardar**. Desde ese momento, todo lo que emita esa persona sale con su serie.',
+          ],
+        },
+        {
+          type: 'consejo',
+          text: 'Lo normal es dejar al dueño con las series del negocio y asignarle la suya solo a la otra persona. En el Punto de Venta, el **"Siguiente:"** que aparece bajo el tipo de comprobante ya muestra la serie de quien tiene la sesión abierta, así que se ve antes de cobrar.',
         },
         {
           type: 'ojo',
-          text: 'No retrocedas el número de una serie que ya emitió. La numeración es correlativa y SUNAT la controla: si vuelves atrás, generas correlativos duplicados y SUNAT los rechaza. Si dos locales emiten con el mismo RUC, dales series distintas — es exactamente para eso que existen.',
+          text: 'No retrocedas el número de una serie que ya emitió. La numeración es correlativa y SUNAT la controla: si vuelves atrás, generas correlativos duplicados y SUNAT los rechaza. Por lo mismo, una serie no puede estar en dos lugares a la vez: si intentas darle a alguien una serie que ya usa el negocio u otra persona, el sistema te avisa y no la guarda.',
+        },
+        {
+          type: 'texto',
+          text: 'Para que alguien vuelva a emitir con las series del negocio, presiona **Quitar** en su tarjeta. No se borra nada de lo ya emitido: solo deja de numerar por su cuenta.',
+        },
+        {
+          type: 'ojo',
+          text: 'Las **notas de crédito y débito** siguen saliendo con la serie del negocio aunque la persona tenga la suya. Es correcto para SUNAT: una serie de notas puede corregir comprobantes de cualquier serie.',
         },
         {
           type: 'consejo',

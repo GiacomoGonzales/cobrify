@@ -177,8 +177,19 @@ export const createInvoiceWithNumber = async (userId, invoiceData, documentType,
       // La serie: la MISMA regla con la que el POS anuncia el "Siguiente:"
       // (utils/serieParaNumerar.js). Un comprobante de otro RUC numera SOLO
       // con las series de ese RUC: dos RUC no pueden compartir correlativo.
+      //
+      // `createdBy` es quien está vendiendo, y lo pone el POS al armar el
+      // comprobante (POS.jsx). Va acá y no como parámetro nuevo porque es el
+      // MISMO dato que queda grabado en el documento: así la serie con la que
+      // se numera y el autor que figura no se pueden separar.
       const emisorDelComprobante = emisorIdDe(invoiceData)
-      const elegida = serieParaNumerar(data, { documentType, emisorId: emisorDelComprobante, branchId, warehouseId })
+      const elegida = serieParaNumerar(data, {
+        documentType,
+        emisorId: emisorDelComprobante,
+        branchId,
+        warehouseId,
+        userId: invoiceData?.createdBy || null,
+      })
       if (!elegida) {
         if (!esPrincipal(emisorDelComprobante)) {
           const quien = invoiceData?.emisor?.razonSocial || 'El RUC elegido'
@@ -1916,8 +1927,10 @@ export const anularParteDeNota = async (businessId, notaId, invoiceId) => {
  * @param {string} documentType - Tipo de documento (factura, boleta, etc.)
  * @param {string} warehouseId - ID del almacén (compatibilidad hacia atrás)
  * @param {string} branchId - ID de la sucursal (nuevo, prioritario sobre warehouseId)
+ * @param {string} autorId - UID de quien emite, si tiene serie propia asignada
+ *   (`userSeries`). Sin él numera como siempre: sucursal, almacén o negocio.
  */
-export const getNextDocumentNumber = async (userId, documentType, warehouseId = null, branchId = null) => {
+export const getNextDocumentNumber = async (userId, documentType, warehouseId = null, branchId = null, autorId = null) => {
   try {
     const docRef = doc(db, 'businesses', userId)
 
@@ -1933,7 +1946,7 @@ export const getNextDocumentNumber = async (userId, documentType, warehouseId = 
 
       // La serie: la misma regla que createInvoiceWithNumber y que el
       // "Siguiente:" del POS (utils/serieParaNumerar.js).
-      const elegida = serieParaNumerar(data, { documentType, branchId, warehouseId })
+      const elegida = serieParaNumerar(data, { documentType, branchId, warehouseId, userId: autorId })
       if (!elegida) {
         throw new Error(`Series no configuradas para ${documentType}`)
       }
@@ -2104,6 +2117,81 @@ export const getAllBranchSeriesFS = async (userId) => {
     }
   } catch (error) {
     console.error('Error al obtener series por sucursal:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+// ==================== SERIES POR USUARIO ====================
+
+/**
+ * Asignarle a UNA persona sus propias series.
+ *
+ * Existe para dos personas que venden desde el mismo punto de venta y cada una
+ * tiene que emitir con su serie (F001 y F002). Hasta ahora el único modo de
+ * lograrlo era crearle una sucursal a cada una, con lo que los reportes
+ * quedaban partidos por locales que no existen.
+ *
+ * `userId` es el del NEGOCIO y `subUserId` el de la persona (el mismo UID que
+ * el comprobante graba en `createdBy`).
+ */
+export const updateUserSeriesFS = async (userId, subUserId, seriesData) => {
+  try {
+    const docRef = doc(db, 'businesses', userId)
+
+    await updateDoc(docRef, {
+      [`userSeries.${subUserId}`]: seriesData,
+      updatedAt: serverTimestamp(),
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error al actualizar series del usuario:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Quitarle a una persona sus series propias: vuelve a emitir con las de su
+ * sucursal o las del negocio. Borra la rama entera en vez de dejarla vacía,
+ * porque un mapa sin `serie` cuenta como "mal configurada" y no como "sin
+ * asignar" (ver utils/serieParaNumerar.js).
+ */
+export const removeUserSeriesFS = async (userId, subUserId) => {
+  try {
+    const docRef = doc(db, 'businesses', userId)
+
+    await updateDoc(docRef, {
+      [`userSeries.${subUserId}`]: deleteField(),
+      updatedAt: serverTimestamp(),
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error al quitar las series del usuario:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Todas las series asignadas por persona, para la pestaña de Configuración.
+ */
+export const getAllUserSeriesFS = async (userId) => {
+  try {
+    const docRef = doc(db, 'businesses', userId)
+    const docSnap = await getDoc(docRef)
+
+    if (!docSnap.exists()) {
+      return { success: false, error: 'Negocio no encontrado' }
+    }
+
+    const data = docSnap.data()
+    return {
+      success: true,
+      data: data.userSeries || {},
+      globalSeries: data.series || {}
+    }
+  } catch (error) {
+    console.error('Error al obtener series por usuario:', error)
     return { success: false, error: error.message }
   }
 }

@@ -342,7 +342,7 @@ export default function ModalEmitirComprobante({ conversacion, ficha, onCerrar, 
             <p className="text-[11.5px] text-gray-500">
               Va como PDF a {destinatario} con el texto:{' '}
               <span className="text-gray-700">
-                «{textoDelEnvio({ documentType: tipo, number: numeroProbable(emisor?.ajustes, tipo), total: d.total })}»
+                «{textoDelEnvio({ documentType: tipo, number: numeroProbable(emisor?.ajustes, tipo, emisor?.uid), total: d.total })}»
               </span>
             </p>
           </div>

@@ -25,8 +25,9 @@ import { Seccion, Nota, Separador } from '@/components/settings/kit'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Card, { CardContent, CardHeader } from '@/components/ui/Card'
-import { getAllBranchSeriesFS, updateBranchSeriesFS } from '@/services/firestoreService'
+import { getAllBranchSeriesFS, updateBranchSeriesFS, getAllUserSeriesFS, updateUserSeriesFS, removeUserSeriesFS } from '@/services/firestoreService'
 import { getActiveBranches } from '@/services/branchService'
+import { getManagedUsers } from '@/services/userManagementService'
 import RenumberInvoicesModal from '@/components/RenumberInvoicesModal'
 import { duenoDeLaSerie } from '../../../functions/src/utils/emisorDelComprobante.js'
 import { numeroSiguiente } from '@/utils/serieParaNumerar'
@@ -85,6 +86,47 @@ const GRUPOS_DE_DOCUMENTOS = [
 // "F001-00000013": el correlativo que llevará el próximo comprobante. El
 // mismo cálculo que el cobro y que el "Siguiente:" del POS.
 const getNextNumber = (serie, lastNumber) => numeroSiguiente({ serie, lastNumber })
+
+// "F001" con el número 2 → "F002"; "FN01" → "FN02". Una serie son CUATRO
+// caracteres: las letras que la identifican y el resto en dígitos, así que el
+// relleno depende de cuántas letras trae, no de un ancho fijo.
+const serieConNumero = (base, n) => {
+  const letras = String(base).replace(/[0-9]+$/, '')
+  const digitos = Math.max(String(base).length - letras.length, 1)
+  return `${letras}${String(n).padStart(digitos, '0')}`
+}
+
+// Todas las series que ya están tomadas en la cuenta. Una serie no se puede
+// repartir entre dos dueños: cada lugar lleva su propio `lastNumber`, así que
+// la misma serie en dos sitios significa dos comprobantes con el mismo número
+// — y SUNAT rechaza el segundo (código 1033).
+const seriesOcupadas = ({ series, branchSeries, userSeries }, exceptoUid = null) => {
+  const usadas = new Map()
+  const anotar = (mapa, quien) => {
+    for (const datos of Object.values(mapa || {})) {
+      if (datos?.serie) usadas.set(String(datos.serie).toUpperCase(), quien)
+    }
+  }
+  anotar(series, 'la sucursal principal')
+  for (const mapa of Object.values(branchSeries || {})) anotar(mapa, 'otra sucursal')
+  for (const [uid, mapa] of Object.entries(userSeries || {})) {
+    if (uid !== exceptoUid) anotar(mapa, 'otra persona')
+  }
+  return usadas
+}
+
+// El primer juego de series libre: si la principal usa F001 y una sucursal
+// F002, propone F003 y no una que vaya a chocar.
+const proponerSeriesLibres = (ocupadas) => {
+  for (let n = 1; n <= 999; n++) {
+    const candidatas = Object.fromEntries(
+      Object.entries(defaultSeries).map(([tipo, d]) => [tipo, { serie: serieConNumero(d.serie, n), lastNumber: 0 }])
+    )
+    const chocaAlguna = Object.values(candidatas).some((d) => ocupadas.has(d.serie.toUpperCase()))
+    if (!chocaAlguna) return candidatas
+  }
+  return Object.fromEntries(Object.entries(defaultSeries).map(([tipo, d]) => [tipo, { ...d }]))
+}
 
 // Columnas de la grilla en escritorio: documento (lo que sobre), serie,
 // último número, siguiente. En el celular cada fila se apila en 3 columnas
@@ -166,12 +208,12 @@ function GrillaDeSeries({ series, editando, onChange, soloLasQueTiene = false })
  * Editar / Cancelar + Guardar de una tarjeta. Los mismos tres botones para
  * la principal y para cada sucursal; solo cambia quién guarda.
  */
-function BotonesDeEdicion({ editando, guardando, onEditar, onCancelar, onGuardar }) {
+function BotonesDeEdicion({ editando, guardando, onEditar, onCancelar, onGuardar, etiqueta = 'Editar series' }) {
   if (!editando) {
     return (
       <Button type="button" variant="outline" size="sm" onClick={onEditar} className="w-full sm:w-auto">
         <Edit className="w-4 h-4 mr-1.5" />
-        Editar series
+        {etiqueta}
       </Button>
     )
   }
@@ -224,6 +266,13 @@ export default function Series() {
   // administrador en la ficha; aquí se consultan y se cuidan.
   const [emisorSeries, setEmisorSeries] = useState(() => businessSettings?.emisorSeries || {})
 
+  // Series por persona: para dos que venden desde el MISMO punto de venta y
+  // cada una emite con su serie. Antes solo se lograba creando una sucursal
+  // por persona, y los reportes quedaban partidos por locales inventados.
+  const [personas, setPersonas] = useState([])
+  const [userSeries, setUserSeries] = useState({})
+  const [editingUserId, setEditingUserId] = useState(null)
+
   // Una serie es de UN solo RUC en toda la cuenta: si la del negocio o la de
   // una sede ya la usa otro RUC, sus correlativos se pisarían y el servidor
   // no dejaría firmar esos comprobantes.
@@ -237,6 +286,42 @@ export default function Series() {
       }
     }
     return null
+  }
+
+  /**
+   * Las personas de la cuenta y lo que cada una tenga asignado.
+   *
+   * El DUEÑO va primero y no es un caso aparte: cuando emite, el comprobante
+   * queda con `createdBy` igual al id del negocio, así que se le asigna una
+   * serie igual que a cualquiera. Es lo que permite el caso más común — el
+   * dueño con la suya y un empleado con otra — sin crear dos sub-usuarios.
+   */
+  const loadUsersAndSeries = async () => {
+    if (!user?.uid || isDemoMode) return
+    const businessId = getBusinessId()
+    try {
+      const [usuarios, asignadas] = await Promise.all([
+        getManagedUsers(businessId),
+        getAllUserSeriesFS(businessId),
+      ])
+      const subUsuarios = usuarios.success ? (usuarios.data || []) : []
+      setPersonas([
+        { id: businessId, nombre: 'Dueño de la cuenta', detalle: businessSettings?.email || '', esDueno: true },
+        ...subUsuarios.map((u) => ({
+          // `uid || id`, la misma convención que `useUserNames`: la serie se
+          // guarda bajo la llave que el comprobante grabará en `createdBy`. Si
+          // se guardara bajo otra, la persona seguiría emitiendo con la del
+          // negocio y no habría ningún error a la vista.
+          id: u.uid || u.id,
+          nombre: u.displayName || u.name || u.email || 'Usuario',
+          detalle: u.email || '',
+          inactivo: u.isActive === false,
+        })),
+      ])
+      if (asignadas.success) setUserSeries(asignadas.data || {})
+    } catch (error) {
+      console.error('Error al cargar las personas y sus series:', error)
+    }
   }
 
   // Cargar sucursales y sus series
@@ -292,6 +377,7 @@ export default function Series() {
     if (!businessId || isDemoMode) return
     recargarSeries()
     loadBranchesAndSeries()
+    loadUsersAndSeries()
     // Los dos cargadores son funciones del componente: como dependencias
     // correrían en cada render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -364,6 +450,95 @@ export default function Series() {
       }))
     }
     setEditingBranchId(branchId)
+  }
+
+  const handleUserSeriesChange = (uid, docType, field, value) => {
+    setUserSeries(prev => ({
+      ...prev,
+      [uid]: {
+        ...(prev[uid] || {}),
+        [docType]: {
+          ...(prev[uid]?.[docType] || defaultSeries[docType]),
+          [field]: field === 'lastNumber' ? parseInt(value) || 0 : value.toUpperCase()
+        }
+      }
+    }))
+  }
+
+  // Le propone a esta persona el primer juego de series que no choque con
+  // nada de la cuenta.
+  const initializeUserSeries = (uid) => {
+    if (!userSeries[uid]) {
+      const ocupadas = seriesOcupadas({ series, branchSeries, userSeries }, uid)
+      setUserSeries(prev => ({ ...prev, [uid]: proponerSeriesLibres(ocupadas) }))
+    }
+    setEditingUserId(uid)
+  }
+
+  const handleSaveUserSeries = async (uid) => {
+    if (!user?.uid) return
+    const suyas = userSeries[uid] || {}
+
+    const choque = serieDeOtroRuc(suyas)
+    if (choque) {
+      toast.error(choque)
+      return
+    }
+
+    // Que no repita una serie que ya lleva su propio contador en otro lado:
+    // el mismo número saldría dos veces y SUNAT rechazaría el segundo.
+    const ocupadas = seriesOcupadas({ series, branchSeries, userSeries }, uid)
+    for (const datos of Object.values(suyas)) {
+      const dueno = datos?.serie ? ocupadas.get(String(datos.serie).toUpperCase()) : null
+      if (dueno) {
+        toast.error(
+          `La serie ${String(datos.serie).toUpperCase()} ya la usa ${dueno}. ` +
+          'Ponle otra, o deja a esta persona sin serie propia para que emita con esa misma.'
+        )
+        return
+      }
+    }
+
+    setIsSaving(true)
+    try {
+      const result = await updateUserSeriesFS(getBusinessId(), uid, suyas)
+      if (result.success) {
+        toast.success('Series de la persona actualizadas')
+        setEditingUserId(null)
+      } else {
+        toast.error(result.error || 'Error al guardar series')
+      }
+    } catch (error) {
+      console.error('Error al guardar las series de la persona:', error)
+      toast.error('Error al guardar series')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Quitarle la serie propia: vuelve a emitir con la de su sucursal o la del
+  // negocio. No borra nada emitido; solo deja de numerar por su cuenta.
+  const handleRemoveUserSeries = async (uid) => {
+    setIsSaving(true)
+    try {
+      const result = await removeUserSeriesFS(getBusinessId(), uid)
+      if (result.success) {
+        setUserSeries(prev => {
+          const copia = { ...prev }
+          delete copia[uid]
+          return copia
+        })
+        setEditingUserId(null)
+        toast.success('Esta persona vuelve a emitir con las series del negocio')
+      } else {
+        toast.error(result.error || 'Error al quitar las series')
+      }
+    } catch (error) {
+      console.error('Error al quitar las series de la persona:', error)
+      toast.error('Error al quitar las series')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   // Escribe SOLO `series` (la regla de `useGuardado`). El hook corta en
@@ -475,6 +650,86 @@ export default function Series() {
                         </div>
                       )}
                     </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          </Seccion>
+        </>
+      )}
+
+      {/* Series por persona. Quien no tiene asignada nada no muestra grilla:
+          con doce personas en la cuenta, doce grillas de series que no usa
+          tapan a las dos que sí importan. */}
+      {personas.length > 0 && (
+        <>
+          <Separador />
+          <Seccion
+            id="opcion-userSeries"
+            titulo="Series por persona"
+            descripcion="Para que dos personas emitan con series distintas desde el mismo punto de venta. Quien no tenga una asignada emite con la de su sucursal, o con la del negocio."
+          >
+            <div className="space-y-4">
+              {personas.map((persona) => {
+                const suyas = userSeries[persona.id] || {}
+                const tieneSerie = Boolean(suyas.factura?.serie)
+                const isEditing = editingUserId === persona.id
+
+                return (
+                  <Card key={persona.id}>
+                    <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-base font-semibold text-gray-900 truncate">
+                          {persona.nombre}
+                          {persona.inactivo && <span className="font-normal text-gray-500"> · desactivado</span>}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5 truncate">
+                          {persona.esDueno ? 'Dueño de la cuenta' : persona.detalle}
+                        </p>
+                      </div>
+                      <div className="flex gap-2 w-full sm:w-auto">
+                        {tieneSerie && !isEditing && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={isSaving}
+                            onClick={() => handleRemoveUserSeries(persona.id)}
+                            className="flex-1 sm:flex-none"
+                          >
+                            Quitar
+                          </Button>
+                        )}
+                        <BotonesDeEdicion
+                          editando={isEditing}
+                          guardando={isSaving}
+                          etiqueta={tieneSerie ? 'Editar series' : 'Asignarle una serie'}
+                          onEditar={() => initializeUserSeries(persona.id)}
+                          // Cancelar relee del servidor: descarta lo tipeado y
+                          // la propuesta a quien todavía no tenía nada.
+                          onCancelar={() => { setEditingUserId(null); loadUsersAndSeries() }}
+                          onGuardar={() => handleSaveUserSeries(persona.id)}
+                        />
+                      </div>
+                    </CardHeader>
+                    {(tieneSerie || isEditing) && (
+                      <CardContent className="px-1 sm:px-3">
+                        <GrillaDeSeries
+                          series={suyas}
+                          editando={isEditing}
+                          onChange={(docType, field, value) => handleUserSeriesChange(persona.id, docType, field, value)}
+                        />
+                      </CardContent>
+                    )}
+                    {!tieneSerie && !isEditing && (
+                      <CardContent className="px-1 sm:px-3">
+                        <div className="px-2 pb-1">
+                          <Nota>
+                            Sin serie propia: emite con las de su sucursal, o con las globales del negocio.
+                          </Nota>
+                        </div>
+                      </CardContent>
+                    )}
                   </Card>
                 )
               })}
