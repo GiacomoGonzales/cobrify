@@ -200,7 +200,9 @@ export function Cabecera({ base = '', pagina = 'inicio', cantidadEnCarrito = 0, 
         <Link to={seccion(base, 'productos')} onClick={cerrar}>Productos</Link>
         <Link to={tienda(base)} onClick={cerrar}>Tienda en línea</Link>
         <Link to={seccion(base, 'ubicacion')} onClick={cerrar}>Tienda física</Link>
-        <Link to={tienda(base)} onClick={cerrar}>Comprar ahora</Link>
+        {/* Sin "Comprar ahora": llevaba al mismo sitio que "Tienda en línea" y en
+            el menú del celular quedaban dos entradas para lo mismo (Luis,
+            16-set-2026). En la cabecera de escritorio se queda. */}
         {conCuentas && <a href="#cuenta" onClick={(e) => { e.preventDefault(); cerrar(); if (onCuenta) setTimeout(onCuenta, 60) }}>Mi cuenta</a>}
         <Link to={reclamos(base)} onClick={cerrar}>Libro de reclamaciones</Link>
       </nav>

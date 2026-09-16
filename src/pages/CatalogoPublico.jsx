@@ -3369,6 +3369,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         ignoreStock={ignoreStock}
         catalogCurrency={catalogCurrency}
         catalogExchangeRate={catalogExchangeRate}
+        // Atajo al carrito desde la ventana del producto: con variantes la
+        // ventana no se cierra al agregar, así que sin esto había que cerrarla
+        // e ir hasta el carrito del encabezado (pedido de CITEX, 16-set-2026).
+        onVerCarrito={() => { setSelectedProduct(null); setCartOpen(true) }}
         themeClasses={themeClasses}
       />
 
@@ -3409,6 +3413,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         cart={cart}
         onUpdateQuantity={updateCartQuantity}
         onRemove={removeFromCart}
+        onClearCart={() => setCart([])}
         business={business}
         onCheckout={handleCheckout}
         showPrices={showPrices}

@@ -9,7 +9,7 @@
  */
 export default {
   id: 'catalogo-online',
-  actualizado: '15/09/2026',
+  actualizado: '16/09/2026',
   intro:
     'Tu catálogo online es una tienda web que sale de los productos que ya tienes cargados. No hay que armarla aparte: se enciende, se comparte el enlace y tus clientes pueden ver precios y hacer pedidos.',
 
@@ -135,6 +135,10 @@ export default {
         {
           type: 'texto',
           text: 'Cuando entra un pedido suena una alerta en la barra superior del sistema, estés en la pantalla que estés. Los pedidos se gestionan en **Pedidos Online** (o en **Órdenes** si eres restaurante).',
+        },
+        {
+          type: 'texto',
+          text: 'Del lado del comprador: cuando agrega un producto con tallas o colores la ventana **no se cierra**, para que pueda llevar varias tallas del mismo modelo, y le aparece un botón **Ver carrito** para ir directo sin tener que cerrarla y buscar el carrito arriba. Y dentro del carrito tiene **Vaciar**, que quita todo de una vez en lugar de borrar producto por producto.',
         },
       ],
     },

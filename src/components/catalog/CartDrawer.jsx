@@ -170,6 +170,9 @@ export default function CartDrawer({
   cart,
   onUpdateQuantity,
   onRemove,
+  // Vaciar el carrito de una. Sin esto había que borrar producto por producto
+  // (pedido de CITEX, 16-set-2026). Si no llega, el botón no se muestra.
+  onClearCart = null,
   business,
   onCheckout,
   showPrices = true,
@@ -1081,12 +1084,25 @@ export default function CartDrawer({
                 </span>
               )}
             </div>
-            <button
-              onClick={onClose}
-              className="w-10 h-10 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-1 shrink-0">
+              {paso === 'carrito' && cart.length > 0 && onClearCart && (
+                <button
+                  onClick={() => {
+                    if (window.confirm('¿Quitar todos los productos del carrito?')) onClearCart()
+                  }}
+                  className="px-3 h-10 rounded-full hover:bg-gray-100 flex items-center gap-1.5 text-sm text-gray-600 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Vaciar
+                </button>
+              )}
+              <button
+                onClick={onClose}
+                className="w-10 h-10 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           {/* Barra de progreso del checkout (port shopifree) */}

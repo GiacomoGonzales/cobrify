@@ -46,7 +46,7 @@ const enumerar = (palabras) => palabras.length <= 1
   ? (palabras[0] || '')
   : `${palabras.slice(0, -1).join(', ')} y ${palabras[palabras.length - 1]}`
 
-export default function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, showPrices: globalShowPrices = true, business, ignoreStock = false, catalogCurrency = 'PEN', catalogExchangeRate = 1, themeClasses = null }) {
+export default function ProductModal({ product, isOpen, onClose, onAddToCart, cartQuantity, showPrices: globalShowPrices = true, business, ignoreStock = false, catalogCurrency = 'PEN', catalogExchangeRate = 1, onVerCarrito = null, themeClasses = null }) {
   // Tipografía del tema para nombre y precio: la MISMA familia que las
   // tarjetas, para que tarjeta → detalle se sienta continuo (reporte de
   // Giacomo: en Boutique la tarjeta era serif y el drawer salía en sans).
@@ -90,6 +90,10 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
   // `if (!isOpen || !product) return null`, y un hook debajo de un early return
   // cambia el orden de los hooks entre renders (pantalla en blanco, error 310).
   const [ultimaAgregada, setUltimaAgregada] = useState(null)
+  // Si ya entró algo al carrito con esta ventana abierta. El aviso verde se va
+  // solo a los 2.5 s, pero el atajo "Ver carrito" tiene que quedarse mientras
+  // el comprador sigue eligiendo tallas (pedido de CITEX, 16-set-2026).
+  const [agregoAlgo, setAgregoAlgo] = useState(false)
   const [activeImageIdx, setActiveImageIdx] = useState(0)
 
   // Galería: usa imageUrls si existe, si no cae a imageUrl (legacy).
@@ -504,6 +508,9 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
       setUltimaAgregada(
         Object.values(selectedVariant.attributes || {}).join(' / ') || selectedVariant.sku
       )
+      // Solo hace falta acá: por los otros dos caminos la ventana se cierra sola
+      // y el atajo al carrito no llega a verse.
+      setAgregoAlgo(true)
       return
     }
     onAddToCart(product, quantity, modifiersData, totalPrice, priceLevelLabel, basePrice)
@@ -1255,6 +1262,26 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, ca
               <Check className="w-4 h-4 flex-shrink-0" />
               <span className="truncate">Agregado: {ultimaAgregada}</span>
             </div>
+          )}
+
+          {/* Atajo al carrito: se queda mientras la ventana siga abierta, al
+              revés del aviso verde de arriba, que se va solo a los 2.5 s. Sin
+              esto había que cerrar la ventana y subir al carrito del
+              encabezado (pedido de CITEX, 16-set-2026). */}
+          {agregoAlgo && onVerCarrito && (
+            <button
+              type="button"
+              onClick={onVerCarrito}
+              className="w-full py-3 mb-2 text-sm font-semibold flex items-center justify-center gap-2 border transition-opacity hover:opacity-80"
+              style={{
+                borderRadius: tokens.radius.lg,
+                borderColor: getCatalogAccent(business),
+                color: getCatalogAccent(business),
+              }}
+            >
+              <ShoppingBag className="w-4 h-4" />
+              Ver carrito
+            </button>
           )}
 
           {/* Botón agregar */}
