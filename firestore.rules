@@ -371,6 +371,19 @@ service cloud.firestore {
       allow read: if isAdmin();
     }
 
+    // Y las GUÍAS, por lo mismo: el panel de Alertas las busca por la marca
+    // `posibleChoqueDeSerie`, que el servidor pone al emitir. Estar declaradas
+    // abajo como subcolección de un negocio NO habilita la consulta de grupo;
+    // sin estas dos reglas la consulta se rechaza y —al ir dentro de un
+    // `.catch()`— las guías marcadas no aparecerían, sin error a la vista.
+    // Solo lectura y solo admin, igual que la de comprobantes.
+    match /{path=**}/dispatchGuides/{guideId} {
+      allow read: if isAdmin();
+    }
+    match /{path=**}/carrierDispatchGuides/{guideId} {
+      allow read: if isAdmin();
+    }
+
     // Notifications collection
     match /notifications/{notificationId} {
       // Users can only read/write their own notifications

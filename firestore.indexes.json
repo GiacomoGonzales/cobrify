@@ -397,6 +397,42 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "dispatchGuides",
+      "fieldPath": "posibleChoqueDeSerie.detectadoEn",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "carrierDispatchGuides",
+      "fieldPath": "posibleChoqueDeSerie.detectadoEn",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
       "collectionGroup": "invoices",
       "fieldPath": "posibleChoqueDeSerie.detectadoEn",
       "indexes": [

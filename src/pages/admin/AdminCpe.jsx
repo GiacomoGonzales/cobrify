@@ -475,19 +475,42 @@ export default function AdminCpe() {
       //
       // Si el índice todavía no está construido, la consulta falla y se sigue
       // con la de siempre: vale más la pantalla a medias que una pantalla rota.
-      const porMarca = await getDocs(query(
-        collectionGroup(db, 'invoices'),
-        where('posibleChoqueDeSerie.detectadoEn', '>=', desde),
-        where('posibleChoqueDeSerie.detectadoEn', '<', hasta),
-        orderBy('posibleChoqueDeSerie.detectadoEn', 'desc'),
-        limit(2000),
-      )).catch(e => { console.warn('Alertas: falta el índice de posibleChoqueDeSerie', e?.message); return null })
+      // Y las GUÍAS, que viven en sus propias colecciones: la consulta de
+      // arriba es solo sobre `invoices`, así que una guía marcada no aparecía
+      // aquí por más que el servidor la hubiera detectado. Las tres se piden
+      // en paralelo y se acotan por `createdAt` igual que el resto (ver
+      // `consultarColeccion`, que usa ese mismo campo para toda colección).
+      const TIPO_DE_GUIA = { dispatchGuides: 'guia_remision', carrierDispatchGuides: 'guia_transportista' }
+      const marcadas = await Promise.all(
+        ['invoices', 'dispatchGuides', 'carrierDispatchGuides'].map(async coleccion => {
+          const s = await getDocs(query(
+            collectionGroup(db, coleccion),
+            where('posibleChoqueDeSerie.detectadoEn', '>=', desde),
+            where('posibleChoqueDeSerie.detectadoEn', '<', hasta),
+            orderBy('posibleChoqueDeSerie.detectadoEn', 'desc'),
+            limit(2000),
+          )).catch(e => {
+            // Sin índice construido se sigue con lo que haya: vale más la
+            // pantalla a medias que una pantalla rota.
+            console.warn(`Alertas: sin índice de posibleChoqueDeSerie en ${coleccion}`, e?.message)
+            return null
+          })
+          return { coleccion, docs: s?.docs || [] }
+        })
+      )
 
+      // Las guías se normalizan como en `aFila`: su documento no trae
+      // `documentType` y su destinatario vive en `recipient`.
       const porClave = new Map()
-      for (const d of [...snap.docs, ...(porMarca?.docs || [])]) {
+      const anotar = (d, coleccion) => {
         const bizId = d.ref.parent.parent.id
-        porClave.set(`${bizId}/${d.id}`, { id: d.id, bizId, coleccion: 'invoices', ...d.data() })
+        const g = d.data()
+        porClave.set(`${bizId}/${d.id}`, coleccion === 'invoices'
+          ? { id: d.id, bizId, coleccion, ...g }
+          : { id: d.id, bizId, coleccion, ...g, documentType: TIPO_DE_GUIA[coleccion], customer: g.recipient || g.customer || null })
       }
+      for (const d of snap.docs) anotar(d, 'invoices')
+      for (const { coleccion, docs } of marcadas) for (const d of docs) anotar(d, coleccion)
       const hits = [...porClave.values()]
 
       const negocios = new Map()
@@ -507,6 +530,10 @@ export default function AdminCpe() {
 
       await enTandas(hits, 10, async h => {
         if (!h.number) return
+        // Solo para comprobantes: buscar el número de una GUÍA dentro de
+        // `invoices` no puede encontrar nada (son numeraciones distintas) y
+        // gastaría dos consultas por guía para nada.
+        if (h.coleccion !== 'invoices') return
         const [otros, borrados] = await Promise.all([
           getDocs(query(collection(db, 'businesses', h.bizId, 'invoices'), where('number', '==', h.number), limit(5))).catch(() => null),
           getDocs(query(collection(db, 'businesses', h.bizId, 'deletedInvoices'), where('number', '==', h.number), limit(5))).catch(() => null),
