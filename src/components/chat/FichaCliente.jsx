@@ -40,8 +40,10 @@ import {
   altaDeLaConversacion,
 } from '@/services/whatsappChatService'
 import { registerPayment, suspendUser, reactivateUser, PLANS } from '@/services/subscriptionService'
-import { convertirPruebaEnCuenta } from '@/services/adminCuentasService'
+import { convertirPruebaEnCuenta, registrarPagoDeRuc } from '@/services/adminCuentasService'
 import { claveDelMetodo } from '@/utils/metodoDePago'
+import { estadoDelRuc } from '@/utils/cobroPorRuc'
+import PagoDeRucModal from '@/components/admin/cuenta/PagoDeRucModal'
 import ConvertirPruebaModal from '@/components/admin/cuenta/ConvertirPruebaModal'
 import { METODOS_DE_COBRO as METODOS } from '@/services/comprobanteChatService'
 import ModalEmitirComprobante, { ModalReenviarComprobante } from '@/components/chat/EmitirComprobante'
@@ -94,6 +96,9 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
   const [altaAbierta, setAltaAbierta] = useState(false)
   const [convertirAbierto, setConvertirAbierto] = useState(false)
   const [convirtiendo, setConvirtiendo] = useState(false)
+  // El RUC adicional cuya mensualidad se está registrando.
+  const [rucAPagar, setRucAPagar] = useState(null)
+  const [pagandoRuc, setPagandoRuc] = useState(false)
   const [verTodosLosPagos, setVerTodosLosPagos] = useState(false)
   const [trabajando, setTrabajando] = useState(false)
 
@@ -151,6 +156,7 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
     setEmitirAbierto(false)
     setReenviarAbierto(false)
     setConvertirAbierto(false)
+    setRucAPagar(null)
     setVerTodosLosPagos(false)
     if (!businessId) { setCargando(false); return undefined }
     // Una respuesta que llega después de cambiar de conversación (o de
@@ -635,6 +641,44 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
               </div>
             )}
 
+            {/* Los RUC adicionales que se cobran aparte: cada uno con su
+                mensualidad, su vencimiento y sus comprobantes del mes, y se
+                renueva acá mismo sin salir de la conversación. */}
+            {ficha.cobroPorRuc && Object.keys(ficha.rucsCobrados || {}).length > 0 && (
+              <div>
+                <p className="text-[12px] font-medium text-gray-700 mb-1.5">RUC adicionales</p>
+                <div className="rounded-lg border border-gray-200 divide-y divide-gray-100">
+                  {Object.entries(ficha.rucsCobrados).map(([emisorId, cobro]) => {
+                    const { clave } = estadoDelRuc(cobro)
+                    const vence = cobro?.vence?.toDate?.()
+                    const tono = clave === 'vencido'
+                      ? 'font-medium text-red-600'
+                      : clave === 'por_vencer' ? 'text-amber-700' : 'text-gray-500'
+                    return (
+                      <div key={emisorId} className="px-3 py-2">
+                        <p className="text-[13px] font-medium text-gray-800 truncate">
+                          {cobro?.nombre || `RUC ${cobro?.ruc || ''}`}
+                        </p>
+                        <p className={`text-[11.5px] ${tono}`}>
+                          RUC {cobro?.ruc || '—'} · {clave === 'vencido' ? 'venció el' : 'al día hasta el'}{' '}
+                          {vence ? vence.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                        </p>
+                        <p className="text-[11.5px] text-gray-500">
+                          {ficha.usoPorRuc?.[emisorId] || 0} comprobantes este mes
+                        </p>
+                        <button
+                          onClick={() => setRucAPagar({ id: emisorId, ruc: cobro?.ruc || null, businessName: cobro?.nombre || null })}
+                          className="mt-1 text-[11.5px] font-medium text-primary-700 hover:text-primary-800"
+                        >
+                          Registrar pago
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Comprobantes del mes: es lo primero que pregunta un cliente
                 que llama porque "no puede facturar". */}
             <div className="bg-gray-50 rounded-lg p-3">
@@ -911,6 +955,30 @@ export default function FichaCliente({ conversacion, onCerrar, onAbrirConversaci
           conversacion={conversacion}
           onClose={() => setAltaAbierta(false)}
           onPonerEnElCompositor={onPonerEnElCompositor}
+        />
+      )}
+
+      {/* La mensualidad de un RUC adicional: el mismo cuadro del admin. */}
+      {rucAPagar && ficha && (
+        <PagoDeRucModal
+          cuenta={{ plan: ficha.plan }}
+          emisor={rucAPagar}
+          cobro={ficha.rucsCobrados?.[rucAPagar.id]}
+          procesando={pagandoRuc}
+          onClose={() => setRucAPagar(null)}
+          onRegistrar={async (datos) => {
+            setPagandoRuc(true)
+            try {
+              const r = await registrarPagoDeRuc(businessId, rucAPagar, datos)
+              toast.success(`Pago del RUC registrado: al día hasta el ${r.vence.toLocaleDateString('es-PE')}`)
+              setRucAPagar(null)
+              await releerFicha()
+            } catch (error) {
+              toast.error(error.message || 'No se pudo registrar el pago')
+            } finally {
+              setPagandoRuc(false)
+            }
+          }}
         />
       )}
 

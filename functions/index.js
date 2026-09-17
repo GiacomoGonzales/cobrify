@@ -20,6 +20,7 @@ import { topeAlAplicarPlan } from './src/utils/topeDeComprobantes.js'
 import { sendSummary, getStatus, getStatusCdr } from './src/utils/sunatClient.js'
 import { voidBoletaViaQPse, voidInvoiceViaQPse, obtenerToken, consultarEstado, leerEstadoQPse } from './src/services/qpseService.js'
 import { tocaResetear } from './src/utils/cicloMensual.js'
+import { contadorDelDocumento, rucsPorReiniciar } from './src/utils/cupoPorRuc.js'
 import { sendPushNotification } from './notifications/sendPushNotification.js'
 import { loginRappi, probeLogins, getStoreOrders, getOrdersV2, registerWebhook, listWebhooks, registerStoreWebhook, listStoreWebhook, getClientIdFromToken, decodeJwtPayload, getBaseUrl, getV1BaseUrl } from './src/services/rappiApi.js'
 import {
@@ -1786,37 +1787,9 @@ export const sendInvoiceToSunat = onRequest(
 
       // 5. Incrementar contador de documentos emitidos SOLO si fue ACEPTADO por SUNAT
       if (emissionResult.accepted === true) {
-        try {
-          const subscriptionRef = db.collection('subscriptions').doc(userId)
-          const subscriptionDoc = await subscriptionRef.get()
-
-          if (subscriptionDoc.exists) {
-            const subscriptionData = subscriptionDoc.data()
-
-            // Si no tiene el campo usage, inicializarlo primero
-            if (!subscriptionData.usage) {
-              await subscriptionRef.update({
-                usage: {
-                  invoicesThisMonth: 1,
-                  totalCustomers: 0,
-                  totalProducts: 0
-                }
-              })
-              console.log(`📊 Campo usage inicializado y contador en 1 - Usuario: ${userId}`)
-            } else {
-              // Si ya tiene usage, incrementar normalmente
-              await subscriptionRef.update({
-                'usage.invoicesThisMonth': FieldValue.increment(1)
-              })
-              console.log(`📊 Contador de documentos incrementado - Usuario: ${userId}`)
-            }
-          } else {
-            console.warn(`⚠️ No existe suscripción para usuario: ${userId}`)
-          }
-        } catch (counterError) {
-          console.error('⚠️ Error al incrementar contador (no crítico):', counterError)
-          // No fallar la operación si el contador falla
-        }
+        // A qué contador suma lo decide incrementInvoiceUsage: el de la cuenta,
+        // o el del RUC adicional que lo emitió si ese RUC se cobra aparte.
+        await incrementInvoiceUsage(userId, invoiceData)
       } else {
         console.log(`⏭️ Documento rechazado - No se incrementa el contador`)
       }
@@ -2258,7 +2231,7 @@ export const sendCreditNoteToSunat = onRequest(
 
           // SUNAT ya tenía la NC: se acepta por esta vía y la rama de éxito normal
           // (que cuenta el comprobante) NO se ejecutó. Contamos aquí para no perderla.
-          await incrementInvoiceUsage(userId)
+          await incrementInvoiceUsage(userId, creditNoteData)
 
           res.status(200).json({
             success: true,
@@ -2504,36 +2477,9 @@ export const sendCreditNoteToSunat = onRequest(
 
       // 6. Incrementar contador de documentos emitidos SOLO si fue ACEPTADO
       if (emissionResult.accepted === true) {
-        try {
-          const subscriptionRef = db.collection('subscriptions').doc(userId)
-          const subscriptionDoc = await subscriptionRef.get()
-
-          if (subscriptionDoc.exists) {
-            const subscriptionData = subscriptionDoc.data()
-
-            // Si no tiene el campo usage, inicializarlo primero
-            if (!subscriptionData.usage) {
-              await subscriptionRef.update({
-                usage: {
-                  invoicesThisMonth: 1,
-                  totalCustomers: 0,
-                  totalProducts: 0
-                }
-              })
-              console.log(`📊 Campo usage inicializado y contador en 1 - Usuario: ${userId}`)
-            } else {
-              // Si ya tiene usage, incrementar normalmente
-              await subscriptionRef.update({
-                'usage.invoicesThisMonth': FieldValue.increment(1)
-              })
-              console.log(`📊 Contador de documentos incrementado - Usuario: ${userId}`)
-            }
-          } else {
-            console.warn(`⚠️ No existe suscripción para usuario: ${userId}`)
-          }
-        } catch (counterError) {
-          console.error('⚠️ Error al incrementar contador (no crítico):', counterError)
-        }
+        // A qué contador suma lo decide incrementInvoiceUsage: el de la cuenta,
+        // o el del RUC adicional que lo emitió si ese RUC se cobra aparte.
+        await incrementInvoiceUsage(userId, creditNoteData)
 
         // 7. Actualizar el documento original (boleta/factura) como anulado o con devolución parcial
         try {
@@ -3003,7 +2949,7 @@ export const sendDebitNoteToSunat = onRequest(
 
           // SUNAT ya tenía la ND: se acepta por esta vía y la rama de éxito normal
           // (que cuenta el comprobante) NO se ejecutó. Contamos aquí para no perderla.
-          await incrementInvoiceUsage(userId)
+          await incrementInvoiceUsage(userId, debitNoteData)
 
           res.status(200).json({
             success: true,
@@ -3244,34 +3190,9 @@ export const sendDebitNoteToSunat = onRequest(
 
       // 6. Incrementar contador de documentos emitidos SOLO si fue ACEPTADO
       if (emissionResult.accepted === true) {
-        try {
-          const subscriptionRef = db.collection('subscriptions').doc(userId)
-          const subscriptionDoc = await subscriptionRef.get()
-
-          if (subscriptionDoc.exists) {
-            const subscriptionData = subscriptionDoc.data()
-
-            if (!subscriptionData.usage) {
-              await subscriptionRef.update({
-                usage: {
-                  invoicesThisMonth: 1,
-                  totalCustomers: 0,
-                  totalProducts: 0
-                }
-              })
-              console.log(`📊 Campo usage inicializado y contador en 1 - Usuario: ${userId}`)
-            } else {
-              await subscriptionRef.update({
-                'usage.invoicesThisMonth': FieldValue.increment(1)
-              })
-              console.log(`📊 Contador de documentos incrementado - Usuario: ${userId}`)
-            }
-          } else {
-            console.warn(`⚠️ No existe suscripción para usuario: ${userId}`)
-          }
-        } catch (counterError) {
-          console.error('⚠️ Error al incrementar contador (no crítico):', counterError)
-        }
+        // A qué contador suma lo decide incrementInvoiceUsage: el de la cuenta,
+        // o el del RUC adicional que lo emitió si ese RUC se cobra aparte.
+        await incrementInvoiceUsage(userId, debitNoteData)
 
         // 7. Actualizar el documento original (boleta/factura) para reflejar el cargo adicional
         try {
@@ -3382,6 +3303,8 @@ export const resetMonthlyCounters = onSchedule(
       let resetCount = 0
       let skippedCount = 0
       const porResetear = []
+      // RUC adicionales cobrados aparte: cada uno con su propio ciclo.
+      const rucsAReiniciar = []
 
       for (const docSnapshot of subscriptionsSnapshot.docs) {
         const subscription = docSnapshot.data()
@@ -3400,6 +3323,14 @@ export const resetMonthlyCounters = onSchedule(
         } else {
           skippedCount++
         }
+
+        // Vuelven a cero cada mes desde el día en que se pagaron, como la
+        // cuenta desde su alta (src/utils/cupoPorRuc.js).
+        const rucs = rucsPorReiniciar(subscription, today)
+        if (rucs.length) {
+          console.log(`✅ Usuario ${userId}: reseteando ${rucs.length} RUC cobrado(s) aparte`)
+          rucsAReiniciar.push({ ref: docSnapshot.ref, rucs })
+        }
       }
 
       // En lotes de 400: un batch de Firestore admite 500 operaciones y esto
@@ -3412,6 +3343,19 @@ export const resetMonthlyCounters = onSchedule(
             'usage.invoicesThisMonth': 0,
             lastCounterReset: FieldValue.serverTimestamp()
           })
+        }
+        await batch.commit()
+      }
+
+      for (let i = 0; i < rucsAReiniciar.length; i += 400) {
+        const batch = db.batch()
+        for (const { ref, rucs } of rucsAReiniciar.slice(i, i + 400)) {
+          const cambios = {}
+          for (const emisorId of rucs) {
+            cambios[`usage.porRuc.${emisorId}`] = 0
+            cambios[`rucsCobrados.${emisorId}.ultimoReset`] = FieldValue.serverTimestamp()
+          }
+          batch.update(ref, cambios)
         }
         await batch.commit()
       }
@@ -4943,8 +4887,12 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
  * cuenta una sola vez, justo al pasar a 'accepted'.
  *
  * No es crítico: si falla, se registra el error pero NO se rompe la emisión.
+ *
+ * `documento` son los datos del comprobante: si lo emitió un RUC adicional que
+ * se cobra aparte, suma al cupo de ESE RUC (`usage.porRuc.{emisorId}`) y no
+ * al de la cuenta. Sin documento, todo va a la cuenta, como antes.
  */
-async function incrementInvoiceUsage(businessId) {
+async function incrementInvoiceUsage(businessId, documento = null) {
   try {
     const subscriptionRef = db.collection('subscriptions').doc(businessId)
     const subscriptionDoc = await subscriptionRef.get()
@@ -4955,6 +4903,16 @@ async function incrementInvoiceUsage(businessId) {
     }
 
     const subscriptionData = subscriptionDoc.data()
+
+    // Un RUC adicional cobrado aparte tiene SU cupo (src/utils/cupoPorRuc.js).
+    // El id del emisor es un id automático de Firestore: va tal cual en la ruta.
+    const { porRuc, emisorId } = contadorDelDocumento(subscriptionData, documento)
+    if (porRuc) {
+      await subscriptionRef.update({ [`usage.porRuc.${emisorId}`]: FieldValue.increment(1) })
+      console.log(`📊 [USAGE] Contador del RUC ${emisorId} incrementado - Negocio: ${businessId}`)
+      return
+    }
+
     if (!subscriptionData.usage) {
       await subscriptionRef.update({
         usage: { invoicesThisMonth: 1, totalCustomers: 0, totalProducts: 0 }
@@ -5237,7 +5195,7 @@ export const retryPendingInvoices = onSchedule(
 
                   // Contar el comprobante en el USO mensual: este documento estaba
                   // 'pending' y nunca se contó; ahora confirmamos que SUNAT lo aceptó.
-                  await incrementInvoiceUsage(businessId)
+                  await incrementInvoiceUsage(businessId, invoiceData)
 
                   totalSuccess++
                   totalProcessed++
@@ -5323,7 +5281,7 @@ export const retryPendingInvoices = onSchedule(
             // Si quedó aceptado, contar el comprobante en el USO mensual (igual que
             // en el primer envío). Los transitorios/rechazados NO cuentan.
             if (result.accepted) {
-              await incrementInvoiceUsage(businessId)
+              await incrementInvoiceUsage(businessId, invoiceData)
             }
 
             console.log(`✅ [RETRY] ${docNumber}: ${finalStatus}`)
@@ -5611,7 +5569,7 @@ export const resendPendingBoletas = onRequest(
 
             // Si quedó aceptada, contar la boleta en el USO mensual.
             if (result.accepted) {
-              await incrementInvoiceUsage(businessId)
+              await incrementInvoiceUsage(businessId, invoiceData)
             }
 
             console.log(`${result.accepted ? '✅' : '❌'} [RESEND-BOLETAS] ${invoiceData.series}-${invoiceData.correlativeNumber}: ${finalStatus}`)
@@ -5850,7 +5808,7 @@ export const testRetryPendingInvoices = onRequest(
 
             // Si quedó aceptado, contar el comprobante en el USO mensual.
             if (result.accepted) {
-              await incrementInvoiceUsage(businessId)
+              await incrementInvoiceUsage(businessId, invoiceData)
             }
 
             console.log(`✅ [RETRY-TEST] ${invoiceData.series}-${invoiceData.correlativeNumber}: ${finalStatus}`)
@@ -10410,6 +10368,45 @@ export const checkSubscriptionExpirations = onSchedule(
             notificationsCreated++
           } catch (notifError) {
             console.error(`⚠️ Error creando notificación para ${userId}:`, notifError.message)
+          }
+        }
+        // LOS RUC COBRADOS APARTE avisan por su cuenta: la misma escalera (4, 1 y
+        // 0 días) y un aviso más el día siguiente de vencer. Al vencer NO se
+        // suspende la cuenta: el POS frena solo la emisión con ese RUC
+        // (src/utils/cupoDeComprobantes.js) y el resto sigue trabajando.
+        if (sub.cobroPorRuc === true) {
+          for (const [emisorId, cobro] of Object.entries(sub.rucsCobrados || {})) {
+            const venceRuc = cobro?.vence?.toDate?.()
+            if (!venceRuc) continue
+            const dias = Math.round((diaLima(venceRuc) - diaLima(now)) / 86400000)
+            if (![4, 1, 0, -1].includes(dias)) continue
+            const quien = cobro.nombre || 'Tu RUC adicional'
+            const rucTexto = cobro.ruc ? `el RUC ${cobro.ruc}` : 'este RUC'
+            const fechaRuc = venceRuc.toLocaleDateString('es-PE', { day: 'numeric', month: 'long', timeZone: 'America/Lima' })
+            const titulo = dias === 4 ? `${quien} vence en 4 días`
+              : dias === 1 ? `${quien} vence mañana`
+              : dias === 0 ? `${quien} vence hoy`
+              : `${quien} venció`
+            const mensaje = dias >= 0
+              ? `La mensualidad de ${rucTexto} vence el ${fechaRuc}. Renuévala para seguir emitiendo facturas y boletas con él.`
+              : `La mensualidad de ${rucTexto} venció el ${fechaRuc}: ya no puedes emitir facturas ni boletas con él. El resto de tu cuenta sigue funcionando.`
+            const tipo = dias > 0 ? 'subscription_expiring_soon' : 'subscription_expired'
+            try {
+              await db.collection('notifications').add({
+                userId,
+                type: tipo,
+                title: titulo,
+                message: mensaje,
+                metadata: { emisorId, ruc: cobro.ruc || null, vence: venceRuc.toISOString(), dias },
+                read: false,
+                createdAt: FieldValue.serverTimestamp(),
+                updatedAt: FieldValue.serverTimestamp(),
+              })
+              await sendPushNotification(userId, titulo, mensaje, { type: tipo })
+              notificationsCreated++
+            } catch (notifRucError) {
+              console.error(`⚠️ Error avisando el RUC ${emisorId} de ${userId}:`, notifRucError.message)
+            }
           }
         }
         } catch (userError) {

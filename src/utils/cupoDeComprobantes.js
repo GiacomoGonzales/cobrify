@@ -35,6 +35,10 @@
  * no viajan a SUNAT. Son las que le quedan al negocio para seguir trabajando.
  */
 
+import { rucCobradoAparte } from '../../functions/src/utils/cupoPorRuc.js'
+import { PLANES_VENDIBLES } from '@/data/planes'
+import { estadoDelRuc } from '@/utils/cobroPorRuc'
+
 /** Desde este porcentaje del cupo se avisa que se está por acabar. */
 export const AVISAR_DESDE = 0.9
 
@@ -67,6 +71,53 @@ export function cupoDeComprobantes(subscription, { esAdmin = false } = {}) {
   }
 }
 
+/**
+ * El cupo del RUC con el que se va a emitir.
+ *
+ * Con "Cobrar cada RUC aparte", un RUC adicional tiene su propio tope —el de
+ * su plan: 1000 en el Mensual—, su propio contador (`usage.porRuc`) y su
+ * propio vencimiento: si su mensualidad venció no emite facturas ni boletas,
+ * aunque la cuenta esté al día. El principal, o un RUC sin cobro aparte, usa el
+ * cupo de la cuenta como siempre (ver functions/src/utils/cupoPorRuc.js).
+ *
+ * @returns lo mismo que cupoDeComprobantes, más `vencido`, `vence` y
+ *   `nombreRuc` cuando es de un RUC cobrado aparte.
+ */
+export function cupoDelRuc(subscription, emisorId, { esAdmin = false } = {}) {
+  const cobro = rucCobradoAparte(subscription, emisorId)
+  if (!cobro) return cupoDeComprobantes(subscription, { esAdmin })
+
+  const usados = subscription?.usage?.porRuc?.[emisorId] || 0
+  const nombreRuc = cobro.nombre || cobro.ruc || 'adicional'
+  const vencido = !esAdmin && estadoDelRuc(cobro).clave === 'vencido'
+  const topePlan = PLANES_VENDIBLES[cobro.plan]?.limits?.maxInvoicesPerMonth
+  if (esAdmin || typeof topePlan !== 'number' || topePlan === -1) {
+    return { ilimitado: true, tope: -1, usados, restantes: Infinity, agotado: false, porAgotarse: false, vencido, vence: cobro.vence, nombreRuc }
+  }
+
+  const restantes = Math.max(0, topePlan - usados)
+  return {
+    ilimitado: false,
+    tope: topePlan,
+    usados,
+    restantes,
+    agotado: usados >= topePlan,
+    porAgotarse: topePlan > 0 && usados < topePlan && usados >= topePlan * AVISAR_DESDE,
+    vencido,
+    vence: cobro.vence,
+    nombreRuc,
+  }
+}
+
+const fechaCorta = (v) => {
+  const d = v?.toDate ? v.toDate() : v ? new Date(v) : null
+  return d && !isNaN(d) ? d.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' }) : ''
+}
+
+const motivoDeVencido = (cupo) =>
+  `La mensualidad del RUC ${cupo.nombreRuc} venció${cupo.vence ? ` el ${fechaCorta(cupo.vence)}` : ''}. `
+  + 'Renuévala para volver a emitir facturas y boletas con él; mientras tanto puede emitir con el RUC principal o usar notas de venta.'
+
 /** ¿Este tipo de documento se queda sin poder emitirse al agotarse el cupo? */
 export function consumeCupo(documentType) {
   return CONSUMEN_CUPO.includes(documentType)
@@ -78,6 +129,7 @@ export function consumeCupo(documentType) {
  * @returns {{puede: boolean, motivo: string|null}}
  */
 export function puedeEmitirse(documentType, cupo) {
+  if (cupo?.vencido && consumeCupo(documentType)) return { puede: false, motivo: motivoDeVencido(cupo) }
   if (!cupo || cupo.ilimitado || !cupo.agotado) return { puede: true, motivo: null }
   if (!consumeCupo(documentType)) return { puede: true, motivo: null }
   return {
@@ -89,18 +141,21 @@ export function puedeEmitirse(documentType, cupo) {
 
 /** El aviso a mostrar, o null si no hay nada que decir. */
 export function avisoDeCupo(cupo) {
+  if (cupo?.vencido) return { tono: 'error', texto: motivoDeVencido(cupo) }
   if (!cupo || cupo.ilimitado) return null
+  // Con un RUC cobrado aparte, el cupo es SUYO: se dice de cuál.
+  const deQuien = cupo.nombreRuc ? ` del RUC ${cupo.nombreRuc}` : ''
   if (cupo.agotado) {
     return {
       tono: 'error',
-      texto: `Se acabaron los comprobantes de este mes (${cupo.usados} de ${cupo.tope}). `
+      texto: `Se acabaron los comprobantes de este mes${deQuien} (${cupo.usados} de ${cupo.tope}). `
         + 'Solo puede emitir notas de venta y cotizaciones hasta que amplíe su plan.',
     }
   }
   if (cupo.porAgotarse) {
     return {
       tono: 'aviso',
-      texto: `Le ${cupo.restantes === 1 ? 'queda 1 comprobante' : `quedan ${cupo.restantes} comprobantes`} este mes `
+      texto: `Le ${cupo.restantes === 1 ? 'queda 1 comprobante' : `quedan ${cupo.restantes} comprobantes`} este mes${deQuien} `
         + `(${cupo.usados} de ${cupo.tope}).`,
     }
   }

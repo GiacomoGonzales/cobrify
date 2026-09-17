@@ -120,6 +120,8 @@ export function armarCuenta(id, data, business = {}, userDoc = null, { resellers
     // Varios RUC con mensualidad propia por RUC (ver registrarPagoDeRuc).
     cobroPorRuc: data.cobroPorRuc === true,
     rucsCobrados: data.rucsCobrados || {},
+    // Los comprobantes del mes de cada RUC cobrado aparte.
+    usoPorRuc: data.usage?.porRuc || {},
     createdByReseller: data.createdByReseller || false,
     resellerId: data.resellerId || null,
     resellerName: data.resellerId ? resellersMap[data.resellerId] || data.resellerId : null,
@@ -373,7 +375,12 @@ export async function registrarPagoDeRuc(userId, emisor, { planId, monto, metodo
       precio: importe,
       vence: Timestamp.fromDate(vence),
       ultimoPago: Timestamp.fromDate(ahora),
+      // El ciclo del RUC arranca con el pago y su contador vuelve a cero, igual
+      // que la cuenta al renovar (functions/src/utils/cupoPorRuc.js).
+      inicio: Timestamp.fromDate(ahora),
+      ultimoReset: Timestamp.fromDate(ahora),
     },
+    [`usage.porRuc.${emisor.id}`]: 0,
     paymentHistory: arrayUnion({
       date: Timestamp.fromDate(ahora),
       amount: importe,

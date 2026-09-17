@@ -4,6 +4,7 @@ import { origenDeCuenta } from '@/utils/subscriptionOwnership'
 import { PLANS, classifyPlan } from '@/services/subscriptionService'
 import { getCustomPlans } from '@/services/customPlanService'
 import { metodoDeEmision } from '@/services/adminCuentasService'
+import { mensualidadDeRucs } from '@/utils/cobroPorRuc'
 
 // El Resumen del admin en dos velocidades.
 //
@@ -102,6 +103,8 @@ function calcularStats(subsSnap, customPlans, recargasSnap) {
     const periodEnd = data.currentPeriodEnd?.toDate?.()
     if (data.status === 'active' && !data.accessBlocked && PLANS[data.plan]) {
       mrr += PLANS[data.plan].pricePerMonth || 0
+      // Y la mensualidad de los RUC adicionales que se cobran aparte.
+      mrr += mensualidadDeRucs(data)
       if (periodEnd && periodEnd >= startOfMonth && periodEnd <= endOfMonth) {
         collectableThisMonth += PLANS[data.plan].pricePerMonth || 0
         collectableCount++

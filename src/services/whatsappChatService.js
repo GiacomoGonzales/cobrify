@@ -427,6 +427,10 @@ export const obtenerFichaCliente = async (businessId) => {
     // cuantos muestra: antes se cortaban en tres aca y no habia forma de ver
     // el resto sin salir al panel.
     pagos: [...(sub.paymentHistory || [])].reverse(),
+    // Varios RUC con mensualidad propia (adminCuentasService › registrarPagoDeRuc).
+    cobroPorRuc: sub.cobroPorRuc === true,
+    rucsCobrados: sub.rucsCobrados || {},
+    usoPorRuc: sub.usage?.porRuc || {},
 
     // ── Lo principal de la ficha del admin ──
     // No se copia todo: en 320 px de ancho, y con un cliente esperando del

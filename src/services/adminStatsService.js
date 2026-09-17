@@ -1,4 +1,5 @@
 import { db, functions } from '@/lib/firebase'
+import { mensualidadDeRucs } from '@/utils/cobroPorRuc'
 import {
   collection,
   query,
@@ -74,6 +75,8 @@ export async function getAdminStats() {
       // MRR (Monthly Recurring Revenue)
       if (data.status === 'active' && !data.accessBlocked && PLANS[data.plan]) {
         mrr += PLANS[data.plan].pricePerMonth || 0
+        // Y la mensualidad de los RUC adicionales que se cobran aparte.
+        mrr += mensualidadDeRucs(data)
 
         // Por cobrar este mes: solo suscripciones cuyo período termina este mes
         const periodEndDate = data.currentPeriodEnd?.toDate?.()

@@ -69,12 +69,14 @@ const fechaHora = d => (toDate(d) ? toDate(d).toLocaleString('es-PE', { day: '2-
 const limite = v => (v === -1 || v === undefined || v === null ? '∞' : entero(v))
 
 /** La mensualidad de un RUC cobrado aparte: plan, precio y hasta cuándo está al día. */
-function CeldaMensualidad({ cobro }) {
+function CeldaMensualidad({ cobro, usados = 0 }) {
   const { clave, dias } = estadoDelRuc(cobro)
   if (clave === 'sin_pagar') {
     return <Td><span className="font-medium text-red-600">Sin pago registrado</span></Td>
   }
   const tono = clave === 'vencido' ? 'font-medium text-red-600' : clave === 'por_vencer' ? 'text-amber-700' : 'text-gray-500'
+  // El cupo es del RUC: el tope de SU plan y SU contador del mes.
+  const tope = PLANS[cobro.plan]?.limits?.maxInvoicesPerMonth
   return (
     <Td className="whitespace-normal">
       <span className="text-gray-900">{cobro.planName || cobro.plan} · {moneda(cobro.precio)}</span>
@@ -82,6 +84,9 @@ function CeldaMensualidad({ cobro }) {
         {clave === 'vencido'
           ? `Venció el ${fecha(cobro.vence)}`
           : `Al día hasta el ${fecha(cobro.vence)}${clave === 'por_vencer' ? (dias === 0 ? ' · vence hoy' : ` · quedan ${dias} d`) : ''}`}
+      </span>
+      <span className="block text-[11.5px] text-gray-500 tabular-nums">
+        {entero(usados)}{typeof tope === 'number' && tope !== -1 ? ` de ${entero(tope)}` : ''} comprobantes este mes
       </span>
     </Td>
   )
@@ -841,7 +846,7 @@ export default function AdminCuenta() {
                   </Td>
                   <Td apagado className="tabular-nums">{firmasPorRuc ? (firmasPorRuc[e.id] ?? 0).toLocaleString('es-PE') : '…'}</Td>
                   <Td apagado>{e.activo === false ? 'Inactivo' : 'Activo'}</Td>
-                  {c.cobroPorRuc && <CeldaMensualidad cobro={c.rucsCobrados?.[e.id]} />}
+                  {c.cobroPorRuc && <CeldaMensualidad cobro={c.rucsCobrados?.[e.id]} usados={c.usoPorRuc?.[e.id] || 0} />}
                   {c.cobroPorRuc && (
                     <Td className="text-right">
                       <Boton tamano="sm" onClick={() => setRucAPagar(e)}>Registrar pago</Boton>

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useMemo, useDeferredValue } from 'r
 import { isPharmaLikeMode } from '@/utils/businessModes'
 import { estadoInicialSunat } from '@/utils/estadoInicialSunat'
 import { comprobanteYaEnviado, motivoParaNoEditar, loQueNoCambiaAlEditar } from '@/utils/edicionDeComprobante'
-import { cupoDeComprobantes, avisoDeCupo } from '@/utils/cupoDeComprobantes'
+import { cupoDelRuc, avisoDeCupo } from '@/utils/cupoDeComprobantes'
 import { serieParaNumerar, numeroSiguiente } from '@/utils/serieParaNumerar'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
@@ -688,9 +688,11 @@ export default function POS() {
     return true
   }
 
+  // El cupo del RUC elegido en "Emitir con": un RUC adicional que se cobra
+  // aparte tiene su propio tope y su propio vencimiento (utils/cupoDeComprobantes).
   const cupo = useMemo(
-    () => cupoDeComprobantes(subscription, { esAdmin: isAdmin || isDemoMode }),
-    [subscription, isAdmin, isDemoMode]
+    () => cupoDelRuc(subscription, emisorElegido?.id, { esAdmin: isAdmin || isDemoMode }),
+    [subscription, emisorElegido?.id, isAdmin, isDemoMode]
   )
 
   const avisoCupo = useMemo(() => avisoDeCupo(cupo), [cupo])
@@ -699,11 +701,13 @@ export default function POS() {
     enabledForBusiness: empresaDeVenta?.enabledDocumentTypes || null,
     allowedForUser: allowedDocumentTypes || null,
     canEmitFiscal,
-    cupoAgotado: cupo.agotado,
+    // Un RUC con la mensualidad vencida tampoco emite facturas ni boletas: el
+    // aviso de arriba dice por qué, y le quedan el principal y la nota de venta.
+    cupoAgotado: cupo.agotado || !!cupo.vencido,
     // Al convertir una nota, la Nota de Venta sale del selector: se convierte
     // en un comprobante, no en otra nota.
     convirtiendoNota: !!(pendingNotaVentaIds && pendingNotaVentaIds.length > 0),
-  }), [empresaDeVenta?.enabledDocumentTypes, allowedDocumentTypes, canEmitFiscal, cupo.agotado, pendingNotaVentaIds])
+  }), [empresaDeVenta?.enabledDocumentTypes, allowedDocumentTypes, canEmitFiscal, cupo.agotado, cupo.vencido, pendingNotaVentaIds])
 
   const availableDocTypes = useMemo(() => getAvailableDocumentTypes(docTypeOpts), [docTypeOpts])
 
