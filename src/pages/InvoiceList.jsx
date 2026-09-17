@@ -4386,7 +4386,14 @@ Gracias por tu preferencia.`
                       <button
                         onClick={() => {
                           setOpenMenuId(null)
-                          if (!empresaDe(invoice)?.ruc) {
+                          // Se mira la RAZÓN SOCIAL, no el RUC. Un negocio que
+                          // marcó "No tengo RUC" (uso interno) guarda `ruc: ''`
+                          // a propósito, y con la prueba vieja no podía imprimir
+                          // NADA: el botón le contestaba "configura tu empresa"
+                          // teniéndola configurada (Shop Biker Perú, 17-set-2026).
+                          // Un ticket necesita el nombre; del RUC ya se encarga
+                          // `rucDeEmpresa`, que omite la línea si no hay.
+                          if (!empresaDe(invoice)?.businessName) {
                             toast.error('Configura los datos de tu empresa primero')
                             return
                           }
@@ -4402,7 +4409,10 @@ Gracias por tu preferencia.`
                       <button
                         onClick={async () => {
                           setOpenMenuId(null)
-                          if (!empresaDe(invoice)?.ruc) {
+                          // Razón social, no RUC: ver el comentario de "Imprimir
+                          // ticket". Sin RUC es un estado válido, no uno a medio
+                          // configurar.
+                          if (!empresaDe(invoice)?.businessName) {
                             toast.error('Configura los datos de tu empresa primero')
                             return
                           }
@@ -5352,7 +5362,10 @@ Gracias por tu preferencia.`
 
             {/* ========== ACCIONES ========== */}
             <div className="border-t border-gray-200 pt-4 space-y-3">
-              {/* Mandar, imprimir o bajar otra copia: se puede quitar por usuario. */}
+              {/* Mandar, imprimir o bajar otra copia: se puede quitar por usuario.
+                  Los tres botones miran la RAZÓN SOCIAL y no el RUC: quien marcó
+                  "No tengo RUC" guarda `ruc: ''` a propósito y con la prueba vieja
+                  no podía imprimir ni ver el PDF de nada. */}
               {permisosComprobante.reimprimir && (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <Button size="sm" variant="outline" onClick={() => handleSendWhatsApp(viewingInvoice)} disabled={sendingWhatsApp}>
@@ -5360,21 +5373,21 @@ Gracias por tu preferencia.`
                     WhatsApp
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => {
-                    if (!empresaDe(viewingInvoice)?.ruc) { toast.error('Configura los datos de tu empresa primero'); return; }
+                    if (!empresaDe(viewingInvoice)?.businessName) { toast.error('Configura los datos de tu empresa primero'); return; }
                     handlePrintTicket()
                   }}>
                     <Printer className="w-4 h-4 mr-1" />
                     Ticket
                   </Button>
                   <Button size="sm" variant="outline" onClick={async () => {
-                    if (!empresaDe(viewingInvoice)?.ruc) { toast.error('Configura los datos de tu empresa primero'); return; }
+                    if (!empresaDe(viewingInvoice)?.businessName) { toast.error('Configura los datos de tu empresa primero'); return; }
                     try { await previewInvoicePDF(viewingInvoice, empresaDe(viewingInvoice), branding, branches) } catch (e) { toast.error('Error al generar vista previa') }
                   }}>
                     <Eye className="w-4 h-4 mr-1" />
                     Vista Previa
                   </Button>
                   <Button size="sm" onClick={async () => {
-                    if (!empresaDe(viewingInvoice)?.ruc) { toast.error('Configura los datos de tu empresa primero'); return; }
+                    if (!empresaDe(viewingInvoice)?.businessName) { toast.error('Configura los datos de tu empresa primero'); return; }
                     try { await generateInvoicePDF(viewingInvoice, empresaDe(viewingInvoice), true, branding, branches); toast.success('PDF descargado') } catch (e) { toast.error('Error') }
                   }}>
                     <Download className="w-4 h-4 mr-1" />
