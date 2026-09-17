@@ -381,16 +381,6 @@
       ]
     },
     {
-      "collectionGroup": "invoices",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "posibleChoqueDeSerie.detectadoEn",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "accesosSoporte",
       "queryScope": "COLLECTION",
       "fields": [
@@ -406,6 +396,24 @@
     }
   ],
   "fieldOverrides": [
+    {
+      "collectionGroup": "invoices",
+      "fieldPath": "posibleChoqueDeSerie.detectadoEn",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
     {
       "collectionGroup": "invoices",
       "fieldPath": "sunatStatus",
