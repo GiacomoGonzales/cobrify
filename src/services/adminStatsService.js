@@ -356,6 +356,10 @@ export async function getAllPayments(filters = {}) {
             amount: payment.amount || 0,
             method: payment.method || 'N/A',
             plan: payment.plan || data.plan,
+            planName: payment.planName || null,
+            // El pago de un RUC adicional lleva su RUC: Pagos lo muestra al lado.
+            ruc: payment.ruc || null,
+            rucNombre: payment.rucNombre || null,
             status: payment.status || 'completed',
             date: paymentDate,
             notes: payment.notes || ''

@@ -1,4 +1,5 @@
-import { collection, deleteField, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
+import { arrayUnion, collection, deleteField, doc, getDoc, getDocs, query, serverTimestamp, Timestamp, updateDoc, where } from 'firebase/firestore'
+import { venceDelRucTrasPagar } from '@/utils/cobroPorRuc'
 import { db } from '@/lib/firebase'
 import { PLANS, nuncaVence, registerPayment } from '@/services/subscriptionService'
 import { nombreRubro } from '@/data/rubros'
@@ -116,6 +117,9 @@ export function armarCuenta(id, data, business = {}, userDoc = null, { resellers
     subUsersCount: subUsers.length,
     subUsers,
     features: data.features || { productImages: false },
+    // Varios RUC con mensualidad propia por RUC (ver registrarPagoDeRuc).
+    cobroPorRuc: data.cobroPorRuc === true,
+    rucsCobrados: data.rucsCobrados || {},
     createdByReseller: data.createdByReseller || false,
     resellerId: data.resellerId || null,
     resellerName: data.resellerId ? resellersMap[data.resellerId] || data.resellerId : null,
@@ -325,6 +329,72 @@ export function enlaceRecordatorioWhatsapp(cuenta) {
  * @param {string} metodo   cómo pagó
  * @param {string} planId   el plan que contrató
  */
+/**
+ * COBRAR CADA RUC ADICIONAL POR SEPARADO.
+ *
+ * Para algunos clientes cada RUC es un sistema aparte: paga su mensualidad y
+ * tiene sus comprobantes (KARSOL, 17-set-2026: Plan Mensual de S/ 29.90 y dos
+ * RUC más a S/ 29.90 cada uno). Para otros, todos sus RUC van incluidos en el
+ * plan. Por eso es una casilla por cuenta, apagada de entrada.
+ *
+ * Lo de cada RUC vive en la suscripción, que solo escribe el admin:
+ * `rucsCobrados.{emisorId}` = { ruc, nombre, plan, planName, meses, precio,
+ * vence, ultimoPago }. El pago entra al mismo `paymentHistory` de la cuenta
+ * —así Admin › Pagos, los totales y el Resumen lo cuentan sin nada nuevo— con
+ * `addonType: 'ruc'` y el RUC al lado, y NO toca el vencimiento, el plan ni el
+ * cupo de la cuenta.
+ */
+export async function cambiarCobroPorRuc(userId, activo) {
+  await updateDoc(doc(db, 'subscriptions', userId), { cobroPorRuc: !!activo, updatedAt: serverTimestamp() })
+}
+
+export async function registrarPagoDeRuc(userId, emisor, { planId, monto, metodo }) {
+  const plan = PLANS[planId]
+  if (!plan) throw new Error('Plan no válido')
+  if (!emisor?.id) throw new Error('Falta el RUC')
+
+  const ref = doc(db, 'subscriptions', userId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) throw new Error('La suscripción no existe')
+
+  const ahora = new Date()
+  const meses = plan.months || 1
+  const vence = venceDelRucTrasPagar(snap.data().rucsCobrados?.[emisor.id]?.vence, meses, ahora)
+  const importe = Number(monto) || 0
+  const planName = plan.name || planId
+
+  await updateDoc(ref, {
+    [`rucsCobrados.${emisor.id}`]: {
+      ruc: emisor.ruc || null,
+      nombre: emisor.businessName || null,
+      plan: planId,
+      planName,
+      meses,
+      precio: importe,
+      vence: Timestamp.fromDate(vence),
+      ultimoPago: Timestamp.fromDate(ahora),
+    },
+    paymentHistory: arrayUnion({
+      date: Timestamp.fromDate(ahora),
+      amount: importe,
+      method: metodo,
+      plan: planId,
+      planName,
+      months: meses,
+      status: 'completed',
+      registeredBy: 'admin',
+      addonType: 'ruc',
+      emisorId: emisor.id,
+      ruc: emisor.ruc || null,
+      rucNombre: emisor.businessName || null,
+    }),
+    lastPaymentDate: Timestamp.fromDate(ahora),
+    updatedAt: serverTimestamp(),
+  })
+
+  return { vence, planName }
+}
+
 export async function convertirPruebaEnCuenta(userId, monto, metodo, planId) {
   const antes = await getDoc(doc(db, 'subscriptions', userId))
   if (!antes.exists()) throw new Error('Esta cuenta no existe')

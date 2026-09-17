@@ -9,9 +9,11 @@ import { getBranches } from '@/services/branchService'
 import { getEmisores, getSeriesDelNegocio } from '@/services/emisoresService'
 import { TIPOS_DE_SERIE_DE_EMISOR } from '../../../functions/src/utils/emisorDelComprobante.js'
 import { resumenDeUso, firmasPorEmisor } from '@/services/adminUsoService'
-import { cargarCuenta, diasParaVencer, enlaceRecordatorioWhatsapp, convertirPruebaEnCuenta } from '@/services/adminCuentasService'
+import { cargarCuenta, diasParaVencer, enlaceRecordatorioWhatsapp, convertirPruebaEnCuenta, cambiarCobroPorRuc, registrarPagoDeRuc } from '@/services/adminCuentasService'
 import { esPrueba } from '@/data/prueba'
 import ConvertirPruebaModal from '@/components/admin/cuenta/ConvertirPruebaModal'
+import PagoDeRucModal from '@/components/admin/cuenta/PagoDeRucModal'
+import { estadoDelRuc } from '@/utils/cobroPorRuc'
 import { RUBROS_ALFABETICOS, nombreRubro } from '@/data/rubros'
 import { nombreModo } from '@/utils/businessModes'
 import { useToast } from '@/contexts/ToastContext'
@@ -66,6 +68,43 @@ const fecha = d => (toDate(d) ? toDate(d).toLocaleDateString('es-PE', { day: '2-
 const fechaHora = d => (toDate(d) ? toDate(d).toLocaleString('es-PE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—')
 const limite = v => (v === -1 || v === undefined || v === null ? '∞' : entero(v))
 
+/** La mensualidad de un RUC cobrado aparte: plan, precio y hasta cuándo está al día. */
+function CeldaMensualidad({ cobro }) {
+  const { clave, dias } = estadoDelRuc(cobro)
+  if (clave === 'sin_pagar') {
+    return <Td><span className="font-medium text-red-600">Sin pago registrado</span></Td>
+  }
+  const tono = clave === 'vencido' ? 'font-medium text-red-600' : clave === 'por_vencer' ? 'text-amber-700' : 'text-gray-500'
+  return (
+    <Td className="whitespace-normal">
+      <span className="text-gray-900">{cobro.planName || cobro.plan} · {moneda(cobro.precio)}</span>
+      <span className={`block text-[11.5px] ${tono}`}>
+        {clave === 'vencido'
+          ? `Venció el ${fecha(cobro.vence)}`
+          : `Al día hasta el ${fecha(cobro.vence)}${clave === 'por_vencer' ? (dias === 0 ? ' · vence hoy' : ` · quedan ${dias} d`) : ''}`}
+      </span>
+    </Td>
+  )
+}
+
+/** Debajo de la tabla: cuánto suman al mes los RUC adicionales y cuáles faltan. */
+function ResumenDeRucs({ emisores, rucsCobrados }) {
+  const activos = emisores.filter(e => e.activo !== false)
+  if (activos.length === 0) return null
+  const cobros = activos.map(e => rucsCobrados?.[e.id])
+  const claves = cobros.map(cobro => estadoDelRuc(cobro).clave)
+  const sinPagar = claves.filter(k => k === 'sin_pagar').length
+  const vencidos = claves.filter(k => k === 'vencido').length
+  const alMes = cobros.reduce((suma, r) => suma + (r ? (Number(r.precio) || 0) / (Number(r.meses) || 1) : 0), 0)
+  return (
+    <p className={`border-t border-gray-100 px-4 py-2.5 text-[12.5px] ${sinPagar || vencidos ? 'text-red-600' : 'text-gray-500'}`}>
+      {activos.length} RUC adicional{activos.length === 1 ? '' : 'es'} cobrado{activos.length === 1 ? '' : 's'} aparte · {moneda(alMes)} al mes
+      {sinPagar > 0 && ` · ${sinPagar} sin pago registrado`}
+      {vencidos > 0 && ` · ${vencidos} vencido${vencidos === 1 ? '' : 's'}`}
+    </p>
+  )
+}
+
 export default function AdminCuenta() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -80,6 +119,8 @@ export default function AdminCuenta() {
   const [sucursales, setSucursales] = useState([])
   // Varios RUC: los emisores adicionales y sus series (que viven en el doc del negocio).
   const [emisores, setEmisores] = useState([])
+  // El RUC adicional cuyo pago se está registrando ("Cobrar cada RUC aparte").
+  const [rucAPagar, setRucAPagar] = useState(null)
   const [emisorSeries, setEmisorSeries] = useState({})
   const [uso, setUso] = useState(null)
   // Varios RUC: firmas por RUC adicional (el principal es el resto del total).
@@ -169,6 +210,34 @@ export default function AdminCuenta() {
     getSeriesDelNegocio(cuentaId).then(d => setEmisorSeries(d.emisorSeries || {})).catch(() => {})
   }
   const cerrarModal = () => setModal(null)
+
+  // Cada RUC adicional con su propia mensualidad, o todos incluidos en el plan.
+  async function alternarCobroPorRuc() {
+    const activo = !cuenta.cobroPorRuc
+    try {
+      await cambiarCobroPorRuc(id, activo)
+      parchar({ cobroPorRuc: activo })
+      toast.success(activo ? 'Cada RUC adicional se cobra aparte' : 'Los RUC adicionales van incluidos en el plan')
+    } catch (error) {
+      console.error('Error cambiando el cobro por RUC:', error)
+      toast.error('No se pudo cambiar')
+    }
+  }
+
+  async function registrarPagoRuc({ planId, monto, metodo }) {
+    setProcesando(true)
+    try {
+      const r = await registrarPagoDeRuc(id, rucAPagar, { planId, monto, metodo })
+      toast.success(`Pago del RUC registrado: al día hasta el ${r.vence.toLocaleDateString('es-PE')}`)
+      setRucAPagar(null)
+      await cargar()
+    } catch (error) {
+      console.error('Error registrando el pago del RUC:', error)
+      toast.error(error.message || 'No se pudo registrar el pago')
+    } finally {
+      setProcesando(false)
+    }
+  }
 
   // ── Acciones ────────────────────────────────────────────────────────────────
 
@@ -717,9 +786,18 @@ export default function AdminCuenta() {
       {c.features?.multiRuc && (
         <Seccion
           titulo={`Emisores (${emisores.filter(e => e.activo !== false).length + 1})`}
-          descripcion="Los RUC con los que esta cuenta puede emitir. El principal es el negocio; los demás se eligen en el POS."
+          descripcion={c.cobroPorRuc
+            ? 'Cada RUC adicional paga su propia mensualidad: se renueva por separado y su pago sale en Pagos con su nombre.'
+            : 'Los RUC con los que esta cuenta puede emitir. El principal es el negocio; los demás se eligen en el POS y van incluidos en el plan.'}
           sinRelleno
-          acciones={<Boton tamano="sm" onClick={() => setModal('emisores')}>Gestionar</Boton>}
+          acciones={
+            <>
+              <Boton tamano="sm" onClick={alternarCobroPorRuc}>
+                {c.cobroPorRuc ? 'Incluir los RUC en el plan' : 'Cobrar cada RUC aparte'}
+              </Boton>
+              <Boton tamano="sm" onClick={() => setModal('emisores')}>Gestionar</Boton>
+            </>
+          }
         >
           <Tabla>
             <thead>
@@ -731,6 +809,8 @@ export default function AdminCuenta() {
                 <Th>Series</Th>
                 <Th>Firmas</Th>
                 <Th>Estado</Th>
+                {c.cobroPorRuc && <Th>Mensualidad</Th>}
+                {c.cobroPorRuc && <Th><span className="sr-only">Pagar</span></Th>}
               </tr>
             </thead>
             <tbody>
@@ -747,6 +827,8 @@ export default function AdminCuenta() {
                     : '…'}
                 </Td>
                 <Td apagado>Activo</Td>
+                {c.cobroPorRuc && <Td apagado className="whitespace-normal">El plan de la cuenta</Td>}
+                {c.cobroPorRuc && <Td />}
               </Fila>
               {emisores.map(e => (
                 <Fila key={e.id} apagada={e.activo === false}>
@@ -759,10 +841,17 @@ export default function AdminCuenta() {
                   </Td>
                   <Td apagado className="tabular-nums">{firmasPorRuc ? (firmasPorRuc[e.id] ?? 0).toLocaleString('es-PE') : '…'}</Td>
                   <Td apagado>{e.activo === false ? 'Inactivo' : 'Activo'}</Td>
+                  {c.cobroPorRuc && <CeldaMensualidad cobro={c.rucsCobrados?.[e.id]} />}
+                  {c.cobroPorRuc && (
+                    <Td className="text-right">
+                      <Boton tamano="sm" onClick={() => setRucAPagar(e)}>Registrar pago</Boton>
+                    </Td>
+                  )}
                 </Fila>
               ))}
             </tbody>
           </Tabla>
+          {c.cobroPorRuc && <ResumenDeRucs emisores={emisores} rucsCobrados={c.rucsCobrados} />}
         </Seccion>
       )}
 
@@ -821,7 +910,10 @@ export default function AdminCuenta() {
               estado={<Estado valor={p.status || 'completed'} etiqueta={p.status === 'pending' ? 'Pendiente' : p.status === 'failed' ? 'Fallido' : 'Completado'} />}
               datos={[
                 ['Fecha', fechaHora(p.date)],
-                ['Plan', p.planName || (p.plan && (PLANS[p.plan]?.name || customPlans[p.plan]?.name)) || p.plan],
+                ['Plan', [
+                  p.planName || (p.plan && (PLANS[p.plan]?.name || customPlans[p.plan]?.name)) || p.plan,
+                  p.ruc && `RUC ${p.ruc}${p.rucNombre ? ` ${p.rucNombre}` : ''}`,
+                ].filter(Boolean).join(' · ')],
                 ['Duración', p.months ? `${p.months} ${p.months === 1 ? 'mes' : 'meses'}` : null],
                 ['Método', p.method],
               ]}
@@ -845,7 +937,10 @@ export default function AdminCuenta() {
             {[...c.paymentHistory].reverse().map((p, i) => (
               <Fila key={i}>
                 <Td>{fechaHora(p.date)}</Td>
-                <Td apagado>{p.planName || (p.plan && (PLANS[p.plan]?.name || customPlans[p.plan]?.name)) || p.plan || '—'}</Td>
+                <Td apagado className="whitespace-normal">
+                  {p.planName || (p.plan && (PLANS[p.plan]?.name || customPlans[p.plan]?.name)) || p.plan || '—'}
+                  {p.ruc && <span className="block text-[11.5px] text-gray-500">RUC {p.ruc}{p.rucNombre ? ` · ${p.rucNombre}` : ''}</span>}
+                </Td>
                 <Td apagado>{p.months ? `${p.months} ${p.months === 1 ? 'mes' : 'meses'}` : '—'}</Td>
                 <Td apagado>{p.method || '—'}</Td>
                 <Td><Estado valor={p.status || 'completed'} etiqueta={p.status === 'pending' ? 'Pendiente' : p.status === 'failed' ? 'Fallido' : 'Completado'} /></Td>
@@ -920,6 +1015,16 @@ export default function AdminCuenta() {
         />
       )}
       {modal === 'emisores' && <EmisoresModal cuenta={c} onClose={() => { cerrarModal(); cargarEmisores(id) }} />}
+      {rucAPagar && (
+        <PagoDeRucModal
+          cuenta={c}
+          emisor={rucAPagar}
+          cobro={c.rucsCobrados?.[rucAPagar.id]}
+          procesando={procesando}
+          onClose={() => setRucAPagar(null)}
+          onRegistrar={registrarPagoRuc}
+        />
+      )}
       {modal === 'contacto' && <ContactoModal cuenta={c} onClose={cerrarModal} onGuardado={cambios => parchar(cambios)} />}
       {modal === 'vendedor' && <AsignarVendedorModal cuenta={c} vendedores={vendedores} onClose={cerrarModal} onGuardado={cambios => parchar(cambios)} />}
       {modal === 'eliminar' && <EliminarCuentaModal cuenta={c} onClose={cerrarModal} onEliminada={() => navigate('/app/admin/users')} />}

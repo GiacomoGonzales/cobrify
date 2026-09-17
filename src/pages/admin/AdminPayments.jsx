@@ -23,6 +23,12 @@ const METODOS = METODOS_DE_PAGO
 const ESTADOS = { completed: 'Completado', pending: 'Pendiente', failed: 'Fallido' }
 const PAGE_SIZE = 50
 
+// El plan del pago y, si es de un RUC adicional cobrado aparte, de qué RUC.
+const planDelPago = p => [
+  p.planName || PLANS[p.plan]?.name || p.plan,
+  p.ruc && `RUC ${p.ruc}${p.rucNombre ? ` ${p.rucNombre}` : ''}`,
+].filter(Boolean).join(' · ')
+
 const moneda = v => new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(v) || 0)
 const fechaHora = d => (d ? d.toLocaleString('es-PE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—')
 const aFechaInput = d => {
@@ -142,7 +148,7 @@ export default function AdminPayments() {
       p.businessName,
       p.amount,
       etiquetaDelMetodo(p.method),
-      p.planName || PLANS[p.plan]?.name || p.plan,
+      planDelPago(p),
       p.status,
       p.notes || '',
     ])
@@ -269,7 +275,7 @@ export default function AdminPayments() {
                   <div className="min-w-0">
                     <Link to={`/app/admin/users/${p.subscriptionId}`} className="block truncate font-medium hover:underline">{p.businessName}</Link>
                     <div className="truncate text-[11.5px] text-gray-500">
-                      {fechaHora(p.date)} · {etiquetaDelMetodo(p.method)} · {p.planName || PLANS[p.plan]?.name || p.plan}
+                      {fechaHora(p.date)} · {etiquetaDelMetodo(p.method)} · {planDelPago(p)}
                     </div>
                   </div>
                   <div className="shrink-0 text-right">
@@ -331,7 +337,7 @@ export default function AdminPayments() {
                   </Td>
                   <Td numero className="font-medium">{moneda(p.amount)}</Td>
                   <Td apagado>{etiquetaDelMetodo(p.method)}</Td>
-                  <Td apagado>{p.planName || PLANS[p.plan]?.name || p.plan}</Td>
+                  <Td apagado>{planDelPago(p)}</Td>
                   <Td><Estado valor={p.status} etiqueta={ESTADOS[p.status] || p.status} /></Td>
                   <Td apagado className="max-w-[240px] truncate" title={p.notes || undefined}>{p.notes || '—'}</Td>
                   <Td alinear="centro">
