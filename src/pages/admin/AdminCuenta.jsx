@@ -30,6 +30,7 @@ import EntrarComoModal from '@/components/admin/cuenta/EntrarComoModal'
 import {
   Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Estado, Pastilla, Boton, ListaDatos, Dato, Cifras, Cifra, Aviso,
   Selector, Entrada, AreaTexto, useTituloAdmin,
+  useMenuDeFila, CajaMenu, ItemMenu, SeparadorMenu,
 } from '@/components/admin/ui'
 
 // Ficha de una cuenta: todo lo que hay que saber de un negocio en una sola
@@ -92,6 +93,14 @@ function CeldaMensualidad({ cobro, usados = 0 }) {
   )
 }
 
+/** En una línea, cómo va la mensualidad de un RUC: para el desplegable de pago. */
+function textoDelCobro(cobro) {
+  const { clave } = estadoDelRuc(cobro)
+  if (clave === 'sin_pagar') return { texto: 'Sin pago registrado', rojo: true }
+  if (clave === 'vencido') return { texto: `Venció el ${fecha(cobro.vence)}`, rojo: true }
+  return { texto: `Al día hasta el ${fecha(cobro.vence)}`, rojo: false }
+}
+
 /** Debajo de la tabla: cuánto suman al mes los RUC adicionales y cuáles faltan. */
 function ResumenDeRucs({ emisores, rucsCobrados }) {
   const activos = emisores.filter(e => e.activo !== false)
@@ -126,6 +135,8 @@ export default function AdminCuenta() {
   const [emisores, setEmisores] = useState([])
   // El RUC adicional cuyo pago se está registrando ("Cobrar cada RUC aparte").
   const [rucAPagar, setRucAPagar] = useState(null)
+  // El desplegable del boton "Registrar pago" cuando la cuenta cobra por RUC.
+  const menuPago = useMenuDeFila()
   const [emisorSeries, setEmisorSeries] = useState({})
   const [uso, setUso] = useState(null)
   // Varios RUC: firmas por RUC adicional (el principal es el resto del total).
@@ -500,6 +511,8 @@ export default function AdminCuenta() {
     ? `${vencida ? 'Venció' : 'Vence'} el ${fecha(c.periodEnd)}${dias === 0 ? ' (hoy)' : vencida ? ` (hace ${Math.abs(dias)} días)` : ` (en ${dias} días)`}`
     : 'Sin fecha de vencimiento'
   const sucursalesActivas = sucursales.filter(s => s.isActive !== false)
+  const emisoresActivos = emisores.filter(e => e.activo !== false)
+  const cobraPorRuc = Boolean(c.cobroPorRuc) && emisoresActivos.length > 0
 
   return (
     <Pagina
@@ -514,7 +527,16 @@ export default function AdminCuenta() {
               Convertir en cuenta real
             </Boton>
           )}
-          <Boton tamano="sm" variante={esCuentaDePrueba ? undefined : 'primario'} onClick={() => setModal('pago')}>Registrar pago</Boton>
+          {/* Con varios RUC cobrados aparte, el boton pregunta PRIMERO de que
+              empresa es el pago: son varias mensualidades distintas y elegir
+              mal cobra a quien no era. Una cuenta normal no nota el cambio. */}
+          <Boton
+            tamano="sm"
+            variante={esCuentaDePrueba ? undefined : 'primario'}
+            onClick={e => (cobraPorRuc ? menuPago.alternar('pago', e.currentTarget) : setModal('pago'))}
+          >
+            {cobraPorRuc ? 'Registrar pago ▾' : 'Registrar pago'}
+          </Boton>
           <Boton tamano="sm" onClick={renovarRapido} disabled={procesando}>Renovar con el mismo plan</Boton>
           <Boton tamano="sm" onClick={() => setModal('plan')}>Cambiar plan</Boton>
           <Boton tamano="sm" onClick={() => setModal('vencimiento')}>Cambiar vencimiento</Boton>
@@ -814,8 +836,9 @@ export default function AdminCuenta() {
                 <Th>Series</Th>
                 <Th>Firmas</Th>
                 <Th>Estado</Th>
+                {/* El pago se registra desde el boton azul de arriba, que
+                    pregunta de que empresa es: aca solo se informa. */}
                 {c.cobroPorRuc && <Th>Mensualidad</Th>}
-                {c.cobroPorRuc && <Th><span className="sr-only">Pagar</span></Th>}
               </tr>
             </thead>
             <tbody>
@@ -833,7 +856,6 @@ export default function AdminCuenta() {
                 </Td>
                 <Td apagado>Activo</Td>
                 {c.cobroPorRuc && <Td apagado className="whitespace-normal">El plan de la cuenta</Td>}
-                {c.cobroPorRuc && <Td />}
               </Fila>
               {emisores.map(e => (
                 <Fila key={e.id} apagada={e.activo === false}>
@@ -847,11 +869,6 @@ export default function AdminCuenta() {
                   <Td apagado className="tabular-nums">{firmasPorRuc ? (firmasPorRuc[e.id] ?? 0).toLocaleString('es-PE') : '…'}</Td>
                   <Td apagado>{e.activo === false ? 'Inactivo' : 'Activo'}</Td>
                   {c.cobroPorRuc && <CeldaMensualidad cobro={c.rucsCobrados?.[e.id]} usados={c.usoPorRuc?.[e.id] || 0} />}
-                  {c.cobroPorRuc && (
-                    <Td className="text-right">
-                      <Boton tamano="sm" onClick={() => setRucAPagar(e)}>Registrar pago</Boton>
-                    </Td>
-                  )}
                 </Fila>
               ))}
             </tbody>
@@ -1020,6 +1037,32 @@ export default function AdminCuenta() {
         />
       )}
       {modal === 'emisores' && <EmisoresModal cuenta={c} onClose={() => { cerrarModal(); cargarEmisores(id) }} />}
+
+      {/* De qué empresa es el pago. Todas juntas: el RUC principal paga el plan
+          de la cuenta y cada RUC adicional su propia mensualidad, así que lo
+          primero que hay que elegir es a cuál se le está cobrando. */}
+      {menuPago.abiertoEn && (
+        <CajaMenu posicion={menuPago.posicion} refMenu={menuPago.refMenu}>
+          <p className="px-3 py-1.5 text-[11.5px] text-gray-500">¿De qué empresa es el pago?</p>
+          <ItemMenu onClick={() => { menuPago.cerrar(); setModal('pago') }}>
+            <span className="block font-medium text-gray-900">{c.businessName}</span>
+            <span className="block text-[11.5px] text-gray-500">{c.ruc || 'sin RUC'} · principal</span>
+            <span className={`block text-[11.5px] ${vencida ? 'text-red-600' : 'text-gray-500'}`}>{textoVence}</span>
+          </ItemMenu>
+          <SeparadorMenu />
+          {emisoresActivos.map(e => {
+            const { texto, rojo } = textoDelCobro(c.rucsCobrados?.[e.id])
+            return (
+              <ItemMenu key={e.id} onClick={() => { menuPago.cerrar(); setRucAPagar(e) }}>
+                <span className="block font-medium text-gray-900">{e.businessName}</span>
+                <span className="block text-[11.5px] text-gray-500">{e.ruc}</span>
+                <span className={`block text-[11.5px] ${rojo ? 'text-red-600' : 'text-gray-500'}`}>{texto}</span>
+              </ItemMenu>
+            )
+          })}
+        </CajaMenu>
+      )}
+
       {rucAPagar && (
         <PagoDeRucModal
           cuenta={c}
