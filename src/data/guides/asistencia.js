@@ -233,7 +233,15 @@ export default {
       blocks: [
         {
           type: 'texto',
-          text: 'El dueño y los administradores ven todo: Marcaciones, Personal, Horarios, Vacaciones y Configuración. Un sub-usuario común solo ve **Marcar** y **Mi historial**, con su jornada de hoy y sus últimos días. En su jornada ve la **hora que cuenta**: si aprobaste o ajustaste una hora, ve esa, y si una marca está por revisar, se lo dice. **Mi historial** muestra cada escaneo tal como lo hizo. Nadie que no administre puede ver ni aprobar las marcaciones de otros.',
+          text: 'El dueño y los administradores ven todo: Marcaciones, Personal, Horarios, Vacaciones y Configuración. Un sub-usuario común, sin permisos extra, solo ve **Marcar** y **Mi historial**, con su jornada de hoy y sus últimos días. En su jornada ve la **hora que cuenta**: si aprobaste o ajustaste una hora, ve esa, y si una marca está por revisar, se lo dice. **Mi historial** muestra cada escaneo tal como lo hizo. Nadie que no administre puede ver ni aprobar las marcaciones de otros.',
+        },
+        {
+          type: 'texto',
+          text: 'Si quieres que alguien de tu equipo **arme los horarios** sin darle el resto del módulo, ve a **Usuarios**, abre a esa persona y márcale dos permisos: **Marcar Asistencia** y **Horarios (planificador)**. El segundo necesita al primero. Con los dos entra directo al planificador, tanto en la app como en el navegador, y en su menú el módulo aparece como **Horarios** en vez de **Marcar Asistencia**.',
+        },
+        {
+          type: 'ojo',
+          text: 'El **reporte de Marcaciones** todavía no se puede delegar: sigue siendo solo del dueño. Dar **Horarios (planificador)** deja armar y modificar turnos, pero no ver ni aprobar las marcaciones de los demás.',
         },
       ],
     },

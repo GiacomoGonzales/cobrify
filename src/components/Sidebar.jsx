@@ -433,13 +433,19 @@ function Sidebar() {
           menuId: 'fleet',
         }] : []),
         // Control de Asistencia:
-        // - Sub-usuarios solo ven el link en la app nativa (marcan con QR/GPS).
         // - Owner/Admin lo ven siempre (gestionan configuración y marcaciones).
-        ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+        // - Sub-usuarios lo ven en la app nativa (marcan con QR/GPS) y TAMBIÉN
+        //   en web si tienen el permiso 'attendance'. Antes el menú los dejaba
+        //   fuera aunque el dueño se lo hubiera dado: el permiso existía y
+        //   parecía roto, solo se llegaba escribiendo la URL (reporte de Carlos
+        //   Porras, Mandil, 17-set-2026). Quien además tenga 'schedules' aterriza
+        //   en el planificador, así que para esa persona el link dice "Horarios".
+        //   El filtro general por permiso sigue viviendo más abajo.
+        ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform() || (hasPageAccess && hasPageAccess('attendance')))
           ? [{
               path: '/asistencia',
               icon: UserCheck,
-              label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
+              label: (isBusinessOwner || isAdmin) ? 'Personal' : ((hasPageAccess && hasPageAccess('schedules')) ? 'Horarios' : 'Marcar Asistencia'),
               menuId: 'attendance',
               pageId: 'attendance',
             }]
@@ -817,11 +823,11 @@ function Sidebar() {
           pageId: 'fleet',
           menuId: 'fleet',
         }] : []),
-        ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+        ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform() || (hasPageAccess && hasPageAccess('attendance')))
           ? [{
               path: '/asistencia',
               icon: UserCheck,
-              label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
+              label: (isBusinessOwner || isAdmin) ? 'Personal' : ((hasPageAccess && hasPageAccess('schedules')) ? 'Horarios' : 'Marcar Asistencia'),
               menuId: 'attendance',
               pageId: 'attendance',
             }]
@@ -1136,11 +1142,11 @@ function Sidebar() {
           pageId: 'fleet',
           menuId: 'fleet',
         }] : []),
-        ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+        ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform() || (hasPageAccess && hasPageAccess('attendance')))
           ? [{
               path: '/asistencia',
               icon: UserCheck,
-              label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
+              label: (isBusinessOwner || isAdmin) ? 'Personal' : ((hasPageAccess && hasPageAccess('schedules')) ? 'Horarios' : 'Marcar Asistencia'),
               menuId: 'attendance',
               pageId: 'attendance',
             }]
@@ -1272,11 +1278,11 @@ function Sidebar() {
       label: 'Comisiones',
       pageId: 'commissions',
     },
-    ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+    ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform() || (hasPageAccess && hasPageAccess('attendance')))
       ? [{
           path: '/asistencia',
           icon: UserCheck,
-          label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
+          label: (isBusinessOwner || isAdmin) ? 'Personal' : ((hasPageAccess && hasPageAccess('schedules')) ? 'Horarios' : 'Marcar Asistencia'),
           menuId: 'attendance',
           pageId: 'attendance',
         }]
@@ -1469,11 +1475,11 @@ function Sidebar() {
       icon: Briefcase,
       label: 'Equipo',
       children: [
-        ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+        ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform() || (hasPageAccess && hasPageAccess('attendance')))
           ? [{
               path: '/asistencia',
               icon: UserCheck,
-              label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
+              label: (isBusinessOwner || isAdmin) ? 'Personal' : ((hasPageAccess && hasPageAccess('schedules')) ? 'Horarios' : 'Marcar Asistencia'),
               menuId: 'attendance',
               pageId: 'attendance',
             }]
@@ -1661,11 +1667,11 @@ function Sidebar() {
       pageId: 'suppliers',
       menuId: 'suppliers',
     },
-    ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+    ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform() || (hasPageAccess && hasPageAccess('attendance')))
       ? [{
           path: '/asistencia',
           icon: UserCheck,
-          label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
+          label: (isBusinessOwner || isAdmin) ? 'Personal' : ((hasPageAccess && hasPageAccess('schedules')) ? 'Horarios' : 'Marcar Asistencia'),
           menuId: 'attendance',
           pageId: 'attendance',
         }]
@@ -1952,11 +1958,11 @@ function Sidebar() {
           pageId: 'sellers',
           menuId: 'sellers',
         },
-        ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+        ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform() || (hasPageAccess && hasPageAccess('attendance')))
           ? [{
               path: '/asistencia',
               icon: UserCheck,
-              label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
+              label: (isBusinessOwner || isAdmin) ? 'Personal' : ((hasPageAccess && hasPageAccess('schedules')) ? 'Horarios' : 'Marcar Asistencia'),
               menuId: 'attendance',
               pageId: 'attendance',
             }]
@@ -2182,11 +2188,11 @@ function Sidebar() {
           pageId: 'sellers',
           menuId: 'sellers',
         },
-        ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform())
+        ...(((isBusinessOwner || isAdmin) || Capacitor.isNativePlatform() || (hasPageAccess && hasPageAccess('attendance')))
           ? [{
               path: '/asistencia',
               icon: UserCheck,
-              label: (isBusinessOwner || isAdmin) ? 'Personal' : 'Marcar Asistencia',
+              label: (isBusinessOwner || isAdmin) ? 'Personal' : ((hasPageAccess && hasPageAccess('schedules')) ? 'Horarios' : 'Marcar Asistencia'),
               menuId: 'attendance',
               pageId: 'attendance',
             }]
