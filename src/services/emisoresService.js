@@ -1,5 +1,5 @@
 import { db } from '@/lib/firebase'
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, deleteField, doc, getDoc, getDocs, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { getEmissionSecrets, saveEmissionSecrets } from './emissionSecretsService'
 import { TIPOS_DE_SERIE_DE_EMISOR } from '../../functions/src/utils/emisorDelComprobante.js'
 
@@ -151,6 +151,43 @@ export async function guardarSeriesDelNegocio(businessId, series) {
   }
 }
 
+/**
+ * La serie propia de UNA PERSONA dentro de UN RUC adicional.
+ *
+ * Vive en `emisorUserSeries.{emisorId}.{uid}` y manda sobre la del RUC cuando
+ * esa persona emite con él (ver utils/serieParaNumerar). Es el equivalente de
+ * `userSeries` del RUC principal: dos cajeros con series distintas vendiendo
+ * con la misma empresa.
+ *
+ * Quien llama valida antes que ninguna choque con el resto de la cuenta.
+ */
+export async function actualizarSeriesDePersonaEnRuc(businessId, emisorId, uid, series) {
+  try {
+    const limpias = {}
+    for (const tipo of TIPOS_DE_SERIE_DE_EMISOR) {
+      const serie = String(series?.[tipo]?.serie || '').trim().toUpperCase()
+      if (!serie) continue
+      limpias[tipo] = { serie, lastNumber: Number(series[tipo]?.lastNumber) || 0 }
+    }
+    await updateDoc(doc(db, 'businesses', businessId), { [`emisorUserSeries.${emisorId}.${uid}`]: limpias })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al guardar las series de la persona en el RUC:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/** Quitarlas: esa persona vuelve a emitir con las series del RUC. */
+export async function quitarSeriesDePersonaEnRuc(businessId, emisorId, uid) {
+  try {
+    await updateDoc(doc(db, 'businesses', businessId), { [`emisorUserSeries.${emisorId}.${uid}`]: deleteField() })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al quitar las series de la persona en el RUC:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 /** Lo que el negocio tiene guardado de series, para validar que ninguna se repita. */
 export async function getSeriesDelNegocio(businessId) {
   const snap = await getDoc(doc(db, 'businesses', businessId))
@@ -160,6 +197,7 @@ export async function getSeriesDelNegocio(businessId) {
     branchSeries: d.branchSeries || {},
     warehouseSeries: d.warehouseSeries || {},
     emisorSeries: d.emisorSeries || {},
+    emisorUserSeries: d.emisorUserSeries || {},
   }
 }
 

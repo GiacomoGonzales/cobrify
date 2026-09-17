@@ -12,7 +12,7 @@ import { db } from '@/lib/firebase'
  *
  * @param {string|null} businessId
  * @param {boolean} [activo]  apagado (demo, sin negocio) no escucha nada
- * @returns {{series: object, userSeries: object, branchSeries: object, warehouseSeries: object, emisorSeries: object} | null}
+ * @returns {{series: object, userSeries: object, branchSeries: object, warehouseSeries: object, emisorSeries: object, emisorUserSeries: object} | null}
  *   null mientras no hay nada que mostrar: cargando, sin permiso o sin el doc
  */
 export function useSeriesEnVivo(businessId, activo = true) {
@@ -34,6 +34,10 @@ export function useSeriesEnVivo(businessId, activo = true) {
             branchSeries: d.branchSeries || {},
             warehouseSeries: d.warehouseSeries || {},
             emisorSeries: d.emisorSeries || {},
+            // La serie propia de una persona dentro de un RUC adicional: sin
+            // esto el POS anunciaria la del RUC y el cobro numeraria con la
+            // suya, que es justo lo que este hook viene a evitar.
+            emisorUserSeries: d.emisorUserSeries || {},
           },
         })
       },

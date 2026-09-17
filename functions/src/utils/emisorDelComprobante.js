@@ -181,17 +181,28 @@ const igual = (a, b) => limpio(a).toUpperCase() === limpio(b).toUpperCase()
  */
 export function duenoDeLaSerie(serie, negocio) {
   if (vacio(serie) || !negocio) return null
-  const buscar = (mapa, emisorId, donde) => {
+  const buscar = (mapa, emisorId, donde, uid = null) => {
     for (const [tipo, datos] of Object.entries(mapa || {})) {
-      if (datos && igual(datos.serie, serie)) return { emisorId, tipo, donde }
+      if (datos && igual(datos.serie, serie)) return { emisorId, tipo, donde, uid }
     }
     return null
   }
+  // `emisorUserSeries.{ruc}.{persona}`: la serie propia de alguien DENTRO de un
+  // RUC adicional. Pertenece a ese RUC igual que las suyas, pero lleva contador
+  // aparte, así que también ocupa el nombre para todos los demás.
+  const deLasPersonasDeUnRuc = Object.entries(negocio.emisorUserSeries || {}).reduce(
+    (r, [eid, porPersona]) => r || Object.entries(porPersona || {}).reduce(
+      (r2, [uid, m]) => r2 || buscar(m, eid, 'emisor-persona', uid),
+      null
+    ),
+    null
+  )
   return (
     buscar(negocio.series, EMISOR_PRINCIPAL, 'negocio') ||
     Object.values(negocio.branchSeries || {}).reduce((r, m) => r || buscar(m, EMISOR_PRINCIPAL, 'sucursal'), null) ||
     Object.values(negocio.warehouseSeries || {}).reduce((r, m) => r || buscar(m, EMISOR_PRINCIPAL, 'almacen'), null) ||
-    Object.entries(negocio.emisorSeries || {}).reduce((r, [eid, m]) => r || buscar(m, eid, 'emisor'), null)
+    Object.entries(negocio.emisorSeries || {}).reduce((r, [eid, m]) => r || buscar(m, eid, 'emisor'), null) ||
+    deLasPersonasDeUnRuc
   )
 }
 
@@ -248,7 +259,9 @@ export function seriesRepetidas(seriesNuevas, negocio, { salvo } = {}) {
     vistas.set(s, tipo)
     const dueno = duenoDeLaSerie(s, negocio)
     if (!dueno) continue
-    if (salvo && !esPrincipal(salvo) && dueno.emisorId === limpio(salvo)) continue
+    // Editando un emisor, sus PROPIAS series no cuentan como tomadas; las de
+    // una persona dentro de ese mismo RUC sí, que llevan contador aparte.
+    if (salvo && !esPrincipal(salvo) && dueno.emisorId === limpio(salvo) && dueno.donde === 'emisor') continue
     if (editandoElNegocio && dueno.emisorId === EMISOR_PRINCIPAL && dueno.donde === 'negocio') continue
     problemas.push({
       tipo,

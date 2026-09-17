@@ -30,7 +30,7 @@ import { getActiveBranches } from '@/services/branchService'
 import { getManagedUsers } from '@/services/userManagementService'
 import RenumberInvoicesModal from '@/components/RenumberInvoicesModal'
 import { duenoDeLaSerie, seriesRepetidas, serieValida, TIPOS_DE_SERIE_DE_EMISOR } from '../../../functions/src/utils/emisorDelComprobante.js'
-import { actualizarSeriesDeEmisor } from '@/services/emisoresService'
+import { actualizarSeriesDeEmisor, actualizarSeriesDePersonaEnRuc, quitarSeriesDePersonaEnRuc } from '@/services/emisoresService'
 import { numeroSiguiente } from '@/utils/serieParaNumerar'
 
 // Series de un negocio nuevo. También son el piso de lectura: un tipo que no
@@ -137,7 +137,7 @@ const serieConNumero = (base, n) => {
 // repartir entre dos dueños: cada lugar lleva su propio `lastNumber`, así que
 // la misma serie en dos sitios significa dos comprobantes con el mismo número
 // — y SUNAT rechaza el segundo (código 1033).
-const seriesOcupadas = ({ series, branchSeries, userSeries }, exceptoUid = null) => {
+const seriesOcupadas = ({ series, branchSeries, userSeries, emisorSeries, emisorUserSeries }, exceptoUid = null) => {
   const usadas = new Map()
   const anotar = (mapa, quien) => {
     for (const datos of Object.values(mapa || {})) {
@@ -148,6 +148,14 @@ const seriesOcupadas = ({ series, branchSeries, userSeries }, exceptoUid = null)
   for (const mapa of Object.values(branchSeries || {})) anotar(mapa, 'otra sucursal')
   for (const [uid, mapa] of Object.entries(userSeries || {})) {
     if (uid !== exceptoUid) anotar(mapa, 'otra persona')
+  }
+  // Los otros RUC y las personas con serie propia DENTRO de ellos: cada uno
+  // lleva su contador, así que el nombre queda ocupado para todos los demás.
+  for (const mapa of Object.values(emisorSeries || {})) anotar(mapa, 'otro RUC')
+  for (const porPersona of Object.values(emisorUserSeries || {})) {
+    for (const [uid, mapa] of Object.entries(porPersona || {})) {
+      if (uid !== exceptoUid) anotar(mapa, 'otra persona en otro RUC')
+    }
   }
   return usadas
 }
@@ -332,6 +340,8 @@ export default function Series() {
   // Varios RUC: las series de los otros RUC de la cuenta. Las configura el
   // administrador en la ficha; aquí se consultan y se cuidan.
   const [emisorSeries, setEmisorSeries] = useState(() => businessSettings?.emisorSeries || {})
+  // La serie propia de una persona DENTRO de un RUC adicional.
+  const [emisorUserSeries, setEmisorUserSeries] = useState(() => businessSettings?.emisorUserSeries || {})
 
   // Series por persona: para dos que venden desde el MISMO punto de venta y
   // cada una emite con su serie. Antes solo se lograba creando una sucursal
@@ -429,6 +439,7 @@ export default function Series() {
       const guardadas = snap.exists() ? snap.data()?.series : null
       if (guardadas) setSeries(prev => ({ ...prev, ...guardadas }))
       if (snap.exists()) setEmisorSeries(snap.data()?.emisorSeries || {})
+      if (snap.exists()) setEmisorUserSeries(snap.data()?.emisorUserSeries || {})
     } catch (error) {
       console.error('Error al recargar series:', error)
     }
@@ -696,6 +707,119 @@ export default function Series() {
     }
   }
 
+  // ── Series por persona DENTRO de un RUC adicional ───────────────────────
+  // El equivalente de "Series por persona" del principal, pero para el RUC
+  // elegido arriba: dos cajeros vendiendo con la misma empresa y cada uno con
+  // su serie. Manda sobre la del RUC (ver utils/serieParaNumerar).
+  const [editandoPersonaEnRuc, setEditandoPersonaEnRuc] = useState(null)
+
+  const seriesDeLaPersonaEnRuc = (uid) => emisorUserSeries?.[rucElegido]?.[uid] || {}
+
+  const handlePersonaEnRucChange = (uid, tipo, campo, valor) => {
+    setEmisorUserSeries(prev => ({
+      ...prev,
+      [rucElegido]: {
+        ...(prev[rucElegido] || {}),
+        [uid]: {
+          ...(prev[rucElegido]?.[uid] || {}),
+          [tipo]: {
+            ...(prev[rucElegido]?.[uid]?.[tipo] || defaultSeries[tipo]),
+            [campo]: campo === 'lastNumber' ? parseInt(valor) || 0 : valor.toUpperCase(),
+          },
+        },
+      },
+    }))
+  }
+
+  // Le propone el primer juego que no choque con nada de la cuenta, partiendo
+  // de las series DEL RUC (si el RUC usa B101, se le propone B102 y no B002).
+  const iniciarPersonaEnRuc = (uid) => {
+    if (!emisorUserSeries?.[rucElegido]?.[uid]) {
+      const ocupadas = seriesOcupadas({ series, branchSeries, userSeries, emisorSeries, emisorUserSeries }, uid)
+      const propuestas = proponerSeriesLibres(ocupadas, emisorSeries[rucElegido] || series)
+      setEmisorUserSeries(prev => ({
+        ...prev,
+        [rucElegido]: { ...(prev[rucElegido] || {}), [uid]: propuestas },
+      }))
+    }
+    setEditandoPersonaEnRuc(uid)
+  }
+
+  const handleSavePersonaEnRuc = async (uid) => {
+    if (!user?.uid) return
+    const suyas = seriesDeLaPersonaEnRuc(uid)
+    const lista = TIPOS_DE_SERIE_DE_EMISOR
+      .map(tipo => ({ tipo, serie: suyas[tipo]?.serie }))
+      .filter(({ serie }) => String(serie || '').trim())
+
+    if (lista.length === 0) {
+      toast.error('Ponle al menos una serie o quítasela')
+      return
+    }
+    const mala = lista.find(({ tipo, serie }) => !serieValida(tipo, serie))
+    if (mala) {
+      toast.error(`La serie ${String(mala.serie).toUpperCase()} no sirve: son cuatro caracteres, y las de factura empiezan con F y las de boleta con B.`)
+      return
+    }
+    // Contra toda la cuenta MENOS lo suyo de ahora, que si no chocaría consigo
+    // mismo. Se le quita su propio rincón en vez de usar `salvo`, que excluye
+    // el RUC entero —y las del RUC sí tienen que chocar con las suyas—.
+    const sinLoSuyo = {
+      ...(emisorUserSeries || {}),
+      [rucElegido]: Object.fromEntries(
+        Object.entries(emisorUserSeries?.[rucElegido] || {}).filter(([otro]) => otro !== uid)
+      ),
+    }
+    const repetidas = seriesRepetidas(
+      lista,
+      { series, branchSeries, warehouseSeries: businessSettings?.warehouseSeries, emisorSeries, emisorUserSeries: sinLoSuyo },
+      {}
+    )
+    if (repetidas.length > 0) {
+      toast.error(`La serie ${repetidas[0].serie} ${repetidas[0].motivo}. Elige otra.`)
+      return
+    }
+    const dePersonas = seriesOcupadas({ userSeries })
+    const choque = lista.find(({ serie }) => dePersonas.has(String(serie).toUpperCase()))
+    if (choque) {
+      toast.error(`La serie ${String(choque.serie).toUpperCase()} ya la usa otra persona en el RUC principal. Elige otra.`)
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      const r = await actualizarSeriesDePersonaEnRuc(getBusinessId(), rucElegido, uid, suyas)
+      if (r.success) {
+        toast.success('Series actualizadas')
+        setEditandoPersonaEnRuc(null)
+      } else {
+        toast.error(r.error || 'No se pudieron guardar las series')
+      }
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleRemovePersonaEnRuc = async (uid) => {
+    setIsSaving(true)
+    try {
+      const r = await quitarSeriesDePersonaEnRuc(getBusinessId(), rucElegido, uid)
+      if (r.success) {
+        setEmisorUserSeries(prev => {
+          const copia = { ...prev, [rucElegido]: { ...(prev[rucElegido] || {}) } }
+          delete copia[rucElegido][uid]
+          return copia
+        })
+        setEditandoPersonaEnRuc(null)
+        toast.success('Esta persona vuelve a emitir con las series de este RUC')
+      } else {
+        toast.error(r.error || 'No se pudieron quitar las series')
+      }
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   const handleSeriesChange = (type, field, value) => {
     setSeries(prev => ({
       ...prev,
@@ -947,10 +1071,85 @@ export default function Series() {
             </CardContent>
           </Card>
           <Nota>
-            Las sucursales y las personas con serie propia numeran solo con el RUC principal. Lo que se venda con
-            este RUC sale siempre con estas series, lo emita quien lo emita y desde donde lo emita.
+            Las sucursales numeran solo con el RUC principal: lo que se venda con este RUC sale con estas series
+            desde donde sea, salvo que la persona que emite tenga la suya propia (más abajo).
           </Nota>
         </Seccion>
+      )}
+
+      {/* Series por persona DENTRO del RUC elegido: el equivalente de las del
+          principal, para dos cajeros que venden con la misma empresa. */}
+      {!viendoElPrincipal && personas.length > 0 && (
+        <>
+          <Separador />
+          <Seccion
+            id="opcion-emisorUserSeries"
+            titulo="Series por persona en este RUC"
+            descripcion={`Para que dos personas emitan con series distintas vendiendo con ${emisorElegido?.businessName || 'este RUC'}. Quien no tenga una asignada emite con las de arriba.`}
+          >
+            <div className="space-y-4">
+              {personas.map((persona) => {
+                const suyas = seriesDeLaPersonaEnRuc(persona.id)
+                const tieneSerie = Boolean(suyas.boleta?.serie || suyas.factura?.serie)
+                const editando = editandoPersonaEnRuc === persona.id
+                return (
+                  <Card key={persona.id}>
+                    <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-base font-semibold text-gray-900 truncate">
+                          {persona.nombre}
+                          {persona.inactivo && <span className="font-normal text-gray-500"> · desactivado</span>}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5 truncate">
+                          {persona.esDueno ? 'Dueño de la cuenta' : persona.detalle}
+                        </p>
+                      </div>
+                      <div className="flex gap-2 w-full sm:w-auto">
+                        {tieneSerie && !editando && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={isSaving}
+                            onClick={() => handleRemovePersonaEnRuc(persona.id)}
+                            className="flex-1 sm:flex-none"
+                          >
+                            Quitar
+                          </Button>
+                        )}
+                        <BotonesDeEdicion
+                          editando={editando}
+                          guardando={isSaving}
+                          etiqueta={tieneSerie ? 'Editar series' : 'Asignarle una serie'}
+                          onEditar={() => iniciarPersonaEnRuc(persona.id)}
+                          onCancelar={async () => { setEditandoPersonaEnRuc(null); await recargarSeries() }}
+                          onGuardar={() => handleSavePersonaEnRuc(persona.id)}
+                        />
+                      </div>
+                    </CardHeader>
+                    {(tieneSerie || editando) && (
+                      <CardContent className="px-1 sm:px-3">
+                        <GrillaDeSeries
+                          series={suyas}
+                          editando={editando}
+                          onChange={(tipo, campo, valor) => handlePersonaEnRucChange(persona.id, tipo, campo, valor)}
+                          tiposPermitidos={TIPOS_DE_SERIE_DE_EMISOR}
+                        />
+                      </CardContent>
+                    )}
+                    {!tieneSerie && !editando && (
+                      <CardContent className="px-1 sm:px-3">
+                        <div className="px-2 pb-1">
+                          <Nota>Sin serie propia en este RUC: emite con las del RUC.</Nota>
+                        </div>
+                      </CardContent>
+                    )}
+                  </Card>
+                )
+              })}
+            </div>
+          </Seccion>
+        </>
       )}
 
       {/* Renumerador: solo el dueño o el administrador. Antes estaba en

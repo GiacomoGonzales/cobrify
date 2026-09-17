@@ -7,9 +7,12 @@
  * se anunciaría un número y saldría otro.
  *
  * El orden:
- *  1. Varios RUC: un comprobante de otro RUC numera SOLO con las series de ese
- *     RUC (`emisorSeries`); nunca cae a las del negocio ni a las de una sede,
- *     porque dos RUC no pueden compartir correlativo.
+ *  1. Varios RUC: un comprobante de otro RUC numera SOLO con series de ESE RUC;
+ *     nunca cae a las del negocio ni a las de una sede, porque dos RUC no
+ *     pueden compartir correlativo. Dentro del RUC manda la de la PERSONA que
+ *     emite (`emisorUserSeries.{ruc}.{uid}`) y, si no tiene, la del RUC
+ *     (`emisorSeries.{ruc}`) — el mismo orden que en el principal, donde la
+ *     persona manda sobre la sucursal y sobre el negocio.
  *  2. La serie del USUARIO que emite (`userSeries`), para dos personas que
  *     venden desde el MISMO punto de venta con series distintas (pedido de
  *     NOVAKENE, 16-set-2026: "cada una de las series será asignada a un
@@ -32,7 +35,7 @@ import { esPrincipal } from '../../functions/src/utils/emisorDelComprobante.js'
 const elegir = (datos, ruta) => (datos?.serie ? { datos, ruta } : null)
 
 /**
- * @param {object} negocio  el doc del negocio (o sus cinco mapas de series)
+ * @param {object} negocio  el doc del negocio (o sus seis mapas de series)
  * @param {{documentType: string, emisorId?: string, branchId?: string, warehouseId?: string, userId?: string}} opciones
  *   `userId` es quien emite (el `createdBy` del comprobante), no el vendedor
  *   de las comisiones: la serie va con la cuenta desde la que se vende.
@@ -43,6 +46,8 @@ export function serieParaNumerar(negocio, { documentType, emisorId = null, branc
   if (!negocio || !documentType) return null
 
   if (!esPrincipal(emisorId)) {
+    const suyaEnEsteRuc = userId ? negocio.emisorUserSeries?.[emisorId]?.[userId]?.[documentType] : null
+    if (suyaEnEsteRuc) return elegir(suyaEnEsteRuc, `emisorUserSeries.${emisorId}.${userId}.${documentType}`)
     return elegir(negocio.emisorSeries?.[emisorId]?.[documentType], `emisorSeries.${emisorId}.${documentType}`)
   }
 
