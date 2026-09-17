@@ -751,6 +751,10 @@ export default function CreatePurchase() {
     }
   }
 
+  // Los cuatro campos de precio de venta de una fila. Solo estos se marcan como
+  // "editados por la persona" en `updateItem`.
+  const CAMPOS_DE_PRECIO_DE_VENTA = ['salePrice', 'salePrice2', 'salePrice3', 'salePrice4']
+
   const addItem = () => {
     setPurchaseItems([
       ...purchaseItems,
@@ -782,6 +786,20 @@ export default function CreatePurchase() {
   const updateItem = (index, field, value) => {
     const newItems = [...purchaseItems]
     newItems[index][field] = value
+    // Un precio de venta solo se guarda si la PERSONA lo escribió. Las filas
+    // nacen con el precio actual del producto ya puesto (desde el XML, desde
+    // una orden de compra o al editar), y antes ese valor pre-llenado se
+    // trataba igual que uno tecleado: toda compra reescribía el precio del
+    // producto con él. En soles no se notaba —se multiplica por TC 1— pero en
+    // dólares salía multiplicado por el tipo de cambio (reporte de GRUPO
+    // LLACROS, 17-set-2026: precio en soles × 3.371). Es la misma regla que ya
+    // tenían los precios de presentación: en blanco = no cambiar.
+    if (CAMPOS_DE_PRECIO_DE_VENTA.includes(field)) {
+      newItems[index].preciosEditados = {
+        ...(newItems[index].preciosEditados || {}),
+        [field]: true,
+      }
+    }
     // Ajustar array de seriales cuando cambia la cantidad
     if (field === 'quantity' && newItems[index].trackSerials) {
       const qty = parseInt(value) || 0
@@ -2891,6 +2909,11 @@ export default function CreatePurchase() {
             if (!Number.isFinite(v) || v <= 0) return null
             return Math.round(convertToBase(v, currency, exchangeRate) * 1e6) / 1e6
           }
+          // El precio que la persona TECLEÓ, o vacío si solo estaba pre-llenado
+          // (ver `updateItem`). Vacío entra a `salePriceToBase` como NaN y sale
+          // null, que es lo que ya significaba "no cambiar este precio".
+          const precioEditado = (fila, campo) =>
+            (fila?.preciosEditados?.[campo] ? fila[campo] : '')
           // Valor crudo en USD (para fijar priceUSD sin convertir). Solo aplica en modo ancla.
           const salePriceUsdRaw = (raw) => {
             const v = parseFloat(raw)
@@ -2906,12 +2929,12 @@ export default function CreatePurchase() {
             const updatedVariants = freshVariants.map(v => {
               const matchingItem = items.find(i => i.variantSku === v.sku)
               if (matchingItem) {
-                const p2 = salePriceToBase(matchingItem.salePrice2)
-                const p3 = salePriceToBase(matchingItem.salePrice3)
-                const p4 = salePriceToBase(matchingItem.salePrice4)
+                const p2 = salePriceToBase(precioEditado(matchingItem, 'salePrice2'))
+                const p3 = salePriceToBase(precioEditado(matchingItem, 'salePrice3'))
+                const p4 = salePriceToBase(precioEditado(matchingItem, 'salePrice4'))
                 if (useUsdAnchor) {
                   // Precio de venta fijo en dólares: guardar priceUSD (ancla) y price = USD × TC.
-                  const usd1 = salePriceUsdRaw(matchingItem.salePrice)
+                  const usd1 = salePriceUsdRaw(precioEditado(matchingItem, 'salePrice'))
                   return {
                     ...v,
                     priceUSD: usd1 != null ? usd1 : (v.priceUSD ?? null),
@@ -2921,7 +2944,7 @@ export default function CreatePurchase() {
                     price4: p4 != null ? p4 : v.price4,
                   }
                 }
-                const p1 = salePriceToBase(matchingItem.salePrice)
+                const p1 = salePriceToBase(precioEditado(matchingItem, 'salePrice'))
                 return {
                   ...v,
                   price: p1 != null ? p1 : v.price,
@@ -2941,14 +2964,14 @@ export default function CreatePurchase() {
             // Producto sin variantes
             const item = items[0]
             const updates = {}
-            const p2 = salePriceToBase(item.salePrice2)
-            const p3 = salePriceToBase(item.salePrice3)
-            const p4 = salePriceToBase(item.salePrice4)
+            const p2 = salePriceToBase(precioEditado(item, 'salePrice2'))
+            const p3 = salePriceToBase(precioEditado(item, 'salePrice3'))
+            const p4 = salePriceToBase(precioEditado(item, 'salePrice4'))
             if (useUsdAnchor) {
               // Precio de venta fijo en dólares: guardar priceUSD (ancla) y price = USD × TC.
               // El ancla en dólares es GLOBAL por diseño (utils/branchPricing), así que
               // este camino no admite precio por sucursal.
-              const usd1 = salePriceUsdRaw(item.salePrice)
+              const usd1 = salePriceUsdRaw(precioEditado(item, 'salePrice'))
               if (usd1 != null) {
                 updates.priceUSD = usd1
                 updates.price = Math.round(convertToBase(usd1, 'USD', exchangeRate) * 1e6) / 1e6
@@ -2964,13 +2987,13 @@ export default function CreatePurchase() {
               // que cargar una compra en un local cambiaba el precio del otro
               // (reporte de GARIBAY, 02-sep-2026). Ahora va al override de ESTA
               // sucursal y ninguna otra se entera.
-              const p1 = salePriceToBase(item.salePrice)
+              const p1 = salePriceToBase(precioEditado(item, 'salePrice'))
               const mapa = conPrecioDeSucursal(product, sucursalDeLaCompra, {
                 price: p1, price2: p2, price3: p3, price4: p4,
               })
               if (mapa) updates.branchPrices = mapa
             } else {
-              const p1 = salePriceToBase(item.salePrice)
+              const p1 = salePriceToBase(precioEditado(item, 'salePrice'))
               if (p1 != null) updates.price = p1
               if (p2 != null) updates.price2 = p2
               if (p3 != null) updates.price3 = p3
