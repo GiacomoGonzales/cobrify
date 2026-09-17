@@ -48,6 +48,33 @@ enum PlanCatalogo {
     static func nuncaVence(_ id: String?) -> Bool { id == "enterprise" }
 }
 
+/// Un RUC adicional que se cobra aparte ("Cobrar cada RUC aparte", en el admin
+/// web): su mensualidad, su vencimiento y sus comprobantes del mes. Espejo de
+/// `rucsCobrados.{emisorId}` y `usage.porRuc.{emisorId}` de la suscripción.
+struct RucCobrado: Identifiable {
+    let id: String  // el id del emisor
+    let ruc: String?
+    let nombre: String?
+    let plan: String?
+    let planName: String?
+    let precio: Double?
+    let meses: Int
+    let vence: Date?
+    let usados: Int
+
+    var titulo: String { nombre ?? "RUC \(ruc ?? "")" }
+    var vencido: Bool {
+        guard let vence else { return false }
+        return vence < Date()
+    }
+    var diasParaVencer: Int? { vence.map { Int(ceil($0.timeIntervalSinceNow / 86400)) } }
+    /// El tope del mes: el de su plan (1000 en el Mensual), o nil si no limita.
+    var tope: Int? {
+        guard let p = PlanCatalogo.plan(plan), p.maxComprobantes >= 0 else { return nil }
+        return p.maxComprobantes
+    }
+}
+
 struct FichaCliente {
     var businessId: String
     var nombre: String?
@@ -70,6 +97,9 @@ struct FichaCliente {
     var nuncaVence: Bool = false
     /// El negocio existe pero su suscripción no: se dice, en vez de rayas.
     var sinSuscripcion: Bool = false
+    /// Varios RUC con mensualidad propia por RUC (ver `RucCobrado`).
+    var cobroPorRuc: Bool = false
+    var rucsCobrados: [RucCobrado] = []
 
     var vencido: Bool { (diasParaVencer ?? 1) < 0 }
 
@@ -144,7 +174,9 @@ final class FichaStore: ObservableObject {
                 blockReason: s["blockReason"] as? String,
                 blockedAt: (s["blockedAt"] as? Timestamp)?.dateValue(),
                 nuncaVence: interna,
-                sinSuscripcion: !sub.exists
+                sinSuscripcion: !sub.exists,
+                cobroPorRuc: s["cobroPorRuc"] as? Bool ?? false,
+                rucsCobrados: Self.rucsCobrados(s)
             )
         } catch {
             self.error = "No se pudo cargar la ficha."
@@ -248,6 +280,89 @@ final class FichaStore: ObservableObject {
                 .updateData(["catalogSuspended": false, "updatedAt": FieldValue.serverTimestamp()])
             await cargar(businessId: f.businessId)
             return (true, nuevoVence, nil)
+        } catch {
+            return (false, nil, "No se pudo registrar el pago. Revisa tu conexión.")
+        }
+    }
+
+    /// Los RUC cobrados aparte de la suscripción, ordenados por nombre.
+    static func rucsCobrados(_ s: [String: Any]) -> [RucCobrado] {
+        let cobros = s["rucsCobrados"] as? [String: [String: Any]] ?? [:]
+        let usados = ((s["usage"] as? [String: Any])?["porRuc"] as? [String: Any]) ?? [:]
+        return cobros.map { id, c in
+            RucCobrado(
+                id: id,
+                ruc: c["ruc"] as? String,
+                nombre: c["nombre"] as? String,
+                plan: c["plan"] as? String,
+                planName: c["planName"] as? String,
+                precio: c["precio"] as? Double ?? (c["precio"] as? Int).map(Double.init),
+                meses: c["meses"] as? Int ?? 1,
+                vence: (c["vence"] as? Timestamp)?.dateValue(),
+                usados: (usados[id] as? Int) ?? Int((usados[id] as? Double) ?? 0)
+            )
+        }
+        .sorted { $0.titulo < $1.titulo }
+    }
+
+    /// El pago de un RUC adicional cobrado aparte, calcado de
+    /// `registrarPagoDeRuc` de la web (adminCuentasService): renueva SOLO ese
+    /// RUC —desde hoy si ya venció o nunca pagó, si no se suma a lo que le
+    /// quedaba—, pone su contador del mes en cero y deja el pago en el
+    /// historial con su RUC. No toca el plan ni el vencimiento de la cuenta.
+    func registrarPagoDeRuc(_ r: RucCobrado, monto: Double, metodo: String, planId: String) async -> (ok: Bool, vence: Date?, error: String?) {
+        guard let f = ficha, let plan = PlanCatalogo.plan(planId), plan.meses > 0 else {
+            return (false, nil, "Ese plan se gestiona desde la web.")
+        }
+        let db = Firestore.firestore()
+        let ref = db.collection("subscriptions").document(f.businessId)
+        let ahora = Date()
+        // El vencimiento se relee del servidor: otro equipo pudo haberlo movido.
+        var venceActual = r.vence
+        if let snap = try? await ref.getDocument(source: .server),
+           let cobro = (snap.data()?["rucsCobrados"] as? [String: [String: Any]])?[r.id] {
+            venceActual = (cobro["vence"] as? Timestamp)?.dateValue()
+        }
+        let base = (venceActual.map { $0 > ahora } ?? false) ? venceActual! : ahora
+        guard let vence = Calendar.current.date(byAdding: .month, value: plan.meses, to: base) else {
+            return (false, nil, "No se pudo calcular la fecha.")
+        }
+        let registro: [String: Any] = [
+            "date": Timestamp(date: ahora),
+            "amount": monto,
+            "method": metodo,
+            "plan": planId,
+            "planName": plan.nombre,
+            "months": plan.meses,
+            "status": "completed",
+            "registeredBy": "admin",
+            "addonType": "ruc",
+            "emisorId": r.id,
+            "ruc": r.ruc ?? NSNull(),
+            "rucNombre": r.nombre ?? NSNull(),
+        ]
+        let cobro: [String: Any] = [
+            "ruc": r.ruc ?? NSNull(),
+            "nombre": r.nombre ?? NSNull(),
+            "plan": planId,
+            "planName": plan.nombre,
+            "meses": plan.meses,
+            "precio": monto,
+            "vence": Timestamp(date: vence),
+            "ultimoPago": Timestamp(date: ahora),
+            "inicio": Timestamp(date: ahora),
+            "ultimoReset": Timestamp(date: ahora),
+        ]
+        do {
+            try await ref.updateData([
+                "rucsCobrados.\(r.id)": cobro,
+                "usage.porRuc.\(r.id)": 0,
+                "paymentHistory": FieldValue.arrayUnion([registro]),
+                "lastPaymentDate": Timestamp(date: ahora),
+                "updatedAt": FieldValue.serverTimestamp(),
+            ])
+            await cargar(businessId: f.businessId)
+            return (true, vence, nil)
         } catch {
             return (false, nil, "No se pudo registrar el pago. Revisa tu conexión.")
         }

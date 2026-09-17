@@ -148,7 +148,17 @@ enum VistaPrevia {
             comprobantesLimite: 50,
             registradoEl: Date().addingTimeInterval(-2 * 86400),
             blockReason: nil,
-            blockedAt: nil
+            blockedAt: nil,
+            // Dos RUC cobrados aparte: uno al día y otro vencido, para ver la sección.
+            cobroPorRuc: true,
+            rucsCobrados: [
+                RucCobrado(id: "e1", ruc: "20613113844", nombre: "TISAYO BUSINESS E.I.R.L.", plan: "mensual",
+                           planName: "Plan Mensual - 1 Mes", precio: 29.9, meses: 1,
+                           vence: Date().addingTimeInterval(30 * 86400), usados: 12),
+                RucCobrado(id: "e2", ruc: "20613118862", nombre: "MAROQUI COMPANY E.I.R.L.", plan: "mensual",
+                           planName: "Plan Mensual - 1 Mes", precio: 29.9, meses: 1,
+                           vence: Date().addingTimeInterval(-2 * 86400), usados: 1000),
+            ]
         )
     }
 

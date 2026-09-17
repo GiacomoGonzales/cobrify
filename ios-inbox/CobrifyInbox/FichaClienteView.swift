@@ -22,6 +22,8 @@ struct FichaClienteView: View {
     @State private var verTodaLaCartera = false
     @StateObject private var otros = OtrosContactosStore()
     @State private var mostrarRenovar = false
+    /// El RUC adicional cuya mensualidad se está registrando.
+    @State private var rucAPagar: RucCobrado?
     @State private var mostrarAddon = false
     @State private var mostrarReactivar = false
     @State private var confirmarSuspender = false
@@ -43,6 +45,9 @@ struct FichaClienteView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { Button("Cerrar") { dismiss() } }
+            }
+            .sheet(item: $rucAPagar) { r in
+                PagoDeRucSheet(store: store, ruc: r)
             }
             .sheet(isPresented: $mostrarRenovar) {
                 if store.ficha != nil {
@@ -183,6 +188,30 @@ struct FichaClienteView: View {
                 }
                 if let precio = f.renewalPrice {
                     LabeledContent("Precio pactado", value: String(format: "S/ %.2f", precio))
+                }
+            }
+            // Los RUC adicionales que se cobran aparte (se activa en el admin
+            // web): cada uno con su mensualidad, su vencimiento y sus
+            // comprobantes del mes, y se renueva acá mismo.
+            if f.cobroPorRuc && !f.rucsCobrados.isEmpty {
+                Section("RUC adicionales") {
+                    ForEach(f.rucsCobrados) { r in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(r.titulo)
+                                .font(.body.weight(.medium))
+                            Text(textoDelRuc(r))
+                                .font(.caption)
+                                .foregroundStyle(r.vencido ? Color.red : ((r.diasParaVencer ?? 99) <= 5 ? Color.orange : Color.secondary))
+                            Text(r.tope.map { "\(r.usados) de \($0) comprobantes este mes" } ?? "\(r.usados) comprobantes este mes")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Button("Registrar pago") { rucAPagar = r }
+                                .font(.callout.weight(.semibold))
+                                .buttonStyle(.borderless)
+                                .padding(.top, 2)
+                        }
+                        .padding(.vertical, 2)
+                    }
                 }
             }
             Section("Comprobantes de este mes") {
@@ -346,6 +375,150 @@ struct FichaClienteView: View {
         if d < 0 { return "exclamationmark.triangle.fill" }
         if d <= 7 { return "clock.fill" }
         return "checkmark.circle.fill"
+    }
+}
+
+/// "RUC 20613113844 · al día hasta el 17 oct 2026" (o "venció el…", o "sin pago registrado").
+private func textoDelRuc(_ r: RucCobrado) -> String {
+    let ruc = r.ruc.map { "RUC \($0)" } ?? "RUC"
+    guard let v = r.vence else { return "\(ruc) · sin pago registrado" }
+    let fecha = v.formatted(date: .abbreviated, time: .omitted)
+    return r.vencido ? "\(ruc) · venció el \(fecha)" : "\(ruc) · al día hasta el \(fecha)"
+}
+
+/// El pago de un RUC adicional que se cobra aparte: plan, monto y método, con
+/// CONFIRMACIÓN (toca dinero de un cliente real). Renueva SOLO ese RUC; ver
+/// `FichaStore.registrarPagoDeRuc`.
+struct PagoDeRucSheet: View {
+    @ObservedObject var store: FichaStore
+    let ruc: RucCobrado
+    @Environment(\.dismiss) private var dismiss
+    @State private var planId = ""
+    @State private var monto = ""
+    @State private var metodo = "plin"
+    @State private var confirmando = false
+    @State private var trabajando = false
+    @State private var error: String?
+    @State private var listo: Date?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if let listo {
+                    Section {
+                        VStack(spacing: 10) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 44)).foregroundStyle(.green)
+                            Text("Pago registrado")
+                                .font(.headline)
+                            Text("\(ruc.titulo) queda al día hasta el \(listo.formatted(date: .long, time: .omitted)).")
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                    }
+                } else {
+                    Section {
+                        LabeledContent("RUC", value: ruc.ruc ?? "—")
+                    } header: {
+                        Text(ruc.titulo)
+                    } footer: {
+                        Text("Renueva solo este RUC y el pago sale en Pagos con su nombre. No cambia el plan ni el vencimiento de la cuenta.")
+                    }
+                    Section("Cobro") {
+                        HStack {
+                            Text("S/")
+                            TextField("Monto", text: $monto)
+                                .keyboardType(.decimalPad)
+                        }
+                        Picker("Método", selection: $metodo) {
+                            ForEach(PlanesVendibles.metodos, id: \.id) { m in
+                                Text(m.nombre).tag(m.id)
+                            }
+                        }
+                    }
+                    Section("Plan") {
+                        Picker("Plan", selection: $planId) {
+                            ForEach(PlanesVendibles.lista, id: \.id) { p in
+                                Text(p.nombre).tag(p.id)
+                            }
+                        }
+                        .pickerStyle(.navigationLink)
+                        .onChange(of: planId) { _, nuevo in
+                            // El precio del catálogo, salvo que el RUC ya tenga uno pactado.
+                            if ruc.precio == nil, let precio = PlanesVendibles.precios[nuevo] {
+                                monto = String(format: "%.2f", precio)
+                            }
+                        }
+                        if let nuevo = nuevoVence {
+                            LabeledContent("Queda al día hasta") {
+                                Text(nuevo, style: .date).fontWeight(.semibold)
+                            }
+                        }
+                    }
+                    if let error {
+                        Section { Text(error).foregroundStyle(.red) }
+                    }
+                }
+            }
+            .navigationTitle("Pago del RUC")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(listo == nil ? "Cancelar" : "Cerrar") { dismiss() }
+                }
+                if listo == nil {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            confirmando = true
+                        } label: {
+                            if trabajando { ProgressView() } else { Text("Registrar").fontWeight(.semibold) }
+                        }
+                        .disabled(montoNum == nil || planId.isEmpty || trabajando)
+                    }
+                }
+            }
+            .confirmationDialog(textoConfirmacion, isPresented: $confirmando, titleVisibility: .visible) {
+                Button("Sí, registrar el pago") { registrar() }
+                Button("Cancelar", role: .cancel) {}
+            }
+            .onAppear {
+                guard planId.isEmpty else { return }
+                let inicial = PlanesVendibles.ids.contains(ruc.plan ?? "") ? (ruc.plan ?? "mensual") : "mensual"
+                planId = inicial
+                monto = String(format: "%.2f", ruc.precio ?? PlanesVendibles.precios[inicial] ?? 0)
+            }
+        }
+        .sensoryFeedback(.success, trigger: listo) { _, nuevo in nuevo != nil }
+        .interactiveDismissDisabled(trabajando)
+    }
+
+    private var montoNum: Double? {
+        guard let v = Double(monto.replacingOccurrences(of: ",", with: ".")), v > 0 else { return nil }
+        return v
+    }
+
+    private var nuevoVence: Date? {
+        guard let meses = PlanCatalogo.plan(planId)?.meses, meses > 0 else { return nil }
+        let base = (ruc.vence.map { $0 > Date() } ?? false) ? ruc.vence! : Date()
+        return Calendar.current.date(byAdding: .month, value: meses, to: base)
+    }
+
+    private var textoConfirmacion: String {
+        guard let m = montoNum, let nuevo = nuevoVence else { return "" }
+        let nombreMetodo = PlanesVendibles.metodos.first { $0.id == metodo }?.nombre ?? metodo
+        return "Registrar S/ \(String(format: "%.2f", m)) por \(nombreMetodo) para \(ruc.titulo). Queda al día hasta el \(nuevo.formatted(date: .long, time: .omitted))."
+    }
+
+    private func registrar() {
+        guard let m = montoNum else { return }
+        trabajando = true
+        error = nil
+        Task {
+            let r = await store.registrarPagoDeRuc(ruc, monto: m, metodo: metodo, planId: planId)
+            trabajando = false
+            if r.ok { listo = r.vence } else { error = r.error }
+        }
     }
 }
 
