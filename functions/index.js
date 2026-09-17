@@ -12372,12 +12372,80 @@ function esPrimerEnvioDelDocumento(doc) {
 }
 
 /**
+ * Avisa a los ADMINISTRADORES de que una cuenta está chocando con SUNAT por
+ * repetir una serie de su sistema anterior.
+ *
+ * Va a los admins y NO al dueño del negocio, a propósito: el dueño no sabe qué
+ * es una serie ni un correlativo, así que un aviso urgente sobre eso le produce
+ * una pregunta, no una solución. Un admin lo arregla en Configuración > Series
+ * en medio minuto. (Decisión de Giacomo, 17-set-2026.)
+ *
+ * Los destinatarios salen de la colección `admins`, la misma que consulta
+ * `isAdmin()` en las reglas: así no hay ningún uid cableado y un admin nuevo
+ * empieza a recibirlos solo.
+ *
+ * UNA vez por negocio y por día. El que migra no choca con UN comprobante:
+ * choca con todos los que emita esa mañana, y ocho avisos idénticos se vuelven
+ * ruido que se ignora. El candado es un `create()` sobre un id determinista —
+ * si el documento ya existe lanza, y ahí se corta.
+ *
+ * Nada de esto puede costar la emisión: todo va envuelto y el peor caso es
+ * quedarse sin aviso, nunca romper el comprobante.
+ */
+async function avisarAdminsDelChoque(bizId, datos = {}) {
+  if (!bizId) return
+  const hoy = new Date().toISOString().slice(0, 10)
+  try {
+    await db.collection('avisosDeChoqueDeSerie').doc(`${bizId}_${hoy}`).create({
+      bizId,
+      numero: datos.numero || null,
+      createdAt: FieldValue.serverTimestamp(),
+    })
+  } catch {
+    return // ya se avisó hoy por este negocio
+  }
+
+  try {
+    const [negocio, admins] = await Promise.all([
+      db.collection('businesses').doc(bizId).get(),
+      db.collection('admins').get(),
+    ])
+    const n = negocio.data() || {}
+    const nombre = n.businessName || n.razonSocial || n.name || bizId
+    const titulo = 'Serie repetida en SUNAT'
+    const cuerpo = `${nombre}: ${datos.numero || 'un comprobante'} ya existía en SUNAT. Hay que cambiarle la serie o continuar su numeración.`
+
+    for (const a of admins.docs) {
+      await sendPushNotification(a.id, titulo, cuerpo, {
+        type: 'choque_de_serie',
+        bizId,
+        numero: String(datos.numero || ''),
+      })
+      await db.collection('notifications').add({
+        userId: a.id,
+        type: 'choque_de_serie',
+        title: titulo,
+        message: cuerpo,
+        metadata: { bizId, numero: datos.numero || null, ruc: n.ruc || null },
+        read: false,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+    }
+    console.log(`🔔 Choque de serie avisado a ${admins.size} admin(s) por ${nombre}`)
+  } catch (e) {
+    console.warn('No se pudo avisar del choque de serie:', e.message)
+  }
+}
+
+/**
  * Deja la marca del posible choque en el documento. NO cambia si se acepta o
  * no: esa decisión la tomó alguien a propósito ("tratar como aceptado porque
  * está en SUNAT") y revertirla en silencio cambiaría la emisión de todos.
  * Marcar es reversible; cambiar `accepted`, no.
  *
- * Lo lee el panel de CPE, que ya agrupa los 1033 por negocio.
+ * Lo lee el panel de CPE, que ya agrupa los 1033 por negocio, y además avisa a
+ * los admins (ver `avisarAdminsDelChoque`).
  */
 async function marcarPosibleChoqueDeSerie(ref, doc, datos = {}) {
   if (!ref || !esPrimerEnvioDelDocumento(doc)) return false
@@ -12391,6 +12459,9 @@ async function marcarPosibleChoqueDeSerie(ref, doc, datos = {}) {
       },
     }, { merge: true })
     console.log(`🚩 POSIBLE CHOQUE DE SERIE en ${datos.numero}: primer envío y SUNAT ya lo tenía`)
+    // `businesses/{bizId}/invoices/{id}` → el padre de la colección es el
+    // negocio. Vale igual para las dos colecciones de guías.
+    await avisarAdminsDelChoque(ref.parent?.parent?.id, datos)
   } catch (e) {
     console.warn('No se pudo marcar el posible choque de serie:', e.message)
   }
