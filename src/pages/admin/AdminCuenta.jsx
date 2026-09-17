@@ -93,6 +93,27 @@ function CeldaMensualidad({ cobro, usados = 0 }) {
   )
 }
 
+/**
+ * De qué RUC es un pago, para poder distinguirlos entre sí.
+ *
+ * El pago de un RUC adicional trae el suyo guardado; el de la cuenta no guarda
+ * ninguno, así que se le pone el del negocio. Solo cuando la cuenta tiene más
+ * de un RUC: con uno solo sería repetir lo que ya dice la cabecera, y en una
+ * lista de tres pagos iguales no se sabía cuál era de quién.
+ */
+const rucDelPago = (p, cuenta, variosRuc) => {
+  if (p.ruc) return `RUC ${p.ruc}${p.rucNombre ? ` · ${p.rucNombre}` : ''}`
+  if (!variosRuc || !cuenta?.ruc) return null
+  return `RUC ${cuenta.ruc}${cuenta.businessName ? ` · ${cuenta.businessName}` : ''}`
+}
+
+/** La línea con el RUC del pago, debajo del plan, cuando hay que distinguirlo. */
+function LineaDeRuc({ pago, cuenta, variosRuc }) {
+  const texto = rucDelPago(pago, cuenta, variosRuc)
+  if (!texto) return null
+  return <span className="block text-[11.5px] text-gray-500">{texto}</span>
+}
+
 /** En una línea, cómo va la mensualidad de un RUC: para el desplegable de pago. */
 function textoDelCobro(cobro) {
   const { clave } = estadoDelRuc(cobro)
@@ -461,10 +482,12 @@ export default function AdminCuenta() {
       if (d) eventos.push({ fecha: d, evento, detalle })
     }
     agregar(cuenta.createdAt, 'Alta de la cuenta', cuenta.createdByReseller ? `Por el reseller ${cuenta.resellerName}` : '')
+    const variosRuc = emisores.some(e => e.activo !== false)
     for (const p of cuenta.paymentHistory) {
       agregar(p.date, `Pago de ${moneda(p.amount)}`, [
         p.planName || PLANS[p.plan]?.name || p.plan,
         p.months ? `${p.months} ${p.months === 1 ? 'mes' : 'meses'}` : null,
+        rucDelPago(p, cuenta, variosRuc),
         p.method,
         p.status && p.status !== 'completed' ? p.status : null,
       ].filter(Boolean).join(' · '))
@@ -478,7 +501,7 @@ export default function AdminCuenta() {
     for (const u of cuenta.subUsers) agregar(u.createdAt, `Sub-usuario creado: ${u.email}`)
     eventos.sort((a, b) => b.fecha - a.fecha)
     return eventos
-  }, [cuenta, sucursales])
+  }, [cuenta, sucursales, emisores])
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -513,6 +536,8 @@ export default function AdminCuenta() {
   const sucursalesActivas = sucursales.filter(s => s.isActive !== false)
   const emisoresActivos = emisores.filter(e => e.activo !== false)
   const cobraPorRuc = Boolean(c.cobroPorRuc) && emisoresActivos.length > 0
+  // Con más de un RUC, cada pago dice de cuál es (incluido el de la cuenta).
+  const variosRuc = emisoresActivos.length > 0
 
   return (
     <Pagina
@@ -934,7 +959,7 @@ export default function AdminCuenta() {
                 ['Fecha', fechaHora(p.date)],
                 ['Plan', [
                   p.planName || (p.plan && (PLANS[p.plan]?.name || customPlans[p.plan]?.name)) || p.plan,
-                  p.ruc && `RUC ${p.ruc}${p.rucNombre ? ` ${p.rucNombre}` : ''}`,
+                  rucDelPago(p, c, variosRuc),
                 ].filter(Boolean).join(' · ')],
                 ['Duración', p.months ? `${p.months} ${p.months === 1 ? 'mes' : 'meses'}` : null],
                 ['Método', p.method],
@@ -961,7 +986,7 @@ export default function AdminCuenta() {
                 <Td>{fechaHora(p.date)}</Td>
                 <Td apagado className="whitespace-normal">
                   {p.planName || (p.plan && (PLANS[p.plan]?.name || customPlans[p.plan]?.name)) || p.plan || '—'}
-                  {p.ruc && <span className="block text-[11.5px] text-gray-500">RUC {p.ruc}{p.rucNombre ? ` · ${p.rucNombre}` : ''}</span>}
+                  <LineaDeRuc pago={p} cuenta={c} variosRuc={variosRuc} />
                 </Td>
                 <Td apagado>{p.months ? `${p.months} ${p.months === 1 ? 'mes' : 'meses'}` : '—'}</Td>
                 <Td apagado>{p.method || '—'}</Td>
