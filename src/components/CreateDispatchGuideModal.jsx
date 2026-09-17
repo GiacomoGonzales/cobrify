@@ -1,5 +1,6 @@
 import { textoDelBien } from '@/utils/bienDeLaGuia'
 import { codigoParaCitar, origenInterno } from '@/utils/guiaDesdeDocumento'
+import { emisorIdDe, esPrincipal } from '../../functions/src/utils/emisorDelComprobante.js'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { X, Truck, MapPin, User, Package, Calendar, FileText, Plus, Trash2, ChevronDown, ChevronUp, Store, Search, Loader2, AlertTriangle } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
@@ -1981,6 +1982,47 @@ export default function CreateDispatchGuideModal({ isOpen, onClose, onCreated = 
   const getDistritos = (deptCode, provCode) => {
     const key = `${deptCode}${provCode}`
     return DISTRITOS[key] || []
+  }
+
+  // VARIOS RUC: la guía de remisión sale SIEMPRE con el RUC del negocio. El
+  // servidor la firma con las credenciales del negocio (sendDispatchGuideToSunat
+  // solo lee `businesses/{id}`) y un RUC adicional ni siquiera puede tener
+  // series de guía (TIPOS_DE_SERIE_DE_EMISOR son los siete comprobantes de
+  // venta, sin guías). Armar la guía de una venta hecha con otro RUC daría un
+  // documento cuyo remitente no es quien vendió, y eso SUNAT lo rechaza.
+  //
+  // El corte va acá, en el modal, y no en cada pantalla que lo abre —
+  // comprobantes, compras, cotizaciones, salidas de almacén y la de guías—,
+  // para que no se olvide en ninguna. El día que las guías se emitan por RUC,
+  // este bloque se borra y se le pasa el emisor a createDispatchGuide.
+  const emisorDeLaVenta = emisorIdDe(referenceInvoice || {})
+  if (isOpen && !esPrincipal(emisorDeLaVenta)) {
+    const quienVendio = referenceInvoice?.emisor?.razonSocial || 'otro RUC de la cuenta'
+    return (
+      <Modal isOpen={isOpen} onClose={onClose} maxWidth="lg">
+        <div className="p-5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <h3 className="text-base font-semibold text-gray-900">Esta venta es de otro RUC</h3>
+              <p className="mt-1.5 text-sm text-gray-600">
+                El comprobante lo emitió <span className="font-medium">{quienVendio}</span>, pero la guía de
+                remisión saldría a nombre de {businessSettings?.businessName || 'tu empresa'}
+                {businessSettings?.ruc ? ` (RUC ${businessSettings.ruc})` : ''}. SUNAT rechaza una guía cuyo
+                remitente no es quien vendió.
+              </p>
+              <p className="mt-2 text-sm text-gray-600">
+                Por ahora las guías salen solo con el RUC principal. Escríbenos si necesitas emitirlas con los
+                demás RUC de tu cuenta.
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button variant="secondary" onClick={onClose}>Entendido</Button>
+          </div>
+        </div>
+      </Modal>
+    )
   }
 
   return (
