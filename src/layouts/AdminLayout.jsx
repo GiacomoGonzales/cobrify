@@ -20,6 +20,7 @@ const ITEMS = [
   { path: '/app/admin/asistente', label: 'Asistente' },
   { path: '/app/admin/resellers', label: 'Resellers' },
   { path: '/app/admin/payments', label: 'Pagos' },
+  { path: '/app/admin/rucs', label: 'RUC' },
   { path: '/app/admin/cpe', label: 'Comprobantes' },
   { path: '/app/admin/notifications', label: 'Notificaciones' },
   { path: '/app/admin/settings', label: 'Configuración' },

@@ -43,6 +43,14 @@ export function buildAccountHaystack(u) {
     ? u.subUsers.flatMap(s => s ? [s.email, s.displayName] : [])
     : []
 
+  // Varios RUC: llegar a la cuenta tecleando el RUC (o la razón social) de
+  // CUALQUIERA de sus empresas. Hasta el 17-set-2026 solo se indexaba el RUC
+  // del negocio principal, así que buscar el RUC de la segunda empresa no
+  // devolvía nada y había que acordarse de a nombre de quién estaba.
+  const deEmisores = Array.isArray(u.emisores)
+    ? u.emisores.flatMap(e => e ? [e.ruc, soloDigitos(e.ruc), e.businessName] : [])
+    : []
+
   return buildSearchHaystack(
     // Identidad
     u.email,
@@ -75,5 +83,6 @@ export function buildAccountHaystack(u) {
     u.catalogSlug,
     u.customDomain,
     ...deSubUsuarios,
+    ...deEmisores,
   )
 }

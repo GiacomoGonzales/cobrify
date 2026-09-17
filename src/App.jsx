@@ -62,6 +62,7 @@ const AdminOrigen = lazy(() => import('./pages/admin/AdminOrigen'))
 const AdminAsistente = lazy(() => import('./pages/admin/AdminAsistente'))
 const AdminPruebas = lazy(() => import('./pages/admin/AdminPruebas'))
 const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'))
+const AdminRucs = lazy(() => import('./pages/admin/AdminRucs'))
 const AdminCpe = lazy(() => import('./pages/admin/AdminCpe'))
 const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'))
 const AdminResellers = lazy(() => import('./pages/admin/AdminResellers'))
@@ -710,6 +711,7 @@ function App() {
               <Route path="pruebas" element={<AdminPruebas />} />
               <Route path="resellers" element={<AdminResellers />} />
               <Route path="payments" element={<AdminPayments />} />
+              <Route path="rucs" element={<AdminRucs />} />
               <Route path="cpe" element={<AdminCpe />} />
               {/* Rutas viejas: todo lo global vive en Resumen y los
                   vencimientos son un filtro de Usuarios. */}

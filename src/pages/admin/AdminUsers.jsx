@@ -58,6 +58,25 @@ const planEnLineas = (user, customPlans) => {
   }
 }
 
+/**
+ * Con cuantos RUC emite la cuenta, para la marca "3 RUC" de la fila.
+ *
+ * Se cuentan igual que en la ficha ("Emisores (3)"): el principal, que es el
+ * negocio, mas sus emisores activos. Una cuenta normal no lleva marca. El
+ * detalle va en el `title` porque son datos largos que no caben en la fila.
+ */
+const rucsDeLaCuenta = (user) => {
+  const activos = (user.emisores || []).filter(e => e.activo !== false)
+  return {
+    varios: activos.length > 0,
+    cuantos: activos.length + 1,
+    detalle: [
+      `${user.businessName || 'Principal'}${user.ruc ? ` · ${user.ruc}` : ''}`,
+      ...activos.map(e => `${e.businessName || 'Sin nombre'} · ${e.ruc}`),
+    ].join('\n'),
+  }
+}
+
 const formatDate = date => (date ? date.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—')
 
 export default function AdminUsers() {
@@ -561,7 +580,12 @@ export default function AdminUsers() {
                 <div key={user.id} className={`px-3 py-2.5 ${user.archived ? 'text-gray-400' : ''}`} onClick={() => irAFicha(user)}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="truncate font-medium text-gray-900">{user.businessName}</div>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="truncate font-medium text-gray-900">{user.businessName}</span>
+                        {rucsDeLaCuenta(user).varios && (
+                          <Pastilla tono="neutro" className="shrink-0">{rucsDeLaCuenta(user).cuantos} RUC</Pastilla>
+                        )}
+                      </div>
                       <div className="truncate text-[11.5px] text-gray-500">
                         {user.email}{user.ruc ? ` · ${user.ruc}` : ''}{user.codigoCliente ? ` · ${user.codigoCliente}` : ''}
                       </div>
@@ -618,12 +642,16 @@ export default function AdminUsers() {
                   : null
                 const plan3 = planEnLineas(user, customPlans)
                 const nombreVendedor = user.vendedorId ? vendedores.find(v => v.id === user.vendedorId)?.name || '—' : null
+                const rucs = rucsDeLaCuenta(user)
                 return (
                   <Fila key={user.id} onClick={() => irAFicha(user)} apagada={user.archived}>
                     <Td apagado className="font-mono text-[12px]">{user.codigoCliente || '—'}</Td>
                     <Td className="max-w-[250px]">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="truncate font-medium">{user.businessName}</span>
+                        {rucs.varios && (
+                          <Pastilla tono="neutro" className="shrink-0" title={rucs.detalle}>{rucs.cuantos} RUC</Pastilla>
+                        )}
                         {urlTienda && (
                           <a href={urlTienda} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
                             className="shrink-0 text-[11px] text-primary-700 hover:underline" title={`Abrir la tienda: ${urlTienda}`}>

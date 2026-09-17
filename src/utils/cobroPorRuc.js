@@ -25,10 +25,6 @@ export function venceDelRucTrasPagar(venceActual, meses, hoy = new Date()) {
 }
 
 /**
- * En qué anda un RUC cobrado aparte.
- * @returns {{ clave: 'sin_pagar'|'vencido'|'por_vencer'|'al_dia', dias: number|null }}
- */
-/**
  * Lo que suman al mes los RUC cobrados aparte que están al día: entra al MRR.
  * Un RUC vencido deja de sumar, igual que una cuenta suspendida.
  */
@@ -40,6 +36,10 @@ export function mensualidadDeRucs(suscripcion, hoy = new Date()) {
   }, 0)
 }
 
+/**
+ * En qué anda un RUC cobrado aparte.
+ * @returns {{ clave: 'sin_pagar'|'vencido'|'por_vencer'|'al_dia', dias: number|null }}
+ */
 export function estadoDelRuc(cobro, hoy = new Date()) {
   const vence = aFecha(cobro?.vence)
   if (!vence) return { clave: 'sin_pagar', dias: null }

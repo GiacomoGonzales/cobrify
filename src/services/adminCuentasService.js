@@ -122,6 +122,9 @@ export function armarCuenta(id, data, business = {}, userDoc = null, { resellers
     rucsCobrados: data.rucsCobrados || {},
     // Los comprobantes del mes de cada RUC cobrado aparte.
     usoPorRuc: data.usage?.porRuc || {},
+    // Los RUC adicionales viven en una subcoleccion del negocio, no aqui: los
+    // adjunta `adjuntarEmisores` y solo a las cuentas con "Varios RUC".
+    emisores: [],
     createdByReseller: data.createdByReseller || false,
     resellerId: data.resellerId || null,
     resellerName: data.resellerId ? resellersMap[data.resellerId] || data.resellerId : null,
@@ -230,7 +233,44 @@ export async function cargarCuentas({ customPlans = {} } = {}) {
     })
   })
 
+  await adjuntarEmisores(cuentas)
+
   return { cuentas, huerfanas, resellers }
+}
+
+/**
+ * Los RUC adicionales de cada cuenta, pegados a la lista.
+ *
+ * Viven en `businesses/{id}/emisores`, una subcoleccion, asi que no vienen en
+ * los cuatro `getDocs` de arriba. Se piden SOLO de las cuentas con la funcion
+ * "Varios RUC" —hoy un punado— y en paralelo, asi que no se nota; una cuenta
+ * que falle (sin subcoleccion, o sin permiso) se queda sin RUC en vez de
+ * tumbar toda la lista.
+ *
+ * Con esto, el buscador del admin encuentra una cuenta tecleando el RUC de
+ * CUALQUIERA de sus empresas (antes solo el principal) y la pagina RUC puede
+ * listar hasta los que nunca se pagaron.
+ */
+async function adjuntarEmisores(cuentas) {
+  const conVariosRuc = cuentas.filter(c => c.features?.multiRuc)
+  if (conVariosRuc.length === 0) return
+  const listas = await Promise.all(conVariosRuc.map(async c => {
+    try {
+      const snap = await getDocs(collection(db, 'businesses', c.id, 'emisores'))
+      return snap.docs.map(d => {
+        const e = d.data()
+        return {
+          id: d.id,
+          ruc: e.ruc || '',
+          businessName: e.businessName || e.tradeName || '',
+          activo: e.activo !== false,
+        }
+      })
+    } catch {
+      return []
+    }
+  }))
+  conVariosRuc.forEach((c, i) => { c.emisores = listas[i] })
 }
 
 // Una sola cuenta, para la ficha. null si no existe la suscripcion.
