@@ -1373,6 +1373,9 @@ export const sendInvoiceToSunat = onRequest(
         if (isAlreadyRegisteredError) {
           console.log('📋 Documento ya registrado en SUNAT (detectado en error path) - tratando como ACEPTADO')
           console.log(`   Código: ${errorCode}, Mensaje: ${errorMessage}`)
+          await marcarPosibleChoqueDeSerie(invoiceRef, invoiceData, {
+            numero: invoiceData.number, codigo: errorCode, descripcion: errorMessage,
+          })
 
           // Intentar guardar XML y CDR en Storage si están disponibles
           let errXmlStorageUrl = null
@@ -1546,6 +1549,12 @@ export const sendInvoiceToSunat = onRequest(
           console.log('   Tratando como ACEPTADO (el documento está en SUNAT)')
           // Cambio: También tratar como aceptado porque está en SUNAT
           emissionResult.accepted = true
+          // …pero que quede la marca: esta rama ES el caso del que migra.
+          await marcarPosibleChoqueDeSerie(invoiceRef, invoiceData, {
+            numero: invoiceData.number,
+            codigo: emissionResult.responseCode,
+            descripcion: emissionResult.description,
+          })
           emissionResult.notes = emissionResult.notes || []
           if (Array.isArray(emissionResult.notes)) {
             emissionResult.notes.push('Documento ya existía en SUNAT (código 1033)')
@@ -2359,6 +2368,11 @@ export const sendCreditNoteToSunat = onRequest(
           console.log('⚠️ Código 1033: Documento ya estaba en estado:', creditNoteData.sunatStatus)
           emissionResult.accepted = true
         }
+        await marcarPosibleChoqueDeSerie(creditNoteRef, creditNoteData, {
+          numero: creditNoteData.number,
+          codigo: emissionResult.responseCode,
+          descripcion: emissionResult.description,
+        })
       }
 
       const isPendingManual = emissionResult.pendingManual === true
@@ -3094,6 +3108,11 @@ export const sendDebitNoteToSunat = onRequest(
           console.log('⚠️ Código 1033: Documento ya estaba en estado:', debitNoteData.sunatStatus)
           emissionResult.accepted = true
         }
+        await marcarPosibleChoqueDeSerie(debitNoteRef, debitNoteData, {
+          numero: debitNoteData.number,
+          codigo: emissionResult.responseCode,
+          descripcion: emissionResult.description,
+        })
       }
 
       const isPendingManual = emissionResult.pendingManual === true
@@ -4403,6 +4422,9 @@ export const sendDispatchGuideToSunatFn = onRequest(
         console.log(`   Descripción: ${result.description}`)
         result.accepted = true
         result.description = (result.description || '') + ' (Documento ya existía en SUNAT)'
+        await marcarPosibleChoqueDeSerie(guideRef, guideData, {
+          numero: guideData?.number, codigo: result.responseCode, descripcion: result.description,
+        })
       }
 
       // ========== GUARDAR XML Y CDR EN FIREBASE STORAGE (GRE REMITENTE) ==========
@@ -4774,6 +4796,9 @@ export const sendCarrierDispatchGuideToSunatFn = onRequest(
         console.log(`   Descripción: ${result.description}`)
         result.accepted = true
         result.description = (result.description || '') + ' (Documento ya existía en SUNAT)'
+        await marcarPosibleChoqueDeSerie(guideRef, guideData, {
+          numero: guideData?.number, codigo: result.responseCode, descripcion: result.description,
+        })
       }
 
       // ========== GUARDAR XML Y CDR EN FIREBASE STORAGE (GRE TRANSPORTISTA) ==========
@@ -5260,6 +5285,9 @@ export const retryPendingInvoices = onSchedule(
             if (is1033 && !result.accepted) {
               console.log(`📋 [RETRY] ${docNumber}: SUNAT dice que ya existe (1033) - tratando como aceptado`)
               result.accepted = true
+              await marcarPosibleChoqueDeSerie(invoicesRef.doc(invoiceId), invoiceData, {
+                numero: docNumber, codigo: result.responseCode, descripcion: result.description || result.error,
+              })
             }
 
             // Determinar estado final
@@ -5373,6 +5401,11 @@ export const retryPendingInvoices = onSchedule(
               if (!result.accepted && (cod.includes('1033') || cod.includes('4000') ||
                   desc.includes('registrado previamente') || desc.includes('ya existe'))) {
                 result.accepted = true
+                await marcarPosibleChoqueDeSerie(guiasRef.doc(guiaDoc.id), guia, {
+                  numero: `${guia.series}-${guia.correlative}`,
+                  codigo: result.responseCode,
+                  descripcion: result.description || result.error,
+                })
               }
 
               const estado = estadoDeEnvio(result)
@@ -12313,6 +12346,60 @@ export const pollShopifreeOrdersNow = onCall(
  * comprobante que SI llego a SUNAT es peor: obliga a reemitir algo que ya
  * existe y quema un correlativo.
  */
+/**
+ * ¿Este 1033 huele a que el negocio YA USÓ ese número en OTRO sistema?
+ *
+ * `hasCorrelativeConflict` mira si el número está repetido en NUESTRA base, y
+ * eso solo caza el bug de numeración no atómica. Al que viene migrando no lo ve:
+ * su comprobante viejo está en SUNAT, no acá, así que el número es único entre
+ * nosotros y el 1033 termina tratado como "ya aceptado". El dueño cree que
+ * emitió y no emitió.
+ *
+ * Lo que delata al migrante es que sea el PRIMER envío: si nunca mandamos ese
+ * documento y SUNAT ya lo tiene, el número lo ocupó alguien más — y ese alguien
+ * es él mismo, en su sistema anterior. Mismo criterio que `clasificarAlerta` en
+ * el panel de CPE ("Primer envío ya dio 1033").
+ *
+ * OJO con las guías: no llevan `sunatLog`, así que ahí la señal es más pobre
+ * (solo `retryCount` y `lastRetryError`) y puede marcar de más. Marcar de más
+ * es barato; callar es lo que costó caro.
+ */
+function esPrimerEnvioDelDocumento(doc) {
+  const log = Array.isArray(doc?.sunatLog) ? doc.sunatLog : []
+  const previos = log.filter((e) => e?.status && e.status !== 'created')
+  return previos.length === 0
+    && !(Number(doc?.retryCount) > 0)
+    && !doc?.lastRetryError
+    && !doc?.sunatSentAt
+    && !doc?.sunatResponse
+}
+
+/**
+ * Deja la marca del posible choque en el documento. NO cambia si se acepta o
+ * no: esa decisión la tomó alguien a propósito ("tratar como aceptado porque
+ * está en SUNAT") y revertirla en silencio cambiaría la emisión de todos.
+ * Marcar es reversible; cambiar `accepted`, no.
+ *
+ * Lo lee el panel de CPE, que ya agrupa los 1033 por negocio.
+ */
+async function marcarPosibleChoqueDeSerie(ref, doc, datos = {}) {
+  if (!ref || !esPrimerEnvioDelDocumento(doc)) return false
+  try {
+    await ref.set({
+      posibleChoqueDeSerie: {
+        numero: datos.numero || null,
+        codigo: String(datos.codigo || ''),
+        descripcion: String(datos.descripcion || '').slice(0, 300),
+        detectadoEn: FieldValue.serverTimestamp(),
+      },
+    }, { merge: true })
+    console.log(`🚩 POSIBLE CHOQUE DE SERIE en ${datos.numero}: primer envío y SUNAT ya lo tenía`)
+  } catch (e) {
+    console.warn('No se pudo marcar el posible choque de serie:', e.message)
+  }
+  return true
+}
+
 async function hasCorrelativeConflict(businessId, docId, documentNumber) {
   if (!businessId || !documentNumber) return false
   try {
