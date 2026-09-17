@@ -5,6 +5,7 @@ import { db } from '@/lib/firebase'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { sendInvoiceToSunat } from '@/services/firestoreService'
+import { emisorIdDe, esPrincipal } from '../../functions/src/utils/emisorDelComprobante.js'
 
 /**
  * Modal de administración para renumerar documentos rechazados por SUNAT
@@ -26,6 +27,8 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
 
   // Documentos encontrados y seleccionados
   const [documents, setDocuments] = useState([])
+  // Cuantos comprobantes de OTRO RUC se dejaron fuera de la busqueda.
+  const [excluidosDeOtroRuc, setExcluidosDeOtroRuc] = useState(0)
   const [selectedDocs, setSelectedDocs] = useState([])
 
   // Nueva serie
@@ -139,6 +142,16 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
         )
       }
 
+      // VARIOS RUC: este renumerador solo sabe de las series del negocio
+      // (`businessData.series`), así que a un comprobante de otro RUC le
+      // pondría una serie que no es suya y le movería el correlativo al RUC
+      // principal. Se sacan de la lista y se dice cuántos, en vez de dejarlos
+      // a un clic de distancia. El día que sepa numerar por RUC, este filtro
+      // se cambia por leer `emisorSeries` del RUC de cada comprobante.
+      const deOtroRuc = docs.filter(d => !esPrincipal(emisorIdDe(d))).length
+      docs = docs.filter(d => esPrincipal(emisorIdDe(d)))
+      setExcluidosDeOtroRuc(deOtroRuc)
+
       // Ordenar por fecha de creación
       docs.sort((a, b) => {
         const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt)
@@ -153,7 +166,9 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
         setStep(2)
         toast.success(`Se encontraron ${docs.length} documentos`)
       } else {
-        toast.error('No se encontraron documentos con los filtros especificados')
+        toast.error(deOtroRuc > 0
+          ? `Los ${deOtroRuc} que coinciden son de otro RUC y no se pueden renumerar desde aquí`
+          : 'No se encontraron documentos con los filtros especificados')
       }
     } catch (error) {
       console.error('Error buscando documentos:', error)
@@ -547,6 +562,19 @@ export default function RenumberInvoicesModal({ isOpen, onClose }) {
                   {selectedDocs.length === documents.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
                 </button>
               </div>
+
+              {excluidosDeOtroRuc > 0 && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <p>
+                    {excluidosDeOtroRuc === 1
+                      ? 'Hay 1 comprobante de otro RUC que no sale en esta lista.'
+                      : `Hay ${excluidosDeOtroRuc} comprobantes de otro RUC que no salen en esta lista.`}{' '}
+                    Esta herramienta solo renumera con las series del RUC principal; renumerarlos desde aquí les
+                    pondría una serie que no es suya. Escríbenos para esos.
+                  </p>
+                </div>
+              )}
 
               <div className="border rounded-lg overflow-hidden">
                 <div className="max-h-72 overflow-y-auto">
