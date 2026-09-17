@@ -5216,7 +5216,17 @@ export default function POS() {
         item.isBonificacion || Number(item.price) === 0 ||
         // Precio anclado en dólares: se fijó a propósito y los niveles del
         // catálogo están en soles. Repreciarlo lo convierte en otra moneda.
-        !!item.fixedPriceUSD
+        !!item.fixedPriceUSD ||
+        // Presentación (SACO, CAJA, PLANCHA...): su precio lo puso el vendedor
+        // para ESE paquete y no se deriva del precio de la unidad, así que el
+        // mayorista por cantidad no tiene nada que recalcular ahí. Sin este
+        // guard, tocar la cantidad devolvía el precio de la unidad base y lo
+        // escribía encima: la línea seguía diciendo "SACO (x49)" pero cobraba
+        // S/2.50 en vez de S/107, y el stock igual se descontaba por el factor
+        // (reporte de Carmen, GRUPO JC & AN, 17-set-2026: 5 sacos por S/12.50).
+        // El catálogo online ya tenía esta misma cláusula (CatalogoPublico.jsx);
+        // las dos pantallas comparten `repreciarPorCantidad` y el POS se quedó sin ella.
+        !!item.presentationName
       ),
     })
 
