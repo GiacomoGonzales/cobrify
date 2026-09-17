@@ -839,6 +839,26 @@ export default function POS() {
     [seriesEnVivo, documentType, emisorElegido?.id, selectedBranch?.id, selectedWarehouse?.id, user?.uid]
   )
 
+  // La PRIMERA factura o boleta de una serie, que es el único momento en que se
+  // puede avisar a tiempo de un choque de correlativos.
+  //
+  // SUNAT lleva la cuenta por RUC: quien viene de otro sistema ya emitió allá su
+  // F001-00000001, y acá el sistema se lo ofrece de nuevo. El segundo lo rechaza
+  // (error 1033, "registrado previamente con otros datos"). El problema no es
+  // que la serie esté mal, es que ya fue usada por el MISMO RUC en otro lado, y
+  // eso solo lo sabe el dueño: hay que preguntárselo mirando el número concreto.
+  //
+  // Se avisa acá y no en el alta porque en el formulario la pregunta es
+  // abstracta ("¿usaste otro sistema?") y todavía no vieron el producto; acá
+  // tienen delante el número exacto que va a salir. Y se apaga solo: en cuanto
+  // emiten el primero, `lastNumber` deja de ser 0 y no hay nada que decidir.
+  // Para un negocio que recién abre no hay riesgo — su RUC no emitió nunca.
+  const primeraDeLaSerie = Boolean(
+    serieDeLaVenta &&
+    (documentType === 'factura' || documentType === 'boleta') &&
+    Number(serieDeLaVenta.datos?.lastNumber || 0) === 0
+  )
+
   // Precios por sucursal (businessSettings.branchPricingEnabled): `products` es la
   // vista EFECTIVA con price/price2/3/4 reemplazados por el override de la sucursal
   // activa. Sin feature o en Sucursal Principal (sin branchId) → lista original tal
@@ -11064,9 +11084,28 @@ Gracias por tu preferencia.`
                     definitivo se asigna al cobrar (ver `serieDeLaVenta`). */}
                 {!editingInvoiceId && !isLoading && seriesEnVivo && documentType && (
                   serieDeLaVenta ? (
-                    <p className="text-[11px] text-gray-500 mt-1">
-                      Siguiente: <span className="tabular-nums">{numeroSiguiente(serieDeLaVenta.datos)}</span>
-                    </p>
+                    <>
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        Siguiente: <span className="tabular-nums">{numeroSiguiente(serieDeLaVenta.datos)}</span>
+                      </p>
+                      {/* Solo en la primera de la serie (ver `primeraDeLaSerie`).
+                          Va DEBAJO del número y no en su lugar: el aviso habla de
+                          ese número, así que tiene que verse junto a él. */}
+                      {primeraDeLaSerie && (
+                        <p className="text-[11px] text-amber-700 mt-1 leading-snug">
+                          Primera {documentType === 'factura' ? 'factura' : 'boleta'} de esta serie. Si tu RUC ya emitió
+                          con <span className="tabular-nums font-medium">{serieDeLaVenta.datos.serie}</span> en otro
+                          sistema, cambia la serie o continúa la numeración antes de cobrar.{' '}
+                          <button
+                            type="button"
+                            onClick={() => appNavigate('/configuracion?tab=series')}
+                            className="underline font-medium hover:text-amber-800"
+                          >
+                            Configurar series
+                          </button>
+                        </p>
+                      )}
+                    </>
                   ) : (
                     <p className="text-[11px] text-amber-600 mt-1">
                       {emisorElegido ? 'Este RUC no tiene serie para este comprobante.' : 'Sin serie configurada para este comprobante.'}

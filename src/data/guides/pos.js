@@ -230,6 +230,10 @@ export default {
           text: 'Debajo del tipo, en letra chica, ves el número que le tocaría a la venta, por ejemplo **Siguiente: B001-00000124**. Es una referencia: el número se asigna recién al cobrar. Si trabajas con varias cajas y otra emite antes, el aviso se corre solo al que sigue, y ningún número se repite. Si en su lugar dice **Sin serie configurada para este comprobante**, configura la serie antes de cobrar: sin ella la venta no se puede emitir.',
         },
         {
+          type: 'ojo',
+          text: 'La **primera** factura o boleta de una serie te avisa en ámbar. Si tu RUC ya emitió con esa misma serie en otro sistema — porque vienes de otro proveedor o tu contador facturaba por ti — cámbiala, o continúa la numeración desde donde ibas, **antes de cobrar**: SUNAT lleva el correlativo por RUC y rechaza un número que ya recibió. Si tu negocio recién empieza no tienes nada que hacer: el aviso desaparece solo con el primer comprobante emitido.',
+        },
+        {
           type: 'texto',
           text: 'Para las boletas, SUNAT exige identificar al cliente con su DNI cuando la venta llega a S/ 700 o más.',
         },
