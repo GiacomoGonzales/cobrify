@@ -175,6 +175,70 @@ export const SERIES_NEGOCIO = {
 }
 
 /**
+ * Las series de quien NUNCA emitió con otro sistema.
+ *
+ * Son las estándar, que es lo que la gente espera ver en su comprobante. Un RUC
+ * que nunca emitió no puede chocar con nadie: SUNAT lleva el correlativo por
+ * RUC, así que F001-00000001 está libre para él por definición.
+ */
+export const SERIES_ESTANDAR = {
+  factura: { serie: 'F001', lastNumber: 0 },
+  boleta: { serie: 'B001', lastNumber: 0 },
+  nota_venta: { serie: 'N001', lastNumber: 0 },
+  cotizacion: { serie: 'C001', lastNumber: 0 },
+  nota_credito_factura: { serie: 'FC01', lastNumber: 0 },
+  nota_credito_boleta: { serie: 'BC01', lastNumber: 0 },
+  nota_debito_factura: { serie: 'FD01', lastNumber: 0 },
+  nota_debito_boleta: { serie: 'BD01', lastNumber: 0 },
+  guia_remision: { serie: 'T001', lastNumber: 0 },
+  guia_transportista: { serie: 'V001', lastNumber: 0 },
+}
+
+/**
+ * Las series de quien SÍ venía de otro sistema.
+ *
+ * Ese RUC ya emitió allá, casi siempre con las estándar, y repetir un número
+ * que SUNAT ya recibió hace que rechace el comprobante. Se le da un juego que
+ * es muy improbable que haya usado: de 749 cuentas, F001 lo usa el 42.7% y
+ * FF01 el 12.8%, mientras que FF10 lo usa UNA (medido el 16-set-2026).
+ *
+ * OJO: esto reduce la probabilidad, no la elimina — el choque depende de qué
+ * usó ESE RUC, que no sabemos. La red de verdad es el aviso del POS en la
+ * primera emisión, y ahí puede cambiarla o continuar su numeración.
+ */
+export const SERIES_MIGRANTE = {
+  factura: { serie: 'FF10', lastNumber: 0 },
+  boleta: { serie: 'BB10', lastNumber: 0 },
+  nota_venta: { serie: 'NN10', lastNumber: 0 },
+  cotizacion: { serie: 'CC10', lastNumber: 0 },
+  nota_credito_factura: { serie: 'FC10', lastNumber: 0 },
+  nota_credito_boleta: { serie: 'BC10', lastNumber: 0 },
+  nota_debito_factura: { serie: 'FD10', lastNumber: 0 },
+  nota_debito_boleta: { serie: 'BD10', lastNumber: 0 },
+  guia_remision: { serie: 'TT10', lastNumber: 0 },
+  guia_transportista: { serie: 'VV10', lastNumber: 0 },
+}
+
+/**
+ * Con qué series nace la cuenta, según lo que contestó en el alta.
+ *
+ * Son TRES casos, no dos, y es la misma lógica que Giacomo aplicaba a mano
+ * antes de que el alta pasara a ser un formulario: preguntaba si ya habían
+ * usado otro facturador, ponía F001 cuando le decían que no, y dejaba FF01
+ * cuando no le contestaban. Al pasar al formulario no se perdió el default:
+ * se perdió LA PREGUNTA.
+ *
+ * Sin respuesta se mantiene `SERIES_NEGOCIO` (FF01) a propósito: es el caso
+ * desconocido, y ahí conviene la serie rara. Por eso el alta del admin, que no
+ * hace la pregunta, sigue comportándose igual que hasta hoy.
+ */
+export function seriesSegunHistorial(emitiaAntes) {
+  if (emitiaAntes === 'no') return SERIES_ESTANDAR
+  if (emitiaAntes === 'si') return SERIES_MIGRANTE
+  return SERIES_NEGOCIO
+}
+
+/**
  * Las series de una sucursal ADICIONAL (`n` = 1 para la primera que se cree).
  *
  * La semilla NO las usa: la Sucursal Principal es el negocio y sus series son

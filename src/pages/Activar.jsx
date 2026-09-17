@@ -65,6 +65,8 @@ export default function Activar() {
     documento: '', businessName: '', tradeName: '', phone: '',
     address: '', district: '', province: '', department: '', ubigeo: '',
     rubro: '', displayName: '', contactPhone: '', email: '', password: '',
+    /** '' | 'no' | 'si' — ver `PreguntaFacturador`. Obligatoria. */
+    emitiaAntes: '',
   })
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }))
 
@@ -160,6 +162,10 @@ export default function Activar() {
             ubigeo: f.ubigeo,
             rubro: f.rubro,
             displayName: f.displayName,
+            // Decide con qué serie nace la cuenta (`seriesSegunHistorial`, en
+            // la semilla del servidor). Sin esto arranca en F001 y, si ese RUC
+            // ya emitió allá, SUNAT rechaza por correlativo repetido.
+            emitiaAntes: f.emitiaAntes,
           },
         }),
       })
@@ -215,7 +221,9 @@ export default function Activar() {
 
   const puedeSeguir =
     paso === 0 ? f.businessName.trim().length > 2
-    : paso === 1 ? !!f.rubro
+    // La pregunta del facturador es OBLIGATORIA: dejarla en blanco es
+    // exactamente lo que producía la duda que este campo viene a quitar.
+    : paso === 1 ? (!!f.rubro && !!f.emitiaAntes)
     : f.displayName.trim() && f.email.trim().includes('@') && f.password.length >= 8
 
   // El nombre viene del alta que se creó desde el chat, así que casi siempre
@@ -281,6 +289,7 @@ export default function Activar() {
         <>
           <Titulo texto="¿A qué se dedica?" ayuda="Esto decide qué ves al entrar. Se puede cambiar después." />
           <SelectorRubro valor={f.rubro} onElegir={(id) => set('rubro', id)} sugerido={sugerido} />
+          <PreguntaFacturador valor={f.emitiaAntes} onElegir={(v) => set('emitiaAntes', v)} />
         </>
       )}
 
@@ -411,6 +420,58 @@ function SelectorRubro({ valor, onElegir, sugerido }) {
             </button>
           ))
         )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * ¿Ya emitía con otro sistema?
+ *
+ * Es la única pregunta del alta que no se puede dejar para después por
+ * WhatsApp, y por eso está acá pese a la regla de no preguntar de más: decide
+ * con qué SERIE nace la cuenta, y eso se juega en el primer comprobante.
+ *
+ * SUNAT lleva el correlativo por RUC, no por sistema. Quien viene de otro
+ * facturador ya emitió su F001-00000001 allá; si acá empieza igual, SUNAT
+ * rechaza el comprobante por repetido. Quien nunca emitió no puede chocar con
+ * nadie y merece la serie estándar, que es la que espera ver.
+ *
+ * Se pregunta en palabras de negocio ("¿ya facturabas?") y no en palabras del
+ * sistema ("¿qué serie usabas?"): eso último se le pregunta a quien contesta
+ * que sí, y lo resuelve el aviso del POS con el número delante.
+ */
+function PreguntaFacturador({ valor, onElegir }) {
+  const opciones = [
+    { v: 'no', titulo: 'No, es la primera vez', pie: 'Empiezo a facturar ahora' },
+    { v: 'si', titulo: 'Sí, ya facturaba', pie: 'Con otro sistema o con mi contador' },
+  ]
+  return (
+    <div className="space-y-2 border-t border-gray-100 pt-4">
+      <div>
+        <p className="text-[13.5px] font-medium text-gray-900">¿Ya emitías comprobantes electrónicos?</p>
+        <p className="mt-0.5 text-[12px] leading-snug text-gray-500">
+          Con esto elegimos la numeración de tus facturas, para que SUNAT no te las rechace por repetidas.
+        </p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {opciones.map((o) => (
+          <button
+            key={o.v}
+            type="button"
+            onClick={() => onElegir(o.v)}
+            className={`rounded-lg border px-3.5 py-3 text-left transition-colors ${
+              valor === o.v
+                ? 'border-primary-600 bg-primary-50'
+                : 'border-gray-300 bg-white hover:border-gray-400'
+            }`}
+          >
+            <span className={`block text-[13.5px] font-medium ${valor === o.v ? 'text-primary-900' : 'text-gray-700'}`}>
+              {o.titulo}
+            </span>
+            <span className="mt-0.5 block text-[11.5px] leading-snug text-gray-500">{o.pie}</span>
+          </button>
+        ))}
       </div>
     </div>
   )

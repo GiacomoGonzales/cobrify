@@ -19,8 +19,8 @@ const { rubros } = require('../data/rubros.json')
 import { origenDesdeLanding, limpiarOrigen } from '../data/origen.js'
 
 import {
-  OPCIONES_SEMILLA, VALORES_SEMILLA, SERIES_NEGOCIO, SUNAT_SEMILLA,
-  opcionesDelRubro, modoDelRubro,
+  OPCIONES_SEMILLA, VALORES_SEMILLA, SUNAT_SEMILLA,
+  seriesSegunHistorial, opcionesDelRubro, modoDelRubro,
 } from '../data/semilla.js'
 
 /** Sube de número cuando cambie lo que siembra, para poder distinguir cuentas. */
@@ -139,7 +139,11 @@ export async function sembrarCuenta(db, { uid, email, datos = {}, FieldValue }) 
 
     // Las series del negocio SON las de la Sucursal Principal. `branchSeries`
     // se queda vacio: solo lo llenan las sucursales adicionales.
-    series: SERIES_NEGOCIO,
+    //
+    // Cuales, depende de si ya emitia con otro sistema (lo pregunta el alta en
+    // `Activar.jsx`). Sin respuesta se queda con las de siempre, asi que el
+    // alta del admin —que no hace la pregunta— no cambia de comportamiento.
+    series: seriesSegunHistorial(texto(datos.emitiaAntes)),
     sunat: SUNAT_SEMILLA,
 
     semillaVersion: VERSION_SEMILLA,
