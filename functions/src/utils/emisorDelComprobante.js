@@ -229,12 +229,15 @@ export function serieValida(tipo, serie) {
  * @param {Array<{tipo: string, serie: string}>} seriesNuevas
  * @param {object} negocio
  * @param {{salvo?: string}} [opciones]  el emisor que se está editando: sus
- *   propias series no cuentan como tomadas
+ *   propias series no cuentan como tomadas. Con el principal (EMISOR_PRINCIPAL)
+ *   se excluyen las del NEGOCIO pero no las de sus sucursales ni almacenes, que
+ *   llevan su propio contador y sí chocarían.
  * @returns {Array<{tipo: string, serie: string, motivo: string}>}
  */
 export function seriesRepetidas(seriesNuevas, negocio, { salvo } = {}) {
   const problemas = []
   const vistas = new Map()
+  const editandoElNegocio = salvo !== undefined && salvo !== null && esPrincipal(salvo)
   for (const { tipo, serie } of seriesNuevas || []) {
     const s = limpio(serie).toUpperCase()
     if (!s) continue
@@ -246,6 +249,7 @@ export function seriesRepetidas(seriesNuevas, negocio, { salvo } = {}) {
     const dueno = duenoDeLaSerie(s, negocio)
     if (!dueno) continue
     if (salvo && !esPrincipal(salvo) && dueno.emisorId === limpio(salvo)) continue
+    if (editandoElNegocio && dueno.emisorId === EMISOR_PRINCIPAL && dueno.donde === 'negocio') continue
     problemas.push({
       tipo,
       serie: s,

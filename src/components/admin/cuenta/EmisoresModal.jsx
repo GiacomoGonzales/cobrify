@@ -8,13 +8,14 @@ import { DEPARTAMENTOS, PROVINCIAS, DISTRITOS } from '@/data/peruUbigeos'
 import { BANCOS, TIPOS_CUENTA, MONEDAS, CUENTA_VACIA, etiquetaTipoCuenta } from '@/data/cuentasBancarias'
 import {
   getEmisores, nuevoIdDeEmisor, guardarEmisor, cambiarActivoDeEmisor, getSecretosDeEmisor, getSeriesDelNegocio,
+  guardarSeriesDelNegocio,
 } from '@/services/emisoresService'
 import {
   FORM_EMISION_VACIO, NOMBRE_DE_REGIMEN, NOMBRE_DE_METODO, formDesdeConfiguracion, emissionConfigDesdeForm, useCamposDeEmision,
 } from './emision'
 import { CamposDeEmision } from './CamposDeEmision'
 import {
-  TIPOS_DE_SERIE_DE_EMISOR, seriesSugeridas, serieValida, seriesRepetidas,
+  TIPOS_DE_SERIE_DE_EMISOR, seriesSugeridas, serieValida, seriesRepetidas, EMISOR_PRINCIPAL,
 } from '../../../../functions/src/utils/emisorDelComprobante.js'
 
 /**
@@ -103,6 +104,64 @@ export default function EmisoresModal({ cuenta, onClose }) {
   const { ver, alternarVer, archivoCertificado, setArchivoCertificado } = useCamposDeEmision()
   const set = (campo, valor) => setForm(f => ({ ...f, [campo]: valor }))
   const setSerie = (tipo, valor) => setForm(f => ({ ...f, series: { ...f.series, [tipo]: valor.toUpperCase() } }))
+
+  // ── Las series del RUC PRINCIPAL, desde acá ────────────────────────────────
+  // Antes esta tarjeta solo decía que se configuraban en Configuración > Series
+  // del cliente, así que para corregirle una serie había que entrar como él.
+  // Son las mismas siete de un emisor y la misma validación: ninguna serie se
+  // repite en la cuenta.
+  const [editandoNegocio, setEditandoNegocio] = useState(false)
+  const [seriesNegocio, setSeriesNegocio] = useState({})
+  const [guardandoNegocio, setGuardandoNegocio] = useState(false)
+
+  function abrirSeriesDelNegocio() {
+    const actuales = {}
+    for (const tipo of TIPOS_DE_SERIE_DE_EMISOR) actuales[tipo] = negocio?.series?.[tipo]?.serie || ''
+    setSeriesNegocio(actuales)
+    setEditandoNegocio(true)
+  }
+
+  async function guardarSeriesDelPrincipal() {
+    const lista = TIPOS_DE_SERIE_DE_EMISOR
+      .map(tipo => ({ tipo, serie: seriesNegocio[tipo] }))
+      .filter(({ serie }) => String(serie || '').trim())
+    const mala = lista.find(({ tipo, serie }) => !serieValida(tipo, serie))
+    if (mala) {
+      toast.error(`La serie de ${ETIQUETA_DE_SERIE[mala.tipo]} no sirve: son cuatro caracteres, y las de factura empiezan con F y las de boleta con B.`)
+      return
+    }
+    // `salvo: EMISOR_PRINCIPAL` deja fuera las que el negocio ya tiene (si no,
+    // chocarían consigo mismas), pero NO las de sus sucursales ni almacenes:
+    // esas llevan su propio contador y sí serían un choque de verdad.
+    const repetidas = seriesRepetidas(lista, negocio, { salvo: EMISOR_PRINCIPAL })
+    if (repetidas.length > 0) {
+      toast.error(`Series repetidas: ${repetidas.map(r => `${r.serie} (${r.motivo})`).join('; ')}.`)
+      return
+    }
+    // Cambiar una serie que ya emitió arranca otra numeración desde 1, igual
+    // que con un emisor: se avisa antes, no después.
+    const cambiadas = TIPOS_DE_SERIE_DE_EMISOR.filter(t => {
+      const g = negocio?.series?.[t]
+      return g && (g.lastNumber || 0) > 0 && seriesNegocio[t] && g.serie !== seriesNegocio[t]
+    })
+    if (cambiadas.length > 0) {
+      const detalle = cambiadas.map(t => `${ETIQUETA_DE_SERIE[t]} (${negocio.series[t].serie}, ya emitió ${negocio.series[t].lastNumber})`).join(', ')
+      if (!window.confirm(`Vas a cambiar ${detalle}. La serie nueva empieza en 1. ¿Continuar?`)) return
+    }
+    setGuardandoNegocio(true)
+    try {
+      const r = await guardarSeriesDelNegocio(cuenta.id, seriesNegocio)
+      if (r.success) {
+        toast.success('Series del RUC principal actualizadas')
+        setEditandoNegocio(false)
+        await recargar()
+      } else {
+        toast.error(r.error || 'No se pudieron guardar las series')
+      }
+    } finally {
+      setGuardandoNegocio(false)
+    }
+  }
 
   const formAbierto = creando || Boolean(editando)
 
@@ -350,12 +409,52 @@ export default function EmisoresModal({ cuenta, onClose }) {
           nombre={cuenta.businessName}
           ruc={cuenta.ruc}
           esPrincipal
-          nota="Es el negocio. Su emisión y sus series se configuran en Emisión electrónica y en Configuración › Series."
+          nota="Es el negocio. Su emisión se configura en Emisión electrónica; las guías y cotizaciones, en Configuración › Series del cliente."
           datos={[
             ['Método', NOMBRE_DE_METODO[cuenta.emissionMethod] || cuenta.emissionMethod],
             ['Régimen', NOMBRE_DE_REGIMEN[cuenta.taxType] || cuenta.taxType],
+            ['Series', !editandoNegocio
+              ? TIPOS_DE_SERIE_DE_EMISOR.map(t => negocio?.series?.[t]?.serie).filter(Boolean).join(' · ') || 'Sin configurar'
+              : null],
           ]}
-        />
+          acciones={!editandoNegocio && !formAbierto && (
+            <Boton tamano="sm" onClick={abrirSeriesDelNegocio} disabled={cargando}>Editar series</Boton>
+          )}
+        >
+          {editandoNegocio && (
+            <div className="mt-3 space-y-3 border-t border-gray-100 pt-3">
+              <p className="text-[11.5px] text-gray-500">
+                Cuatro caracteres. Una serie pertenece a un solo RUC en toda la cuenta: no puede repetir las de sus
+                sucursales ni las de otro emisor. Cambiar una que ya emitió arranca la numeración en 1.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {TIPOS_DE_SERIE_DE_EMISOR.map(tipo => {
+                  const guardada = negocio?.series?.[tipo]
+                  return (
+                    <Campo
+                      key={tipo}
+                      etiqueta={ETIQUETA_DE_SERIE[tipo]}
+                      ayuda={guardada && (guardada.lastNumber || 0) > 0 ? `${guardada.serie}: ya emitió ${guardada.lastNumber}` : undefined}
+                    >
+                      <Entrada
+                        value={seriesNegocio[tipo] || ''}
+                        maxLength={4}
+                        onChange={e => setSeriesNegocio(s => ({ ...s, [tipo]: e.target.value.toUpperCase() }))}
+                        className="font-mono uppercase"
+                      />
+                    </Campo>
+                  )
+                })}
+              </div>
+              <div className="flex justify-end gap-2">
+                <Boton tamano="sm" onClick={() => setEditandoNegocio(false)} disabled={guardandoNegocio}>Cancelar</Boton>
+                <Boton tamano="sm" variante="primario" onClick={guardarSeriesDelPrincipal} disabled={guardandoNegocio}>
+                  {guardandoNegocio ? 'Guardando…' : 'Guardar series'}
+                </Boton>
+              </div>
+            </div>
+          )}
+        </TarjetaEmisor>
 
         {cargando ? (
           <p className="text-[12.5px] text-gray-500 py-3">Cargando emisores…</p>
@@ -445,7 +544,7 @@ export default function EmisoresModal({ cuenta, onClose }) {
   )
 }
 
-function TarjetaEmisor({ nombre, ruc, esPrincipal = false, inactivo = false, nota, datos = [], onEditar, onAlternar, deshabilitado = false }) {
+function TarjetaEmisor({ nombre, ruc, esPrincipal = false, inactivo = false, nota, datos = [], onEditar, onAlternar, deshabilitado = false, acciones = null, children = null }) {
   const filas = datos.filter(([, v]) => v)
   return (
     <div className={`rounded-md border p-3 ${inactivo ? 'border-gray-200 bg-gray-50' : 'border-gray-200 bg-white'}`}>
@@ -459,6 +558,7 @@ function TarjetaEmisor({ nombre, ruc, esPrincipal = false, inactivo = false, not
           <p className="text-[12px] text-gray-500 tabular-nums">RUC {ruc || '—'}</p>
           {nota && <p className="mt-0.5 text-[11.5px] text-gray-500">{nota}</p>}
         </div>
+        {acciones && <div className="flex shrink-0 gap-1">{acciones}</div>}
         {!esPrincipal && (
           <div className="flex shrink-0 gap-1">
             <Boton tamano="sm" onClick={onEditar} disabled={deshabilitado}>Editar</Boton>
@@ -478,6 +578,7 @@ function TarjetaEmisor({ nombre, ruc, esPrincipal = false, inactivo = false, not
           ))}
         </dl>
       )}
+      {children}
     </div>
   )
 }

@@ -29,7 +29,8 @@ import { getAllBranchSeriesFS, updateBranchSeriesFS, getAllUserSeriesFS, updateU
 import { getActiveBranches } from '@/services/branchService'
 import { getManagedUsers } from '@/services/userManagementService'
 import RenumberInvoicesModal from '@/components/RenumberInvoicesModal'
-import { duenoDeLaSerie } from '../../../functions/src/utils/emisorDelComprobante.js'
+import { duenoDeLaSerie, seriesRepetidas, serieValida, TIPOS_DE_SERIE_DE_EMISOR } from '../../../functions/src/utils/emisorDelComprobante.js'
+import { actualizarSeriesDeEmisor } from '@/services/emisoresService'
 import { numeroSiguiente } from '@/utils/serieParaNumerar'
 
 // Series de un negocio nuevo. También son el piso de lectura: un tipo que no
@@ -182,7 +183,10 @@ const COLUMNAS = 'md:grid-cols-[minmax(0,1fr)_6rem_8rem_11rem]'
  * en el celular. `onChange(docType, campo, valor)` es el contrato de los
  * dos handlers de cambio, que siguen siendo los de siempre.
  */
-function GrillaDeSeries({ series, editando, onChange, soloLasQueTiene = false }) {
+// `tiposPermitidos` recorta la grilla a los tipos que ese dueño puede tener: un
+// RUC adicional lleva los siete comprobantes de venta y ninguna guía, así que
+// sin este filtro se le ofrecerían casillas que al guardar se descartan.
+function GrillaDeSeries({ series, editando, onChange, soloLasQueTiene = false, tiposPermitidos = null }) {
   const claseInput = editando ? '' : 'bg-gray-50'
   return (
     <div>
@@ -194,7 +198,8 @@ function GrillaDeSeries({ series, editando, onChange, soloLasQueTiene = false })
       </div>
       {GRUPOS_DE_DOCUMENTOS.map((grupo) => {
         // Las de otro RUC se muestran tal cual: sin proponerle las que no tiene.
-        const tipos = soloLasQueTiene ? grupo.tipos.filter(({ key }) => series[key]?.serie) : grupo.tipos
+        const delDueno = tiposPermitidos ? grupo.tipos.filter(({ key }) => tiposPermitidos.includes(key)) : grupo.tipos
+        const tipos = soloLasQueTiene ? delDueno.filter(({ key }) => series[key]?.serie) : delDueno
         if (tipos.length === 0) return null
         return (
         <Fragment key={grupo.titulo || 'principales'}>
@@ -596,6 +601,71 @@ export default function Series() {
     if (ok) setEditingSeries(false)
   }
 
+  // ── Series de los otros RUC de la cuenta ────────────────────────────────
+  // El admin las deja configuradas al dar de alta el RUC, pero el dueño tiene
+  // que poder corregirlas igual que las suyas y las de sus sucursales: si SUNAT
+  // le rechaza una tanda y hay que reanudar en otro correlativo, esperar a que
+  // se lo cambien desde afuera le cuesta el día de trabajo.
+  const [editandoEmisorId, setEditandoEmisorId] = useState(null)
+
+  const handleEmisorSeriesChange = (eid, tipo, campo, valor) => {
+    setEmisorSeries(prev => ({
+      ...prev,
+      [eid]: {
+        ...(prev[eid] || {}),
+        [tipo]: {
+          ...(prev[eid]?.[tipo] || { serie: '', lastNumber: 0 }),
+          [campo]: campo === 'lastNumber' ? parseInt(valor) || 0 : valor.toUpperCase(),
+        },
+      },
+    }))
+  }
+
+  const handleSaveEmisorSeries = async (eid) => {
+    if (!user?.uid) return
+    const suyas = emisorSeries[eid] || {}
+    const lista = TIPOS_DE_SERIE_DE_EMISOR
+      .map(tipo => ({ tipo, serie: suyas[tipo]?.serie }))
+      .filter(({ serie }) => String(serie || '').trim())
+
+    const malFormada = lista.find(({ tipo, serie }) => !serieValida(tipo, serie))
+    if (malFormada) {
+      toast.error(`La serie ${String(malFormada.serie).toUpperCase()} no sirve: son cuatro caracteres, y las de factura empiezan con F y las de boleta con B.`)
+      return
+    }
+    // Contra toda la cuenta: el negocio, sus sucursales, sus almacenes y los
+    // demás RUC (`seriesRepetidas`), y aparte las personas con serie propia,
+    // que `duenoDeLaSerie` no mira. `salvo` deja fuera las suyas de ahora.
+    const repetidas = seriesRepetidas(
+      lista,
+      { series, branchSeries, warehouseSeries: businessSettings?.warehouseSeries, emisorSeries },
+      { salvo: eid }
+    )
+    if (repetidas.length > 0) {
+      toast.error(`La serie ${repetidas[0].serie} ${repetidas[0].motivo}. Elige otra.`)
+      return
+    }
+    const dePersonas = seriesOcupadas({ userSeries })
+    const choque = lista.find(({ serie }) => dePersonas.has(String(serie).toUpperCase()))
+    if (choque) {
+      toast.error(`La serie ${String(choque.serie).toUpperCase()} ya la usa otra persona de la cuenta. Elige otra.`)
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      const r = await actualizarSeriesDeEmisor(getBusinessId(), eid, suyas)
+      if (r.success) {
+        toast.success('Series actualizadas')
+        setEditandoEmisorId(null)
+      } else {
+        toast.error(r.error || 'No se pudieron guardar las series')
+      }
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   const handleSeriesChange = (type, field, value) => {
     setSeries(prev => ({
       ...prev,
@@ -788,14 +858,14 @@ export default function Series() {
           <Seccion
             id="opcion-emisorSeries"
             titulo="Otros RUC de la cuenta"
-            descripcion="Cada RUC numera con sus propias series. Las configura tu proveedor del sistema; aquí solo se consultan."
+            descripcion="Cada RUC numera con sus propias series, y ninguna se puede repetir en la cuenta. Las guías y cotizaciones salen siempre con el RUC principal."
           >
             <div className="space-y-4">
               {Object.entries(emisorSeries).map(([eid, susSeries]) => {
                 const emisor = (emisores || []).find(e => e.id === eid)
                 return (
                   <Card key={eid}>
-                    <CardHeader>
+                    <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-base font-semibold text-gray-900 truncate">{emisor?.businessName || 'RUC adicional'}</p>
                         {emisor?.ruc && (
@@ -804,9 +874,25 @@ export default function Series() {
                           </p>
                         )}
                       </div>
+                      <BotonesDeEdicion
+                        editando={editandoEmisorId === eid}
+                        guardando={isSaving}
+                        onEditar={async () => { await recargarSeries(); setEditandoEmisorId(eid) }}
+                        onCancelar={async () => { setEditandoEmisorId(null); await recargarSeries() }}
+                        onGuardar={() => handleSaveEmisorSeries(eid)}
+                      />
                     </CardHeader>
                     <CardContent className="px-1 sm:px-3">
-                      <GrillaDeSeries series={susSeries || {}} editando={false} onChange={() => {}} soloLasQueTiene />
+                      {/* Editando salen los siete comprobantes de venta, aunque
+                          este RUC no tenga alguno todavía; de solo mirar, solo
+                          los que tiene, para no ofrecer casillas vacías. */}
+                      <GrillaDeSeries
+                        series={susSeries || {}}
+                        editando={editandoEmisorId === eid}
+                        onChange={(tipo, campo, valor) => handleEmisorSeriesChange(eid, tipo, campo, valor)}
+                        soloLasQueTiene={editandoEmisorId !== eid}
+                        tiposPermitidos={TIPOS_DE_SERIE_DE_EMISOR}
+                      />
                     </CardContent>
                   </Card>
                 )

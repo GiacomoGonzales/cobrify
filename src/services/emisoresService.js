@@ -93,6 +93,64 @@ export async function guardarSeriesDeEmisor(businessId, emisorId, series) {
   if (Object.keys(cambios).length > 0) await updateDoc(businessRef, cambios)
 }
 
+/**
+ * Las series de un emisor TAL CUAL se editaron, con su contador.
+ *
+ * Es la versión para el DUEÑO (Configuración › Series), que también puede
+ * corregir el "último número", igual que con las suyas y las de sus sucursales
+ * —por ejemplo cuando SUNAT le rechazó comprobantes y hay que reanudar en otro
+ * correlativo—. `guardarSeriesDeEmisor`, la del admin, solo toca la serie y
+ * conserva el contador: ahí se está dando de alta el RUC, no arreglando su
+ * numeración.
+ *
+ * Quien llama valida antes que la serie no choque con nada de la cuenta
+ * (`seriesRepetidas`): acá solo se escribe.
+ */
+export async function actualizarSeriesDeEmisor(businessId, emisorId, series) {
+  try {
+    const limpias = {}
+    for (const tipo of TIPOS_DE_SERIE_DE_EMISOR) {
+      const serie = String(series?.[tipo]?.serie || '').trim().toUpperCase()
+      if (!serie) continue
+      limpias[tipo] = { serie, lastNumber: Number(series[tipo]?.lastNumber) || 0 }
+    }
+    await updateDoc(doc(db, 'businesses', businessId), { [`emisorSeries.${emisorId}`]: limpias })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al guardar las series del emisor:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * Las series del NEGOCIO (el RUC principal), desde la ficha del admin.
+ *
+ * Mismo trato que las de un emisor: si la serie no cambió se conserva su
+ * contador, y una serie nueva empieza en 1. Solo los siete comprobantes de
+ * venta; las guías y las cotizaciones no tienen formato definido y se siguen
+ * cambiando desde Configuración › Series del cliente.
+ */
+export async function guardarSeriesDelNegocio(businessId, series) {
+  try {
+    const businessRef = doc(db, 'businesses', businessId)
+    const snap = await getDoc(businessRef)
+    const actuales = snap.data()?.series || {}
+    const cambios = {}
+    for (const tipo of TIPOS_DE_SERIE_DE_EMISOR) {
+      const serie = String(series?.[tipo] || '').trim().toUpperCase()
+      if (!serie) continue
+      const actual = actuales[tipo]
+      const lastNumber = actual && actual.serie === serie ? actual.lastNumber || 0 : 0
+      cambios[`series.${tipo}`] = { serie, lastNumber }
+    }
+    if (Object.keys(cambios).length > 0) await updateDoc(businessRef, cambios)
+    return { success: true }
+  } catch (error) {
+    console.error('Error al guardar las series del negocio:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 /** Lo que el negocio tiene guardado de series, para validar que ninguna se repita. */
 export async function getSeriesDelNegocio(businessId) {
   const snap = await getDoc(doc(db, 'businesses', businessId))
