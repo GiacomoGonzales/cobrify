@@ -381,6 +381,16 @@
       ]
     },
     {
+      "collectionGroup": "invoices",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "posibleChoqueDeSerie.detectadoEn",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "accesosSoporte",
       "queryScope": "COLLECTION",
       "fields": [

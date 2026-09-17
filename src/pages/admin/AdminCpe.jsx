@@ -113,6 +113,11 @@ const ES_1033 = e => String(e?.code ?? '') === '1033' || /registrado previamente
 
 const clasificarAlerta = h => {
   if (h.gemelos?.length || h.borrados?.length) return { clave: 'repetido', texto: 'Número repetido en Cobrify' }
+  // La marca del SERVIDOR manda sobre lo que se pueda deducir acá. El servidor
+  // miró el documento ANTES de mandarlo y vio que nunca se había enviado; esta
+  // pantalla solo puede reconstruirlo DESPUÉS, con el log que quedó. Cuando las
+  // dos cosas están, la del servidor es la buena.
+  if (h.posibleChoqueDeSerie) return { clave: 'primero', texto: 'Primer envío ya dio 1033 (marcado al emitir)' }
   const log = Array.isArray(h.sunatLog) ? h.sunatLog : []
   const idx = log.findIndex(ES_1033)
   const previos = idx > 0 ? log.slice(0, idx).filter(e => e.status && e.status !== 'created') : []
@@ -124,7 +129,10 @@ const clasificarAlerta = h => {
 const correlativoDe = d => Number(d.correlativeNumber) || Number(String(d.number || '').split('-')[1]) || 0
 const serieDe = d => d.series || String(d.number || '').split('-')[0] || '?'
 
-const PESO_VEREDICTO = { repetido: 3, patron: 2, aislado: 1 }
+// `marcado` pesa como `repetido`: los dos son evidencia directa, no un patrón
+// deducido. Sin esto, un negocio con UN solo documento marcado caía en
+// `aislado` —el peso más bajo— y la mejor pista quedaba al final de la lista.
+const PESO_VEREDICTO = { repetido: 3, marcado: 3, patron: 2, aislado: 1 }
 
 const agruparAlertas = (hits, negocios) => {
   const porNegocio = new Map()
@@ -151,8 +159,10 @@ const agruparAlertas = (hits, negocios) => {
     }
     const repetidos = docs.filter(d => clasificarAlerta(d).clave === 'repetido').length
     const primeros = docs.filter(d => clasificarAlerta(d).clave === 'primero').length
+    const marcados = docs.filter(d => d.posibleChoqueDeSerie).length
     let veredicto
     if (repetidos > 0) veredicto = { clave: 'repetido', texto: `${repetidos} con el número repetido en Cobrify` }
+    else if (marcados > 0) veredicto = { clave: 'marcado', texto: `${marcados} marcado${marcados > 1 ? 's' : ''} al emitir: serie ya usada en otro sistema` }
     else if (docs.length >= 3 || corridaMax >= 2) veredicto = { clave: 'patron', texto: `Patrón: ${docs.length} en el mes${corridaMax >= 2 ? `, ${corridaMax} correlativos seguidos` : ''}` }
     else veredicto = { clave: 'aislado', texto: 'Caso aislado, probable reintento' }
     return {
@@ -456,7 +466,29 @@ export default function AdminCpe() {
         orderBy('createdAt', 'desc'),
         limit(2000),
       ))
-      const hits = snap.docs.map(d => ({ id: d.id, bizId: d.ref.parent.parent.id, coleccion: 'invoices', ...d.data() }))
+      // DOS consultas, no una. La de arriba filtra por `sunatResponse.code`
+      // EXACTO, pero SUNAT manda el 1033 casi siempre dentro del TEXTO de
+      // `description` —por eso `ES_1033` mira los dos campos—, así que esos
+      // documentos no entraban nunca a esta pantalla. Desde el 17-set-2026 el
+      // servidor los marca al emitir (`posibleChoqueDeSerie`): se traen también
+      // por la marca y se fusionan sin repetir.
+      //
+      // Si el índice todavía no está construido, la consulta falla y se sigue
+      // con la de siempre: vale más la pantalla a medias que una pantalla rota.
+      const porMarca = await getDocs(query(
+        collectionGroup(db, 'invoices'),
+        where('posibleChoqueDeSerie.detectadoEn', '>=', desde),
+        where('posibleChoqueDeSerie.detectadoEn', '<', hasta),
+        orderBy('posibleChoqueDeSerie.detectadoEn', 'desc'),
+        limit(2000),
+      )).catch(e => { console.warn('Alertas: falta el índice de posibleChoqueDeSerie', e?.message); return null })
+
+      const porClave = new Map()
+      for (const d of [...snap.docs, ...(porMarca?.docs || [])]) {
+        const bizId = d.ref.parent.parent.id
+        porClave.set(`${bizId}/${d.id}`, { id: d.id, bizId, coleccion: 'invoices', ...d.data() })
+      }
+      const hits = [...porClave.values()]
 
       const negocios = new Map()
       const ids = [...new Set(hits.map(h => h.bizId))]
