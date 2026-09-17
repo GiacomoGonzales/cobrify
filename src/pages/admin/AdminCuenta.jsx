@@ -159,6 +159,8 @@ export default function AdminCuenta() {
   // El desplegable del boton "Registrar pago" cuando la cuenta cobra por RUC.
   const menuPago = useMenuDeFila()
   const [emisorSeries, setEmisorSeries] = useState({})
+  // Las del negocio (Configuración › Series), para la fila del RUC principal.
+  const [seriesNegocio, setSeriesNegocio] = useState({})
   const [uso, setUso] = useState(null)
   // Varios RUC: firmas por RUC adicional (el principal es el resto del total).
   const [firmasPorRuc, setFirmasPorRuc] = useState(null)
@@ -244,7 +246,10 @@ export default function AdminCuenta() {
   // solo se pinta con la función Varios RUC activa.
   function cargarEmisores(cuentaId) {
     getEmisores(cuentaId).then(r => { if (r.success) setEmisores(r.data) }).catch(() => {})
-    getSeriesDelNegocio(cuentaId).then(d => setEmisorSeries(d.emisorSeries || {})).catch(() => {})
+    getSeriesDelNegocio(cuentaId).then(d => {
+      setEmisorSeries(d.emisorSeries || {})
+      setSeriesNegocio(d.series || {})
+    }).catch(() => {})
   }
   const cerrarModal = () => setModal(null)
 
@@ -538,6 +543,10 @@ export default function AdminCuenta() {
   const cobraPorRuc = Boolean(c.cobroPorRuc) && emisoresActivos.length > 0
   // Con más de un RUC, cada pago dice de cuál es (incluido el de la cuenta).
   const variosRuc = emisoresActivos.length > 0
+  // Lo que paga la cuenta al mes: el precio pactado manda sobre el del catálogo.
+  const precioDelPlan = c.renewalPrice != null
+    ? c.renewalPrice
+    : (PLANS[c.plan]?.totalPrice ?? customPlans[c.plan]?.totalPrice ?? null)
 
   return (
     <Pagina
@@ -872,7 +881,11 @@ export default function AdminCuenta() {
                 <Td className="font-medium whitespace-normal">{c.businessName} <span className="text-gray-400 font-normal">· principal</span></Td>
                 <Td apagado>{METODOS[c.emissionMethod] || c.emissionMethod}</Td>
                 <Td apagado>{REGIMENES[c.taxType] || c.taxType}</Td>
-                <Td apagado>Las del negocio</Td>
+                {/* Las de Configuración › Series, las mismas que numeran sus
+                    comprobantes. Si no tiene ninguna configurada, se dice. */}
+                <Td apagado className="whitespace-normal">
+                  {TIPOS_DE_SERIE_DE_EMISOR.map(t => seriesNegocio[t]?.serie).filter(Boolean).join(' · ') || 'Sin configurar'}
+                </Td>
                 {/* El principal es el total menos lo de los emisores. */}
                 <Td apagado className="tabular-nums">
                   {uso && firmasPorRuc
@@ -880,7 +893,26 @@ export default function AdminCuenta() {
                     : '…'}
                 </Td>
                 <Td apagado>Activo</Td>
-                {c.cobroPorRuc && <Td apagado className="whitespace-normal">El plan de la cuenta</Td>}
+                {/* La misma información que los RUC adicionales, para poder
+                    compararlos de un vistazo: plan, vencimiento y consumo. */}
+                {c.cobroPorRuc && (
+                  <Td className="whitespace-normal">
+                    <span className="text-gray-900">
+                      {c.planName || PLANS[c.plan]?.name || customPlans[c.plan]?.name || c.plan}
+                      {precioDelPlan > 0 ? ` · ${moneda(precioDelPlan)}` : ''}
+                    </span>
+                    <span className={`block text-[11.5px] ${vencida ? 'font-medium text-red-600' : 'text-gray-500'}`}>
+                      {c.nuncaVence
+                        ? 'Sin vencimiento'
+                        : c.periodEnd
+                          ? `${vencida ? 'Venció el' : 'Al día hasta el'} ${fecha(c.periodEnd)}`
+                          : 'Sin fecha de vencimiento'}
+                    </span>
+                    <span className="block text-[11.5px] text-gray-500 tabular-nums">
+                      {entero(usados)}{ilimitado ? '' : ` de ${entero(c.limit)}`} comprobantes este mes
+                    </span>
+                  </Td>
+                )}
               </Fila>
               {emisores.map(e => (
                 <Fila key={e.id} apagada={e.activo === false}>
@@ -954,7 +986,9 @@ export default function AdminCuenta() {
             <FichaEnTarjeta
               key={i}
               titulo={moneda(p.amount)}
-              estado={<Estado valor={p.status || 'completed'} etiqueta={p.status === 'pending' ? 'Pendiente' : p.status === 'failed' ? 'Fallido' : 'Completado'} />}
+              estado={p.status && p.status !== 'completed'
+                ? <Estado valor={p.status} etiqueta={p.status === 'pending' ? 'Pendiente' : 'Fallido'} />
+                : null}
               datos={[
                 ['Fecha', fechaHora(p.date)],
                 ['Plan', [
@@ -975,22 +1009,30 @@ export default function AdminCuenta() {
               <Th>Plan</Th>
               <Th>Duración</Th>
               <Th>Método</Th>
-              <Th>Estado</Th>
+              {/* Sin columna de estado: desde que se quitó el cobro con
+                  tarjeta (11-set-2026) todo pago se registra a mano cuando el
+                  dinero YA llegó, así que siempre decía "Completado". Los
+                  viejos que quedaron pendientes o fallidos se avisan debajo
+                  del plan, en rojo, que es cuando de verdad importa. */}
               <Th alinear="der">Monto</Th>
             </tr>
           </thead>
           <tbody>
-            {c.paymentHistory.length === 0 && <FilaVacia colSpan={6}>Todavía no hay pagos registrados</FilaVacia>}
+            {c.paymentHistory.length === 0 && <FilaVacia colSpan={5}>Todavía no hay pagos registrados</FilaVacia>}
             {[...c.paymentHistory].reverse().map((p, i) => (
               <Fila key={i}>
                 <Td>{fechaHora(p.date)}</Td>
                 <Td apagado className="whitespace-normal">
                   {p.planName || (p.plan && (PLANS[p.plan]?.name || customPlans[p.plan]?.name)) || p.plan || '—'}
                   <LineaDeRuc pago={p} cuenta={c} variosRuc={variosRuc} />
+                  {p.status && p.status !== 'completed' && (
+                    <span className="block text-[11.5px] font-medium text-red-600">
+                      {p.status === 'pending' ? 'Pendiente' : 'Fallido'}
+                    </span>
+                  )}
                 </Td>
                 <Td apagado>{p.months ? `${p.months} ${p.months === 1 ? 'mes' : 'meses'}` : '—'}</Td>
                 <Td apagado>{p.method || '—'}</Td>
-                <Td><Estado valor={p.status || 'completed'} etiqueta={p.status === 'pending' ? 'Pendiente' : p.status === 'failed' ? 'Fallido' : 'Completado'} /></Td>
                 <Td numero className="font-medium">{moneda(p.amount)}</Td>
               </Fila>
             ))}
