@@ -12384,26 +12384,89 @@ function esPrimerEnvioDelDocumento(doc) {
  * `isAdmin()` en las reglas: así no hay ningún uid cableado y un admin nuevo
  * empieza a recibirlos solo.
  *
- * UNA vez por negocio y por día. El que migra no choca con UN comprobante:
- * choca con todos los que emita esa mañana, y ocho avisos idénticos se vuelven
- * ruido que se ignora. El candado es un `create()` sobre un id determinista —
- * si el documento ya existe lanza, y ahí se corta.
+ * SOLO con CORRIDA_PARA_AVISAR correlativos SEGUIDOS, y una vez por negocio y
+ * por día. La primera versión avisaba por cada documento marcado y Giacomo
+ * recibió 24 avisos de 24 empresas que no tenían nada repetido: el 1033 es
+ * rutina en QPse —si el primer envío no obtiene respuesta, el segundo llega y
+ * SUNAT dice "ya registrado"— y por nuestro lado eso PARECE un primer envío,
+ * así que `esPrimerEnvioDelDocumento` no puede distinguirlo.
+ *
+ * Lo que sí distingue una migración es el PATRÓN, que es justo lo que decía el
+ * comentario de las alertas del panel de CPE: correlativos seguidos. Medido el
+ * 17-set-2026 sobre los 1.500 comprobantes con 1033 del mes, en 211 negocios:
+ *   - con >=5 CASOS sueltos avisarían 67 negocios (peor que las 24 de hoy),
+ *   - con >=5 correlativos SEGUIDOS avisan 10, y los dos mayores son una serie
+ *     entera chocando (89 y 42 seguidos). Ésos son los que hay que atender.
+ *
+ * Se sigue MARCANDO cada documento —al panel le sirve—; lo que se frena es el
+ * aviso. Los números del día se acumulan en el propio doc del aviso y la
+ * decisión va en transacción, porque varias emisiones caen a la vez.
  *
  * Nada de esto puede costar la emisión: todo va envuelto y el peor caso es
  * quedarse sin aviso, nunca romper el comprobante.
  */
-async function avisarAdminsDelChoque(bizId, datos = {}) {
-  if (!bizId) return
-  const hoy = new Date().toISOString().slice(0, 10)
-  try {
-    await db.collection('avisosDeChoqueDeSerie').doc(`${bizId}_${hoy}`).create({
-      bizId,
-      numero: datos.numero || null,
-      createdAt: FieldValue.serverTimestamp(),
-    })
-  } catch {
-    return // ya se avisó hoy por este negocio
+const CORRIDA_PARA_AVISAR = 5
+
+/**
+ * La corrida más larga de correlativos SEGUIDOS, por serie.
+ *
+ * "F001-00000007" → serie F001, correlativo 7. Se agrupa por serie porque dos
+ * series distintas no se continúan entre sí.
+ */
+function corridaMasLarga(numeros = []) {
+  const porSerie = {}
+  for (const num of numeros) {
+    const [serie, corr] = String(num).split('-')
+    const n = Number(corr)
+    if (!serie || !Number.isFinite(n)) continue
+    ;(porSerie[serie] = porSerie[serie] || []).push(n)
   }
+  let mejor = 0
+  for (const lista of Object.values(porSerie)) {
+    const u = [...new Set(lista)].sort((a, b) => a - b)
+    let run = u.length ? 1 : 0
+    mejor = Math.max(mejor, run)
+    for (let i = 1; i < u.length; i++) {
+      run = u[i] === u[i - 1] + 1 ? run + 1 : 1
+      mejor = Math.max(mejor, run)
+    }
+  }
+  return mejor
+}
+
+async function avisarAdminsDelChoque(bizId, datos = {}) {
+  const numero = String(datos.numero || '')
+  if (!bizId || !numero) return
+
+  const hoy = new Date().toISOString().slice(0, 10)
+  const ref = db.collection('avisosDeChoqueDeSerie').doc(`${bizId}_${hoy}`)
+
+  // Se acumulan los números del día y solo se avisa cuando aparecen
+  // CORRIDA_PARA_AVISAR correlativos SEGUIDOS. En transacción porque varias
+  // emisiones caen a la vez y cada una lee-escribe el mismo documento.
+  let corrida = 0
+  try {
+    corrida = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref)
+      const d = snap.exists ? snap.data() : null
+      if (d?.avisado) return 0 // ya se avisó hoy por este negocio
+      const numeros = [...new Set([...(d?.numeros || []), numero])].slice(-300)
+      const larga = corridaMasLarga(numeros)
+      const toca = larga >= CORRIDA_PARA_AVISAR
+      tx.set(ref, {
+        bizId,
+        numeros,
+        corrida: larga,
+        avisado: toca,
+        actualizadoEn: FieldValue.serverTimestamp(),
+      }, { merge: true })
+      return toca ? larga : 0
+    })
+  } catch (e) {
+    console.warn('No se pudo registrar el choque de serie:', e.message)
+    return
+  }
+  if (!corrida) return
 
   try {
     const [negocio, admins] = await Promise.all([
@@ -12413,26 +12476,27 @@ async function avisarAdminsDelChoque(bizId, datos = {}) {
     const n = negocio.data() || {}
     const nombre = n.businessName || n.razonSocial || n.name || bizId
     const titulo = 'Serie repetida en SUNAT'
-    const cuerpo = `${nombre}: ${datos.numero || 'un comprobante'} ya existía en SUNAT. Hay que cambiarle la serie o continuar su numeración.`
+    const cuerpo = `${nombre}: ${corrida} comprobantes seguidos ya existían en SUNAT (último ${numero}). Hay que cambiarle la serie o continuar su numeración.`
 
     for (const a of admins.docs) {
       await sendPushNotification(a.id, titulo, cuerpo, {
         type: 'choque_de_serie',
         bizId,
-        numero: String(datos.numero || ''),
+        numero,
+        corrida: String(corrida),
       })
       await db.collection('notifications').add({
         userId: a.id,
         type: 'choque_de_serie',
         title: titulo,
         message: cuerpo,
-        metadata: { bizId, numero: datos.numero || null, ruc: n.ruc || null },
+        metadata: { bizId, numero, corrida, ruc: n.ruc || null },
         read: false,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       })
     }
-    console.log(`🔔 Choque de serie avisado a ${admins.size} admin(s) por ${nombre}`)
+    console.log(`🔔 Choque de serie (${corrida} seguidos) avisado a ${admins.size} admin(s) por ${nombre}`)
   } catch (e) {
     console.warn('No se pudo avisar del choque de serie:', e.message)
   }
