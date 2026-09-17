@@ -284,6 +284,25 @@ function BotonesDeEdicion({ editando, guardando, onEditar, onCancelar, onGuardar
   )
 }
 
+/** Un RUC del selector de arriba: el principal y cada RUC adicional. */
+function PastillaDeRuc({ activa, onClick, titulo, subtitulo }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={activa}
+      className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+        activa ? 'border-primary-500 bg-primary-50' : 'border-gray-200 bg-white hover:bg-gray-50'
+      }`}
+    >
+      <span className={`block max-w-[240px] truncate text-sm font-medium ${activa ? 'text-primary-900' : 'text-gray-900'}`}>
+        {titulo}
+      </span>
+      <span className={`block text-xs ${activa ? 'text-primary-700' : 'text-gray-500'}`}>{subtitulo}</span>
+    </button>
+  )
+}
+
 export default function Series() {
   const { user, getBusinessId, isDemoMode, businessSettings, isBusinessOwner, isAdmin, emisores } = useAppContext()
   const toast = useToast()
@@ -608,6 +627,17 @@ export default function Series() {
   // se lo cambien desde afuera le cuesta el día de trabajo.
   const [editandoEmisorId, setEditandoEmisorId] = useState(null)
 
+  // Con varios RUC, el primer nivel de la página es DE CUÁL son las series que
+  // se están mirando: cada uno numera por su cuenta y verlos todos en una sola
+  // lista larga se presta a tocar la serie equivocada. Con un solo RUC no hay
+  // selector y la página queda exactamente como siempre.
+  const [rucElegido, setRucElegido] = useState('principal')
+  const hayOtrosRuc = Object.keys(emisorSeries).length > 0
+  // Si el RUC elegido desaparece (lo quitaron mientras estaba abierto), se
+  // vuelve al principal en vez de dejar la pantalla vacía.
+  const viendoElPrincipal = !hayOtrosRuc || rucElegido === 'principal' || !emisorSeries[rucElegido]
+  const emisorElegido = (emisores || []).find(e => e.id === rucElegido) || null
+
   const handleEmisorSeriesChange = (eid, tipo, campo, valor) => {
     setEmisorSeries(prev => ({
       ...prev,
@@ -678,7 +708,34 @@ export default function Series() {
 
   return (
     <div className="space-y-8">
+      {hayOtrosRuc && (
+        <div>
+          <p className="text-sm font-medium text-gray-700 mb-2">¿De qué RUC son las series?</p>
+          <div className="flex flex-wrap gap-2">
+            <PastillaDeRuc
+              activa={viendoElPrincipal}
+              onClick={() => { setRucElegido('principal'); setEditandoEmisorId(null) }}
+              titulo={businessSettings?.businessName || 'RUC principal'}
+              subtitulo={`RUC ${businessSettings?.ruc || '—'} · principal`}
+            />
+            {Object.keys(emisorSeries).map(eid => {
+              const emisor = (emisores || []).find(e => e.id === eid)
+              return (
+                <PastillaDeRuc
+                  key={eid}
+                  activa={!viendoElPrincipal && rucElegido === eid}
+                  onClick={() => { setRucElegido(eid); setEditandoEmisorId(null) }}
+                  titulo={emisor?.businessName || 'RUC adicional'}
+                  subtitulo={`RUC ${emisor?.ruc || '—'}${emisor?.activo === false ? ' · desactivado' : ''}`}
+                />
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Sucursal principal: las series globales del negocio */}
+      {viendoElPrincipal && (
       <Seccion
         id="opcion-series"
         titulo="Sucursal principal"
@@ -705,8 +762,9 @@ export default function Series() {
           </CardContent>
         </Card>
       </Seccion>
+      )}
 
-      {loadingBranches && (
+      {viendoElPrincipal && loadingBranches && (
         <p className="flex items-center gap-2 text-sm text-gray-500">
           <Loader2 className="w-4 h-4 animate-spin" />
           Cargando sucursales...
@@ -714,7 +772,7 @@ export default function Series() {
       )}
 
       {/* Sucursales adicionales: cada una con sus propias series */}
-      {!loadingBranches && branches.length > 0 && (
+      {viendoElPrincipal && !loadingBranches && branches.length > 0 && (
         <>
           <Separador />
           <Seccion
@@ -773,7 +831,7 @@ export default function Series() {
       {/* Series por persona. Quien no tiene asignada nada no muestra grilla:
           con doce personas en la cuenta, doce grillas de series que no usa
           tapan a las dos que sí importan. */}
-      {personas.length > 0 && (
+      {viendoElPrincipal && personas.length > 0 && (
         <>
           <Separador />
           <Seccion
@@ -850,56 +908,49 @@ export default function Series() {
         </>
       )}
 
-      {/* Varios RUC: las series de los otros RUC, de solo lectura. Las
-          configura el administrador en la ficha de la cuenta. */}
-      {Object.keys(emisorSeries).length > 0 && (
-        <>
-          <Separador />
-          <Seccion
-            id="opcion-emisorSeries"
-            titulo="Otros RUC de la cuenta"
-            descripcion="Cada RUC numera con sus propias series, y ninguna se puede repetir en la cuenta. Las guías y cotizaciones salen siempre con el RUC principal."
-          >
-            <div className="space-y-4">
-              {Object.entries(emisorSeries).map(([eid, susSeries]) => {
-                const emisor = (emisores || []).find(e => e.id === eid)
-                return (
-                  <Card key={eid}>
-                    <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-base font-semibold text-gray-900 truncate">{emisor?.businessName || 'RUC adicional'}</p>
-                        {emisor?.ruc && (
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            RUC {emisor.ruc}{emisor.activo === false ? ' · desactivado' : ''}
-                          </p>
-                        )}
-                      </div>
-                      <BotonesDeEdicion
-                        editando={editandoEmisorId === eid}
-                        guardando={isSaving}
-                        onEditar={async () => { await recargarSeries(); setEditandoEmisorId(eid) }}
-                        onCancelar={async () => { setEditandoEmisorId(null); await recargarSeries() }}
-                        onGuardar={() => handleSaveEmisorSeries(eid)}
-                      />
-                    </CardHeader>
-                    <CardContent className="px-1 sm:px-3">
-                      {/* Editando salen los siete comprobantes de venta, aunque
-                          este RUC no tenga alguno todavía; de solo mirar, solo
-                          los que tiene, para no ofrecer casillas vacías. */}
-                      <GrillaDeSeries
-                        series={susSeries || {}}
-                        editando={editandoEmisorId === eid}
-                        onChange={(tipo, campo, valor) => handleEmisorSeriesChange(eid, tipo, campo, valor)}
-                        soloLasQueTiene={editandoEmisorId !== eid}
-                        tiposPermitidos={TIPOS_DE_SERIE_DE_EMISOR}
-                      />
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
-          </Seccion>
-        </>
+      {/* El RUC elegido arriba, cuando no es el principal. Un RUC adicional no
+          tiene sucursales ni personas con serie propia: emite siempre con
+          estas, así que su pantalla es una sola tarjeta. */}
+      {!viendoElPrincipal && (
+        <Seccion
+          id="opcion-emisorSeries"
+          titulo={emisorElegido?.businessName || 'Otro RUC de la cuenta'}
+          descripcion="Este RUC numera con sus propias series y ninguna se puede repetir en la cuenta. Las guías de remisión y las cotizaciones salen siempre con el RUC principal."
+        >
+          <Card>
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-base font-semibold text-gray-900 truncate">{emisorElegido?.businessName || 'RUC adicional'}</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  RUC {emisorElegido?.ruc || '—'}{emisorElegido?.activo === false ? ' · desactivado' : ''}
+                </p>
+              </div>
+              <BotonesDeEdicion
+                editando={editandoEmisorId === rucElegido}
+                guardando={isSaving}
+                onEditar={async () => { await recargarSeries(); setEditandoEmisorId(rucElegido) }}
+                onCancelar={async () => { setEditandoEmisorId(null); await recargarSeries() }}
+                onGuardar={() => handleSaveEmisorSeries(rucElegido)}
+              />
+            </CardHeader>
+            <CardContent className="px-1 sm:px-3">
+              {/* Editando salen los siete comprobantes de venta, aunque este
+                  RUC no tenga alguno todavía; de solo mirar, solo los que
+                  tiene, para no ofrecer casillas vacías. */}
+              <GrillaDeSeries
+                series={emisorSeries[rucElegido] || {}}
+                editando={editandoEmisorId === rucElegido}
+                onChange={(tipo, campo, valor) => handleEmisorSeriesChange(rucElegido, tipo, campo, valor)}
+                soloLasQueTiene={editandoEmisorId !== rucElegido}
+                tiposPermitidos={TIPOS_DE_SERIE_DE_EMISOR}
+              />
+            </CardContent>
+          </Card>
+          <Nota>
+            Las sucursales y las personas con serie propia numeran solo con el RUC principal. Lo que se venda con
+            este RUC sale siempre con estas series, lo emita quien lo emita y desde donde lo emita.
+          </Nota>
+        </Seccion>
       )}
 
       {/* Renumerador: solo el dueño o el administrador. Antes estaba en
