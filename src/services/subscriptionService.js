@@ -572,6 +572,13 @@ export const createSubscription = async (userId, email, businessName, plan = 'tr
           method: options.initialPayment.method || 'manual',
           date: Timestamp.fromDate(now),
           plan,
+          // Los mismos campos que guarda una renovacion (registerPayment) y un
+          // pago de RUC. Sin ellos, el primer pago de la cuenta salia en la
+          // ficha sin duracion ("—") mientras los demas decian "1 mes", como si
+          // le faltara algo (lo noto Giacomo el 17-set-2026).
+          planName: planConfig.name,
+          months: planConfig.months || 0,
+          status: 'completed',
           note: 'Pago inicial (alta)',
         }
       : null;
