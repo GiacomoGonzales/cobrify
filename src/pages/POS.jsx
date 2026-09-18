@@ -5415,13 +5415,49 @@ export default function POS() {
     }
   }
 
+  /**
+   * VACIAR EL CARRITO A MANO SUELTA LA MESA QUE ESTABA CARGADA.
+   *
+   * `clearCart` ya soltaba el vínculo, pero solo lo llaman "Limpiar" y "Nueva":
+   * borrar las líneas UNA POR UNA con el tacho dejaba el carrito vacío y
+   * `pendingOrderId` intacto. La siguiente venta —armada a mano para otro
+   * cliente— se cobraba con su propio comprobante pero SELLABA la mesa anterior.
+   *
+   * Pasó dos veces en Mandil: el 19-ago (MESA 4 de S/62 apuntando a una nota de
+   * S/131) y el 17-set (MESA 3 de S/78 apuntando a una boleta de S/31 de un
+   * burrito de otra mesa). La segunda vez el arreglo de la primera ya estaba
+   * puesto: cubría "Limpiar", no el tacho.
+   *
+   * Se avisa en pantalla a propósito. Que el vínculo se soltara en silencio es
+   * justo lo que hizo que nadie lo viera venir.
+   */
+  const soltarOrdenSiQuedaVacio = (carritoNuevo) => {
+    if (carritoNuevo.length > 0) return
+    if (!pendingOrderId && !tableData) return
+    const nombre = tableData?.tableNumber || tableData?.tableName || null
+    setPendingOrderId(null)
+    setMarkOrderPaidOnComplete(false)
+    setMarkOnlineOrderCompleteOnSale(false)
+    setTableData(null)
+    // Los refs vuelven a cero para que se pueda cargar otra mesa después.
+    tableLoadedRef.current = false
+    orderLoadedRef.current = false
+    onlineOrderLoadedRef.current = false
+    toast.info(nombre
+      ? `Se soltó ${nombre}: lo que cobres ahora no se le carga a esa cuenta.`
+      : 'Se soltó la cuenta cargada: lo que cobres ahora no se le carga a ella.',
+      6000)
+  }
+
   const removeFromCart = itemId => {
     if (saleCompleted) {
       toast.warning('Ya emitiste esta venta. Presiona "Nueva Venta" para iniciar otra.')
       return
     }
     if (frenarEdicionDeNota()) return
-    setCart(cart.filter(item => (item.cartId || item.id) !== itemId))
+    const nuevo = cart.filter(item => (item.cartId || item.id) !== itemId)
+    setCart(nuevo)
+    soltarOrdenSiQuedaVacio(nuevo)
   }
 
   const startEditingPrice = (itemId, currentPrice, withoutIgv = false) => {
@@ -5578,7 +5614,11 @@ export default function POS() {
     }
     if (frenarEdicionDeNota()) return
     const groupIds = new Set(getSerialGroupCartIds(itemId))
-    setCart(cart.filter(item => !groupIds.has(item.cartId || item.id)))
+    const nuevo = cart.filter(item => !groupIds.has(item.cartId || item.id))
+    setCart(nuevo)
+    // El otro camino que puede dejar el carrito vacío: quitar un grupo de
+    // series entero. Los únicos dos son este y el tacho (ver removeFromCart).
+    soltarOrdenSiQuedaVacio(nuevo)
   }
 
   // Actualizar descuento TOTAL de un grupo de series: se prorratea entre los miembros
@@ -8281,6 +8321,37 @@ ${textoDeErrores(revision.errores)}`, 9000)
         // Después: mostrar éxito + imprimir ticket
         // Esto garantiza que el número solo se usa si la factura se crea exitosamente
         // ========================================
+
+        // 0.a LA RED: lo que se va a cobrar no tiene NADA que ver con la cuenta
+        // cargada.
+        //
+        // Soltar el vínculo al vaciar el carrito (ver `soltarOrdenSiQuedaVacio`)
+        // tapa el caso conocido; esto protege del que no imaginamos, porque el
+        // daño es el mismo venga por donde venga: la mesa queda sellada con un
+        // comprobante ajeno, su venta no aparece en ningún reporte y el dinero
+        // no cuadra. Pasó dos veces en Mandil (19-ago y 17-set-2026).
+        //
+        // A propósito es CONSERVADORA: solo frena si no comparten NI UN
+        // producto. Un descuento, un plato agregado, una cortesía o borrar
+        // algunas líneas —pero no todas— siguen pasando sin molestar a nadie.
+        // Y solo aplica cuando hay con qué comparar: desde Órdenes no viajan
+        // los items, y ahí no se inventa una alarma.
+        if (pendingOrderId && markOrderPaidOnComplete && cart.length > 0
+          && Array.isArray(tableData?.items) && tableData.items.length > 0) {
+          const clave = (i) => String(i?.productId || i?.id || '').trim()
+            || String(i?.name || '').trim().toUpperCase()
+          const deLaCuenta = new Set(tableData.items.map(clave).filter(Boolean))
+          if (!cart.some((i) => deLaCuenta.has(clave(i)))) {
+            const donde = tableData?.tableNumber || tableData?.tableName || 'la cuenta cargada'
+            toast.error(
+              `Lo que vas a cobrar no coincide con ${donde}. Para no cobrárselo a esa cuenta por error, presiona "Limpiar" y arma la venta de nuevo, o vuelve a abrir la mesa desde Mesas.`,
+              12000
+            )
+            setIsProcessing(false)
+            checkoutGuardRef.current = false
+            return
+          }
+        }
 
         // 0. Reservar la orden de mesa/pedido ANTES de gastar un correlativo.
         //
