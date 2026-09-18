@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  El splash de la app: un degradado y el logo al medio, nada más.
+
+  Es también la vista del plugin SplashScreen (@capacitor/splash-screen usa este
+  storyboard), que se queda puesta hasta que la web avisa que ya pintó su
+  primera pantalla (src/utils/splashNativo.js). Por eso el degradado y el logo
+  tienen que ser EXACTAMENTE los de la espera web (FONDO_SPLASH y
+  LADO_LOGO_SPLASH, y el puente de index.html): así se ve UN solo splash de
+  punta a punta. Si cambias uno, cambia los tres.
+-->
 <document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="21701" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="01J-lp-oVM">
     <device id="retina6_1" orientation="portrait" appearance="light"/>
     <dependencies>
@@ -15,16 +25,23 @@
                         <rect key="frame" x="0.0" y="0.0" width="414" height="896"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleToFill" image="SplashFondo" translatesAutoresizingMaskIntoConstraints="NO" id="fondo-image">
+                                <rect key="frame" x="0.0" y="0.0" width="414" height="896"/>
+                            </imageView>
                             <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="Logo" translatesAutoresizingMaskIntoConstraints="NO" id="logo-image">
-                                <rect key="frame" x="137" y="378" width="140" height="140"/>
+                                <rect key="frame" x="155" y="396" width="104" height="104"/>
                                 <constraints>
-                                    <constraint firstAttribute="width" constant="140" id="logo-width"/>
-                                    <constraint firstAttribute="height" constant="140" id="logo-height"/>
+                                    <constraint firstAttribute="width" constant="104" id="logo-width"/>
+                                    <constraint firstAttribute="height" constant="104" id="logo-height"/>
                                 </constraints>
                             </imageView>
                         </subviews>
-                        <color key="backgroundColor" red="0.95686274509803915" green="0.97254901960784312" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                        <color key="backgroundColor" red="1" green="1" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <constraints>
+                            <constraint firstItem="fondo-image" firstAttribute="top" secondItem="main-view" secondAttribute="top" id="fondo-top"/>
+                            <constraint firstItem="fondo-image" firstAttribute="bottom" secondItem="main-view" secondAttribute="bottom" id="fondo-bottom"/>
+                            <constraint firstItem="fondo-image" firstAttribute="leading" secondItem="main-view" secondAttribute="leading" id="fondo-leading"/>
+                            <constraint firstItem="fondo-image" firstAttribute="trailing" secondItem="main-view" secondAttribute="trailing" id="fondo-trailing"/>
                             <constraint firstItem="logo-image" firstAttribute="centerX" secondItem="main-view" secondAttribute="centerX" id="center-x"/>
                             <constraint firstItem="logo-image" firstAttribute="centerY" secondItem="main-view" secondAttribute="centerY" id="center-y"/>
                         </constraints>
@@ -37,5 +54,6 @@
     </scenes>
     <resources>
         <image name="Logo" width="512" height="512"/>
+        <image name="SplashFondo" width="4" height="2796"/>
     </resources>
 </document>

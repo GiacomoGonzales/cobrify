@@ -1,4 +1,6 @@
+import { Capacitor } from '@capacitor/core'
 import AuthShell from '@/components/AuthShell'
+import { FONDO_SPLASH, LADO_LOGO_SPLASH, splashYaSeOculto } from '@/utils/splashNativo'
 import { esDominioReseller } from '@/utils/resellerDomain'
 import { estaEnElChat, MARCA_CHAT } from '@/utils/dominioChat'
 import { leerMarcaCache } from '@/utils/marcaCache'
@@ -29,6 +31,11 @@ import { leerMarcaCache } from '@/utils/marcaCache'
  * @param {Function|null} onReintentar qué hace el botón Reintentar del aviso
  */
 export default function SplashMarca({ mensaje = null, aviso = false, onReintentar = null }) {
+  // En la app nativa, el MISMO dibujo que el splash de iOS (ver utils/splashNativo).
+  if (Capacitor.isNativePlatform()) {
+    return <SplashNativo mensaje={mensaje} aviso={aviso} onReintentar={onReintentar} />
+  }
+
   if (esDominioReseller()) {
     const marca = leerMarcaCache()
     const conColor = !!marca?.primaryColor
@@ -104,6 +111,65 @@ export default function SplashMarca({ mensaje = null, aviso = false, onReintenta
         />
       </div>
     </AuthShell>
+  )
+}
+
+/**
+ * La espera en la app nativa: el fondo y el logo del splash de iOS, en el mismo
+ * lugar, para que al pasar de uno a otro no se note nada.
+ *
+ * Sin spinner al arrancar: esa carga la tapa el splash nativo, y un spinner
+ * sobre el logo era justo una de las pantallas de más (18-set-2026). Solo gira
+ * si el splash ya se fue —entrar desde el login—, porque ahí la persona acaba
+ * de tocar un botón y tiene que ver que algo pasa. Lo de abajo va fuera del
+ * flujo, así el logo no se mueve cuando aparece.
+ */
+function SplashNativo({ mensaje, aviso, onReintentar }) {
+  const gira = !!mensaje && !aviso && splashYaSeOculto()
+  return (
+    <div className="fixed inset-0 flex items-center justify-center" style={{ background: FONDO_SPLASH }}>
+      <img
+        src="/logo.png"
+        alt="Cobrify"
+        width={LADO_LOGO_SPLASH}
+        height={LADO_LOGO_SPLASH}
+        style={{ width: LADO_LOGO_SPLASH, height: LADO_LOGO_SPLASH }}
+        className="object-contain"
+      />
+      {(gira || (mensaje && aviso)) && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="absolute inset-x-0 flex flex-col items-center gap-3 px-6 text-center"
+          style={{ top: `calc(50% + ${LADO_LOGO_SPLASH / 2 + 28}px)` }}
+        >
+          {gira && (
+            <div
+              className="animate-spin rounded-full h-7 w-7 border-2 border-transparent"
+              style={{ borderBottomColor: '#2563EB' }}
+            />
+          )}
+          {aviso && (
+            <div className="max-w-xs">
+              <p className="text-sm leading-snug" style={{ color: '#425466' }}>
+                Está tardando más de lo normal. Puede ser la conexión a internet:
+                puedes seguir esperando o volver a intentar.
+              </p>
+              {onReintentar && (
+                <button
+                  type="button"
+                  onClick={onReintentar}
+                  className="mt-3 px-4 py-2 rounded-lg text-sm font-medium text-white"
+                  style={{ backgroundColor: '#2563EB' }}
+                >
+                  Reintentar
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 

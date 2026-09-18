@@ -6,6 +6,7 @@ import { ToastProvider } from './contexts/ToastContext'
 import { ActualizacionProvider } from './contexts/ActualizacionContext'
 import AppLifecycleManager from './components/AppLifecycleManager'
 import DiagnosticoApp from './components/DiagnosticoApp'
+import OcultarSplashAlCargar from './components/OcultarSplashAlCargar'
 import MainLayout from './layouts/MainLayout'
 import LandingRouter from './components/LandingRouter'
 import EsperaDeArranque from './components/EsperaDeArranque'
@@ -741,6 +742,7 @@ function App() {
             </Suspense>
           <AppLifecycleManager />
           <DiagnosticoApp />
+          <OcultarSplashAlCargar />
           </ToastProvider>
         </BrandingProvider>
       </AuthProvider>

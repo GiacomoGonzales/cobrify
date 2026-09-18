@@ -34,11 +34,15 @@ export default function EsperaDeArranque({ texto = 'Cargando...' }) {
     return () => clearTimeout(temporizador)
   }, [])
 
+  // La marca `data-espera-arranque` es la que mira OcultarSplashAlCargar: en
+  // la app nativa, el splash no se retira mientras una espera esté a la vista.
   return (
-    <SplashMarca
-      mensaje={texto}
-      aviso={tarda}
-      onReintentar={() => window.location.reload()}
-    />
+    <div data-espera-arranque="" style={{ display: 'contents' }}>
+      <SplashMarca
+        mensaje={texto}
+        aviso={tarda}
+        onReintentar={() => window.location.reload()}
+      />
+    </div>
   )
 }

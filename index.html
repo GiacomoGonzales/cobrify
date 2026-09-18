@@ -269,21 +269,32 @@
           if (['chat.cobrifyperu.com', 'chat.cobrify.com', 'chat.localhost'].indexOf(host) !== -1) return;
           var root = document.getElementById('root');
           if (!root || root.childNodes.length) return;
+          // En la app nativa (tras una recarga; al abrirla lo tapa el splash
+          // de iOS) va el MISMO dibujo que ese splash: el degradado y el logo
+          // de 104 en el centro, sin spinner ni texto. Espejado en
+          // src/utils/splashNativo.js y LaunchScreen.storyboard.
+          var nativo = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
           var estilo = document.createElement('style');
           estilo.textContent = '@keyframes puente-giro { to { transform: rotate(360deg); } }';
           document.head.appendChild(estilo);
           var d = document.createElement('div');
           d.id = 'puente-carga';
           d.setAttribute('role', 'status');
+          var textoAviso = '<p style="margin:0 0 12px;font-size:14px;line-height:1.4;color:#425466">Está tardando más de lo normal. Puede ser la conexión a internet: puedes seguir esperando o volver a intentar.</p>' +
+              '<button type="button" onclick="window.location.reload()" style="padding:8px 16px;border:0;border-radius:8px;background:#2563EB;color:#fff;font-size:14px;font-weight:500;cursor:pointer">Reintentar</button>';
+          if (nativo) {
+            d.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;background:linear-gradient(180deg,#FFFFFF 0%,#E6EFFF 100%)';
+            d.innerHTML =
+              '<img src="/logo.png" alt="" width="104" height="104" style="width:104px;height:104px;object-fit:contain">' +
+              '<div id="puente-carga-aviso" hidden style="position:absolute;left:24px;right:24px;top:calc(50% + 80px);text-align:center">' + textoAviso + '</div>';
+          } else {
           d.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:16px;text-align:center;color:#0A2540;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;background:linear-gradient(160deg,#F4F8FF 0%,#EBF5FB 52%,#F5F2FF 100%)';
           d.innerHTML =
             '<img src="/logo.png" alt="" width="96" height="96" style="width:96px;height:96px;object-fit:contain">' +
             '<div style="width:28px;height:28px;border-radius:50%;border:2px solid transparent;border-bottom-color:#2563EB;animation:puente-giro .8s linear infinite"></div>' +
             '<p style="margin:0;font-size:14px;font-weight:500">Cargando...</p>' +
-            '<div id="puente-carga-aviso" hidden style="max-width:320px">' +
-              '<p style="margin:0 0 12px;font-size:14px;line-height:1.4;color:#425466">Está tardando más de lo normal. Puede ser la conexión a internet: puedes seguir esperando o volver a intentar.</p>' +
-              '<button type="button" onclick="window.location.reload()" style="padding:8px 16px;border:0;border-radius:8px;background:#2563EB;color:#fff;font-size:14px;font-weight:500;cursor:pointer">Reintentar</button>' +
-            '</div>';
+            '<div id="puente-carga-aviso" hidden style="max-width:320px">' + textoAviso + '</div>';
+          }
           document.body.appendChild(d);
           var aviso = setTimeout(function () {
             var a = document.getElementById('puente-carga-aviso');
