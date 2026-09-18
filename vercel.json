@@ -119,7 +119,7 @@
       "destination": "/api/registro-meta"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!assets/).*)",
       "destination": "/index.html"
     }
   ],
