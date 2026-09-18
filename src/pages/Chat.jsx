@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
 import { Navigate } from 'react-router-dom'
 import { getAuth } from 'firebase/auth'
 import {
@@ -214,6 +214,27 @@ export default function Chat() {
   const cancelarPrecalentar = () => clearTimeout(temporizadorPrecalentar.current)
   const selectorArchivo = useRef(null)
   const cuadroTexto = useRef(null)
+
+  /**
+   * EL CUADRO CRECE CON EL TEXTO, como el de WhatsApp.
+   *
+   * Va en un efecto y no en el `onChange` del cuadro porque el texto entra de
+   * varios lados: tecleando, pegando, con una respuesta rápida ("/"), desde la
+   * ficha del cliente o cuando vuelve tras un envío fallido. Cuando lo hacía el
+   * `onChange`, una respuesta rápida de diez líneas entraba con el alto de una
+   * y había que leerla por una rendija, desplazando (18-set-2026).
+   *
+   * El tope es amplio —40% de la ventana, entre 132 y 400 px— y recién ahí se
+   * desplaza por dentro; lo que sobra del compositor es la conversación, y
+   * comerse media pantalla para escribir tampoco sirve.
+   */
+  useLayoutEffect(() => {
+    const cuadro = cuadroTexto.current
+    if (!cuadro) return
+    const tope = Math.max(132, Math.min(400, Math.round(window.innerHeight * 0.4)))
+    cuadro.style.height = 'auto'
+    cuadro.style.height = `${Math.min(cuadro.scrollHeight, tope)}px`
+  }, [texto])
   // Adjunto elegido, esperando confirmacion (con su vista previa y pie).
   const [adjunto, setAdjunto] = useState(null)
   const [pieAdjunto, setPieAdjunto] = useState('')
@@ -501,7 +522,6 @@ export default function Chat() {
    * tapando media conversacion.
    */
   const devolverElCursor = () => {
-    if (cuadroTexto.current) cuadroTexto.current.style.height = 'auto'
     if (!window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) return
     cuadroTexto.current?.focus()
     requestAnimationFrame(() => cuadroTexto.current?.focus())
@@ -2294,14 +2314,7 @@ export default function Chat() {
                   ref={cuadroTexto}
                   rows={1}
                   value={texto}
-                  onChange={(e) => {
-                    setTexto(e.target.value)
-                    // Alto automatico: crece con el texto hasta 6 lineas, como
-                    // WhatsApp. Un input de una linea obliga a escribir a
-                    // ciegas cuando el mensaje es largo.
-                    e.target.style.height = 'auto'
-                    e.target.style.height = `${Math.min(e.target.scrollHeight, 132)}px`
-                  }}
+                  onChange={(e) => setTexto(e.target.value)}
                   onKeyDown={(e) => {
                     // Con la lista de atajos abierta, las flechas la recorren y
                     // Enter usa el elegido — sin sacar la mano del teclado.
@@ -2326,12 +2339,11 @@ export default function Chat() {
                     // Enter envia; Shift+Enter hace salto de linea.
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault()
-                      e.target.style.height = 'auto'
                       handleEnviar(e)
                     }
                   }}
                   placeholder={respuestasRapidas.length ? 'Escribe un mensaje, o / para una respuesta rápida' : 'Escribe un mensaje'}
-                  className="flex-1 px-4 py-2.5 bg-gray-100 rounded-2xl text-[14px] focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-60 resize-none leading-5 max-h-[132px]"
+                  className="flex-1 px-4 py-2.5 bg-gray-100 rounded-2xl text-[14px] focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-60 resize-none leading-5"
                 />
                 )}
                 {/* Con algo escrito, el botón envía. Sin nada, ofrece el
