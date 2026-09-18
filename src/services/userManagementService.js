@@ -45,6 +45,10 @@ export const COMMON_PAGES = [
   // Permite GESTIONAR los horarios (planificador) dentro de la página Asistencia.
   // Requiere también el permiso "Marcar Asistencia" (da acceso a la página).
   { id: 'schedules', name: 'Horarios (planificador)', path: '/asistencia', category: 'sistema' },
+  // Permite VER el reporte de Marcaciones (y aprobar o ajustar horas) dentro de
+  // la página Asistencia, sin dar el resto de la gestión de personal. Requiere
+  // también "Marcar Asistencia", que es el que da acceso a la página.
+  { id: 'attendance-records', name: 'Marcaciones (reporte)', path: '/asistencia', category: 'sistema' },
   // Otros
   { id: 'accounting', name: 'Contabilidad', path: '/contabilidad', category: 'finanzas' },
   { id: 'complaints', name: 'Libro de Reclamos', path: '/reclamos', category: 'otros' },

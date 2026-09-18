@@ -240,8 +240,16 @@ export default {
           text: 'Si quieres que alguien de tu equipo **arme los horarios** sin darle el resto del módulo, ve a **Usuarios**, abre a esa persona y márcale dos permisos: **Marcar Asistencia** y **Horarios (planificador)**. El segundo necesita al primero. Con los dos entra directo al planificador, tanto en la app como en el navegador, y en su menú el módulo aparece como **Horarios** en vez de **Marcar Asistencia**.',
         },
         {
+          type: 'texto',
+          text: 'El **reporte de Marcaciones** también se puede delegar, y por separado: el permiso **Marcaciones (reporte)** deja ver las marcaciones de todos y aprobar o ajustar horas, sin dar Personal, Vacaciones ni Configuración. Como los otros dos, necesita además **Marcar Asistencia**. Quien lo tenga sigue fichando con su propia vista: el permiso no lo convierte en administrador.',
+        },
+        {
+          type: 'texto',
+          text: 'Y si prefieres que tu equipo **solo marque**, sin poder repasar sus horas: en **Configuración**, dentro de Asistencia, activa **Ocultar el historial a los trabajadores**. A cada persona le queda su tarjeta de hoy —entrada, salida y total en curso— pero desaparecen la pestaña **Mi historial** y la lista de días anteriores. Tú sigues viendo todo en Marcaciones.',
+        },
+        {
           type: 'ojo',
-          text: 'El **reporte de Marcaciones** todavía no se puede delegar: sigue siendo solo del dueño. Dar **Horarios (planificador)** deja armar y modificar turnos, pero no ver ni aprobar las marcaciones de los demás.',
+          text: 'Ocultar el historial es un cambio de **pantalla**, no un candado: alguien con conocimientos técnicos podría seguir consultando sus marcaciones por otras vías. Sirve para ordenar el día a día, no para guardar un secreto.',
         },
       ],
     },

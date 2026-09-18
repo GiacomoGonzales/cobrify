@@ -190,6 +190,30 @@ export const setAttendanceBreakProgramado = async (businessId, enabled) => {
 }
 
 /**
+ * Oculta al trabajador su propio historial de marcaciones: deja solo marcar.
+ *
+ * Pedido de Mandil (Carlos Porras): quieren capturar las marcaciones sin que
+ * cada persona pueda repasar las suyas. Del negocio entero, como los breaks.
+ *
+ * ⚠️ ES SOLO DE PANTALLA. Las reglas de Firestore dejan leer las marcaciones a
+ * cualquier usuario del negocio (`firestore.rules`, match de attendance), así
+ * que esto esconde, no protege. Si alguna vez tiene que ser de verdad, hay que
+ * cambiar la regla para que un no-gestor solo lea las suyas.
+ */
+export const setAttendanceOcultarHistorial = async (businessId, oculto) => {
+  try {
+    await setDoc(getBusinessDocRef(businessId), {
+      attendanceOcultarHistorial: !!oculto,
+      updatedAt: serverTimestamp(),
+    }, { merge: true })
+    return { success: true }
+  } catch (error) {
+    console.error('Error al cambiar la visibilidad del historial:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * Habilita o deshabilita asistencia en una sucursal, inicializando el token si no existía.
  */
 export const setAttendanceEnabled = async (businessId, branchId, enabled, userId) => {

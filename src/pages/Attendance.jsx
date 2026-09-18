@@ -32,6 +32,7 @@ import {
   setAttendanceBreakProgramado,
   setAttendanceBreaksEnabled,
   setAttendanceEnabled,
+  setAttendanceOcultarHistorial,
   updateBranchAttendanceHours,
   updateBranchGeofence,
   updateBranchGracePeriod,
@@ -142,6 +143,17 @@ export default function Attendance() {
   // horarios (no el resto de la gestión de personal). Requiere también el
   // permiso "Marcar Asistencia" para tener acceso a la página /asistencia.
   const canManageSchedules = canManage || (typeof hasPageAccess === 'function' && hasPageAccess('schedules'))
+  // Sub-usuario con permiso "Marcaciones (reporte)": ve el reporte de todos y
+  // puede aprobar o ajustar horas, pero NADA más de la gestión de personal.
+  //
+  // Va aparte de `canManage` a propósito: esa variable decide también si la
+  // pestaña "Marcar" muestra la vista del dueño o la del trabajador, y quien
+  // tiene este permiso sigue siendo un trabajador que ficha.
+  const canVerMarcaciones = canManage || (typeof hasPageAccess === 'function' && hasPageAccess('attendance-records'))
+  // El negocio puede esconderle al trabajador su propio historial y dejarle
+  // solo marcar (pedido de Mandil). ⚠️ Es solo de pantalla: las reglas dejan
+  // leer las marcaciones a cualquier usuario del negocio.
+  const ocultarHistorial = businessSettings?.attendanceOcultarHistorial === true && !canManage
   const toast = useToast()
 
   // Tab inicial: en app nativa siempre "mark", en web depende del rol.
@@ -274,7 +286,7 @@ export default function Attendance() {
   // lista cambia. Con más de 120 días, solo los últimos 120: los días más
   // viejos quedan sin turno y se cuentan con lo marcado.
   useEffect(() => {
-    if (!canManage || isDemoMode || !businessId) return undefined
+    if (!canVerMarcaciones || isDemoMode || !businessId) return undefined
     const fechas = records.map((r) => tsToDate(r.timestamp)).filter(Boolean).map((d) => d.getTime())
     if (fechas.length === 0) {
       setTurnosDelRango([])
@@ -288,15 +300,15 @@ export default function Attendance() {
       if (vigente && res.success) setTurnosDelRango(res.data || [])
     })
     return () => { vigente = false }
-  }, [records, canManage, isDemoMode, businessId])
+  }, [records, canVerMarcaciones, isDemoMode, businessId])
 
-  const jornadas = useMemo(() => (canManage
+  const jornadas = useMemo(() => (canVerMarcaciones
     ? construirJornadas(records, {
       horarioDe: (id) => horariosPorSucursal.get(id) || null,
       turnoDe: indiceDeTurnos(turnosDelRango),
       descontarBreakProgramado,
     })
-    : []), [canManage, records, horariosPorSucursal, turnosDelRango, descontarBreakProgramado])
+    : []), [canVerMarcaciones, records, horariosPorSucursal, turnosDelRango, descontarBreakProgramado])
 
   // Para la lista de marcaciones: qué hora cuenta de cada marca.
   const ladoPorMarca = useMemo(() => {
@@ -323,15 +335,23 @@ export default function Attendance() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, employeesLoaded, canManageSchedules])
 
-  // Sub-usuario con permiso de Horarios (no gestor): abrir directo el
-  // planificador en vez de "Mi historial". Se ejecuta una sola vez al
-  // resolverse el permiso (no pelea con clics posteriores del usuario).
+  // Sub-usuario NO gestor: abrirle directo lo que sí puede usar, en vez de
+  // "Mi historial". Se ejecuta al resolverse los permisos y solo mueve si
+  // sigue en 'myhistory', así que no pelea con los clics posteriores.
+  //
+  // Tres casos: con el reporte va al reporte (si tiene los dos permisos gana
+  // ese, que es la pantalla que se pidió), con Horarios al planificador, y si
+  // el negocio escondió el historial hay que sacarlo de ahí igual — esa
+  // pestaña ya no existe y se quedaría mirando el vacío.
   useEffect(() => {
-    if (!canManage && canManageSchedules) {
-      setActiveTab(prev => (prev === 'myhistory' ? 'schedules' : prev))
-    }
+    if (canManage) return
+    const destino = canVerMarcaciones
+      ? 'records'
+      : (canManageSchedules ? 'schedules' : (ocultarHistorial ? 'mark' : null))
+    if (!destino) return
+    setActiveTab(prev => (prev === 'myhistory' ? destino : prev))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canManage, canManageSchedules])
+  }, [canManage, canManageSchedules, canVerMarcaciones, ocultarHistorial])
 
   const loadInitial = async () => {
     if (isDemoMode) {
@@ -386,7 +406,11 @@ export default function Attendance() {
       if (turnosRes.success) setMisTurnos(turnosRes.data || [])
       // Carga inicial filtrada por la semana en curso (estado inicial de los
       // filtros). Si el usuario quiere ver todo, presiona "Limpiar".
-      if (canManage) await loadRecords({ fromDate: filterFrom || undefined, toDate: filterTo || undefined })
+      //
+      // Va por `canVerMarcaciones` y no por `canManage`: con el permiso del
+      // reporte la pestaña se abre igual, y sin esta carga saldría vacía —
+      // que desde afuera parece otro error, no un permiso a medias.
+      if (canVerMarcaciones) await loadRecords({ fromDate: filterFrom || undefined, toDate: filterTo || undefined })
     } catch (e) {
       console.error(e)
     } finally {
@@ -653,6 +677,26 @@ export default function Attendance() {
       : 'Las horas vuelven a descontar solo el break marcado')
   }
 
+  /**
+   * Esconderle al trabajador su propio historial: le queda solo marcar.
+   * Del negocio entero, como los breaks.
+   */
+  const handleToggleOcultarHistorial = async (oculto) => {
+    if (isDemoMode) {
+      toast.info('Esta función no está disponible en modo demo')
+      return
+    }
+    const res = await setAttendanceOcultarHistorial(businessId, oculto)
+    if (!res.success) {
+      toast.error('No se pudo actualizar')
+      return
+    }
+    if (refreshBusinessSettings) await refreshBusinessSettings()
+    toast.success(oculto
+      ? 'Los trabajadores ya no ven su historial de marcaciones'
+      : 'Los trabajadores vuelven a ver su historial')
+  }
+
   const handleSaveHorario = async (branchId, horario) => {
     if (isDemoMode) {
       toast.info('Esta función no está disponible en modo demo')
@@ -873,9 +917,16 @@ export default function Attendance() {
                 {isNative && (
                   <TabsTrigger value="mark" activeTab={at} setActiveTab={setAt}>Marcar</TabsTrigger>
                 )}
+                {/* "Marcaciones" va FUERA del grupo del dueño: con el permiso
+                    "Marcaciones (reporte)" un sub-usuario la ve sola, sin
+                    arrastrar Personal, Horarios, Vacaciones ni Configuración.
+                    Puesta antes del grupo, al dueño le queda el mismo orden de
+                    siempre. */}
+                {canVerMarcaciones && (
+                  <TabsTrigger value="records" activeTab={at} setActiveTab={setAt}>Marcaciones</TabsTrigger>
+                )}
                 {canManage && (
                   <>
-                    <TabsTrigger value="records" activeTab={at} setActiveTab={setAt}>Marcaciones</TabsTrigger>
                     <TabsTrigger value="personnel" activeTab={at} setActiveTab={setAt}>Personal</TabsTrigger>
                     <TabsTrigger value="schedules" activeTab={at} setActiveTab={setAt}>Horarios</TabsTrigger>
                     <TabsTrigger value="vacations" activeTab={at} setActiveTab={setAt}>Vacaciones</TabsTrigger>
@@ -885,7 +936,7 @@ export default function Attendance() {
                 {!canManage && canManageSchedules && (
                   <TabsTrigger value="schedules" activeTab={at} setActiveTab={setAt}>Horarios</TabsTrigger>
                 )}
-                {!canManage && (
+                {!canManage && !ocultarHistorial && (
                   <TabsTrigger value="myhistory" activeTab={at} setActiveTab={setAt}>Mi historial</TabsTrigger>
                 )}
               </TabsList>
@@ -970,12 +1021,13 @@ export default function Attendance() {
                     branches={branches}
                     turnos={misTurnos}
                     descontarBreakProgramado={descontarBreakProgramado}
+                    ocultarHistorial={ocultarHistorial}
                   />
                 )}
               </TabsContent>
 
-              {/* ========== TAB: MARCACIONES (owner) ========== */}
-              {canManage && (
+              {/* ========== TAB: MARCACIONES (dueño o permiso del reporte) ========== */}
+              {canVerMarcaciones && (
                 <TabsContent value="records" activeTab={at} className="mt-4">
                   <div className="space-y-4">
                     <div className="bg-white border border-gray-200 rounded-xl p-4">
@@ -1459,6 +1511,31 @@ export default function Attendance() {
                           </p>
                         </div>
                       </label>
+
+                      {/* Ocultar el historial: del negocio entero (ver handleToggleOcultarHistorial) */}
+                      <label className="flex items-start gap-3 cursor-pointer mt-4 pt-4 border-t border-gray-100">
+                        <input
+                          type="checkbox"
+                          checked={businessSettings?.attendanceOcultarHistorial === true}
+                          onChange={(e) => handleToggleOcultarHistorial(e.target.checked)}
+                          className="mt-1 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                            <Calendar className="w-4 h-4 text-gray-500" />
+                            Ocultar el historial a los trabajadores
+                          </span>
+                          <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                            Cada persona sigue viendo su tarjeta de hoy —entrada, salida y total en
+                            curso—, pero desaparecen la pestaña "Mi historial" y la lista de días
+                            anteriores. Tú sigues viendo todo en Marcaciones.
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1.5">
+                            Es un cambio de pantalla, no un candado: ordena el día a día, pero no
+                            guarda un secreto.
+                          </p>
+                        </div>
+                      </label>
                     </div>
 
                     {branches.length === 0 && (
@@ -1484,7 +1561,12 @@ export default function Attendance() {
               )}
 
               {/* ========== TAB: MI HISTORIAL (sub-user) ========== */}
-              {!canManage && (
+              {/* El `!ocultarHistorial` va también acá y no solo en la pestaña:
+                  el efecto que reubica la pestaña activa corre al resolverse
+                  los permisos, así que un `activeTab` que todavía diga
+                  'myhistory' pintaría el historial entero con la opción
+                  encendida. */}
+              {!canManage && !ocultarHistorial && (
                 <TabsContent value="myhistory" activeTab={at} className="mt-4">
                   <MyHistory businessId={businessId} userId={user?.uid} />
                 </TabsContent>
@@ -1801,7 +1883,7 @@ const notaParaElTrabajador = (lado) => {
  * break programado del turno si el negocio lo descuenta. El botón, en cambio,
  * sigue las marcas tal cual: dice qué va a registrar el próximo escaneo.
  */
-function SubUserAttendanceView({ weekRecords, onMark, marking, isNative, breaksActivos = false, branches = [], turnos = [], descontarBreakProgramado = false }) {
+function SubUserAttendanceView({ weekRecords, onMark, marking, isNative, breaksActivos = false, branches = [], turnos = [], descontarBreakProgramado = false, ocultarHistorial = false }) {
   const grouped = useMemo(() => groupRecordsByDay(weekRecords || []), [weekRecords])
 
   const jornadasPorDia = useMemo(() => {
@@ -2003,7 +2085,10 @@ function SubUserAttendanceView({ weekRecords, onMark, marking, isNative, breaksA
       </div>
 
       {/* ===== DÍAS ANTERIORES ===== */}
-      {previousDays.length > 0 && (
+      {/* Con "ocultar historial" encendido queda SOLO la tarjeta de hoy: la
+          persona ficha y ve su jornada en curso, pero no puede repasar días
+          anteriores. La pestaña "Mi historial" tampoco se muestra. */}
+      {!ocultarHistorial && previousDays.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
             <p className="text-sm font-semibold text-gray-700">Días anteriores</p>
