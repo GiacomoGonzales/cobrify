@@ -58,13 +58,18 @@ const METODO_PAGO = {
  * mientras las que no tocó conservan la suya y se omiten. Con la huella vieja
  * (nombre del archivo + números de operación) un archivo corregido se veía
  * idéntico al anterior y no se emitía nada.
+ *
+ * Un nombre que completó el sistema (SUNAT, RENIEC o la ficha del cliente)
+ * queda AFUERA: la consulta puede responder distinto de una subida a otra, y
+ * volver a subir el mismo archivo no puede emitir dos veces. Con el nombre
+ * escrito en el Excel, la huella es la de siempre.
  */
 export const huellaDeOperacion = (op) => huellaDeContenido({
   n: op.nOperacion,
   tipo: op.tipo,
   fecha: op.fechaEmision,
   moneda: op.moneda,
-  cliente: [op.cliente?.documentType, op.cliente?.documentNumber, op.cliente?.name],
+  cliente: [op.cliente?.documentType, op.cliente?.documentNumber, op.cliente?.completado?.nombre ? '' : op.cliente?.name],
   items: (op.items || []).map((it) => [
     it.codigo, it.descripcion, it.cantidad, it.unidadCodigo,
     it.precioUnitario, it.taxAffectation, it.descuentoItem,

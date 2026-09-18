@@ -6,9 +6,9 @@
  */
 export default {
   id: 'emision-masiva',
-  actualizado: '19/08/2026',
+  actualizado: '18/09/2026',
   intro:
-    'Para cuando tienes que emitir muchos documentos de una sola vez: los armas en un Excel con calma, el sistema los revisa todos, y nada sale a SUNAT hasta que confirmes. Tiene dos pestañas: Comprobantes y GRE Transportista.',
+    'Para cuando tienes que emitir muchos documentos de una sola vez: los armas en un Excel con calma, el sistema los revisa todos, y nada sale a SUNAT hasta que confirmes. Tiene tres pestañas: Comprobantes, GRE Transportista y GRE Remitente.',
 
   sections: [
     {
@@ -26,6 +26,14 @@ export default {
           ],
         },
         { type: 'ui', kind: 'boton', label: 'Descargar plantilla' },
+        {
+          type: 'consejo',
+          text: '**Con RUC o DNI basta el número.** Si dejas vacíos **NOMBRE / RAZÓN SOCIAL** y **DIRECCIÓN**, al subir el archivo el sistema los completa: la razón social y el domicilio fiscal de SUNAT para un RUC, el nombre de RENIEC para un DNI. Si SUNAT no responde, usa los datos de tu cliente registrado. Lo que escribiste en el Excel no se cambia, y en la vista previa ves lo que trajo antes de emitir.',
+        },
+        {
+          type: 'ojo',
+          text: 'Si no se encuentra el nombre de un RUC o DNI, esa operación queda con error y te pide escribirlo en el Excel. Las demás siguen normalmente.',
+        },
         {
           type: 'ojo',
           text: 'La **serie y el número** de cada comprobante NO van en la plantilla: los asigna el sistema al emitir, igual que en el POS. Un Excel con correlativos escritos a mano es una fábrica de rechazos por "comprobante ya registrado".',
@@ -177,7 +185,7 @@ export default {
   preguntas: [
     {
       q: 'Subí el archivo y no pasó nada, ¿se emitió algo?',
-      a: 'No. Subir el archivo solo valida y te muestra la vista previa. En GRE Transportista, la emisión ocurre recién cuando presionas el botón Emitir y confirmas. En Comprobantes todavía no hay emisión: la vista previa deja tu archivo revisado y listo para cuando esa parte esté disponible.',
+      a: 'No. Subir el archivo solo valida y te muestra la vista previa. La emisión ocurre recién cuando presionas el botón Emitir y confirmas.',
     },
     {
       q: 'Emití las guías y los códigos salen con un guion en el PDF',

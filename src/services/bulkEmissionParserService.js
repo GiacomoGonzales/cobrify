@@ -188,6 +188,67 @@ const indexarProductos = (products) => {
   return map
 }
 
+/** N° de documento de la cabecera. Excel a veces numeriza ("20100047218.0"). */
+const numeroDeDocumento = (cab) => String(cab.NUM_DOC_CLIENTE ?? '').trim().replace(/\.0$/, '')
+
+/** Consultas a SUNAT/RENIEC a la vez: sin saturar apiperu ni hacer esperar de más. */
+const CONSULTAS_A_LA_VEZ = 3
+
+/**
+ * Completa los clientes que el Excel trae solo con su RUC o DNI.
+ *
+ * Se consulta únicamente lo que se puede y hace falta: RUC o DNI, con el
+ * número VÁLIDO (uno mal escrito ya tiene su error, y consultarlo gastaría un
+ * crédito en nada), y solo si en la PRIMERA fila de la operación, que es la
+ * que manda, falta el nombre o la dirección. Un mismo documento repetido en
+ * varias operaciones se consulta una sola vez.
+ *
+ * @returns {Promise<Map<string, object|null>>} por `TIPO:NUMERO`; null = no se encontró
+ */
+async function completarClientes(porOperacion, buscarCliente, onProgreso) {
+  const pedidos = new Map()
+  for (const { filas } of porOperacion.values()) {
+    const cab = filas[0].valores
+    const tipo = normalizar(cab.TIPO_DOC_CLIENTE)
+    if (tipo !== 'RUC' && tipo !== 'DNI') continue
+    const numero = numeroDeDocumento(cab)
+    if (!validateDocument(TIPO_DOC_A_SISTEMA[tipo], numero).isValid) continue
+    const necesitaNombre = !String(cab.NOMBRE_CLIENTE ?? '').trim()
+    const necesitaDireccion = !String(cab.DIRECCION_CLIENTE ?? '').trim()
+    if (!necesitaNombre && !necesitaDireccion) continue
+    const clave = `${tipo}:${numero}`
+    const previo = pedidos.get(clave)
+    pedidos.set(clave, {
+      tipo,
+      numero,
+      necesitaNombre: necesitaNombre || !!previo?.necesitaNombre,
+      necesitaDireccion: necesitaDireccion || !!previo?.necesitaDireccion,
+    })
+  }
+
+  const hallados = new Map()
+  const cola = [...pedidos.entries()]
+  const total = cola.length
+  let hechos = 0
+  onProgreso?.({ hechos, total })
+  const trabajar = async () => {
+    while (cola.length) {
+      const [clave, pedido] = cola.shift()
+      let hallado = null
+      try {
+        hallado = await buscarCliente(pedido)
+      } catch {
+        // Una consulta que falla deja con error a SU operación, no al archivo.
+      }
+      hallados.set(clave, hallado || null)
+      hechos++
+      onProgreso?.({ hechos, total })
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CONSULTAS_A_LA_VEZ, total) }, trabajar))
+  return hallados
+}
+
 /**
  * Parsea y valida el Excel de comprobantes.
  *
@@ -197,13 +258,16 @@ const indexarProductos = (products) => {
  * @param {number} [ctx.igvRate]  - tasa IGV del negocio (18 salvo excepciones)
  * @param {Array}  [ctx.sellers]  - vendedores registrados, para resolver la columna VENDEDOR
  * @param {string} [ctx.cuentaDetraccion] - cuenta del Banco de la Nación configurada en Ajustes
+ * @param {Function} [ctx.buscarCliente] - completa nombre y dirección vacíos desde el RUC o DNI
+ *   (ver bulkEmissionClientesService). Sin él, el nombre es obligatorio como siempre.
+ * @param {Function} [ctx.onProgresoClientes] - `({ hechos, total })` mientras se consulta
  * @param {Date}   [ctx.hoy]      - inyectable para pruebas
  * @returns {Promise<{success:boolean, error?:string, operaciones?:Array, errores?:Array, advertencias?:Array, resumen?:object}>}
  *
  * `operaciones[n].errores` / `.advertencias`: `{ fila, columna, mensaje }`,
  * con `fila` = número REAL de fila en el Excel (para que el usuario la ubique).
  */
-export async function parsearExcelComprobantes(buffer, { products = [], igvRate = 18, sellers = [], cuentaDetraccion = '', hoy = new Date() } = {}) {
+export async function parsearExcelComprobantes(buffer, { products = [], igvRate = 18, sellers = [], cuentaDetraccion = '', buscarCliente = null, onProgresoClientes = null, hoy = new Date() } = {}) {
   const ExcelJS = (await import('exceljs')).default || (await import('exceljs'))
   const wb = new ExcelJS.Workbook()
   try {
@@ -267,6 +331,11 @@ export async function parsearExcelComprobantes(buffer, { products = [], igvRate 
     return { success: false, error: `El archivo tiene ${porOperacion.size} operaciones y el máximo es ${LIMITE_OPERACIONES}. Divídelo en varios archivos.` }
   }
 
+  // ── Pasada 1½: nombre y dirección desde el RUC o DNI ────────────────────
+  const hallados = buscarCliente
+    ? await completarClientes(porOperacion, buscarCliente, onProgresoClientes)
+    : new Map()
+
   // ── Pasada 2: validar cada operación y armar su estructura ──────────────
   const operaciones = []
 
@@ -307,9 +376,20 @@ export async function parsearExcelComprobantes(buffer, { products = [], igvRate 
 
     // — Cabecera: cliente —
     const tipoDocTexto = normalizar(cab.TIPO_DOC_CLIENTE)
-    const numDoc = String(cab.NUM_DOC_CLIENTE ?? '').trim().replace(/\.0$/, '') // Excel a veces numeriza
-    const nombre = String(cab.NOMBRE_CLIENTE ?? '').trim()
+    const numDoc = numeroDeDocumento(cab)
+    const nombreEscrito = String(cab.NOMBRE_CLIENTE ?? '').trim()
+    const direccionEscrita = String(cab.DIRECCION_CLIENTE ?? '').trim()
     const sinDocumento = tipoDocTexto === 'SIN DOCUMENTO'
+
+    // Lo que el Excel dejó vacío y trajo la consulta. Lo escrito manda.
+    const claveDoc = `${tipoDocTexto}:${numDoc}`
+    const hallado = hallados.get(claveDoc) || null
+    const nombre = nombreEscrito || hallado?.name || ''
+    const direccion = direccionEscrita || hallado?.address || ''
+    const completado = {
+      nombre: !nombreEscrito && hallado?.name ? hallado.origenNombre : null,
+      direccion: !direccionEscrita && hallado?.address ? hallado.origenDireccion : null,
+    }
 
     if (!VALORES_COMPROBANTES.TIPO_DOC_CLIENTE.includes(tipoDocTexto)) {
       error(primera.fila, 'TIPO DOC. CLIENTE', cab.TIPO_DOC_CLIENTE ? `Tipo de documento "${cab.TIPO_DOC_CLIENTE}" no válido.` : 'Falta el tipo de documento del cliente.')
@@ -325,7 +405,11 @@ export async function parsearExcelComprobantes(buffer, { products = [], igvRate 
       if (!val.isValid) error(primera.fila, 'N° DOC. CLIENTE', numDoc ? val.message : 'Falta el número de documento del cliente.')
     }
     if (!sinDocumento && !nombre) {
-      error(primera.fila, 'NOMBRE / RAZÓN SOCIAL', 'Falta el nombre o razón social del cliente.')
+      // Consultado y sin respuesta: el RUC no existe o SUNAT no contestó. Las
+      // dos se resuelven igual, escribiendo el nombre.
+      error(primera.fila, 'NOMBRE / RAZÓN SOCIAL', hallados.has(claveDoc)
+        ? `No se pudo obtener el nombre del ${tipoDocTexto} ${numDoc} desde ${tipoDocTexto === 'RUC' ? 'SUNAT' : 'RENIEC'}. Escríbelo en esta columna.`
+        : 'Falta el nombre o razón social del cliente.')
     }
 
     // — Cabecera: forma de pago —
@@ -604,8 +688,11 @@ export async function parsearExcelComprobantes(buffer, { products = [], igvRate 
         documentType: sinDocumento ? '' : (TIPO_DOC_A_SISTEMA[tipoDocTexto] || ''),
         documentNumber: sinDocumento ? '' : numDoc,
         name: nombre || 'Cliente varios',
-        address: String(cab.DIRECCION_CLIENTE ?? '').trim(),
+        address: direccion,
         email,
+        // Lo que puso el sistema y de dónde: la vista previa lo muestra, y la
+        // huella del emisor deja afuera un nombre que el usuario no escribió.
+        ...(completado.nombre || completado.direccion ? { completado } : {}),
       },
       items,
       descuentoGlobal,

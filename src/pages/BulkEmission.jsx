@@ -24,6 +24,7 @@ import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import GuideLink from '@/components/guide/GuideLink'
 import { formatCurrency } from '@/lib/utils'
+import { describirCompletado } from '@/utils/clienteCompletado'
 
 const ETIQUETA_ESTADO = {
   // GRE (femenino: la guía)
@@ -50,6 +51,9 @@ export default function BulkEmission() {
   const toast = useToast()
   const inputRef = useRef(null)
   const cancelarRef = useRef(false)
+  // Lo que SUNAT y RENIEC ya respondieron en esta pantalla: volver a subir el
+  // Excel corregido no vuelve a pagar la consulta de los mismos RUC.
+  const memoriaClientesRef = useRef(new Map())
 
   const [tipo, setTipo] = useState('comprobantes') // 'comprobantes' | 'gre' | 'gre_remitente'
   // Las dos guías comparten casi todo el circuito y casi toda la pantalla; solo
@@ -58,6 +62,7 @@ export default function BulkEmission() {
   const esRemitente = tipo === 'gre_remitente'
   const [descargando, setDescargando] = useState(false)
   const [analizando, setAnalizando] = useState(false)
+  const [consultando, setConsultando] = useState(null) // { hechos, total } mientras se completan clientes
   const [nombreArchivo, setNombreArchivo] = useState('')
   const [resultado, setResultado] = useState(null)
   const [abiertas, setAbiertas] = useState(() => new Set())
@@ -131,9 +136,10 @@ export default function BulkEmission() {
         // El catálogo hace falta para cruzar códigos; los vendedores, para
         // resolver la columna VENDEDOR. Van en paralelo: son dos lecturas
         // independientes y el usuario está esperando la vista previa.
-        const [{ getProducts }, { getSellers }] = await Promise.all([
+        const [{ getProducts }, { getSellers }, { crearBuscadorDeClientes }] = await Promise.all([
           import('@/services/firestoreService'),
           import('@/services/sellerService'),
+          import('@/services/bulkEmissionClientesService'),
         ])
         const [prodRes, sellersRes] = await Promise.all([
           getProducts(getBusinessId()),
@@ -150,6 +156,10 @@ export default function BulkEmission() {
           cuentaDetraccion: (businessSettings?.bankAccountsList || [])
             .find((c) => c?.accountType === 'detracciones')?.accountNumber || '',
           igvRate,
+          // Con RUC o DNI, el nombre y la dirección vacíos se completan solos
+          // (pedido de JMC): SUNAT o RENIEC, y si no, la ficha del cliente.
+          buscarCliente: crearBuscadorDeClientes(getBusinessId(), memoriaClientesRef.current),
+          onProgresoClientes: (p) => setConsultando(p.hechos < p.total ? p : null),
         })
       }
 
@@ -172,6 +182,7 @@ export default function BulkEmission() {
       setNombreArchivo('')
     } finally {
       setAnalizando(false)
+      setConsultando(null)
     }
   }
 
@@ -375,6 +386,12 @@ export default function BulkEmission() {
                     <span className="truncate">{nombreArchivo}</span>
                   </p>
                 )}
+                {analizando && consultando && (
+                  <p className="text-xs text-primary-700 flex items-center gap-1 mt-1.5">
+                    <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" />
+                    Buscando los datos de los clientes: {consultando.hechos} de {consultando.total}
+                  </p>
+                )}
               </div>
               <input ref={inputRef} type="file" accept=".xlsx" className="hidden" onChange={handleArchivo} />
               <Button
@@ -565,6 +582,7 @@ export default function BulkEmission() {
                             {op.cuotas?.length > 1 && ` en ${op.cuotas.length} cuotas`}
                             {op.detraccion && ` · Detracción ${op.detraccion.rate}%`}
                             {op.vendedor && ` · ${op.vendedor.name}`}
+                            {op.cliente.completado && ` · Cliente: ${describirCompletado(op.cliente.completado)}`}
                             {op.advertencias.length > 0 && ` · ${op.advertencias.length} aviso${op.advertencias.length === 1 ? '' : 's'}`}
                           </p>
                         </>
@@ -652,6 +670,19 @@ export default function BulkEmission() {
                         </table>
                       </div>
 
+                      {/* El cliente, con lo que se completó desde su RUC o DNI:
+                          se revisa acá, antes de emitir. */}
+                      {tipo === 'comprobantes' && (
+                        <p className="text-xs text-gray-600">
+                          <span className="font-medium text-gray-700">Cliente:</span>{' '}
+                          {op.cliente.documentNumber && `${op.cliente.documentNumber} · `}
+                          {op.cliente.name}
+                          {op.cliente.address && ` · ${op.cliente.address}`}
+                          {op.cliente.completado && (
+                            <span className="text-gray-500"> ({describirCompletado(op.cliente.completado)})</span>
+                          )}
+                        </p>
+                      )}
                       {/* Cuotas y detracción: se revisan ANTES de emitir, no
                           después de que SUNAT las rechace. */}
                       {tipo === 'comprobantes' && op.cuotas?.length > 0 && (

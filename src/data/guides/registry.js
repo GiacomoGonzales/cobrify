@@ -304,7 +304,7 @@ export const GUIDES = [
     title: 'Emisión Masiva',
     category: 'Ventas',
     description: 'Crear muchos documentos de una vez desde un Excel: comprobantes con vista previa validada, y GRE Transportista con emisión del lote a SUNAT.',
-    keywords: 'emision masiva excel plantilla lote importar comprobantes facturas boletas guias transportista gre masivo carga masiva subir archivo validar errores por fila ubigeo',
+    keywords: 'emision masiva excel plantilla lote importar comprobantes facturas boletas guias transportista gre masivo carga masiva subir archivo validar errores por fila ubigeo ruc dni razon social direccion completar automatico sunat reniec',
     modos: ['retail', 'pharmacy', 'transport'],
     load: () => import('./emision-masiva.js'),
   },
