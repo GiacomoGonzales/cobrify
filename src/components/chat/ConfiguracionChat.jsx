@@ -52,7 +52,10 @@ export default function ConfiguracionChat({ onVolver }) {
       </header>
 
       {/* Pestañas al estilo del admin: sin iconos, que aquí solo decoraban. */}
-      <div className="flex items-center gap-1 px-2 bg-white border-b border-gray-200 overflow-x-auto">
+      {/* `scrollbar-hide`: en pantalla angosta los títulos se deslizan, pero la
+          barra de desplazamiento sobre ellos se ve como un error (y en macOS
+          con "mostrar siempre" sale hasta cuando entran justos). */}
+      <div className="flex items-center gap-1 px-2 bg-white border-b border-gray-200 overflow-x-auto scrollbar-hide">
         {[
           ['perfil', 'Perfil del negocio'],
           ['automaticos', 'Respuestas automáticas'],

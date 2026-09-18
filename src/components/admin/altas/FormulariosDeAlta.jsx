@@ -159,6 +159,34 @@ export default function FormulariosDeAlta({ pestanas }) {
     window.open(`https://wa.me/${String(a.waId).replace(/\D/g, '')}?text=${texto}`, '_blank')
   }
 
+  // El menú ⋯ de un alta. Es una función y no un componente para que no se
+  // remonte en cada render, igual que en Usuarios; lo pintan la tarjeta del
+  // celular y la fila de la tabla, y el hook se queda con la copia visible.
+  const menuDeAlta = (a) => (
+    <CajaMenu posicion={menu.posicion} refMenu={menu.refMenu}>
+      {a.estado !== 'usada' && (
+        <>
+          <ItemMenu onClick={() => recordar(a)}>Recordar por WhatsApp</ItemMenu>
+          <ItemMenu onClick={() => copiar(a)}>Copiar enlace</ItemMenu>
+          <ItemMenu onClick={() => copiarLargo(a)}>Copiar enlace largo</ItemMenu>
+        </>
+      )}
+      {a.conversationId && (
+        <ItemMenu onClick={() => { menu.cerrar(); window.open('/chat', '_blank') }}>
+          Abrir el chat
+        </ItemMenu>
+      )}
+      <SeparadorMenu />
+      <ItemMenu rojo onClick={() => eliminar(a)}>
+        {a.estado === 'usada' ? 'Borrar de la lista' : 'Borrar y anular el enlace'}
+      </ItemMenu>
+    </CajaMenu>
+  )
+
+  const vacia = altas.length === 0
+    ? 'Todavía no has mandado ningún formulario de alta. Se mandan desde la ficha del cliente en el chat.'
+    : 'Nada que atender con este filtro.'
+
   const resumen = cargando
     ? 'Cargando altas…'
     : `${cuenta.enviada} sin abrir · ${cuenta.abierta} abiertas sin terminar · ${cuenta.usada} activadas`
@@ -176,8 +204,7 @@ export default function FormulariosDeAlta({ pestanas }) {
         <Cifra etiqueta="Activadas" valor={cuenta.usada} />
       </Cifras>
 
-      <Seccion>
-        <Filtros>
+      <Filtros>
           <Buscador
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
@@ -190,8 +217,51 @@ export default function FormulariosDeAlta({ pestanas }) {
             <option value="usada">Activadas</option>
             <option value="all">Todas</option>
           </FiltroSelect>
-        </Filtros>
+      </Filtros>
 
+      <Seccion sinRelleno className="overflow-hidden">
+        {/* En el celular, una tarjeta por alta: la tabla obligaba a desplazar
+            de lado para leer una sola fila. */}
+        <div className="sm:hidden divide-y divide-gray-100">
+          {cargando ? (
+            <p className="px-3 py-8 text-center text-[12.5px] text-gray-500">Cargando…</p>
+          ) : filtradas.length === 0 ? (
+            <p className="px-3 py-8 text-center text-[12.5px] text-gray-500">{vacia}</p>
+          ) : (
+            filtradas.map((a) => {
+              const e = ESTADOS[a.estado] || { etiqueta: a.estado, tono: 'normal' }
+              return (
+                <div key={a.codigo} className="px-3 py-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate font-medium text-gray-900">{a.nombre || 'Sin nombre'}</div>
+                      <div className="truncate text-[11.5px] text-gray-500">
+                        {a.waId ? `+${a.waId}` : 'Sin número'}
+                        <span className="ml-1.5 font-mono text-gray-400">{a.codigo}</span>
+                      </div>
+                    </div>
+                    <div className="relative shrink-0">
+                      <BotonDeFila onClick={(el) => menu.alternar(a.codigo, el)} />
+                      {menu.abiertoEn === a.codigo && menuDeAlta(a)}
+                    </div>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11.5px] text-gray-500">
+                    <Estado valor={a.estado} etiqueta={e.etiqueta} tono={e.tono} />
+                    <span>{a.planNombre || a.plan || 'Sin plan'} · {moneda(a.precio)}</span>
+                    <span>{fechaHora(a.createdAt)} · {haceCuanto(a.createdAt)}</span>
+                    {a.estado === 'usada' && a.uid && (
+                      <Link to={`/app/admin/users/${a.uid}`} className="text-primary-700 hover:underline">
+                        Ver la cuenta
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+
+        <div className="hidden sm:block">
         <Tabla>
           <thead>
             <tr>
@@ -206,11 +276,7 @@ export default function FormulariosDeAlta({ pestanas }) {
             {cargando ? (
               <FilaVacia colSpan={5}>Cargando…</FilaVacia>
             ) : filtradas.length === 0 ? (
-              <FilaVacia colSpan={5}>
-                {altas.length === 0
-                  ? 'Todavía no has mandado ningún formulario de alta. Se mandan desde la ficha del cliente en el chat.'
-                  : 'Nada que atender con este filtro.'}
-              </FilaVacia>
+              <FilaVacia colSpan={5}>{vacia}</FilaVacia>
             ) : (
               filtradas.map((a) => {
                 const e = ESTADOS[a.estado] || { etiqueta: a.estado, tono: 'normal' }
@@ -243,26 +309,7 @@ export default function FormulariosDeAlta({ pestanas }) {
                     </Td>
                     <Td alinear="der">
                       <BotonDeFila onClick={(el) => menu.alternar(a.codigo, el)} />
-                      {menu.abiertoEn === a.codigo && (
-                        <CajaMenu posicion={menu.posicion} refMenu={menu.refMenu}>
-                          {a.estado !== 'usada' && (
-                            <>
-                              <ItemMenu onClick={() => recordar(a)}>Recordar por WhatsApp</ItemMenu>
-                              <ItemMenu onClick={() => copiar(a)}>Copiar enlace</ItemMenu>
-                              <ItemMenu onClick={() => copiarLargo(a)}>Copiar enlace largo</ItemMenu>
-                            </>
-                          )}
-                          {a.conversationId && (
-                            <ItemMenu onClick={() => { menu.cerrar(); window.open('/chat', '_blank') }}>
-                              Abrir el chat
-                            </ItemMenu>
-                          )}
-                          <SeparadorMenu />
-                          <ItemMenu rojo onClick={() => eliminar(a)}>
-                            {a.estado === 'usada' ? 'Borrar de la lista' : 'Borrar y anular el enlace'}
-                          </ItemMenu>
-                        </CajaMenu>
-                      )}
+                      {menu.abiertoEn === a.codigo && menuDeAlta(a)}
                     </Td>
                   </Fila>
                 )
@@ -270,6 +317,7 @@ export default function FormulariosDeAlta({ pestanas }) {
             )}
           </tbody>
         </Tabla>
+        </div>
       </Seccion>
 
       {menu.abiertoEn && <div className="fixed inset-0 z-40" onClick={menu.cerrar} />}

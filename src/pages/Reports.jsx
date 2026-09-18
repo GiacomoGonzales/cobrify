@@ -3112,7 +3112,7 @@ function ReportsGeneral() {
           pestañas de Configuración. Antes eran diez botones con sombra que
           pesaban más que el propio contenido. */}
       <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-6 overflow-x-auto">
+        <nav className="-mb-px flex space-x-6 overflow-x-auto scrollbar-hide">
           {[
             { id: 'overview', label: 'Resumen General', icon: BarChart3 },
             { id: 'sales', label: 'Ventas', icon: TrendingUp },

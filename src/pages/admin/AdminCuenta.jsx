@@ -565,6 +565,20 @@ export default function AdminCuenta() {
     ? c.renewalPrice
     : (PLANS[c.plan]?.totalPrice ?? customPlans[c.plan]?.totalPrice ?? null)
 
+  // Los datos del RUC principal en la sección Emisores, calculados una sola
+  // vez: los pintan la tabla de escritorio y la tarjeta del celular.
+  const seriesDelPrincipal = TIPOS_DE_SERIE_DE_EMISOR.map(t => seriesNegocio[t]?.serie).filter(Boolean).join(' · ') || 'Sin configurar'
+  // Las firmas del principal son el total de la cuenta menos las de los demás RUC.
+  const firmasDelPrincipal = uso && firmasPorRuc
+    ? Math.max(0, uso.invoices.firmas.total - Object.values(firmasPorRuc).reduce((a, b) => a + b, 0)).toLocaleString('es-PE')
+    : '…'
+  const mensualidadDelPrincipal = `${c.planName || PLANS[c.plan]?.name || customPlans[c.plan]?.name || c.plan}${precioDelPlan > 0 ? ` · ${moneda(precioDelPlan)}` : ''}`
+  const vencimientoDelPrincipal = c.nuncaVence
+    ? 'Sin vencimiento'
+    : c.periodEnd
+      ? `${vencida ? 'Venció el' : 'Al día hasta el'} ${fecha(c.periodEnd)}`
+      : 'Sin fecha de vencimiento'
+
   return (
     <Pagina
       resumen={volver}
@@ -877,6 +891,55 @@ export default function AdminCuenta() {
             </>
           }
         >
+          {/* En el celular, una tarjeta por RUC: la tabla de ocho columnas
+              quedaba toda apretada. Misma estructura que Sucursales,
+              Sub-usuarios y Pagos. */}
+          <div className="sm:hidden divide-y divide-gray-100">
+            <FichaEnTarjeta
+              titulo={`${c.businessName} · principal`}
+              estado={<Estado valor="active" etiqueta="Activo" />}
+              datos={[
+                ['RUC', c.ruc],
+                ['Método', METODOS[c.emissionMethod] || c.emissionMethod],
+                ['Régimen', REGIMENES[c.taxType] || c.taxType],
+                ['Series', seriesDelPrincipal],
+                ['Firmas', firmasDelPrincipal],
+                ...(c.cobroPorRuc ? [
+                  ['Mensualidad', mensualidadDelPrincipal],
+                  ['Pago', vencida
+                    ? <span className="font-medium text-red-600">{vencimientoDelPrincipal}</span>
+                    : vencimientoDelPrincipal],
+                  ['Este mes', `${entero(usados)}${ilimitado ? '' : ` de ${entero(c.limit)}`} comprobantes`],
+                ] : []),
+              ]}
+            />
+            {emisores.map(e => {
+              const cobro = c.rucsCobrados?.[e.id]
+              const { texto, rojo } = textoDelCobro(cobro)
+              const tope = cobro ? PLANS[cobro.plan]?.limits?.maxInvoicesPerMonth : undefined
+              return (
+                <FichaEnTarjeta
+                  key={e.id}
+                  titulo={e.businessName}
+                  estado={<Estado valor={e.activo === false ? 'inactive' : 'active'} etiqueta={e.activo === false ? 'Inactivo' : 'Activo'} />}
+                  datos={[
+                    ['RUC', e.ruc],
+                    ['Método', METODOS[e.emissionMethod] || 'Sin configurar'],
+                    ['Régimen', REGIMENES[e.emissionConfig?.taxConfig?.taxType] || REGIMENES.standard],
+                    ['Series', TIPOS_DE_SERIE_DE_EMISOR.map(t => emisorSeries[e.id]?.[t]?.serie).filter(Boolean).join(' · ') || 'Sin configurar'],
+                    ['Firmas', firmasPorRuc ? (firmasPorRuc[e.id] ?? 0).toLocaleString('es-PE') : '…'],
+                    ...(c.cobroPorRuc ? [
+                      ['Mensualidad', cobro ? `${cobro.planName || cobro.plan} · ${moneda(cobro.precio)}` : '—'],
+                      ['Pago', rojo ? <span className="font-medium text-red-600">{texto}</span> : texto],
+                      ['Este mes', `${entero(c.usoPorRuc?.[e.id] || 0)}${typeof tope === 'number' && tope !== -1 ? ` de ${entero(tope)}` : ''} comprobantes`],
+                    ] : []),
+                  ]}
+                />
+              )
+            })}
+          </div>
+
+          <div className="hidden sm:block">
           <Tabla>
             <thead>
               <tr>
@@ -900,30 +963,17 @@ export default function AdminCuenta() {
                 <Td apagado>{REGIMENES[c.taxType] || c.taxType}</Td>
                 {/* Las de Configuración › Series, las mismas que numeran sus
                     comprobantes. Si no tiene ninguna configurada, se dice. */}
-                <Td apagado className="whitespace-normal">
-                  {TIPOS_DE_SERIE_DE_EMISOR.map(t => seriesNegocio[t]?.serie).filter(Boolean).join(' · ') || 'Sin configurar'}
-                </Td>
+                <Td apagado className="whitespace-normal">{seriesDelPrincipal}</Td>
                 {/* El principal es el total menos lo de los emisores. */}
-                <Td apagado className="tabular-nums">
-                  {uso && firmasPorRuc
-                    ? Math.max(0, uso.invoices.firmas.total - Object.values(firmasPorRuc).reduce((a, b) => a + b, 0)).toLocaleString('es-PE')
-                    : '…'}
-                </Td>
+                <Td apagado className="tabular-nums">{firmasDelPrincipal}</Td>
                 <Td apagado>Activo</Td>
                 {/* La misma información que los RUC adicionales, para poder
                     compararlos de un vistazo: plan, vencimiento y consumo. */}
                 {c.cobroPorRuc && (
                   <Td className="whitespace-normal">
-                    <span className="text-gray-900">
-                      {c.planName || PLANS[c.plan]?.name || customPlans[c.plan]?.name || c.plan}
-                      {precioDelPlan > 0 ? ` · ${moneda(precioDelPlan)}` : ''}
-                    </span>
+                    <span className="text-gray-900">{mensualidadDelPrincipal}</span>
                     <span className={`block text-[11.5px] ${vencida ? 'font-medium text-red-600' : 'text-gray-500'}`}>
-                      {c.nuncaVence
-                        ? 'Sin vencimiento'
-                        : c.periodEnd
-                          ? `${vencida ? 'Venció el' : 'Al día hasta el'} ${fecha(c.periodEnd)}`
-                          : 'Sin fecha de vencimiento'}
+                      {vencimientoDelPrincipal}
                     </span>
                     <span className="block text-[11.5px] text-gray-500 tabular-nums">
                       {entero(usados)}{ilimitado ? '' : ` de ${entero(c.limit)}`} comprobantes este mes
@@ -947,6 +997,7 @@ export default function AdminCuenta() {
               ))}
             </tbody>
           </Tabla>
+          </div>
           {c.cobroPorRuc && <ResumenDeRucs emisores={emisores} rucsCobrados={c.rucsCobrados} />}
         </Seccion>
       )}

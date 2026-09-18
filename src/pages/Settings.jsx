@@ -211,7 +211,7 @@ export default function Settings() {
 
       {!esCatalogo && (
         <div className="border-b border-gray-200">
-          <nav className="-mb-px flex gap-6 overflow-x-auto">
+          <nav className="-mb-px flex gap-6 overflow-x-auto scrollbar-hide">
             {PESTANAS.map(p => (
               <button
                 key={p.id}
