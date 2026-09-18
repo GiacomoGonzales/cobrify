@@ -17,6 +17,7 @@ import { generateSummaryDocumentsXML, generateSummaryDocumentId, canVoidBoleta, 
 import { signXML } from './src/utils/xmlSigner.js'
 import { esAdminSegunDoc } from './src/utils/admin.js'
 import { topeAlAplicarPlan } from './src/utils/topeDeComprobantes.js'
+import { bajaSinRespuesta, esRechazoPorComprobanteDeBaja } from './src/utils/bajasYNotas.js'
 import { sendSummary, getStatus, getStatusCdr } from './src/utils/sunatClient.js'
 import { voidBoletaViaQPse, voidInvoiceViaQPse, obtenerToken, consultarEstado, leerEstadoQPse } from './src/services/qpseService.js'
 import { tocaResetear } from './src/utils/cicloMensual.js'
@@ -852,6 +853,111 @@ function codigoSunat(valor) {
   const s = String(valor ?? '').trim()
   if (!/^\d+$/.test(s)) return s.toUpperCase()
   return String(Number(s))
+}
+
+/**
+ * Marca como ANULADO el comprobante que modifica una nota rechazada con 2120
+ * ("el documento modificado en la nota de crédito se encuentra de baja").
+ *
+ * Es SUNAT diciendo, sobre su propio registro, que el comprobante está anulado.
+ * Sin esto el comprobante seguía "Aceptado" y en "Anulación en proceso" para
+ * siempre (VIGUZZA FP08-00000155, 18-set-2026).
+ *
+ * El stock no se toca. Si la nota lo devolvió al crearse (motivos 01/06/07) el
+ * comprobante ya tiene `stockRestored` y está bien así. Si no lo devolvió, queda
+ * `stockPorRevisar`: la devolución por lotes vive en el front y no se
+ * reimplementa acá a ciegas.
+ *
+ * Nunca lanza: una falla acá no puede cambiar lo que se responde sobre la nota.
+ */
+async function marcarAnuladoSegunSunat(userId, notaData, { codigo, mensaje }) {
+  try {
+    const comprobantes = db.collection('businesses').doc(userId).collection('invoices')
+    let ref = notaData.referencedInvoiceFirestoreId ? comprobantes.doc(notaData.referencedInvoiceFirestoreId) : null
+    let snap = ref ? await ref.get() : null
+    if (!snap?.exists && notaData.referencedDocumentId) {
+      const q = await comprobantes.where('number', '==', notaData.referencedDocumentId).limit(1).get()
+      if (!q.empty) { snap = q.docs[0]; ref = snap.ref }
+    }
+    if (!snap?.exists) {
+      console.warn(`⚠️ 2120 en la nota ${notaData.number}: no se encontró el comprobante ${notaData.referencedDocumentId}`)
+      return
+    }
+    const comprobante = snap.data()
+    if (comprobante.sunatStatus === 'voided') return
+
+    await ref.update({
+      sunatStatus: 'voided',
+      status: 'voided',
+      voidingTicket: null,
+      voidedAt: FieldValue.serverTimestamp(),
+      // La nota fue RECHAZADA: no anula nada. Sin borrar esto el PDF dice
+      // "Anulado por Nota de Crédito ..." cuando lo anuló la baja.
+      pendingCreditNoteId: FieldValue.delete(),
+      pendingCreditNoteNumber: FieldValue.delete(),
+      pendingCreditNoteTotal: FieldValue.delete(),
+      anuladaSegunSunat: {
+        porNota: notaData.number || null,
+        codigo: String(codigo || ''),
+        mensaje: String(mensaje || '').slice(0, 500),
+        fecha: FieldValue.serverTimestamp(),
+      },
+      ...(comprobante.stockRestored === true ? {} : { stockPorRevisar: true }),
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+    console.log(`✅ ${comprobante.number || snap.id} marcado ANULADO: SUNAT rechazó la nota ${notaData.number} con ${codigo} (comprobante de baja)`)
+  } catch (e) {
+    console.error('⚠️ No se pudo sincronizar el comprobante de baja tras el 2120:', e.message)
+  }
+}
+
+/**
+ * ¿Otra comunicación de baja del MISMO comprobante ya fue aceptada por SUNAT?
+ *
+ * Se pregunta antes de dar una baja por no hecha. Caso real (VIGUZZA,
+ * FP08-00000155, 18-set-2026): la primera baja se guardó "fallida" con
+ * env:Server y SUNAT la tenía ACEPTADA. El comprobante perdió el puntero a
+ * ella, cada reintento consultaba solo la última —rechazada con 99 porque el
+ * comprobante YA estaba anulado— y mandaba otra: 16 para una factura. La
+ * respuesta estuvo siempre en la primera.
+ *
+ * De a una, en orden de creación (la primera es la que más probablemente entró)
+ * y con pausa: once consultas seguidas a QPse devolvieron el mismo 0098 genérico
+ * a todas, la aceptada incluida. Las que ya tienen veredicto de rechazo no se
+ * vuelven a preguntar. Solo comunicaciones de baja (facturas); los resúmenes
+ * de boletas agrupan varios comprobantes y no se buscan así.
+ */
+const MAX_BAJAS_HERMANAS = 6
+async function buscarBajaHermanaAceptada({ userId, invoiceId, excluirId, ruc, token, environment }) {
+  if (!invoiceId || !token) return null
+  let hermanas = []
+  try {
+    const snap = await db.collection('businesses').doc(userId).collection('voidedDocuments')
+      .where('invoiceId', '==', invoiceId).get()
+    hermanas = snap.docs
+      .filter((d) => d.id !== excluirId && d.data().voidedDocId && d.data().status !== 'rejected')
+      .sort((a, b) => (a.data().createdAt?.toMillis?.() || 0) - (b.data().createdAt?.toMillis?.() || 0))
+      .slice(0, MAX_BAJAS_HERMANAS)
+  } catch (e) {
+    console.warn('⚠️ No se pudieron leer las otras bajas del comprobante:', e.message)
+    return null
+  }
+
+  for (const [i, d] of hermanas.entries()) {
+    const datos = d.data()
+    if (datos.status === 'accepted') {
+      return { ref: d.ref, voidedDocId: datos.voidedDocId, leido: { codigo: String(datos.responseCode || '0'), descripcion: datos.responseDescription || '' } }
+    }
+    if (i > 0) await new Promise((r) => setTimeout(r, 1500))
+    try {
+      const leido = leerEstadoQPse(await consultarEstado(`${ruc}-${datos.voidedDocId}`, token, environment))
+      const yaDeBaja = isAlreadyVoidedResponse({ responseCode: leido.codigo, description: leido.descripcion, notes: leido.notas })
+      if (leido.aceptado || yaDeBaja) return { ref: d.ref, voidedDocId: datos.voidedDocId, leido }
+    } catch (e) {
+      console.warn(`⚠️ No se pudo consultar la baja ${datos.voidedDocId}:`, e.message)
+    }
+  }
+  return null
 }
 
 /**
@@ -2295,6 +2401,12 @@ export const sendCreditNoteToSunat = onRequest(
           sunatSentAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
         })
+
+        // Rechazada porque el comprobante que modifica YA está de baja (2120):
+        // sincronizarlo, o se queda "Aceptado" y en "Anulación en proceso".
+        if (esRechazoPorComprobanteDeBaja(ncErrorCode, ncErrorMessage)) {
+          await marcarAnuladoSegunSunat(userId, creditNoteData, { codigo: ncErrorCode, mensaje: ncErrorMessage })
+        }
 
         res.status(500).json({
           error: ncErrorMessage,
@@ -6620,38 +6732,69 @@ export const checkVoidStatus = onRequest(
           // 'voiding' PARA SIEMPRE (mismo bug ya corregido en voidInvoiceQPse).
           // Código vacío = respuesta ambigua de QPse: mantener pendiente sin tocar estados.
           res.status(200).json({ status: 'pending', message: 'Aún en proceso en SUNAT' })
-        } else if (leido.etiqueta === 'indeterminado') {
-          // QPse dice que ni el sabe (tipico del error de envio 'env:Server', que
-          // significa que el resumen no llego a SUNAT). No es una baja rechazada
-          // por SUNAT, asi que no se puede dar por muerta; tampoco sirve dejar el
-          // comprobante en "Anulando..." para siempre. Se devuelve al estado
-          // anterior con el motivo a la vista para que se pueda reintentar.
-          const detalle = leido.descripcion || leido.notas || 'SUNAT no confirmó la baja'
-          await voidedDocRef.update({
-            status: 'failed',
-            responseCode: codigo,
-            responseDescription: detalle,
-            processedAt: FieldValue.serverTimestamp()
-          })
-          await invoiceRef.update({
-            sunatStatus: 'accepted',
-            voidingTicket: null,
-            voidError: `No se pudo confirmar la baja: ${detalle}. Vuelva a intentar la anulación.`
-          })
-          res.status(200).json({ status: 'unconfirmed', error: detalle })
         } else {
-          const errorMsg = leido.descripcion || leido.notas || 'Error desconocido'
-          await voidedDocRef.update({
-            status: 'rejected',
-            error: errorMsg,
-            processedAt: FieldValue.serverTimestamp()
+          // ESTA baja no anuló el comprobante. Antes de darlo por vigente, las
+          // OTRAS bajas del mismo comprobante: en VIGUZZA la aceptada era la
+          // primera y se consultaba siempre la última (buscarBajaHermanaAceptada).
+          const hermana = esResumen ? null : await buscarBajaHermanaAceptada({
+            userId,
+            invoiceId: voidedData.invoiceId,
+            excluirId: documentoId,
+            ruc: businessData.ruc,
+            token,
+            environment: qpseConfig.environment || 'demo',
           })
-          await invoiceRef.update({
-            sunatStatus: 'accepted',
-            voidingTicket: null,
-            voidError: errorMsg
-          })
-          res.status(200).json({ status: 'rejected', error: errorMsg })
+
+          if (hermana) {
+            await hermana.ref.update({
+              status: 'accepted',
+              responseCode: hermana.leido.codigo,
+              responseDescription: hermana.leido.descripcion || 'Anulación aceptada',
+              processedAt: FieldValue.serverTimestamp()
+            })
+            await invoiceRef.update({
+              sunatStatus: 'voided',
+              status: 'voided',
+              voidingTicket: null,
+              voidedDocumentId: hermana.ref.id,
+              voidedAt: FieldValue.serverTimestamp()
+            })
+            res.status(200).json({ status: 'voided', message: `SUNAT ya había aceptado la baja ${hermana.voidedDocId}` })
+          } else if (leido.etiqueta === 'indeterminado') {
+            // QPse dice que ni él sabe. Es lo que queda tras un envío con
+            // 'env:Server', y eso NO siempre es "no llegó": la RA-20260905-1 de
+            // VIGUZZA respondía así y SUNAT la tenía ACEPTADA. Como ninguna otra
+            // baja del comprobante está aceptada, se devuelve al estado anterior
+            // con el motivo a la vista para que se pueda reintentar; si el
+            // reintento choca con una baja que sí entró, lo resuelve la búsqueda
+            // de hermanas.
+            const detalle = leido.descripcion || leido.notas || 'SUNAT no confirmó la baja'
+            await voidedDocRef.update({
+              status: 'failed',
+              responseCode: codigo,
+              responseDescription: detalle,
+              processedAt: FieldValue.serverTimestamp()
+            })
+            await invoiceRef.update({
+              sunatStatus: 'accepted',
+              voidingTicket: null,
+              voidError: `No se pudo confirmar la baja: ${detalle}. Vuelva a intentar la anulación.`
+            })
+            res.status(200).json({ status: 'unconfirmed', error: detalle })
+          } else {
+            const errorMsg = leido.descripcion || leido.notas || 'Error desconocido'
+            await voidedDocRef.update({
+              status: 'rejected',
+              error: errorMsg,
+              processedAt: FieldValue.serverTimestamp()
+            })
+            await invoiceRef.update({
+              sunatStatus: 'accepted',
+              voidingTicket: null,
+              voidError: errorMsg
+            })
+            res.status(200).json({ status: 'rejected', error: errorMsg })
+          }
         }
       } else {
         // SUNAT directo: consultar con ticket
@@ -8015,6 +8158,9 @@ export const voidInvoiceQPse = onRequest(
 
       console.log('📋 [QPse] Resultado:', JSON.stringify(qpseResult, null, 2))
 
+      // SUNAT no contestó: la baja pudo haber entrado (ver bajaSinRespuesta).
+      const sinRespuesta = !qpseResult.accepted && bajaSinRespuesta(qpseResult)
+
       // 10. Guardar documento de comunicación de baja
       const voidedDocRef = await voidedDocsRef.add({
         ...campoDeEmisor(firma.emisorId),
@@ -8028,7 +8174,7 @@ export const voidInvoiceQPse = onRequest(
         action: 'void',
         method: 'qpse',
         reason: reason || 'ANULACION DE OPERACION',
-        status: qpseResult.accepted ? 'accepted' : (sunatEnProceso(qpseResult.responseCode) ? 'pending' : 'failed'),
+        status: qpseResult.accepted ? 'accepted' : ((sunatEnProceso(qpseResult.responseCode) || sinRespuesta) ? 'pending' : 'failed'),
         ticket: qpseResult.ticket || null,
         responseCode: qpseResult.responseCode || null,
         responseDescription: qpseResult.description || null,
@@ -8220,6 +8366,70 @@ export const voidInvoiceQPse = onRequest(
           voidedDocumentId: voidedDocRef.id
         })
         return
+      }
+
+      // SUNAT no contestó (env:Server): la baja PUDO haber entrado. No se da por
+      // fallida ni se suelta el puntero a ella: queda EN CURSO y la revisión
+      // automática la consulta. La RA-20260905-1 de VIGUZZA se guardó "fallida"
+      // así con SUNAT habiéndola ACEPTADO, y el botón mandó 15 bajas más.
+      if (sinRespuesta) {
+        await invoiceRef.update({
+          sunatStatus: 'voiding',
+          voidingTicket: qpseResult.ticket || null,
+          voidedDocumentId: voidedDocRef.id,
+          updatedAt: FieldValue.serverTimestamp()
+        })
+        res.status(202).json({
+          success: true,
+          status: 'pending',
+          ticket: qpseResult.ticket || null,
+          voidedDocumentId: voidedDocRef.id,
+          message: 'SUNAT no confirmó la recepción de la baja. Se consultará su estado: no hace falta volver a anular.'
+        })
+        return
+      }
+
+      // SUNAT rechazó ESTA baja. Si otra del mismo comprobante ya fue aceptada,
+      // el comprobante está anulado y el rechazo es solo el duplicado: así
+      // rebotaron las de VIGUZZA después de la primera.
+      try {
+        const tokenHermanas = await obtenerToken({
+          usuario: qpseConfig.usuario,
+          password: qpseConfig.password,
+          environment: qpseConfig.environment || 'demo',
+        })
+        const hermana = await buscarBajaHermanaAceptada({
+          userId,
+          invoiceId,
+          excluirId: voidedDocRef.id,
+          ruc: businessData.ruc,
+          token: tokenHermanas,
+          environment: qpseConfig.environment || 'demo',
+        })
+        if (hermana) {
+          await hermana.ref.update({
+            status: 'accepted',
+            responseCode: hermana.leido.codigo,
+            responseDescription: hermana.leido.descripcion || 'Anulación aceptada',
+            processedAt: FieldValue.serverTimestamp()
+          })
+          await invoiceRef.update({
+            sunatStatus: 'voided',
+            status: 'voided',
+            voidingTicket: null,
+            voidedAt: FieldValue.serverTimestamp(),
+            voidedDocumentId: hermana.ref.id,
+          })
+          res.status(200).json({
+            success: true,
+            status: 'voided',
+            message: `SUNAT ya había aceptado la baja ${hermana.voidedDocId}`,
+            voidedDocumentId: hermana.ref.id
+          })
+          return
+        }
+      } catch (e) {
+        console.warn('⚠️ No se pudieron revisar las otras bajas del comprobante:', e.message)
       }
 
       // Error en la anulación

@@ -72,6 +72,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { storage } from '@/lib/firebase'
 import { prepareInvoiceXML, downloadCompressedXML, voidDocument, canVoidDocument, checkVoidStatus } from '@/services/sunatService'
 import { referenciaDeBaja } from '@/utils/bajaSunat'
+import { clasificarRechazoDeNota } from '@/utils/notaRechazada'
 import { plazoDeAnulacion } from '@/utils/plazoDeAnulacion'
 import { generateInvoicesExcel } from '@/services/invoiceExportService'
 import InvoiceTicket from '@/components/InvoiceTicket'
@@ -2998,7 +2999,20 @@ Gracias por tu preferencia.`
     setSelectedInvoiceIds(new Set())
   }, [searchTerm, filterStatus, filterType, filterSeller, filterPaymentMethod, filterConversion, dateFilter, filterStartDate, filterEndDate, filterRuc])
 
-  const getStatusBadge = (status, documentType) => {
+  // La nota de crédito que dejó a este comprobante "en proceso", si SUNAT la
+  // RECHAZÓ. Entonces no está en proceso: está muerta, y el comprobante se
+  // quedaba así para siempre sin que nada lo dijera (VIGUZZA FN08-00000002,
+  // 18-set-2026). Se busca en la lista cargada: la nota es posterior al
+  // comprobante, así que si él está a la vista, ella también.
+  const notaRechazadaDe = (inv) => {
+    if (!inv?.pendingCreditNoteId) return null
+    if (inv.status !== 'pending_cancellation' && inv.status !== 'partial_refund_pending') return null
+    const nota = invoices.find(i => i.id === inv.pendingCreditNoteId)
+    if (!nota || nota.sunatStatus !== 'rejected') return null
+    return { nota, rechazo: clasificarRechazoDeNota(nota.sunatResponse) }
+  }
+
+  const getStatusBadge = (status, documentType, invoice) => {
     // Para Notas de Crédito y Notas de Débito, usar estados específicos
     if (documentType === 'nota_credito' || documentType === 'nota_debito') {
       switch (status) {
@@ -3032,9 +3046,11 @@ Gracias por tu preferencia.`
       // Sin estos casos caian al `default` y la tabla mostraba el codigo CRUDO
       // ("pending_cancellation"), que al usuario no le dice nada.
       case 'pending_cancellation':
-        return <Badge className="bg-amber-100 text-amber-800">Anulación en proceso</Badge>
       case 'partial_refund_pending':
-        return <Badge className="bg-amber-100 text-amber-800">Dev. parcial en proceso</Badge>
+        if (notaRechazadaDe(invoice)) return <Badge variant="danger">NC rechazada</Badge>
+        return status === 'pending_cancellation'
+          ? <Badge className="bg-amber-100 text-amber-800">Anulación en proceso</Badge>
+          : <Badge className="bg-amber-100 text-amber-800">Dev. parcial en proceso</Badge>
       default:
         return <Badge>{status}</Badge>
     }
@@ -3673,7 +3689,7 @@ Gracias por tu preferencia.`
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <div className="scale-90 origin-right">{getStatusBadge(invoice.status, invoice.documentType)}</div>
+                      <div className="scale-90 origin-right">{getStatusBadge(invoice.status, invoice.documentType, invoice)}</div>
                       <div className="scale-75 origin-right">{getSunatStatusBadge(invoice.sunatStatus || 'pending', invoice)}</div>
                     </div>
                   </div>
@@ -3898,7 +3914,7 @@ Gracias por tu preferencia.`
                     </TableCell>
                     <TableCell className="py-2.5 px-2">
                       <div className="flex flex-col gap-1">
-                        <div className="scale-90 origin-left">{getStatusBadge(invoice.status, invoice.documentType)}</div>
+                        <div className="scale-90 origin-left">{getStatusBadge(invoice.status, invoice.documentType, invoice)}</div>
                         {/* Badge de estado de pago para notas de venta con pago parcial o al crédito */}
                         {invoice.documentType === 'nota_venta' && (invoice.paymentStatus === 'partial' || invoice.paymentStatus === 'pending') && (
                           <Badge className="text-xs bg-orange-100 text-orange-800">
@@ -4686,7 +4702,7 @@ Gracias por tu preferencia.`
                   </p>
                 </div>
                 <div className="text-right space-y-2">
-                  {getStatusBadge(viewingInvoice.status)}
+                  {getStatusBadge(viewingInvoice.status, undefined, viewingInvoice)}
                   <div className="mt-1">{getSunatStatusBadge(viewingInvoice.sunatStatus, viewingInvoice)}</div>
                 </div>
               </div>
@@ -4775,36 +4791,92 @@ Gracias por tu preferencia.`
               )
             })()}
 
-            {/* ========== ERROR SUNAT ========== */}
-            {viewingInvoice.sunatStatus === 'rejected' && viewingInvoice.sunatResponse && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+            {/* ========== NOTA DE CRÉDITO RECHAZADA ==========
+                El comprobante quedaba en "Anulación en proceso" para siempre aunque
+                SUNAT hubiera rechazado la nota que lo puso así (VIGUZZA, 18-set-2026). */}
+            {(() => {
+              const rechazada = notaRechazadaDe(viewingInvoice)
+              if (!rechazada?.rechazo) return null
+              return (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                  <div className="flex gap-3">
+                    <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-semibold text-red-800">Nota de crédito {rechazada.nota.number} rechazada por SUNAT</p>
+                      <p className="text-sm font-medium text-red-800 mt-1">{rechazada.rechazo.titulo}</p>
+                      <p className="text-sm text-red-700 mt-1">{rechazada.rechazo.texto}</p>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* ========== ANULADO SEGÚN SUNAT ==========
+                SUNAT rechazó una nota con 2120: el comprobante ya estaba de baja
+                y el servidor lo sincronizó (ver marcarAnuladoSegunSunat). */}
+            {viewingInvoice.anuladaSegunSunat && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
                 <div className="flex gap-3">
-                  <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <p className="font-semibold text-red-800">Rechazado por SUNAT</p>
-                    <p className="text-sm text-red-700 mt-1">{viewingInvoice.sunatResponse.description || 'Error desconocido'}</p>
-                    {viewingInvoice.sunatResponse.observations?.length > 0 && (
-                      <ul className="mt-2 text-sm text-red-600 list-disc list-inside">
-                        {viewingInvoice.sunatResponse.observations.map((obs, i) => <li key={i}>{obs}</li>)}
-                      </ul>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="mt-3 border-red-300 text-red-700 hover:bg-red-100"
-                      onClick={() => { setViewingInvoice(null); handleSendToSunat(viewingInvoice.id); }}
-                      disabled={sendingToSunat === viewingInvoice.id}
-                    >
-                      {sendingToSunat === viewingInvoice.id ? (
-                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Reenviando...</>
-                      ) : (
-                        <><Send className="w-4 h-4 mr-2" />Reintentar envío</>
-                      )}
-                    </Button>
+                    <p className="font-semibold text-amber-900">Anulado según SUNAT</p>
+                    <p className="text-sm text-amber-800 mt-1">
+                      SUNAT rechazó la nota de crédito {viewingInvoice.anuladaSegunSunat.porNota || ''} porque este comprobante ya estaba dado de baja.
+                      {viewingInvoice.stockPorRevisar && ' El stock de esta venta no se devolvió automáticamente: revíselo.'}
+                    </p>
                   </div>
                 </div>
               </div>
             )}
+
+            {/* ========== ERROR SUNAT ========== */}
+            {viewingInvoice.sunatStatus === 'rejected' && viewingInvoice.sunatResponse && (() => {
+              // En una nota de crédito, reenviar la MISMA nota no sirve si el
+              // comprobante ya está de baja, si se venció el plazo o si SUNAT ya
+              // la registró rechazada: solo la quema con otro 1032. Así terminó
+              // la FN08-00000002 de VIGUZZA.
+              const rechazoDeNota = viewingInvoice.documentType === 'nota_credito'
+                ? clasificarRechazoDeNota(viewingInvoice.sunatResponse)
+                : null
+              const reenviable = !rechazoDeNota || !['baja', 'plazo', 'quemada'].includes(rechazoDeNota.clase)
+              return (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                  <div className="flex gap-3">
+                    <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-semibold text-red-800">Rechazado por SUNAT</p>
+                      {rechazoDeNota && (
+                        <>
+                          <p className="text-sm font-medium text-red-800 mt-1">{rechazoDeNota.titulo}</p>
+                          <p className="text-sm text-red-700 mt-1">{rechazoDeNota.texto}</p>
+                        </>
+                      )}
+                      <p className={`text-sm mt-1 ${rechazoDeNota ? 'text-red-600' : 'text-red-700'}`}>{viewingInvoice.sunatResponse.description || 'Error desconocido'}</p>
+                      {viewingInvoice.sunatResponse.observations?.length > 0 && (
+                        <ul className="mt-2 text-sm text-red-600 list-disc list-inside">
+                          {viewingInvoice.sunatResponse.observations.map((obs, i) => <li key={i}>{obs}</li>)}
+                        </ul>
+                      )}
+                      {reenviable && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-3 border-red-300 text-red-700 hover:bg-red-100"
+                          onClick={() => { setViewingInvoice(null); handleSendToSunat(viewingInvoice.id); }}
+                          disabled={sendingToSunat === viewingInvoice.id}
+                        >
+                          {sendingToSunat === viewingInvoice.id ? (
+                            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Reenviando...</>
+                          ) : (
+                            <><Send className="w-4 h-4 mr-2" />Reintentar envío</>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* ========== CONTEXTO DE LA VENTA ==========
                 Antes eran seis cajas grises del mismo peso en una grilla de tres

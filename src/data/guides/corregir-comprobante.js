@@ -75,6 +75,10 @@ export default {
         },
         {
           type: 'consejo',
+          text: 'Si SUNAT no confirma que recibió la baja, el comprobante se queda en **Anulación en proceso** y el sistema consulta solo cómo terminó: **no hace falta volver a anularlo**. Mandar otra baja del mismo comprobante no ayuda, y si la primera ya había entrado, SUNAT rechaza la segunda.',
+        },
+        {
+          type: 'consejo',
           text: 'Anular no es eliminar: el trámite queda registrado ante SUNAT con su constancia. Es la diferencia entre "este documento se dio de baja formalmente" y un hueco en tu correlativo.',
         },
       ],
@@ -87,6 +91,10 @@ export default {
         {
           type: 'texto',
           text: 'Un rechazo significa que el comprobante **nunca existió para SUNAT** — no necesita nota de crédito ni baja. Se corrige lo que causó el rechazo (el RUC del cliente, la fecha, el ubigeo) y se **reenvía**. Mientras tanto sigue contando como venta tuya, porque la venta sí ocurrió; el problema era del envío.',
+        },
+        {
+          type: 'ojo',
+          text: 'Con una **nota de crédito rechazada** la venta sigue vigente en SUNAT, y el comprobante lo muestra como **NC rechazada**. Al abrirlo te dice cuál es el caso: el comprobante **ya estaba anulado** (la nota no hacía falta), se **venció el plazo** para enviarla, o hay que **corregirla**. En los dos primeros no la reenvíes: si SUNAT ya la registró como rechazada, no la acepta otra vez con el mismo número.',
         },
       ],
     },
