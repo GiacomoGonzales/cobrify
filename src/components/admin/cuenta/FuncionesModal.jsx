@@ -15,6 +15,9 @@ export const FUNCIONES = [
   // ficha, en la sección Emisores, que aparece al activar esto. Apagado, el
   // negocio no ve nada: ni el desplegable del POS ni la sección.
   { clave: 'multiRuc', etiqueta: 'Varios RUC', ayuda: 'Emitir con más de un RUC desde el mismo POS. Los RUC se configuran en la ficha, en Emisores.' },
+  // Pedido de JMC (18-set-2026). Ver utils/cobroFlexible: para SUNAT un pago
+  // posterior a la emisión es Crédito, por eso no es para todos.
+  { clave: 'cobroFlexible', etiqueta: 'Cobro flexible al contado', ayuda: 'En el POS, al contado: emitir con 0.00 cobrado (el resto queda por cobrar) y poner la fecha en que pagó el cliente.' },
 ]
 
 export default function FuncionesModal({ cuenta, onClose, onGuardado }) {

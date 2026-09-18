@@ -160,7 +160,8 @@ export default function PublicManual() {
       // Con rubro elegido, el indice se comporta como dentro de la app.
       if (rubro && g.modos?.length > 0 && !g.modos.includes(rubro)) continue
 
-      const secciones = contenidos[g.id]?.sections || []
+      // Las secciones de una función especial no son del manual público.
+      const secciones = (contenidos[g.id]?.sections || []).filter(s => !s.soloConFuncion)
       const coincideGuia = matchesSearchQuery(query, g.title, g.description, g.keywords, g.category)
       const seccionesQueCoinciden = hayBusqueda
         ? secciones.filter(s => matchesSearchQuery(query, s.title))

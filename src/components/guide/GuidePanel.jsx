@@ -20,7 +20,7 @@ import GuideRenderer from './GuideRenderer'
 export default function GuidePanel({ open, onClose }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const { businessMode, businessSettings, isDemoMode } = useAppContext()
+  const { businessMode, businessSettings, isDemoMode, hasFeature } = useAppContext()
 
   const guideMeta = getGuideByPath(location.pathname)
   const guideId = guideMeta?.id || null
@@ -64,7 +64,7 @@ export default function GuidePanel({ open, onClose }) {
 
   if (!open) return null
 
-  const sections = content ? getVisibleSections(content, businessMode) : []
+  const sections = content ? getVisibleSections(content, businessMode, hasFeature) : []
 
   const goToManual = () => {
     onClose()
@@ -160,6 +160,7 @@ export default function GuidePanel({ open, onClose }) {
                 anchorPrefix="panel"
                 isDemoMode={isDemoMode}
                 onNavigate={onClose}
+                tieneFuncion={hasFeature}
               />
             </>
           )}

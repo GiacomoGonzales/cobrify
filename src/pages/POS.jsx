@@ -128,6 +128,8 @@ import { getActiveBranches } from '@/services/branchService'
 import { shortenUrl } from '@/services/urlShortenerService'
 import { releaseTable, updateTableAmount } from '@/services/tableService'
 import { clampEmissionDate, getEmissionDateLimits, validateEmissionDate } from '@/utils/emissionDate'
+import { aplicaCobroFlexible, camposDeCobroFlexible, FUNCION_COBRO_FLEXIBLE } from '@/utils/cobroFlexible'
+import { validarFechaDePago } from '@/utils/fechaDePago'
 import { computeSaleCommission } from '@/utils/commissions'
 import { getSellers } from '@/services/sellerService'
 import { markOrderAsPaid, updateOrder, updateOrderStatus, claimOrderForInvoicing, releaseOrderInvoicingClaim, markOrderInvoiced } from '@/services/orderService'
@@ -1360,6 +1362,9 @@ export default function POS() {
   const [paymentType, setPaymentType] = useState('contado') // 'contado' o 'credito'
   const [paymentDueDate, setPaymentDueDate] = useState('') // Fecha de vencimiento
   const [paymentInstallments, setPaymentInstallments] = useState([]) // Cuotas: [{number, amount, dueDate}]
+  // Cobro flexible al contado (función especial, utils/cobroFlexible): el día
+  // en que pagó el cliente, que puede ser anterior a la factura.
+  const [fechaDePago, setFechaDePago] = useState(() => getLocalDateString())
 
   // Campos opcionales de referencia
   const [guideNumber, setGuideNumber] = useState('') // N° de Guía de Remisión
@@ -2998,6 +3003,13 @@ export default function POS() {
       } else if (invoice.paymentMethod) {
         const methodKey = getPaymentKeyByLabel(invoice.paymentMethod, companySettings)
         setPayments([{ method: methodKey, amount: '' }])
+      }
+
+      // Cobro flexible al contado: la fecha del pago viaja en el historial
+      // (utils/cobroFlexible). Sin esto, editar la corría a hoy.
+      const primerPago = invoice.cobroFlexible ? invoice.paymentHistory?.[0]?.date : null
+      if (primerPago) {
+        setFechaDePago(getLocalDateString(primerPago.toDate ? primerPago.toDate() : new Date(primerPago)))
       }
 
       // Cargar descuento global
@@ -5867,6 +5879,7 @@ export default function POS() {
     setPaymentType('contado')
     setPaymentDueDate('')
     setPaymentInstallments([])
+    setFechaDePago(getLocalDateString())
     // Reset campos de referencia
     setGuideNumber('')
     setPurchaseOrderNumber('')
@@ -6663,6 +6676,15 @@ export default function POS() {
 
   const { totalPaid, remaining, amountToPay } = paymentTotals
 
+  // Cobro flexible al contado: función especial de la cuenta (Admin → Funciones
+  // especiales). Lo que no se cobra ahora queda por cobrar y el pago lleva su
+  // propia fecha. Con "Ocultar métodos de pago" no hay qué elegir: no aplica.
+  const cobroFlexibleActivo = aplicaCobroFlexible({
+    activa: hasFeature(FUNCION_COBRO_FLEXIBLE) && !hasFeature('hidePaymentMethods'),
+    documentType,
+    paymentType,
+  })
+
   // Cargar las facturas de anticipo del cliente (para deducirlas en la factura final).
   // Solo califican: facturas marcadas como anticipo (0104), ACEPTADAS por SUNAT
   // (regla 3218: el comprobante referenciado debe existir aceptado) y que no se
@@ -7407,7 +7429,23 @@ ${textoDeErrores(revision.errores)}`, 9000)
       }
     }
 
-    if (!isCreditSale && !isHidePaymentMethods && totalPaid < amountToPay - PAYMENT_EPSILON) {
+    // Cobro flexible al contado (utils/cobroFlexible): lo que falta no bloquea,
+    // queda por cobrar. Pero la fecha tiene que servir, y una venta que queda
+    // debiendo necesita a quién cobrarle, igual que una al crédito.
+    if (cobroFlexibleActivo) {
+      const fecha = validarFechaDePago(fechaDePago)
+      if (!fecha.valid) {
+        abortCheckout(fecha.error)
+        return
+      }
+      const nombreDeudor = (customerData.name || '').trim() || (customerData.businessName || '').trim()
+      if (totalPaid < amountToPay - PAYMENT_EPSILON && !nombreDeudor) {
+        abortCheckout('Esta venta queda con saldo por cobrar. Escribe al menos el nombre del cliente para saber a quién cobrarle.')
+        return
+      }
+    }
+
+    if (!isCreditSale && !isHidePaymentMethods && !cobroFlexibleActivo && totalPaid < amountToPay - PAYMENT_EPSILON) {
       abortCheckout(`Falta pagar ${formatCurrency(remaining)}. Agrega más métodos de pago.`)
       return
     }
@@ -7454,7 +7492,8 @@ ${textoDeErrores(revision.errores)}`, 9000)
     //   pedirle al cajero que declare cómo cobró nada: la casilla del monto
     //   solo acepta un número mayor a cero, así que la venta quedaba trabada y
     //   no había forma de emitir una boleta de transferencia gratuita.
-    if (!isCreditSale && !nadaQueCobrar && allPayments.length === 0) {
+    // EXCEPCIÓN 3: cobro flexible al contado, que puede salir con 0.00 cobrado.
+    if (!isCreditSale && !nadaQueCobrar && !cobroFlexibleActivo && allPayments.length === 0) {
       abortCheckout('Debes seleccionar al menos un método de pago')
       return
     }
@@ -7831,6 +7870,17 @@ ${textoDeErrores(revision.errores)}`, 9000)
       const balance = isCreditSaleForInvoice ? amounts.total : (isPartialPayment ? amounts.total - amountPaid : 0)
       const paymentStatus = isCreditSaleForInvoice ? 'pending' : (isPartialPayment ? (balance > 0 ? 'partial' : 'completed') : 'completed')
 
+      // Cobro flexible al contado: lo cobrado, con su fecha, y lo que queda por
+      // cobrar. null = se cobró todo y hoy, y la venta se guarda como siempre.
+      const camposFlexibles = cobroFlexibleActivo
+        ? camposDeCobroFlexible({
+            total: amountToPay,
+            pagos: allPayments,
+            fechaDePago,
+            quien: { recordedBy: user.email || user.uid, recordedByName: user.displayName || user.email || 'Usuario' },
+          })
+        : null
+
       // Vuelto: solo aplica a pagos al contado (no crédito, no parcial) cuando el cliente
       // pagó más que el total. totalPaid viene del state del POS y refleja exactamente lo
       // que ingresó el cajero (NO el monto recortado a allPayments por effectiveAmount).
@@ -8006,6 +8056,8 @@ ${textoDeErrores(revision.errores)}`, 9000)
             recordedByName: user.displayName || user.email || 'Usuario'
           }] : []
         }),
+        // Pisa estado, saldo, historial y método de arriba (utils/cobroFlexible).
+        ...(camposFlexibles || {}),
         notes: generalNotes || '',
         // Estado de SUNAT - solo facturas y boletas pueden enviarse a SUNAT.
         // 'not_sent' cuando autoSendToSunat=false → invisible para crones de retry,
@@ -13996,11 +14048,35 @@ Gracias por tu preferencia.`
                       </div>
                       {Math.abs(remaining) >= 0.005 && (
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">{remaining > 0 ? 'Falta:' : 'Cambio:'}</span>
-                          <span className={`font-semibold ${remaining > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          <span className="text-gray-600">{remaining > 0 ? (cobroFlexibleActivo ? 'Por cobrar:' : 'Falta:') : 'Cambio:'}</span>
+                          <span className={`font-semibold ${remaining > 0 ? (cobroFlexibleActivo ? 'text-amber-600' : 'text-red-600') : 'text-green-600'}`}>
                             {formatCurrency(Math.abs(remaining), currency)}
                           </span>
                         </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Cobro flexible al contado (función especial, utils/cobroFlexible):
+                      el día en que pagó el cliente, y lo que falta queda por cobrar. */}
+                  {cobroFlexibleActivo && (
+                    <div className="p-3 border border-gray-200 rounded-lg space-y-2">
+                      <label className="flex items-center justify-between gap-3 text-sm">
+                        <span className="text-gray-700">Fecha de pago</span>
+                        <input
+                          type="date"
+                          value={fechaDePago}
+                          max={getLocalDateString()}
+                          onChange={(e) => setFechaDePago(e.target.value)}
+                          disabled={lastInvoiceData !== null}
+                          className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100"
+                        />
+                      </label>
+                      {remaining > 0.005 && (
+                        <p className="text-xs text-amber-700">
+                          {totalPaid <= 0 && <>Quedan <strong>{formatCurrency(remaining, currency)}</strong> por cobrar. </>}
+                          La venta sale al contado y el saldo se cobra después con <strong>Registrar pago</strong>, en Ventas.
+                        </p>
                       )}
                     </div>
                   )}

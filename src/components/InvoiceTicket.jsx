@@ -1266,7 +1266,7 @@ const InvoiceTicket = forwardRef(({ invoice, companySettings, paperWidth = 80, w
               <>
                 <div className="info-row">
                   <span className="info-label">Método:</span>
-                  <span style={{ fontWeight: 'bold' }}>AL CRÉDITO</span>
+                  <span style={{ fontWeight: 'bold' }}>{real.porCobrar ? 'POR COBRAR' : 'AL CRÉDITO'}</span>
                 </div>
                 <div className="info-row" style={{ marginTop: '4px' }}>
                   <span className="info-label">Saldo Pendiente:</span>

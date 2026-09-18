@@ -20,7 +20,7 @@ import Card, { CardContent } from '@/components/ui/Card'
 export default function Manual() {
   const { guideId } = useParams()
   const location = useLocation()
-  const { businessMode, businessSettings } = useAppContext()
+  const { businessMode, businessSettings, hasFeature } = useAppContext()
 
   const [query, setQuery] = useState('')
   const [content, setContent] = useState(null)
@@ -76,7 +76,7 @@ export default function Manual() {
     })
   }, [businessMode, query])
 
-  const sections = content ? getVisibleSections(content, businessMode) : []
+  const sections = content ? getVisibleSections(content, businessMode, hasFeature) : []
 
   // ===== Vista de una guía =====
   if (guideId) {
@@ -155,6 +155,7 @@ export default function Manual() {
                       businessMode={businessMode}
                       businessSettings={businessSettings}
                       anchorPrefix="sec"
+                      tieneFuncion={hasFeature}
                     />
                   )}
                 </CardContent>

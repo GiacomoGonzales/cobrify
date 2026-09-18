@@ -17,7 +17,7 @@
  */
 export default {
   id: 'pos',
-  actualizado: '10/09/2026',
+  actualizado: '18/09/2026',
   intro:
     'El Punto de Venta es la pantalla para cobrar en el día a día. A la izquierda están tus productos; a la derecha, el **Carrito de Compras** y los datos de la venta. Esta guía recorre el flujo completo y las dudas más comunes.',
 
@@ -460,6 +460,36 @@ export default {
           to: '/app/configuracion?tab=ventas&opcion=notaVentaCreditTerms',
           label: 'Permitir crédito en notas de venta',
         },
+      ],
+    },
+
+    {
+      id: 'cobro-flexible',
+      title: 'Al contado: cobrar después o con otra fecha',
+      // Función especial de la cuenta (utils/cobroFlexible): solo la ve quien la tiene.
+      soloConFuncion: 'cobroFlexible',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Tu cuenta tiene activado el **cobro flexible al contado**. En facturas y boletas al contado, debajo de los métodos de pago aparece la **Fecha de pago**, y el cobro ya no tiene que completar el total.',
+        },
+        {
+          type: 'pasos',
+          items: [
+            'Si el cliente **pagó antes** de facturar: pon el método, el monto y en **Fecha de pago** el día en que te pagó. El pago queda registrado con esa fecha.',
+            'Si **todavía no paga**: deja el monto en 0.00 (o pon solo lo que te dio). La venta sale al contado y lo que falta queda **por cobrar**.',
+            'Cuando te pague, ve a **Ventas**, busca el comprobante y usa **Registrar Pago** con la fecha, el método y el N° de operación.',
+          ],
+        },
+        {
+          type: 'texto',
+          text: 'Las ventas por cobrar aparecen en **Pagos Pendientes** (Ventas) y en la columna Pago dicen **Por cobrar**. La caja cuenta cada cobro el día que pagaron, no el de la factura.',
+        },
+        {
+          type: 'ojo',
+          text: 'Para SUNAT, si el pago llega **después** de la emisión corresponde **Crédito**, con su fecha de vencimiento. Esta opción emite al contado igual; úsala sabiéndolo.',
+        },
+        { type: 'enlace', to: '/app/facturas', label: 'Ir a Ventas' },
       ],
     },
 

@@ -65,6 +65,7 @@ import { metodosRealesDelComprobante as getRealPaymentMethods, montoPorMetodoEnB
 import { getInvoiceDate, getInvoiceTimeInfo } from '@/utils/invoiceDate'
 import { consumoDeModificadoresDeVarias } from '@/utils/modificadorInsumo'
 import { toDateString } from '@/utils/emissionDate'
+import { fechaDePagoElegida } from '@/utils/fechaDePago'
 import { getInvoicesPage, getInvoicesEnAnulacion, deleteInvoice, updateInvoice, getCompanySettings, sendInvoiceToSunat, sendCreditNoteToSunat, updateProductStockTransaction } from '@/services/firestoreService'
 import { getCashRegisterSession, addCashMovement } from '@/services/firestoreService'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, generateExitNotePDF, preloadLogo } from '@/utils/pdfGenerator'
@@ -2372,21 +2373,6 @@ Gracias por tu preferencia.`
     return new Date(anio, mes - 1, dia).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })
   }
 
-  /**
-   * Convierte "2026-08-19" en una fecha LOCAL al mediodía.
-   *
-   * `new Date('2026-08-19')` se interpreta como medianoche UTC, que en Perú es
-   * el día ANTERIOR a las 19:00 — el pago quedaría fechado un día antes.
-   * Armándola por partes y al mediodía, ningún huso la corre de día.
-   *
-   * Si la fecha elegida es HOY se devuelve la hora real, para que el cobro
-   * caiga en la sesión de caja abierta ahora mismo.
-   */
-  const fechaDePagoElegida = (texto) => {
-    if (!texto || texto === toDateString()) return new Date()
-    const [anio, mes, dia] = texto.split('-').map(Number)
-    return new Date(anio, mes - 1, dia, 12, 0, 0)
-  }
 
   const handleRegisterPayment = async () => {
     if (!paymentInvoice || !user?.uid) return
@@ -5126,8 +5112,9 @@ Gracias por tu preferencia.`
               <div className="p-4 space-y-4">
                 {/* --- Pagos del comprobante (solo CONTADO: en una venta al crédito
                     payments[] guarda el método elegido al emitir, no plata real;
-                    mostrarlo como pago engañaría) --- */}
-                {viewingInvoice.paymentType !== 'credito' && (() => {
+                    mostrarlo como pago engañaría). El cobro flexible tampoco: lo
+                    cobrado va, con su fecha, en "Pagos Registrados" (utils/cobroFlexible). --- */}
+                {viewingInvoice.paymentType !== 'credito' && !viewingInvoice.cobroFlexible && (() => {
                   // Ventas viejas sin payments[]: se sintetiza una fila desde el
                   // campo legacy para que el modal siempre edite UNA lista.
                   const pagos = Array.isArray(viewingInvoice.payments) && viewingInvoice.payments.length > 0
@@ -5172,8 +5159,8 @@ Gracias por tu preferencia.`
                   )
                 })()}
 
-                {/* --- Venta al crédito sin cobros aún --- */}
-                {viewingInvoice.paymentType === 'credito' && (!Array.isArray(viewingInvoice.paymentHistory) || viewingInvoice.paymentHistory.length === 0) && (
+                {/* --- Venta al crédito (o al contado por cobrar) sin cobros aún --- */}
+                {(viewingInvoice.paymentType === 'credito' || viewingInvoice.cobroFlexible) && (!Array.isArray(viewingInvoice.paymentHistory) || viewingInvoice.paymentHistory.length === 0) && (
                   <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between text-sm">
                     <span className="text-amber-800">Aún no se registran pagos de esta venta.</span>
                     <span className="font-bold text-amber-900">Saldo: {formatCurrency(viewingInvoice.balance ?? viewingInvoice.total, viewingInvoice.currency)}</span>

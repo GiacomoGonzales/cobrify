@@ -8,6 +8,7 @@
  * S/3,700 pendientes y el monto seguía apareciendo en "Por Cobrar" (reporte de
  * 31-jul-2026).
  */
+import { etiquetaSinCobro } from './cobroFlexible'
 
 /**
  * Saldo pendiente del comprobante.
@@ -63,10 +64,19 @@ export const isPendingInvoice = (inv) => {
  * Mismo criterio que ya usaban el cuadre de caja y los reportes: manda el
  * historial. Vive acá para que las cuatro impresiones no puedan discrepar.
  *
+ * `porCobrar`: sin cobros, pero la venta es AL CONTADO (cobro flexible,
+ * utils/cobroFlexible). Las impresiones dicen "POR COBRAR" en vez de "AL
+ * CRÉDITO", que contradiría el CONTADO de la factura.
+ *
  * @returns {{ payments: Array<{method: string, amount: number}>, totalPaid: number,
- *             pending: number, isCredit: boolean, fromHistory: boolean }}
+ *             pending: number, isCredit: boolean, fromHistory: boolean, porCobrar: boolean }}
  */
 export const getRealPayments = (invoice) => {
+  const reales = pagosReales(invoice)
+  return { ...reales, porCobrar: reales.isCredit && etiquetaSinCobro(invoice) === 'Por cobrar' }
+}
+
+const pagosReales = (invoice) => {
   const total = Number(invoice?.total) || 0
   const historial = Array.isArray(invoice?.paymentHistory) ? invoice.paymentHistory : []
 

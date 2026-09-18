@@ -565,5 +565,10 @@ export const getGuidesForMode = (businessMode) =>
  * con una nota "requiere activar X" (ver GuideRenderer), para que el usuario
  * descubra que la función existe.
  */
-export const getVisibleSections = (content, businessMode) =>
-  (content?.sections || []).filter(s => !s.soloModos || s.soloModos.includes(businessMode))
+export const getVisibleSections = (content, businessMode, tieneFuncion) =>
+  (content?.sections || []).filter(s =>
+    (!s.soloModos || s.soloModos.includes(businessMode)) &&
+    // Función especial de la cuenta (Admin → Funciones especiales): quien no
+    // la tiene no ve la sección, ni en el manual público.
+    (!s.soloConFuncion || (typeof tieneFuncion === 'function' && tieneFuncion(s.soloConFuncion) === true))
+  )

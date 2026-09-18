@@ -28,6 +28,8 @@ import { getVisibleSections } from '@/data/guides/registry'
  *
  * Condiciones por sección:
  *   soloModos: ['retail', ...]   la sección solo existe en esos modos (se oculta)
+ *   soloConFuncion: 'clave'      solo para cuentas con esa función especial
+ *       (Admin → Funciones especiales); a las demás se les oculta.
  *
  * Condiciones por BLOQUE:
  *   soloModos: ['pharmacy', ...]  el bloque solo se dibuja en esos modos. Para
@@ -252,6 +254,8 @@ export default function GuideRenderer({
   anchorPrefix = 'sec',
   isDemoMode = false,
   onNavigate,
+  // hasFeature de la cuenta, para las secciones `soloConFuncion`.
+  tieneFuncion,
   // Manual PUBLICO (sin sesion): muestra TODAS las secciones, etiquetando las
   // que son de un rubro, y convierte los enlaces a la app en texto.
   publico = false,
@@ -264,8 +268,8 @@ export default function GuideRenderer({
   // encontrar las comandas).
   const sinRubroElegido = publico && !businessMode
   const sections = sinRubroElegido
-    ? (content.sections || [])
-    : getVisibleSections(content, businessMode)
+    ? (content.sections || []).filter(s => !s.soloConFuncion)
+    : getVisibleSections(content, businessMode, tieneFuncion)
 
   return (
     <div className="space-y-8">

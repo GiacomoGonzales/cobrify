@@ -16,6 +16,7 @@
  *   3. `paymentMethod`: el método de los comprobantes viejos, que no tienen desglose.
  */
 import { getDocumentTotalInBase, getDocumentRate } from '@/utils/currency'
+import { etiquetaSinCobro } from '@/utils/cobroFlexible'
 
 /** Métodos de pago REALES de un comprobante (para mostrar y filtrar). */
 export function metodosRealesDelComprobante(invoice) {
@@ -28,8 +29,9 @@ export function metodosRealesDelComprobante(invoice) {
   if (Array.isArray(invoice.paymentHistory) && invoice.paymentHistory.length > 0) {
     return [...new Set(invoice.paymentHistory.map(p => p.method || 'Efectivo'))]
   }
-  // Venta al crédito sin ningún pago registrado aún: no hay método real.
-  if (invoice.paymentStatus === 'pending') return ['Crédito']
+  // Venta al crédito sin ningún pago registrado aún: no hay método real. La del
+  // cobro flexible al contado se llama "Por cobrar" (utils/cobroFlexible).
+  if (invoice.paymentStatus === 'pending') return [etiquetaSinCobro(invoice)]
   if (Array.isArray(invoice.payments) && invoice.payments.length > 0) {
     return [...new Set(invoice.payments.map(p => p.method || 'Efectivo'))]
   }
@@ -75,7 +77,7 @@ export function montoPorMetodoEnBase(invoice, metodo) {
     return sumar(invoice.paymentHistory)
   }
   if (invoice.paymentStatus === 'pending') {
-    return buscado === 'crédito' ? totalBase : 0
+    return buscado === etiquetaSinCobro(invoice).toLowerCase() ? totalBase : 0
   }
   if (Array.isArray(invoice.payments) && invoice.payments.length > 0) {
     return sumar(invoice.payments)
