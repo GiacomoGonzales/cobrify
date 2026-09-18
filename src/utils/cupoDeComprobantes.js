@@ -114,9 +114,12 @@ const fechaCorta = (v) => {
   return d && !isNaN(d) ? d.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' }) : ''
 }
 
+// Sin "renuévala": en la app de iPhone ningún texto puede empujar a pagar por
+// fuera de la App Store (Guideline 3.1.1, ver MainLayout desde el 12-set), y de
+// todas formas la reactivación se hace escribiéndole a Cobrify.
 const motivoDeVencido = (cupo) =>
   `La mensualidad del RUC ${cupo.nombreRuc} venció${cupo.vence ? ` el ${fechaCorta(cupo.vence)}` : ''}. `
-  + 'Renuévala para volver a emitir facturas y boletas con él; mientras tanto puede emitir con el RUC principal o usar notas de venta.'
+  + 'Mientras tanto puede emitir con el RUC principal o usar notas de venta; escríbenos para reactivarlo.'
 
 /** ¿Este tipo de documento se queda sin poder emitirse al agotarse el cupo? */
 export function consumeCupo(documentType) {
