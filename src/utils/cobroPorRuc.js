@@ -48,3 +48,16 @@ export function estadoDelRuc(cobro, hoy = new Date()) {
   if (dias <= 5) return { clave: 'por_vencer', dias }
   return { clave: 'al_dia', dias }
 }
+
+const fecha = (v) => aFecha(v)?.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' }) || '—'
+
+/**
+ * En una línea, cómo va la mensualidad de un RUC: para el desplegable de
+ * "Registrar pago", que sale en la ficha y en Usuarios › RUC adicionales.
+ */
+export function textoDelCobro(cobro, hoy = new Date()) {
+  const { clave } = estadoDelRuc(cobro, hoy)
+  if (clave === 'sin_pagar') return { texto: 'Sin pago registrado', rojo: true }
+  if (clave === 'vencido') return { texto: `Venció el ${fecha(cobro.vence)}`, rojo: true }
+  return { texto: `Al día hasta el ${fecha(cobro.vence)}`, rojo: false }
+}

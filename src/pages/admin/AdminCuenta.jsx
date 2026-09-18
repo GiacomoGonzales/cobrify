@@ -14,7 +14,7 @@ import { esPrueba } from '@/data/prueba'
 import ConvertirPruebaModal from '@/components/admin/cuenta/ConvertirPruebaModal'
 import PagoDeRucModal from '@/components/admin/cuenta/PagoDeRucModal'
 import { ultimosDiagnosticos } from '@/services/diagnosticoAppService'
-import { estadoDelRuc } from '@/utils/cobroPorRuc'
+import { estadoDelRuc, textoDelCobro } from '@/utils/cobroPorRuc'
 import { RUBROS_ALFABETICOS, nombreRubro } from '@/data/rubros'
 import { nombreModo } from '@/utils/businessModes'
 import { useToast } from '@/contexts/ToastContext'
@@ -133,14 +133,6 @@ function LineaDeRuc({ pago, cuenta, variosRuc }) {
   const texto = rucDelPago(pago, cuenta, variosRuc)
   if (!texto) return null
   return <span className="block text-[11.5px] text-gray-500">{texto}</span>
-}
-
-/** En una línea, cómo va la mensualidad de un RUC: para el desplegable de pago. */
-function textoDelCobro(cobro) {
-  const { clave } = estadoDelRuc(cobro)
-  if (clave === 'sin_pagar') return { texto: 'Sin pago registrado', rojo: true }
-  if (clave === 'vencido') return { texto: `Venció el ${fecha(cobro.vence)}`, rojo: true }
-  return { texto: `Al día hasta el ${fecha(cobro.vence)}`, rojo: false }
 }
 
 /** Debajo de la tabla: cuánto suman al mes los RUC adicionales y cuáles faltan. */

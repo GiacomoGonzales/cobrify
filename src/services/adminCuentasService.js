@@ -405,21 +405,23 @@ export async function registrarPagoDeRuc(userId, emisor, { planId, monto, metodo
   const importe = Number(monto) || 0
   const planName = plan.name || planId
 
+  const cobro = {
+    ruc: emisor.ruc || null,
+    nombre: emisor.businessName || null,
+    plan: planId,
+    planName,
+    meses,
+    precio: importe,
+    vence: Timestamp.fromDate(vence),
+    ultimoPago: Timestamp.fromDate(ahora),
+    // El ciclo del RUC arranca con el pago y su contador vuelve a cero, igual
+    // que la cuenta al renovar (functions/src/utils/cupoPorRuc.js).
+    inicio: Timestamp.fromDate(ahora),
+    ultimoReset: Timestamp.fromDate(ahora),
+  }
+
   await updateDoc(ref, {
-    [`rucsCobrados.${emisor.id}`]: {
-      ruc: emisor.ruc || null,
-      nombre: emisor.businessName || null,
-      plan: planId,
-      planName,
-      meses,
-      precio: importe,
-      vence: Timestamp.fromDate(vence),
-      ultimoPago: Timestamp.fromDate(ahora),
-      // El ciclo del RUC arranca con el pago y su contador vuelve a cero, igual
-      // que la cuenta al renovar (functions/src/utils/cupoPorRuc.js).
-      inicio: Timestamp.fromDate(ahora),
-      ultimoReset: Timestamp.fromDate(ahora),
-    },
+    [`rucsCobrados.${emisor.id}`]: cobro,
     [`usage.porRuc.${emisor.id}`]: 0,
     paymentHistory: arrayUnion({
       date: Timestamp.fromDate(ahora),
@@ -439,7 +441,9 @@ export async function registrarPagoDeRuc(userId, emisor, { planId, monto, metodo
     updatedAt: serverTimestamp(),
   })
 
-  return { vence, planName }
+  // `cobro` es lo mismo que quedó guardado: la lista de Usuarios lo pega en la
+  // fila sin volver a cargar todas las cuentas.
+  return { vence, planName, cobro }
 }
 
 export async function convertirPruebaEnCuenta(userId, monto, metodo, planId) {

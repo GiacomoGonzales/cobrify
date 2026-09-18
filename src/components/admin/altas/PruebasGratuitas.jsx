@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia,
-  Cifras, Cifra, Estado, Aviso, Filtros, FiltroSelect, useTituloAdmin,
+  Cifras, Cifra, Estado, Aviso, Filtros, FiltroSelect,
 } from '@/components/admin/ui'
 import { cargarPruebas, embudo, EN_CURSO, CONVIRTIO, SE_PERDIO } from '@/services/adminPruebasService'
 import { DIAS_DE_PRUEBA } from '@/data/prueba'
@@ -29,8 +29,7 @@ const fecha = (d) => (d ? d.toLocaleDateString('es-PE', { day: '2-digit', month:
 const TONO = { [CONVIRTIO]: 'normal', [EN_CURSO]: 'tenue', [SE_PERDIO]: 'rojo' }
 const ETIQUETA = { [CONVIRTIO]: 'Compró', [EN_CURSO]: 'Probando', [SE_PERDIO]: 'Se perdió' }
 
-export default function AdminPruebas() {
-  useTituloAdmin('Pruebas')
+export default function PruebasGratuitas({ pestanas }) {
   const [filas, setFilas] = useState([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState(null)
@@ -55,6 +54,8 @@ export default function AdminPruebas() {
     <Pagina
       resumen={cargando ? 'Cargando…' : `${n.total} prueba${n.total === 1 ? '' : 's'} en total`}
     >
+      {pestanas}
+
       {error && <Aviso tono="error">{error}</Aviso>}
 
       {!cargando && n.total === 0 && (
@@ -127,8 +128,11 @@ export default function AdminPruebas() {
                 <Th>Negocio</Th>
                 <Th>Empezó</Th>
                 <Th>Termina</Th>
-                <Th alinear="der">Comprobantes</Th>
-                <Th alinear="der">Productos</Th>
+                {/* Solo lo de la prueba: lo que hizo después de comprar se ve
+                    en Usuarios, no dice nada de la prueba. En dos líneas: en
+                    una sola, la tabla no cabía y se cortaba el Estado. */}
+                <Th alinear="der">Comprobantes<span className="block font-normal">en la prueba</span></Th>
+                <Th alinear="der">Productos<span className="block font-normal">en la prueba</span></Th>
                 <Th>Estado</Th>
               </tr>
             </thead>
@@ -136,8 +140,9 @@ export default function AdminPruebas() {
               {visibles.length === 0 && <FilaVacia colSpan={6}>Ninguna con ese filtro.</FilaVacia>}
               {visibles.map((f) => (
                 <Fila key={f.id}>
-                  <Td>
-                    <Link to={`/app/admin/cuenta/${f.id}`} className="font-medium text-blue-600 hover:underline">
+                  {/* Hay razones sociales de 90 letras: bajan de renglón. */}
+                  <Td className="whitespace-normal max-w-[360px]">
+                    <Link to={`/app/admin/users/${f.id}`} className="font-medium text-primary-700 hover:underline">
                       {f.negocio}
                     </Link>
                     {f.email && <p className="text-[11.5px] text-gray-500">{f.email}</p>}
@@ -155,12 +160,12 @@ export default function AdminPruebas() {
                       de un vistazo al que hizo algo del que no tocó nada. */}
                   <Td alinear="der" numero>
                     <span className={f.comprobantes > 0 ? 'font-medium text-gray-900' : 'text-gray-400'}>
-                      {f.comprobantes}
+                      {f.comprobantes ?? '—'}
                     </span>
                   </Td>
                   <Td alinear="der" numero>
                     <span className={f.productos > 0 ? 'font-medium text-gray-900' : 'text-gray-400'}>
-                      {f.productos}
+                      {f.productos ?? '—'}
                     </span>
                   </Td>
                   <Td>
@@ -178,7 +183,8 @@ export default function AdminPruebas() {
 
       {n.total > 0 && (
         <p className="text-[11.5px] text-gray-500">
-          «La usaron» significa que emitieron algún comprobante (todos los de la cuenta, no los del mes) o cargaron algún producto.
+          Todo se mide durante la prueba: hasta el día que compraron o el día que venció. «La usaron» significa que en ese
+          tiempo emitieron algún comprobante o cargaron algún producto; lo que hicieron después de comprar no cuenta.
           Todavía no se puede saber si solo entraron a mirar: el sistema no guarda la fecha
           del último acceso de nadie.
         </p>

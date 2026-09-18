@@ -16,13 +16,18 @@ import { buildAccountHaystack } from '@/utils/adminSearch'
 import VendedoresModal from '@/components/admin/cuenta/VendedoresModal'
 import EntrarComoModal from '@/components/admin/cuenta/EntrarComoModal'
 import EliminarCuentaModal from '@/components/admin/cuenta/EliminarCuentaModal'
+import RucsAdicionales from '@/components/admin/usuarios/RucsAdicionales'
+import { rucsEnRojo } from '@/components/admin/usuarios/filasDeRucs'
 import {
-  Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Filtros, FiltroSelect, Buscador, Estado, Pastilla, Boton,
+  Pagina, Seccion, Tabla, Th, Td, Fila, FilaVacia, Filtros, FiltroSelect, Buscador, Estado, Pastilla, Boton, Pestanas,
   useMenuDeFila, BotonDeFila, CajaMenu, ItemMenu, SeparadorMenu,
 } from '@/components/admin/ui'
 
 // Lista de cuentas: buscador, filtros y tabla. Clic en una fila abre la ficha
 // (/app/admin/users/:id); el menu de la derecha tiene los atajos.
+//
+// Dos pestañas: Cuentas y RUC adicionales (?vista=rucs), que antes era la
+// pagina RUC del menu. Las dos usan la misma carga de cuentas.
 
 // 'a-medio-crear': su creacion se corto por el camino y le falta el negocio o
 // el plan. Antes ni siquiera salian en esta lista, porque se arma recorriendo
@@ -83,7 +88,8 @@ export default function AdminUsers() {
   const toast = useToast()
   const navigate = useNavigate()
   const { user: currentUser } = useAuth()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const vista = searchParams.get('vista') === 'rucs' ? 'rucs' : 'cuentas'
 
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -298,7 +304,11 @@ export default function AdminUsers() {
 
   // ── Acciones ────────────────────────────────────────────────────────────────
 
-  const actualizarCuenta = (id, cambios) => setUsers(prev => prev.map(u => (u.id === id ? { ...u, ...cambios } : u)))
+  // `cambios` puede ser una funcion de la cuenta, para no pisar lo que cambio
+  // en otra fila mientras tanto (el pago de un RUC arma el mapa entero).
+  const actualizarCuenta = (id, cambios) => setUsers(prev => prev.map(u => (
+    u.id === id ? { ...u, ...(typeof cambios === 'function' ? cambios(u) : cambios) } : u
+  )))
   const abrirModal = (tipo, cuenta) => {
     menu.cerrar()
     setModal({ tipo, cuenta })
@@ -423,6 +433,25 @@ export default function AdminUsers() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
+  // La pestaña va en la direccion: la ruta vieja /app/admin/rucs llega directo,
+  // y al volver de una ficha se abre la misma pestaña. Con `replace`, cambiar
+  // de pestaña no llena el historial del navegador.
+  const cambiarVista = v => {
+    menu.cerrar()
+    setSearchParams(v === 'rucs' ? { vista: 'rucs' } : {}, { replace: true })
+  }
+  const rucsConProblema = useMemo(() => rucsEnRojo(users), [users])
+  const pestanas = (
+    <Pestanas
+      valor={vista}
+      onCambiar={cambiarVista}
+      opciones={[
+        { id: 'cuentas', etiqueta: 'Cuentas' },
+        { id: 'rucs', etiqueta: 'RUC adicionales', aviso: loading ? 0 : rucsConProblema },
+      ]}
+    />
+  )
+
   const orden = { campo: sortField, direccion: sortDirection }
   const cuantosFiltros = [statusFilter, planFilter, sourceFilter, modeFilter, rubroFilter, igvFilter, venceFilter].filter(f => f !== 'all').length
   const hayFiltros = Boolean(searchTerm) || cuantosFiltros > 0
@@ -454,6 +483,18 @@ export default function AdminUsers() {
             </CajaMenu>
   )
 
+  if (vista === 'rucs') {
+    return (
+      <RucsAdicionales
+        cuentas={users}
+        cargando={loading}
+        onRecargar={() => loadUsers()}
+        onCuentaCambiada={actualizarCuenta}
+        pestanas={pestanas}
+      />
+    )
+  }
+
   return (
     <Pagina
       resumen={resumen}
@@ -465,6 +506,8 @@ export default function AdminUsers() {
         </>
       }
     >
+      {pestanas}
+
       {/* El buscador va en su propia fila: es lo que mas se usa y competia por
           el ancho con seis selects. Debajo, los filtros. */}
       <Filtros>

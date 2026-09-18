@@ -61,9 +61,7 @@ const AdminCuenta = lazy(() => import('./pages/admin/AdminCuenta'))
 const AdminAltas = lazy(() => import('./pages/admin/AdminAltas'))
 const AdminOrigen = lazy(() => import('./pages/admin/AdminOrigen'))
 const AdminAsistente = lazy(() => import('./pages/admin/AdminAsistente'))
-const AdminPruebas = lazy(() => import('./pages/admin/AdminPruebas'))
 const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'))
-const AdminRucs = lazy(() => import('./pages/admin/AdminRucs'))
 const AdminCpe = lazy(() => import('./pages/admin/AdminCpe'))
 const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'))
 const AdminResellers = lazy(() => import('./pages/admin/AdminResellers'))
@@ -709,10 +707,12 @@ function App() {
               <Route path="altas" element={<AdminAltas />} />
               <Route path="origen" element={<AdminOrigen />} />
               <Route path="asistente" element={<AdminAsistente />} />
-              <Route path="pruebas" element={<AdminPruebas />} />
+              {/* Pruebas paso a ser una pestaña de Altas */}
+              <Route path="pruebas" element={<Navigate to="/app/admin/altas?vista=pruebas" replace />} />
               <Route path="resellers" element={<AdminResellers />} />
               <Route path="payments" element={<AdminPayments />} />
-              <Route path="rucs" element={<AdminRucs />} />
+              {/* La pagina RUC paso a ser la pestaña "RUC adicionales" de Usuarios */}
+              <Route path="rucs" element={<Navigate to="/app/admin/users?vista=rucs" replace />} />
               <Route path="cpe" element={<AdminCpe />} />
               {/* Rutas viejas: todo lo global vive en Resumen y los
                   vencimientos son un filtro de Usuarios. */}

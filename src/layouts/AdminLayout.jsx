@@ -16,11 +16,8 @@ const ITEMS = [
   { path: '/app/admin/users', label: 'Usuarios' },
   { path: '/app/admin/altas', label: 'Altas' },
   { path: '/app/admin/origen', label: 'Origen' },
-  { path: '/app/admin/pruebas', label: 'Pruebas' },
-  { path: '/app/admin/asistente', label: 'Asistente' },
   { path: '/app/admin/resellers', label: 'Resellers' },
   { path: '/app/admin/payments', label: 'Pagos' },
-  { path: '/app/admin/rucs', label: 'RUC' },
   { path: '/app/admin/cpe', label: 'Comprobantes' },
   { path: '/app/admin/notifications', label: 'Notificaciones' },
   { path: '/app/admin/settings', label: 'Configuración' },
@@ -34,6 +31,12 @@ const TITULOS_SUELTOS = {
   '/app/admin/investor-report': 'Resumen',
   '/app/admin/plan-distribution': 'Resumen',
   '/app/admin/expirations': 'Usuarios',
+  '/app/admin/rucs': 'Usuarios',
+  '/app/admin/pruebas': 'Altas',
+  // Oculto del menu el 17-set-2026: Giacomo no va a usar un bot en sus
+  // conversaciones. Se guarda (pagina y funcion asistenteVentas) por si sirve
+  // cuando se ofrezca Chat Cobrify a los clientes.
+  '/app/admin/asistente': 'Asistente',
 }
 
 function Item({ item, onClick }) {
