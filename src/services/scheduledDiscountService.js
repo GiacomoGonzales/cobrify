@@ -77,14 +77,20 @@ export const getScheduledDiscounts = async (businessId) => {
 }
 
 export const createScheduledDiscount = async (businessId, {
-  name, percent, scope, category = '', productIds = [], days, startTime, endTime, endsAt = null,
+  name, percent, scope, category = '', categories = [], excludedCategories = [],
+  productIds = [], days, startTime, endTime, endsAt = null,
   channels = [CANAL_POS, CANAL_CATALOGO],
 }) => {
   try {
     const pct = Number(percent)
+    // `categories` (varias) es el formato de ahora; `category` (una sola) el de
+    // antes. Se aceptan los dos al crear para no romper ninguna llamada, pero lo
+    // que se GUARDA es siempre el arreglo: un solo formato en la base.
+    const cats = (categories?.length ? categories : (category ? [category] : [])).filter(Boolean)
+    const excluidas = (excludedCategories || []).filter(Boolean)
     if (!String(name || '').trim()) return { success: false, error: 'Ponle un nombre a la promoción' }
     if (!(pct > 0 && pct < 100)) return { success: false, error: 'El descuento debe estar entre 1% y 99%' }
-    if (scope === 'category' && !category) return { success: false, error: 'Elige la categoría' }
+    if (scope === 'category' && !cats.length) return { success: false, error: 'Elige al menos una categoría' }
     if (scope === 'products' && !productIds.length) return { success: false, error: 'Agrega al menos un producto' }
     if (!days?.length) return { success: false, error: 'Elige al menos un día' }
     const canales = (channels || []).filter((c) => c === CANAL_POS || c === CANAL_CATALOGO)
@@ -94,7 +100,11 @@ export const createScheduledDiscount = async (businessId, {
       name: String(name).trim(),
       percent: pct,
       scope, // 'all' | 'category' | 'products'
-      category: scope === 'category' ? category : '',
+      categories: scope === 'category' ? cats : [],
+      // Excluir NO cuelga del alcance: vale para cualquiera. El caso que lo pidió
+      // es "todo el catálogo menos una categoría" (Carlos Porras, VAPORES), que
+      // con scope 'all' no se podía expresar de ninguna forma.
+      excludedCategories: excluidas,
       productIds: scope === 'products' ? productIds : [],
       days, // [0..6], 0 = domingo
       startTime: startTime || '00:00',
@@ -139,10 +149,31 @@ export const promoVigente = (promo, ahora = new Date()) => {
   return hhmm >= (promo.startTime || '00:00') && hhmm <= (promo.endTime || '23:59')
 }
 
+/**
+ * Las categorías de una promo, en un solo formato.
+ *
+ * `categories` es el de ahora (varias). Las promos creadas ANTES solo tienen
+ * `category` (una), y se sigue leyendo tal cual: es exactamente lo que hacían,
+ * así que nadie se despierta con una promo alcanzando de más. Mismo criterio
+ * que `canalesDePromo` con las promos sin `channels`.
+ */
+export const categoriasDePromo = (promo) => {
+  if (promo?.categories?.length) return promo.categories
+  return promo?.category ? [promo.category] : []
+}
+
 /** ¿La regla alcanza a este producto? */
 export const promoAlcanzaProducto = (promo, product) => {
+  const cat = product.category || ''
+  // Excluir GANA sobre el alcance y vale para los tres: el caso que lo motivó es
+  // "todo el catálogo menos una categoría", que con scope 'all' no había forma
+  // de expresar. Una promo vieja no tiene el campo y esto no la toca.
+  if (cat && promo.excludedCategories?.includes(cat)) return false
   if (promo.scope === 'all') return true
-  if (promo.scope === 'category') return (product.category || '') === promo.category
+  // ⚠️ La comparación es PLANA: elegir la categoría padre NO alcanza a sus
+  // subcategorías. Era así con una categoría y se mantiene con varias; cambiarlo
+  // le ampliaría el alcance a promos que ya están corriendo.
+  if (promo.scope === 'category') return categoriasDePromo(promo).includes(cat)
   if (promo.scope === 'products') return promo.productIds?.includes(product.id || product.productId)
   return false
 }

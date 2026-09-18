@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
-import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import Card, { CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import LoyaltyManager from '@/components/loyalty/LoyaltyManager'
@@ -37,6 +37,7 @@ import { getOpenCashSessions } from '@/services/firestoreService'
 import {
   getScheduledDiscounts, createScheduledDiscount, setScheduledDiscountActive,
   deleteScheduledDiscount, promoVigente, DIAS, CANAL_POS, CANAL_CATALOGO, canalesDePromo,
+  categoriasDePromo,
 } from '@/services/scheduledDiscountService'
 
 /**
@@ -88,7 +89,7 @@ export default function Promotions() {
 
   // ── Descuentos programados ──
   const FORM_PROMO_VACIO = {
-    name: '', percent: '', scope: 'all', category: '', productIds: [],
+    name: '', percent: '', scope: 'all', categories: [], excludedCategories: [], productIds: [],
     days: [1, 2, 3, 4, 5, 6, 0], startTime: '00:00', endTime: '23:59', endsAt: '',
     // Por defecto vale en los dos lados; el que quiera limitarla lo cambia.
     channels: [CANAL_POS, CANAL_CATALOGO],
@@ -1004,9 +1005,18 @@ export default function Promotions() {
                     const estadoCls = estado === 'Activa ahora'
                       ? 'bg-green-100 text-green-700'
                       : estado === 'Programada' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
-                    const alcance = p.scope === 'all' ? 'todos los productos'
-                      : p.scope === 'category' ? `categoría ${nombreDeCategoria(p.category)}`
-                      : `${p.productIds?.length || 0} producto${(p.productIds?.length || 0) === 1 ? '' : 's'}`
+                    // Las excluidas se cuelan DENTRO de `alcance` a propósito: así la
+                    // línea que lo pinta no cambia y no quedan dos sitios que tocar.
+                    const catsPromo = categoriasDePromo(p)
+                    const excluidasPromo = p.excludedCategories || []
+                    const salvo = excluidasPromo.length
+                      ? ` salvo ${excluidasPromo.length === 1 ? nombreDeCategoria(excluidasPromo[0]) : `${excluidasPromo.length} categorías`}`
+                      : ''
+                    const alcance = (p.scope === 'all' ? 'todos los productos'
+                      : p.scope === 'category' ? (catsPromo.length === 1
+                        ? `categoría ${nombreDeCategoria(catsPromo[0])}`
+                        : `${catsPromo.length} categorías`)
+                      : `${p.productIds?.length || 0} producto${(p.productIds?.length || 0) === 1 ? '' : 's'}`) + salvo
                     const dias = (p.days || []).length === 7 ? 'todos los días'
                       : (p.days || []).map((d) => DIAS[d]).join(' ')
                     const canal = textoDeCanal(p)
@@ -1092,15 +1102,69 @@ export default function Promotions() {
 
           {promoForm.scope === 'category' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
-              <select
-                value={promoForm.category}
-                onChange={(e) => setPromoForm((f) => ({ ...f, category: e.target.value }))}
-                className={inputCls}
-              >
-                <option value="">Elige una categoría...</option>
-                {categorias.map((c) => <option key={c.valor} value={c.valor}>{c.nombre}</option>)}
-              </select>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Categorías</label>
+              <div className="flex flex-wrap gap-1.5">
+                {categorias.map((c) => {
+                  const elegida = promoForm.categories.includes(c.valor)
+                  return (
+                    <button
+                      key={c.valor}
+                      type="button"
+                      onClick={() => setPromoForm((f) => ({
+                        ...f,
+                        categories: elegida
+                          ? f.categories.filter((x) => x !== c.valor)
+                          : [...f.categories, c.valor],
+                      }))}
+                      className={`px-3 h-9 rounded-lg text-sm font-medium border transition-colors ${elegida
+                        ? 'bg-primary-600 border-primary-600 text-white'
+                        : 'bg-white border-gray-300 text-gray-600 hover:border-primary-400'}`}
+                    >
+                      {c.nombre}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                {categorias.length === 0
+                  ? 'Todavía no hay categorías en tus productos.'
+                  : 'Puedes marcar varias. El descuento alcanza a los productos de cualquiera de ellas.'}
+              </p>
+            </div>
+          )}
+
+          {/* Excluir no depende del alcance: el caso que lo pidió es "todo el
+              catálogo MENOS una categoría", que con "Todos los productos" no
+              había forma de expresar. Se oculta en "productos específicos"
+              porque ahí ya se eligieron a mano y excluir no significa nada. */}
+          {promoForm.scope !== 'products' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Excluir categorías (opcional)</label>
+              <div className="flex flex-wrap gap-1.5">
+                {categorias.map((c) => {
+                  const excluida = promoForm.excludedCategories.includes(c.valor)
+                  return (
+                    <button
+                      key={c.valor}
+                      type="button"
+                      onClick={() => setPromoForm((f) => ({
+                        ...f,
+                        excludedCategories: excluida
+                          ? f.excludedCategories.filter((x) => x !== c.valor)
+                          : [...f.excludedCategories, c.valor],
+                      }))}
+                      className={`px-3 h-9 rounded-lg text-sm font-medium border transition-colors ${excluida
+                        ? 'bg-red-600 border-red-600 text-white'
+                        : 'bg-white border-gray-300 text-gray-600 hover:border-red-400'}`}
+                    >
+                      {c.nombre}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Lo que marques acá queda fuera del descuento, aunque entre por el alcance de arriba.
+              </p>
             </div>
           )}
 

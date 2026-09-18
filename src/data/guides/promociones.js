@@ -179,7 +179,8 @@ export default {
           items: [
             'En la pestaña **Descuentos**, presiona **Crear promoción**.',
             'Ponle **Nombre** (ej: Hora feliz) y el **Descuento (%)**.',
-            'En **Se aplica a**, elige: **Todos los productos**, **Una categoría** o **Productos específicos**.',
+            'En **Se aplica a**, elige: **Todos los productos**, **Categorías** o **Productos específicos**. Si eliges Categorías, puedes marcar **varias**: el descuento alcanza a los productos de cualquiera de ellas.',
+            'Opcional, en **Excluir categorías**: lo que marques ahí queda FUERA del descuento aunque entre por el alcance de arriba. Sirve sobre todo con "Todos los productos" — por ejemplo, todo el catálogo menos Promociones.',
             'En **Dónde aplica**, elige **Local y catálogo**, **Solo en el local** o **Solo en el catálogo**.',
             'Marca los **Días** y define el horario **Desde** / **Hasta**. Opcional: una fecha en **Termina el** para campañas con final.',
             'Presiona **Crear promoción**.',
@@ -200,6 +201,10 @@ export default {
         {
           type: 'ojo',
           text: 'La promoción se evalúa EN EL MOMENTO de agregar el producto al carrito, con hora de Perú. Si dos promociones alcanzan al mismo producto, no se suman: se aplica solo la más generosa. La lista muestra el estado de cada regla: Activa ahora, Programada, Vencida o Desactivada, y marca las que valen solo para un canal.',
+        },
+        {
+          type: 'ojo',
+          text: 'Las categorías se comparan una por una: elegir una categoría **padre** no alcanza a sus subcategorías. Si tienes "Bebidas" con "Bebidas > Gaseosas" adentro y quieres las dos, márcalas las dos. Lo mismo vale para las que excluyes.',
         },
       ],
     },
