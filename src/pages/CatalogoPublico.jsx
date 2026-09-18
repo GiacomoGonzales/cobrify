@@ -356,7 +356,6 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
   // Estado para mesa activa (orden existente del mozo)
   const [activeTableOrder, setActiveTableOrder] = useState(null) // { orderId, tableId, items, total }
-  const [loadingTableOrder, setLoadingTableOrder] = useState(false)
   const [accountModalOpen, setAccountModalOpen] = useState(false)
 
   // Cargar datos del negocio y productos
@@ -518,6 +517,13 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
         let lastDoc = null
         let accumulated = []
         let firstBatch = true
+        // Bucle de paginación a propósito: no tiene condición porque quien corta
+        // es el `break` de abajo, cuando el lote viene incompleto (< BATCH). El
+        // linter marca todo `while (true)`, así que se calla SOLO en esta línea —
+        // mismo criterio que InvoiceList.jsx, que pagina igual. No se toca la
+        // regla global: un `while (true)` sin salida en otro lado debe seguir
+        // saltando.
+        // eslint-disable-next-line no-constant-condition
         while (true) {
           const constraints = [where('catalogVisible', '==', true), orderBy(documentId())]
           if (lastDoc) constraints.push(startAfter(lastDoc))
@@ -555,7 +561,6 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
 
     async function checkActiveTable() {
       try {
-        setLoadingTableOrder(true)
         const tablesRef = collection(db, 'businesses', business.id, 'tables')
         const allTablesSnap = await getDocs(tablesRef)
 
@@ -592,8 +597,6 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       } catch (err) {
         console.warn('Error checking active table:', err)
         setActiveTableOrder(null)
-      } finally {
-        setLoadingTableOrder(false)
       }
     }
 
@@ -2411,7 +2414,7 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
                 src={optimizeImageUrl(business.catalogCoverImage, 'cover_desktop')}
                 alt=""
                 className="absolute inset-0 w-full h-full object-cover"
-                fetchpriority="high"
+                fetchPriority="high"
                 decoding="async"
               />
             </picture>
