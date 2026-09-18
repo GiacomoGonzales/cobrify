@@ -912,6 +912,59 @@ async function marcarAnuladoSegunSunat(userId, notaData, { codigo, mensaje }) {
 }
 
 /**
+ * NOTA DE CRÉDITO ACEPTADA → la nota queda aplicada y el comprobante que
+ * corrige, anulado (o con devolución parcial, si la nota no cubre el total).
+ *
+ * Era solo la rama de éxito de sendCreditNoteToSunat. Otros dos caminos dan
+ * también una nota por aceptada y salían sin tocar el comprobante: la respuesta
+ * "ya registrada / ha sido aceptada" del mismo envío, y el reintento automático
+ * (1033 "fue informado anteriormente", o aceptada al reintentar). El
+ * comprobante quedaba en "Anulación en proceso" para siempre aunque SUNAT ya
+ * tuviera la nota: SERVICE GLOBAL CAR, FPP4-00000129 anulada por la
+ * FN01-00000017, y 38 comprobantes así en la base (18-set-2026).
+ *
+ * El stock no se toca: la nota lo devolvió al crearse (CreateCreditNote).
+ * `marcarNota: false` cuando quien llama ya dejó la nota en 'applied'.
+ * Nunca lanza: la nota ya está aceptada, esto es solo su consecuencia.
+ */
+async function aplicarNotaDeCreditoAceptada(userId, notaId, notaData, { marcarNota = true } = {}) {
+  try {
+    const comprobantes = db.collection('businesses').doc(userId).collection('invoices')
+    if (marcarNota) {
+      await comprobantes.doc(notaId).update({ status: 'applied', updatedAt: FieldValue.serverTimestamp() })
+    }
+    let ref = notaData.referencedInvoiceFirestoreId ? comprobantes.doc(notaData.referencedInvoiceFirestoreId) : null
+    let snap = ref ? await ref.get() : null
+    if (!snap?.exists && notaData.referencedDocumentId) {
+      const q = await comprobantes.where('number', '==', notaData.referencedDocumentId).limit(1).get()
+      if (!q.empty) { snap = q.docs[0]; ref = snap.ref }
+    }
+    if (!snap?.exists) {
+      console.log(`⚠️ Nota ${notaData.number}: no se encontró el comprobante ${notaData.referencedDocumentId}`)
+      return
+    }
+    const comprobante = snap.data()
+    // De baja ya está anulado por otra vía; la nota no le cambia nada.
+    if (comprobante.sunatStatus === 'voided') return
+
+    const totalNota = Number(notaData.total) || 0
+    // Tolerancia de 0.01 para errores de redondeo
+    const anulaTodo = Math.abs((Number(comprobante.total) || 0) - totalNota) < 0.01
+    const nuevoEstado = anulaTodo ? 'cancelled' : 'partial_refund'
+    await ref.update({
+      status: nuevoEstado,
+      creditNoteId: notaId,
+      creditNoteNumber: notaData.number,
+      creditNoteTotal: totalNota,
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+    console.log(`📝 Documento original ${notaData.referencedDocumentId} actualizado a '${nuevoEstado}' por la nota ${notaData.number}`)
+  } catch (e) {
+    console.error('⚠️ No se pudo aplicar la nota de crédito aceptada (no crítico):', e.message)
+  }
+}
+
+/**
  * ¿Otra comunicación de baja del MISMO comprobante ya fue aceptada por SUNAT?
  *
  * Se pregunta antes de dar una baja por no hecha. Caso real (VIGUZZA,
@@ -2335,6 +2388,9 @@ export const sendCreditNoteToSunat = onRequest(
             updatedAt: FieldValue.serverTimestamp(),
           })
 
+          // Y la aplica: sin esto el comprobante quedaba "Anulación en proceso".
+          await aplicarNotaDeCreditoAceptada(userId, creditNoteId, creditNoteData)
+
           // SUNAT ya tenía la NC: se acepta por esta vía y la rama de éxito normal
           // (que cuenta el comprobante) NO se ejecutó. Contamos aquí para no perderla.
           await incrementInvoiceUsage(userId, creditNoteData)
@@ -2593,46 +2649,9 @@ export const sendCreditNoteToSunat = onRequest(
         // o el del RUC adicional que lo emitió si ese RUC se cobra aparte.
         await incrementInvoiceUsage(userId, creditNoteData)
 
-        // 7. Actualizar el documento original (boleta/factura) como anulado o con devolución parcial
-        try {
-          // Buscar el documento original por su número (referencedDocumentId)
-          const referencedDocId = creditNoteData.referencedDocumentId // Ej: "B001-00000001"
-          const referencedFirestoreId = creditNoteData.referencedInvoiceFirestoreId // ID de Firestore
-
-          if (referencedFirestoreId) {
-            const originalDocRef = db.collection('businesses').doc(userId).collection('invoices').doc(referencedFirestoreId)
-            const originalDoc = await originalDocRef.get()
-
-            if (originalDoc.exists) {
-              const originalData = originalDoc.data()
-              const originalTotal = originalData.total || 0
-              const ncTotal = creditNoteData.total || 0
-
-              // Determinar si es anulación total o parcial
-              // Tolerancia de 0.01 para errores de redondeo
-              const isFullCancellation = Math.abs(originalTotal - ncTotal) < 0.01
-
-              const newStatus = isFullCancellation ? 'cancelled' : 'partial_refund'
-
-              await originalDocRef.update({
-                status: newStatus,
-                creditNoteId: creditNoteId,
-                creditNoteNumber: creditNoteData.number,
-                creditNoteTotal: ncTotal,
-                updatedAt: FieldValue.serverTimestamp()
-              })
-
-              console.log(`📝 Documento original ${referencedDocId} actualizado a '${newStatus}'`)
-            } else {
-              console.log(`⚠️ No se encontró el documento original con ID: ${referencedFirestoreId}`)
-            }
-          } else {
-            console.log(`⚠️ No hay referencedInvoiceFirestoreId en la NC`)
-          }
-        } catch (updateOriginalError) {
-          console.error('⚠️ Error al actualizar documento original (no crítico):', updateOriginalError)
-          // No fallar la operación si esto falla
-        }
+        // 7. Actualizar el documento original (boleta/factura) como anulado o con
+        // devolución parcial. La nota ya quedó 'applied' en updateData.
+        await aplicarNotaDeCreditoAceptada(userId, creditNoteId, creditNoteData, { marcarNota: false })
       } else {
         console.log(`⏭️ NC rechazada - No se incrementa el contador`)
       }
@@ -5394,6 +5413,12 @@ export const retryPendingInvoices = onSchedule(
             // en el primer envío). Los transitorios/rechazados NO cuentan.
             if (result.accepted) {
               await incrementInvoiceUsage(businessId, invoiceData)
+            }
+
+            // Una nota de crédito aceptada al reintentar anula su comprobante,
+            // igual que en el primer envío. Antes quedaba "Anulación en proceso".
+            if (finalStatus === 'accepted' && invoiceData.documentType === 'nota_credito') {
+              await aplicarNotaDeCreditoAceptada(businessId, invoiceId, invoiceData)
             }
 
             console.log(`✅ [RETRY] ${docNumber}: ${finalStatus}`)
