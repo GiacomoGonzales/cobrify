@@ -109,3 +109,35 @@ export function aplazarRecargas() {
 
 /** ¿Alguien pidió no recargar ahora? */
 export const recargasAplazadas = () => aplazadas > 0
+
+/** Dónde se anota que ya se intentó el reinicio duro. También en sessionStorage. */
+export const CLAVE_RECARGA_DURA = 'cobrify_reinicio_duro_por_archivo_faltante'
+
+/**
+ * QUÉ INTENTAR CUANDO FALTA EL ARCHIVO, EN DOS ESCALONES.
+ *
+ * Una recarga normal arregla el caso típico: baja el índice nuevo y listo.
+ * Pero si el service worker sigue sirviendo SU copia del índice —con
+ * `skipWaiting: false` el viejo manda hasta que alguien acepte la versión
+ * nueva— la recarga devuelve el mismo índice que pide el mismo archivo que ya
+ * no existe. Ahí la guarda de la recarga suave frenaba y se mostraba una
+ * pantalla sin salida (reporte de Giacomo, 17-set-2026: "esto sale mucho",
+ * después de un día con siete despliegues).
+ *
+ * Por eso el segundo escalón: soltar el service worker y sus cachés, y
+ * recargar. Eso sí escapa del índice viejo. Lleva su propia anotación para no
+ * repetirse: borrar las cachés en bucle dejaría a la persona sin modo sin
+ * conexión y sin explicación.
+ *
+ * @returns {{accion: 'suave'|'dura'|'ninguna', motivo: string}}
+ */
+export function decidirRecuperacion(ahora, anotadoSuave, anotadoDuro, espera = ESPERA_ENTRE_RECARGAS_MS) {
+  const suave = decidirRecarga(ahora, anotadoSuave, espera)
+  if (suave.recargar) return { accion: 'suave', motivo: suave.motivo }
+
+  // La suave ya se gastó. ¿Se probó también la dura?
+  const dura = decidirRecarga(ahora, anotadoDuro, espera)
+  if (dura.recargar) return { accion: 'dura', motivo: 'la recarga no alcanzo; suelto el service worker' }
+
+  return { accion: 'ninguna', motivo: 'ya se intentaron las dos, se muestra el error' }
+}

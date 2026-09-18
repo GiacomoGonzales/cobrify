@@ -5,6 +5,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useActualizacion } from '@/contexts/ActualizacionContext'
 import { aplazarRecargas } from '@/utils/fallosDeCarga'
+import { reinicioDuro } from '@/utils/reinicioDuro'
 import { Modal, Campo, Entrada, Selector, Casilla, Boton, Aviso } from '@/components/admin/ui'
 import { formatearNumero, msRestantesDeVentana } from '@/services/whatsappChatService'
 import {
@@ -451,17 +452,9 @@ function AvisoVersionVieja() {
       actualizacion.actualizar()
       return
     }
-    // Sin una versión esperando, lo mismo que el plan B de ActualizacionContext:
+    // Sin una versión esperando, el mismo plan B que usa todo el mundo:
     // soltar el service worker y sus copias, y recargar.
-    try {
-      const registros = (await navigator.serviceWorker?.getRegistrations?.()) || []
-      await Promise.all(registros.map((r) => r.unregister()))
-      if (window.caches?.keys) {
-        const claves = await caches.keys()
-        await Promise.all(claves.map((c) => caches.delete(c)))
-      }
-    } catch { /* navegador sin service worker */ }
-    window.location.reload()
+    await reinicioDuro()
   }
   return (
     <div className="space-y-2">

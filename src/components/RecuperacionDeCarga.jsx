@@ -1,5 +1,12 @@
 import { Component } from 'react'
-import { esFalloDeDescarga, decidirRecarga, CLAVE_RECARGA } from '@/utils/fallosDeCarga'
+import {
+  esFalloDeDescarga,
+  decidirRecuperacion,
+  recargasAplazadas,
+  CLAVE_RECARGA,
+  CLAVE_RECARGA_DURA,
+} from '@/utils/fallosDeCarga'
+import { soltarServiceWorkerYCaches } from '@/utils/reinicioDuro'
 
 /**
  * LA RED DE SEGURIDAD DEL ARRANQUE.
@@ -11,9 +18,12 @@ import { esFalloDeDescarga, decidirRecarga, CLAVE_RECARGA } from '@/utils/fallos
  *
  * El caso frecuente —y el que se reportó— es que falte el archivo de una
  * pantalla porque hubo un despliegue nuevo mientras la pestaña estaba abierta
- * (el porqué está en src/utils/fallosDeCarga.js). Eso lo arregla una recarga,
- * así que la hace sola, UNA vez. Si vuelve a pasar al toque, ya no insiste:
- * recargar en bucle es peor que mostrar el problema.
+ * (el porqué está en src/utils/fallosDeCarga.js). Se recupera en DOS escalones:
+ * primero una recarga normal, y si esa no alcanzó, soltando el service worker
+ * y sus cachés. El segundo existe porque el SW viejo sigue sirviendo SU copia
+ * del índice, así que recargar devolvía el mismo índice que pedía el mismo
+ * archivo que ya no está. Cada escalón se intenta UNA vez: repetirlos en bucle
+ * es peor que mostrar el problema.
  *
  * Para cualquier otro error muestra algo legible y un botón, en vez de nada.
  */
@@ -31,20 +41,56 @@ class RecuperacionDeCarga extends Component {
     // Al log igual: que se recupere sola no quiere decir que haya que
     // enterarse tarde de que algo se rompió.
     console.error('Fallo al pintar la aplicación:', error, info?.componentStack)
-    if (esFalloDeDescarga(error)) this.recargarUnaVez()
+    if (esFalloDeDescarga(error)) this.recuperar()
   }
 
-  /** Recarga si no venimos de recargar hace un momento. */
-  recargarUnaVez() {
-    let anotado = null
-    try { anotado = sessionStorage.getItem(CLAVE_RECARGA) } catch (e) { /* modo privado */ }
+  /** Lee lo anotado sin romperse en modo privado. */
+  static anotado(clave) {
+    try { return sessionStorage.getItem(clave) } catch (e) { return null }
+  }
 
-    const { recargar } = decidirRecarga(Date.now(), anotado)
-    if (!recargar) return
+  /** Anota, o sigue igual si no se puede: perder la marca no debe frenar la cura. */
+  static anotar(clave) {
+    try { sessionStorage.setItem(clave, String(Date.now())) } catch (e) { /* modo privado */ }
+  }
 
-    try { sessionStorage.setItem(CLAVE_RECARGA, String(Date.now())) } catch (e) { /* idem */ }
+  /**
+   * El escalón que toque, o nada si ya se probaron los dos.
+   *
+   * No mira `estaEnMedioDeAlgo()` a propósito: cuando esto corre, React ya
+   * desmontó la pantalla rota, así que no queda trabajo que proteger y el
+   * heurístico solo daría ruido. Lo que sí se respeta es `recargasAplazadas()`,
+   * que es la señal explícita de que hay una emisión en vuelo — ahí recargar
+   * quemaría el correlativo.
+   */
+  recuperar() {
+    if (recargasAplazadas()) return
+
+    const { accion } = decidirRecuperacion(
+      Date.now(),
+      RecuperacionDeCarga.anotado(CLAVE_RECARGA),
+      RecuperacionDeCarga.anotado(CLAVE_RECARGA_DURA),
+    )
+    if (accion === 'ninguna') return
+
+    if (accion === 'suave') {
+      RecuperacionDeCarga.anotar(CLAVE_RECARGA)
+      this.setState({ recargando: true })
+      window.location.reload()
+      return
+    }
+
+    // Escalón duro: soltar el service worker y sus copias, y recargar.
+    RecuperacionDeCarga.anotar(CLAVE_RECARGA_DURA)
     this.setState({ recargando: true })
-    window.location.reload()
+    soltarServiceWorkerYCaches().finally(() => window.location.reload())
+  }
+
+  /** El botón: para cuando llega acá, la recarga normal ya se probó y no sirvió. */
+  reintentarAMano = () => {
+    this.setState({ recargando: true })
+    RecuperacionDeCarga.anotar(CLAVE_RECARGA_DURA)
+    soltarServiceWorkerYCaches().finally(() => window.location.reload())
   }
 
   render() {
@@ -76,7 +122,7 @@ class RecuperacionDeCarga extends Component {
               : 'Vuelve a intentarlo. Si se repite, avísanos qué estabas haciendo.'}
           </p>
           <button
-            onClick={() => window.location.reload()}
+            onClick={esDescarga ? this.reintentarAMano : () => window.location.reload()}
             className="mt-4 w-full px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors"
           >
             Reintentar

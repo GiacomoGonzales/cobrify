@@ -5,6 +5,7 @@ import { App as CapApp } from '@capacitor/app'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { estaEnMedioDeAlgo, marcarActualizacionAutomatica, actualizoSolaHacePoco } from '@/utils/actualizacionSola'
+import { soltarServiceWorkerYCaches } from '@/utils/reinicioDuro'
 
 const isNative = Capacitor.isNativePlatform()
 
@@ -181,16 +182,7 @@ export function ActualizacionProvider({ children }) {
     // Equivale a "desinstalar y volver a instalar" la PWA, pero en un clic.
     setTimeout(async () => {
       if (reloaded) return
-      try {
-        const regs = (await navigator.serviceWorker?.getRegistrations?.()) || []
-        await Promise.all(regs.map(r => r.unregister()))
-        if (window.caches?.keys) {
-          const keys = await caches.keys()
-          await Promise.all(keys.map(k => caches.delete(k)))
-        }
-      } catch (e) {
-        console.warn('Fallback duro de actualización:', e)
-      }
+      await soltarServiceWorkerYCaches()
       reloadOnce()
     }, 8000)
     try {
