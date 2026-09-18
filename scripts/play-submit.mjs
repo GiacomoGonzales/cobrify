@@ -6,8 +6,11 @@
 //
 //   node scripts/play-submit.mjs [opciones]
 //
-// SUBIR UNA VERSIÓN
+// PUBLICAR UNA VERSIÓN
 //   --aab <ruta>       AAB a subir (default: android/app/build/outputs/bundle/release/app-release.aab)
+//   --promover <code>  NO sube nada: pone en el track un versionCode YA subido antes.
+//                      Es la forma de pasar de "internal" a "production", porque Play
+//                      NO acepta subir dos veces el mismo versionCode.
 //   --track <nombre>   internal | alpha | beta | production   (default: internal)
 //   --notas "<texto>"  "Novedades de esta versión"
 //   --notas-file <f>   Lee las notas desde un archivo
@@ -23,11 +26,10 @@
 //
 // Credenciales (override por env): GOOGLE_PLAY_KEY, PLAY_PACKAGE.
 //
-// Una salida prudente a producción, paso a paso:
-//   node scripts/play-submit.mjs --track production --porcentaje 10 --subir
-//   node scripts/play-submit.mjs --track production --avanzar 50 --subir      (al día siguiente)
-//   node scripts/play-submit.mjs --track production --completar --subir       (al 100%)
-//   node scripts/play-submit.mjs --track production --detener --subir         (si algo sale mal)
+// EL CASO NORMAL es una sola línea, igual que en iOS:
+//   node scripts/play-submit.mjs --subir --track production
+// Y si ese AAB ya se había subido a otro canal:
+//   node scripts/play-submit.mjs --subir --track production --promover 204
 //
 // ── POR QUÉ ESTE ARCHIVO EXISTE ─────────────────────────────────────────────
 // El AAB se subía a mano por Play Console. iOS ya estaba automatizado
@@ -42,7 +44,11 @@
 // ⚠️ El identificador del paquete NO es el `namespace` de build.gradle
 // (com.cobrify.app): es el `applicationId`, com.factuya.cobrify.
 //
+// ⚠️ UN versionCode SOLO SE SUBE UNA VEZ. Si ya está en Play (aunque sea en
+// otro canal), subirlo de nuevo falla: hay que PROMOVERLO con --promover.
+//
 // ── REGLAS DEL DESPLIEGUE POR ETAPAS ────────────────────────────────────────
+// Es OPCIONAL: sin --porcentaje la versión sale al 100%, que es el caso normal.
 // COMPROBADAS CONTRA LA API el 17-set-2026 con `probar_porcentajes.mjs`: una
 // edición que se abre, prueba cada combinación y se DESCARTA sin confirmar (sin
 // commit no se publica nada). No están deducidas de la documentación:
@@ -75,6 +81,7 @@ const SUBIR = tiene('--subir')
 const BORRADOR = tiene('--borrador')
 const track = opt('--track', 'internal')
 const aabPath = opt('--aab', AAB_POR_DEFECTO)
+const PROMOVER = tiene('--promover') ? opt('--promover') : null
 let notas = opt('--notas')
 const notasFile = opt('--notas-file')
 if (!notas && notasFile) notas = fs.readFileSync(notasFile, 'utf8').trim()
@@ -111,6 +118,7 @@ let fraccion = null
 if (GESTION) {
   if (tiene('--porcentaje')) morir(`${GESTION} no se combina con --porcentaje: el número va dentro de --avanzar.`)
   if (BORRADOR) morir(`${GESTION} no se combina con --borrador.`)
+  if (PROMOVER !== null) morir(`${GESTION} no se combina con --promover: la versión ya está en el track.`)
   if (GESTION === '--avanzar') fraccion = leerPorcentaje(opt('--avanzar'), '--avanzar')
 } else {
   if (tiene('--porcentaje')) {
@@ -118,7 +126,11 @@ if (GESTION) {
     if (BORRADOR) morir('--porcentaje y --borrador se contradicen: un borrador todavía no le llega a nadie, y la API rechaza la fracción en estado draft.')
     fraccion = leerPorcentaje(opt('--porcentaje'), '--porcentaje')
   }
-  if (!fs.existsSync(aabPath)) morir(`No existe el AAB: ${aabPath}\n   Ármalo primero (gradlew bundleRelease).`)
+  if (PROMOVER !== null) {
+    if (!/^\d+$/.test(String(PROMOVER))) morir(`--promover necesita un versionCode. Ejemplo: --promover 204`)
+  } else if (!fs.existsSync(aabPath)) {
+    morir(`No existe el AAB: ${aabPath}\n   Ármalo primero (gradlew bundleRelease).`)
+  }
 }
 
 // ── Token OAuth a partir del JSON de la cuenta de servicio ──────────────────
@@ -199,7 +211,9 @@ let TOKEN = null
   TOKEN = cred.token
   log(`🔑 Cuenta de servicio: ${cred.correo}`)
   log(`📦 Paquete: ${PACKAGE}`)
-  if (!GESTION) {
+  if (!GESTION && PROMOVER !== null) {
+    log(`🔁 Promover el versionCode ${PROMOVER} (ya subido antes; no se sube ningún archivo)`)
+  } else if (!GESTION) {
     const tamaño = fs.statSync(aabPath).size
     log(`📁 AAB: ${aabPath} (${tamaño.toLocaleString('es-PE')} bytes)`)
   }
@@ -251,14 +265,16 @@ let TOKEN = null
     return
   }
 
-  // ===== SUBIR UNA VERSIÓN =====
+  // ===== PUBLICAR UNA VERSIÓN =====
   if (!SUBIR) {
     const estado = BORRADOR
       ? 'draft (borrador)'
       : (fraccion !== null ? `inProgress al ${comoPct(fraccion)}` : 'completed (= enviado a revisión, al 100%)')
     log('')
     log('🧪 Con --subir haría:')
-    log(`   1. Subir ${path.basename(aabPath)} como bundle nuevo`)
+    log(PROMOVER !== null
+      ? `   1. Tomar el versionCode ${PROMOVER}, ya subido antes (no sube ningún archivo)`
+      : `   1. Subir ${path.basename(aabPath)} como bundle nuevo`)
     log(`   2. Ponerlo en el track "${track}" con estado ${estado}`)
     log(`   3. Novedades: ${notas ? JSON.stringify(notas.slice(0, 60) + (notas.length > 60 ? '…' : '')) : '(sin notas)'}`)
     log('   4. Confirmar la edición (commit)')
@@ -268,14 +284,20 @@ let TOKEN = null
     return
   }
 
-  log('⏳ Subiendo el AAB (puede tardar varios minutos)…')
-  const bundle = await api('POST', `${UPLOAD}/applications/${PACKAGE}/edits/${editId}/bundles?uploadType=media`, {
-    raw: fs.readFileSync(aabPath),
-    contentType: 'application/octet-stream',
-  })
-  log(`   ✓ Subido como versionCode ${bundle.versionCode}`)
+  let versionCode = PROMOVER
+  if (PROMOVER === null) {
+    log('⏳ Subiendo el AAB (puede tardar varios minutos)…')
+    const bundle = await api('POST', `${UPLOAD}/applications/${PACKAGE}/edits/${editId}/bundles?uploadType=media`, {
+      raw: fs.readFileSync(aabPath),
+      contentType: 'application/octet-stream',
+    })
+    versionCode = bundle.versionCode
+    log(`   ✓ Subido como versionCode ${versionCode}`)
+  } else {
+    log(`⏩ No se sube nada: se promueve el versionCode ${versionCode}`)
+  }
 
-  const release = { versionCodes: [String(bundle.versionCode)] }
+  const release = { versionCodes: [String(versionCode)] }
   if (BORRADOR) release.status = 'draft'
   else if (fraccion !== null) { release.status = 'inProgress'; release.userFraction = fraccion }
   else release.status = 'completed'
@@ -288,7 +310,7 @@ let TOKEN = null
 
   await api('POST', `/applications/${PACKAGE}/edits/${editId}:commit`)
   log('')
-  log(`✅ versionCode ${bundle.versionCode} en el track "${track}".`)
+  log(`✅ versionCode ${versionCode} en el track "${track}".`)
   if (BORRADOR) {
     log('   Quedó en BORRADOR: entra a Play Console y pulsa publicar cuando quieras.')
   } else if (fraccion !== null) {
