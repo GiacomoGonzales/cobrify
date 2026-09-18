@@ -857,6 +857,19 @@ service cloud.firestore {
       // Nunca público: el catálogo no los necesita. Las credenciales de cada
       // uno van en su propia subcolección `secrets`, con la misma regla que
       // las del negocio (dueño y admin; el servidor con Admin SDK).
+      // Diagnóstico de la app (src/utils/diagnosticoApp.js): cada equipo del
+      // negocio deja registrado qué le pasó al POS al dormirse y volver
+      // (pedido de Giacomo, 17-set-2026, por las mesas cruzadas de Mandil).
+      // Lo escribe cualquiera que trabaje en el negocio, dueño o sub-usuario;
+      // lo lee SOLO el admin, porque dice qué equipos y qué versión usa cada
+      // uno. Nadie lo edita ni lo borra: es un registro.
+      match /diagnosticosApp/{eventoId} {
+        allow create: if isAuthenticated() && canAccessBusiness(userId)
+          && request.resource.data.tipo is string
+          && request.resource.data.size() <= 20;
+        allow read: if isAdmin();
+      }
+
       match /emisores/{emisorId} {
         allow read, write: if isAdmin();
         allow read: if isAuthenticated() && canAccessBusiness(userId) && hasAccess(userId);

@@ -5,6 +5,8 @@ import { estadoInicialSunat } from '@/utils/estadoInicialSunat'
 import { comprobanteYaEnviado, motivoParaNoEditar, loQueNoCambiaAlEditar } from '@/utils/edicionDeComprobante'
 import { cupoDelRuc, avisoDeCupo } from '@/utils/cupoDeComprobantes'
 import { serieParaNumerar, numeroSiguiente } from '@/utils/serieParaNumerar'
+import { publicarEstadoDelPOS, leerEstadoDelPOS, fotoDelPOS } from '@/utils/diagnosticoApp'
+import { registrarEventoDeDiagnostico } from '@/services/diagnosticoAppService'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { Building2,
@@ -710,6 +712,14 @@ export default function POS() {
   }), [empresaDeVenta?.enabledDocumentTypes, allowedDocumentTypes, canEmitFiscal, cupo.agotado, cupo.vencido, pendingNotaVentaIds])
 
   const availableDocTypes = useMemo(() => getAvailableDocumentTypes(docTypeOpts), [docTypeOpts])
+  // Para el diagnóstico del selector (más abajo): el valor que PINTA el
+  // <select> contra el que React cree que tiene.
+  const selectorTipoRef = useRef(null)
+  const documentTypeRef = useRef(documentType)
+  documentTypeRef.current = documentType
+  const availableDocTypesRef = useRef(availableDocTypes)
+  availableDocTypesRef.current = availableDocTypes
+  const desfasesAvisadosRef = useRef(0)
 
   // Campo "Alumno" activo (colegios): habilita buscar al apoderado por el nombre
   // del alumno y mostrarlo en el desplegable de clientes.
@@ -6482,6 +6492,65 @@ export default function POS() {
     }
   }, [effectiveCart, effectiveTaxConfig, resolveItemTaxAffectation, resolveItemIgvRate, discountAmount, recargoConsumoConfig, businessMode, currency, exchangeRate, porConsumoActivo, porConsumoConfig.texto])
 
+  // ── Diagnóstico de la app (utils/diagnosticoApp.js) ──────────────────────
+  // La foto del POS que se compara antes y después de que la app se duerma:
+  // solo lo necesario para ver si "volvió a medias" (tipo, carrito, mesa, RUC).
+  // Va después de `amounts` porque lo lee: antes de esa línea no existe.
+  useEffect(() => {
+    publicarEstadoDelPOS(fotoDelPOS({
+      documentType,
+      cart,
+      total: amounts?.total,
+      tableData,
+      pendingOrderId,
+      emisorId: emisorElegido?.id,
+    }))
+  }, [documentType, cart, amounts?.total, tableData, pendingOrderId, emisorElegido?.id])
+  useEffect(() => () => publicarEstadoDelPOS(null), [])
+
+  // "El tipo de comprobante muestra una cosa y por dentro es otra" (Giacomo,
+  // desde un iPad, 17-set-2026). Un <select> controlado cuyo valor no está
+  // entre sus opciones PINTA la primera mientras React sigue con el suyo. La
+  // red de seguridad que corrige el tipo lo arregla en un instante, así que un
+  // desfase que sigue ahí segundo y medio después es justo el síntoma: se
+  // registra con su contexto, también al volver a primer plano, que es cuando
+  // el reporte dice que aparece.
+  useEffect(() => {
+    const revisar = () => {
+      const mostrado = selectorTipoRef.current?.value
+      const real = documentTypeRef.current
+      if (!real || mostrado == null || mostrado === real) return
+      if (desfasesAvisadosRef.current >= 3) return
+      desfasesAvisadosRef.current++
+      registrarEventoDeDiagnostico(getBusinessId(), {
+        tipo: 'desfase-del-selector',
+        motivo: null,
+        usuario: user?.uid || null,
+        rutaDespues: 'pos',
+        mostrado,
+        real,
+        disponibles: availableDocTypesRef.current,
+        despues: leerEstadoDelPOS(),
+        cambios: [`el selector mostraba "${mostrado || 'nada'}" y el comprobante de verdad era "${real}"`],
+      })
+    }
+    const espera = setTimeout(revisar, 1500)
+    let alVolverEspera = null
+    const alVolver = () => {
+      if (document.visibilityState !== 'visible') return
+      clearTimeout(alVolverEspera)
+      alVolverEspera = setTimeout(revisar, 1500)
+    }
+    document.addEventListener('visibilitychange', alVolver)
+    return () => {
+      clearTimeout(espera)
+      clearTimeout(alVolverEspera)
+      document.removeEventListener('visibilitychange', alVolver)
+    }
+    // getBusinessId y user son estables durante la sesión del POS.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentType, availableDocTypes])
+
   // Actualizar pantalla de cliente cuando cambia el carrito
   useEffect(() => {
     if (!companySettings?.enableCustomerDisplay) return
@@ -11109,6 +11178,7 @@ Gracias por tu preferencia.`
                 </label>
                 <div className="flex items-center gap-2">
                   <select
+                    ref={selectorTipoRef}
                     value={documentType}
                     // En edición NO se puede cambiar el tipo: el número emitido pertenece
                     // a la serie de ese tipo (cambiarlo genera p.ej. una "factura" con

@@ -13,6 +13,7 @@ import { cargarCuenta, diasParaVencer, enlaceRecordatorioWhatsapp, convertirPrue
 import { esPrueba } from '@/data/prueba'
 import ConvertirPruebaModal from '@/components/admin/cuenta/ConvertirPruebaModal'
 import PagoDeRucModal from '@/components/admin/cuenta/PagoDeRucModal'
+import { ultimosDiagnosticos } from '@/services/diagnosticoAppService'
 import { estadoDelRuc } from '@/utils/cobroPorRuc'
 import { RUBROS_ALFABETICOS, nombreRubro } from '@/data/rubros'
 import { nombreModo } from '@/utils/businessModes'
@@ -68,6 +69,26 @@ const toDate = v => (v?.toDate ? v.toDate() : v instanceof Date ? v : v ? new Da
 const fecha = d => (toDate(d) ? toDate(d).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—')
 const fechaHora = d => (toDate(d) ? toDate(d).toLocaleString('es-PE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—')
 const limite = v => (v === -1 || v === undefined || v === null ? '∞' : entero(v))
+
+// Diagnóstico de la app: cada tipo de vuelta en palabras (utils/diagnosticoApp.js).
+const QUE_PASO = {
+  'recarga-propia': (motivo) => ({
+    'pausa-larga': 'La app se recargó sola al volver (5 min o más en segundo plano)',
+    pageshow: 'La app se recargó sola (el sistema le devolvió una página guardada)',
+    'actualizacion-automatica': 'Se actualizó sola a la versión nueva',
+  })[motivo] || 'La app se recargó sola',
+  'recarga-del-sistema': () => 'El sistema la recargó (le quitó la memoria en segundo plano)',
+  relanzada: () => 'El sistema la cerró y se volvió a abrir desde cero',
+  'vuelta-con-cambios': () => 'Volvió sin recargarse, pero con algo cambiado',
+  'desfase-del-selector': () => 'El selector mostraba un comprobante distinto del real',
+}
+const equipoDe = (d) => {
+  const ua = String(d.equipo || '')
+  const cual = /iPad/.test(ua) ? 'iPad' : /iPhone/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Android' : /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : 'Equipo'
+  const donde = d.plataforma === 'web' ? 'navegador' : 'app'
+  return `${cual} · ${donde}`
+}
+const duracion = (seg) => (seg < 60 ? `${seg} s` : seg < 3600 ? `${Math.round(seg / 60)} min` : `${(seg / 3600).toFixed(1)} h`)
 
 /** La mensualidad de un RUC cobrado aparte: plan, precio y hasta cuándo está al día. */
 function CeldaMensualidad({ cobro, usados = 0 }) {
@@ -154,6 +175,8 @@ export default function AdminCuenta() {
   const [sucursales, setSucursales] = useState([])
   // Varios RUC: los emisores adicionales y sus series (que viven en el doc del negocio).
   const [emisores, setEmisores] = useState([])
+  // Diagnóstico de la app de esta cuenta (utils/diagnosticoApp.js).
+  const [diagnosticos, setDiagnosticos] = useState([])
   // El RUC adicional cuyo pago se está registrando ("Cobrar cada RUC aparte").
   const [rucAPagar, setRucAPagar] = useState(null)
   // El desplegable del boton "Registrar pago" cuando la cuenta cobra por RUC.
@@ -212,6 +235,8 @@ export default function AdminCuenta() {
     getVendedores().then(r => { if (vivo && r.success) setVendedores(r.data) }).catch(() => {})
     getBranches(id).then(r => { if (vivo && r.success) setSucursales(r.data) }).catch(() => {})
     cargarEmisores(id)
+    setDiagnosticos([])
+    ultimosDiagnosticos(id).then(lista => { if (vivo) setDiagnosticos(lista) }).catch(() => {})
     return () => { vivo = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
@@ -1040,6 +1065,47 @@ export default function AdminCuenta() {
         </Tabla>
         </div>
       </Seccion>
+
+      {/* Diagnóstico de la app: qué le pasó al POS de esta cuenta cada vez que
+          un equipo se durmió y volvió. Solo sale si hay algo registrado. */}
+      {diagnosticos.length > 0 && (
+        <Seccion
+          titulo={`Diagnóstico de la app (${diagnosticos.length})`}
+          descripcion="Qué le pasó al punto de venta cada vez que un equipo se fue a segundo plano y volvió. En rojo, cuando volvió con la mesa o el comprobante cambiados."
+          sinRelleno
+        >
+          <Tabla>
+            <thead>
+              <tr>
+                <Th>Fecha</Th>
+                <Th>Qué pasó</Th>
+                <Th>Equipo</Th>
+                <Th>Quieto</Th>
+                <Th>Qué cambió</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {diagnosticos.map(d => {
+                const grave = (d.cambios || []).some(x => /mesa|comprobante|selector/.test(x))
+                return (
+                  <Fila key={d.id}>
+                    <Td apagado className="whitespace-nowrap">{fechaHora(d.creadoEn)}</Td>
+                    <Td className="whitespace-normal max-w-[240px]">{QUE_PASO[d.tipo]?.(d.motivo) || d.tipo}</Td>
+                    <Td apagado className="whitespace-normal">
+                      {equipoDe(d)}
+                      <span className="block text-[11px] text-gray-400 font-mono">{d.version || '—'}{d.commit ? ` · ${String(d.commit).slice(0, 7)}` : ''}</span>
+                    </Td>
+                    <Td apagado className="whitespace-nowrap">{d.segundosDormida != null ? duracion(d.segundosDormida) : '—'}</Td>
+                    <Td className={`whitespace-normal max-w-[360px] ${grave ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+                      {(d.cambios || []).length ? d.cambios.join(' · ') : 'Volvió igual'}
+                    </Td>
+                  </Fila>
+                )
+              })}
+            </tbody>
+          </Tabla>
+        </Seccion>
+      )}
 
       <Seccion titulo="Historial" descripcion="Todo lo fechado que se sabe de la cuenta, de lo más reciente a lo más antiguo." sinRelleno>
         <div className="sm:hidden divide-y divide-gray-100">

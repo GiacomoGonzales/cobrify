@@ -5,6 +5,7 @@ import { BrandingProvider } from './contexts/BrandingContext'
 import { ToastProvider } from './contexts/ToastContext'
 import { ActualizacionProvider } from './contexts/ActualizacionContext'
 import AppLifecycleManager from './components/AppLifecycleManager'
+import DiagnosticoApp from './components/DiagnosticoApp'
 import MainLayout from './layouts/MainLayout'
 import LandingRouter from './components/LandingRouter'
 import EsperaDeArranque from './components/EsperaDeArranque'
@@ -739,6 +740,7 @@ function App() {
           </Routes>
             </Suspense>
           <AppLifecycleManager />
+          <DiagnosticoApp />
           </ToastProvider>
         </BrandingProvider>
       </AuthProvider>

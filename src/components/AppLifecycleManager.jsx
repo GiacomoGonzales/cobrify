@@ -5,6 +5,7 @@ import { esDominioReseller } from '@/utils/resellerDomain'
 import { App as CapacitorApp } from '@capacitor/app'
 import { disableNetwork, enableNetwork } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
+import { marcarRecargaPropia } from '@/utils/diagnosticoApp'
 
 // Si la app estuvo en background más de este tiempo, recargamos la WebView
 // porque iOS WKWebView suele dejarla en estado inutilizable (timers congelados,
@@ -98,6 +99,10 @@ export default function AppLifecycleManager() {
       if (elapsed >= HARD_RELOAD_THRESHOLD_MS) {
         // Pausa larga: la WebView puede estar en estado inconsistente.
         // Recargar es más confiable que intentar revivir conexiones.
+        // OJO (17-set-2026): esta recarga NO mira si hay una venta o una mesa
+        // abierta, y en un restaurante pasa todo el día. Se marca para que el
+        // diagnóstico (utils/diagnosticoApp) la distinga de las del sistema.
+        marcarRecargaPropia('pausa-larga', { segundos: Math.round(elapsed / 1000) })
         window.location.reload()
         return
       }
@@ -130,6 +135,7 @@ export default function AppLifecycleManager() {
     const handlePageShow = (event) => {
       if (event.persisted) {
         console.log('🔄 pageshow persisted=true → recargando')
+        marcarRecargaPropia('pageshow')
         window.location.reload()
       }
     }
