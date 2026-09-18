@@ -1,6 +1,6 @@
 import { acumuladorPorRuc, lineasDeVentasPorRuc } from '@/utils/filtroDeRuc'
 import { useState, useEffect, useRef } from 'react'
-import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store, Clock, Printer, Loader2, User, FileText, AlertTriangle, ChevronDown } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, Lock, Unlock, Plus, Calendar, Download, FileSpreadsheet, History, Eye, ChevronRight, Edit2, Trash2, Store, Clock, Printer, Loader2, User, FileText, AlertTriangle, ChevronUp } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useDataPermissions } from '@/hooks/useDataPermissions'
 import { useToast } from '@/contexts/ToastContext'
@@ -1367,6 +1367,10 @@ export default function CashRegister() {
    * la relación de productos vendidos del turno. Son dos papeles distintos y
    * el dueño a veces quiere solo el segundo (pedido de un usuario, 9-set-2026).
    * Se cierra al elegir, al tocar fuera o con Escape.
+   *
+   * Abre hacia ARRIBA: el botón vive al pie de los modales (el cierre y el
+   * turno del Historial), y hacia abajo el menú quedaba cortado por el borde
+   * de la pantalla (18-set-2026).
    */
   const MenuDeTicket = ({ onResumen, onProductos, className = '' }) => {
     const [abierto, setAbierto] = useState(false)
@@ -1385,10 +1389,10 @@ export default function CashRegister() {
         <Button variant="outline" size="sm" className="w-full" onClick={() => setAbierto(a => !a)}>
           <Printer className="w-4 h-4 mr-1" />
           Ticket
-          <ChevronDown className="w-3.5 h-3.5 ml-1" />
+          <ChevronUp className="w-3.5 h-3.5 ml-1" />
         </Button>
         {abierto && (
-          <div className="absolute right-0 z-30 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+          <div className="absolute right-0 bottom-full z-30 mb-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
             <button
               type="button"
               onClick={() => elegir(onResumen)}
