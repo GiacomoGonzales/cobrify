@@ -10,10 +10,10 @@ struct ConversationView: View {
     let alAbrir: () -> Void
     @StateObject private var store = MensajesStore()
     @State private var borrador = ""
-    /// Lo último que salió del cuadro y cuándo. Lo usa el `onChange` del
-    /// cuadro para borrar el mensaje enviado si el teclado lo vuelve a meter
-    /// enseguida.
-    @State private var recienEnviado: (texto: String, cuando: Date)?
+    /// El cuadro de escribir, para vaciarlo en el mismo toque de enviar (ver
+    /// `CuadroDeEscribir`): esperar al dibujado de SwiftUI es lo que dejaba
+    /// el mensaje escrito tras enviarlo.
+    @State private var cuadro = ControlDelCuadro()
     /// Un texto que repite lo recién enviado, esperando que se confirme.
     @State private var repetidoPorConfirmar: String?
     /// El último TEXTO enviado y cuándo: cuenta como recién enviado aunque el
@@ -43,7 +43,7 @@ struct ConversationView: View {
     /// Archivo de una respuesta rápida que espera en el compositor: sale
     /// recién al tocar enviar, con lo que haya en el cuadro como pie.
     @State private var mediaPendiente: MediaBiblioteca?
-    @FocusState private var cuadroEnfocado: Bool
+    @State private var cuadroEnfocado = false
     @State private var mostrarVincular = false
     @State private var mostrarAlta = false
     @State private var mostrarBuscar = false
@@ -395,7 +395,7 @@ struct ConversationView: View {
             // El mensaje cae en el compositor, no sale solo: a un cliente que
             // acaba de pagar no conviene mandarle nada a ciegas.
             EnviarAltaSheet(conv: conv) { mensaje in
-                recienEnviado = nil
+                cuadro.olvidarEnvio()
                 borrador = mensaje
                 cuadroEnfocado = true
             }
@@ -800,32 +800,16 @@ struct ConversationView: View {
                         }
                         .vidrioCapsula()
 
-                        TextField("Mensaje", text: $borrador, axis: .vertical)
-                            .lineLimit(1...5)
-                            .focused($cuadroEnfocado)
-                            .onChange(of: borrador) { viejo, nuevo in
-                                // El teclado del iPhone (autocorrector, predicción,
-                                // dictado) puede volver a meter en el cuadro el mensaje que
-                                // se acaba de enviar: SwiftUI borra el texto, pero el cuadro
-                                // de UIKit lo tenía a medio confirmar y lo escribe de nuevo.
-                                // Si pasa en los 2 s siguientes y es EXACTAMENTE lo enviado,
-                                // se vuelve a borrar. El build 53 miraba solo 0,3 s y
-                                // escribiendo largo se escapaba (11-set).
-                                //
-                                // Más allá no se toca el cuadro: borrar "lo que parece un eco"
-                                // mientras la persona escribe le comía el mensaje nuevo
-                                // (enviar "Ok" y escribir "Ok gracias" dejaba "gracias"). Lo
-                                // que se escape lo frena `enviar()`: repetir lo recién
-                                // enviado pide confirmación.
-                                //
-                                // SALVO si el envío falló: ahí el texto vuelve a propósito
-                                // para no perder lo escrito, y `errorEnvio` se pone ANTES de
-                                // devolverlo, así que esta guarda lo deja en paz.
-                                guard let enviado = recienEnviado, errorEnvio == nil,
-                                      viejo.isEmpty, !nuevo.isEmpty,
-                                      Date().timeIntervalSince(enviado.cuando) < 2,
-                                      Compositor.esElMismo(nuevo, enviado.texto) else { return }
-                                borrador = ""
+                        // UITextView propio y no TextField: con el de SwiftUI, a veces
+                        // el mensaje salía y se quedaba escrito (ver CuadroDeEscribir).
+                        CuadroDeEscribir(texto: $borrador, enfocado: $cuadroEnfocado, control: cuadro)
+                            .overlay(alignment: .topLeading) {
+                                if borrador.isEmpty {
+                                    Text("Mensaje")
+                                        .foregroundStyle(Color(uiColor: .placeholderText))
+                                        .allowsHitTesting(false)
+                                        .accessibilityHidden(true)
+                                }
                             }
                             // Alerta y no hoja de acciones: pegada al cuadro, la hoja se
                             // abría como globo y escondía el botón de no mandar.
@@ -835,6 +819,7 @@ struct ConversationView: View {
                                        set: { if !$0 { repetidoPorConfirmar = nil } })) {
                                 Button("No mandar", role: .cancel) {
                                     repetidoPorConfirmar = nil
+                                    cuadro.vaciar()
                                     borrador = ""
                                 }
                                 Button("Mandarlo otra vez") {
@@ -1007,7 +992,7 @@ struct ConversationView: View {
     private func usarRapida(_ r: RespuestaRapida) {
         errorEnvio = nil
         mediaPendiente = r.media
-        recienEnviado = nil
+        cuadro.olvidarEnvio()
         borrador = r.texto
         cuadroEnfocado = true
     }
@@ -1035,7 +1020,7 @@ struct ConversationView: View {
         // Con archivo esperando, el texto es opcional (va de pie de foto).
         if let media = mediaPendiente {
             mediaPendiente = nil
-            recienEnviado = texto.isEmpty ? nil : (texto, Date())
+            cuadro.vaciar(tras: texto.isEmpty ? nil : texto)
             borrador = ""
             errorEnvio = nil
             let eco = Mensaje(pendienteTipo: media.tipo, texto: texto)
@@ -1049,7 +1034,7 @@ struct ConversationView: View {
                     store.pendientes.removeAll { $0.id == eco.id }
                     errorEnvio = (error as? ChatAPI.ErrorEnvio)?.mensaje ?? "No se pudo enviar."
                     mediaPendiente = media
-                    recienEnviado = nil
+                    cuadro.olvidarEnvio()
                     if borrador.isEmpty { borrador = texto }
                 }
             }
@@ -1068,7 +1053,8 @@ struct ConversationView: View {
         }
         let cita = respondiendoA?.id
         respondiendoA = nil
-        recienEnviado = (texto, Date())
+        // Primero el cuadro de UIKit, en este mismo toque; después el estado.
+        cuadro.vaciar(tras: texto)
         borrador = ""
         ultimoTextoEnviado = (texto, Date())
         errorEnvio = nil
@@ -1082,7 +1068,7 @@ struct ConversationView: View {
                 // con el mismo texto chocaba con la confirmación de repetidos de
                 // `enviar()`, justo cuando el usuario intentaba reenviarlo.
                 ultimoTextoEnviado = nil
-                recienEnviado = nil
+                cuadro.olvidarEnvio()
                 // El texto vuelve al borrador: nada se pierde por un fallo.
                 if borrador.isEmpty { borrador = texto }
             }
@@ -1091,7 +1077,7 @@ struct ConversationView: View {
             // iPhone —volver a meter lo enviado— para probar la guarda sin él.
             if error == nil, let eco = VistaPrevia.ecoDelTeclado(para: texto) {
                 try? await Task.sleep(for: .seconds(0.5))
-                borrador = eco
+                cuadro.simularTeclado(eco)
             }
             #endif
         }

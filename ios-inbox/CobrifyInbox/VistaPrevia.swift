@@ -27,10 +27,10 @@ enum VistaPrevia {
     static let envioSimulado = ProcessInfo.processInfo.arguments.contains("-envioSimulado")
 
     /// `-ecoDelTeclado exacto|letra|corregido`: medio segundo después de un
-    /// envío mete en el cuadro lo que hace el teclado del iPhone: el mensaje
-    /// entero (el compositor lo borra solo), o el mensaje con una palabra
-    /// nueva detrás o con la última cambiada (se queda, pero enviarlo pide
-    /// confirmación).
+    /// envío, el "teclado" escribe en el cuadro por el mismo camino que el de
+    /// verdad (UIKit): el mensaje entero (el cuadro lo rechaza y queda vacío),
+    /// o el mensaje con una palabra nueva detrás o con la última cambiada (se
+    /// queda, pero enviarlo pide confirmación).
     static func ecoDelTeclado(para texto: String) -> String? {
         let args = ProcessInfo.processInfo.arguments
         guard let i = args.firstIndex(of: "-ecoDelTeclado"), i + 1 < args.count else { return nil }
