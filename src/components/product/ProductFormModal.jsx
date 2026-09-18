@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { isPharmaLikeMode } from '@/utils/businessModes'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -14,7 +14,9 @@ import { useToast } from '@/contexts/ToastContext'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
+import SelectorBuscable from '@/components/ui/SelectorBuscable'
 import Button from '@/components/ui/Button'
+import { compararEnEspanol } from '@/utils/listasGrandes'
 import { productSchema } from '@/utils/schemas'
 import { uploadProductImage, deleteProductImage, createImagePreview, revokeImagePreview } from '@/services/productImageService'
 import { getNextSkuNumber } from '@/services/firestoreService'
@@ -47,6 +49,32 @@ export const getSubcategories = (categories, parentId) => {
   const migrated = migrateLegacyCategories(categories)
   return migrated.filter(cat => cat.parentId === parentId)
 }
+
+/**
+ * Las categorías aplanadas para un `SelectorBuscable`: primero la raíz y debajo
+ * sus subcategorías, sangradas.
+ *
+ * El `detalle` de una subcategoría es el nombre de su padre, y entra al índice
+ * de búsqueda: escribir "bebidas" también trae "Gaseosas". Es solo ayuda para
+ * encontrarla — lo que se guarda sigue siendo la categoría elegida, sin heredar
+ * nada del padre.
+ */
+export const opcionesDeCategorias = (categories) =>
+  getRootCategories(categories).flatMap(cat => [
+    { id: cat.id, nombre: cat.name },
+    ...getSubcategories(categories, cat.id).map(sub => ({
+      id: sub.id,
+      nombre: sub.name,
+      sangria: true,
+      detalle: cat.name,
+    })),
+  ])
+
+/** Las marcas ordenadas alfabéticamente para un `SelectorBuscable`. */
+export const opcionesDeMarcas = (brands) =>
+  [...(brands || [])]
+    .sort((a, b) => compararEnEspanol(a.name || '', b.name || ''))
+    .map(b => ({ id: b.id, nombre: b.name }))
 
 /**
  * ProductFormModal - Componente reutilizable para crear/editar productos
@@ -648,23 +676,21 @@ const ProductFormModal = ({
               <div>
                 {brands && brands.length > 0 ? (
                   <>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Marca (Opcional)
-                    </label>
-                    <select
-                      {...register('brandId')}
-                      onChange={(e) => {
-                        setValue('brandId', e.target.value)
+                    <SelectorBuscable
+                      label="Marca (Opcional)"
+                      value={watch('brandId') || ''}
+                      onChange={(id) => {
+                        setValue('brandId', id, { shouldDirty: true })
                         // Limpiar el texto libre cuando se elige una marca administrada
-                        if (e.target.value) setValue('marca', '')
+                        if (id) setValue('marca', '')
                       }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm bg-white mb-2"
-                    >
-                      <option value="">Sin marca / Otra</option>
-                      {[...brands].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' })).map(b => (
-                        <option key={b.id} value={b.id}>{b.name}</option>
-                      ))}
-                    </select>
+                      opciones={opcionesDeMarcas(brands)}
+                      textoVacio="Sin marca / Otra"
+                      placeholder="Escribe para buscar la marca..."
+                      className="mb-2"
+                    />
+                    {/* El campo sigue registrado para que viaje en el submit. */}
+                    <input type="hidden" {...register('brandId')} />
                     {!watch('brandId') && (
                       <Input
                         placeholder="O escribe una marca nueva (Opcional)"
@@ -1070,23 +1096,15 @@ const ProductFormModal = ({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Categoría
-                </label>
-                <select
-                  {...register('category')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="">Sin categoría</option>
-                  {getRootCategories(categories).map(cat => (
-                    <React.Fragment key={cat.id}>
-                      <option value={cat.id}>{cat.name}</option>
-                      {getSubcategories(categories, cat.id).map(subcat => (
-                        <option key={subcat.id} value={subcat.id}>└─ {subcat.name}</option>
-                      ))}
-                    </React.Fragment>
-                  ))}
-                </select>
+                <SelectorBuscable
+                  label="Categoría"
+                  value={watch('category') || ''}
+                  onChange={(id) => setValue('category', id, { shouldDirty: true })}
+                  opciones={opcionesDeCategorias(categories)}
+                  textoVacio="Sin categoría"
+                  placeholder="Escribe para buscar la categoría..."
+                />
+                <input type="hidden" {...register('category')} />
               </div>
             </div>
           </div>
@@ -1154,26 +1172,19 @@ const ProductFormModal = ({
 
               {/* Laboratorio */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Laboratorio
-                </label>
-                <select
+                <SelectorBuscable
+                  label="Laboratorio"
                   value={pharmacyData.laboratoryId}
-                  onChange={(e) => {
-                    const lab = laboratories.find(l => l.id === e.target.value)
-                    setPharmacyData({
-                      ...pharmacyData,
-                      laboratoryId: e.target.value,
-                      laboratoryName: lab?.name || ''
-                    })
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
-                >
-                  <option value="">Seleccionar laboratorio</option>
-                  {laboratories.map(lab => (
-                    <option key={lab.id} value={lab.id}>{lab.name}</option>
-                  ))}
-                </select>
+                  onChange={(id, opcion) => setPharmacyData({
+                    ...pharmacyData,
+                    laboratoryId: id,
+                    laboratoryName: opcion?.nombre || ''
+                  })}
+                  opciones={laboratories.map(lab => ({ id: lab.id, nombre: lab.name }))}
+                  textoVacio="Seleccionar laboratorio"
+                  placeholder="Escribe para buscar el laboratorio..."
+                  acento="green"
+                />
                 {laboratories.length === 0 && (
                   <p className="text-xs text-amber-600 mt-1">No hay laboratorios registrados. Agrégalos desde el menú Laboratorios.</p>
                 )}
@@ -1186,21 +1197,20 @@ const ProductFormModal = ({
                 </label>
                 {brands && brands.length > 0 ? (
                   <>
-                    <select
+                    <SelectorBuscable
                       value={pharmacyData.brandId || ''}
-                      onChange={(e) => setPharmacyData({
+                      onChange={(id) => setPharmacyData({
                         ...pharmacyData,
-                        brandId: e.target.value,
+                        brandId: id,
                         // Limpiar texto libre al elegir una administrada
-                        marca: e.target.value ? '' : pharmacyData.marca,
+                        marca: id ? '' : pharmacyData.marca,
                       })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm bg-white mb-2"
-                    >
-                      <option value="">Sin marca / Otra</option>
-                      {[...brands].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' })).map(b => (
-                        <option key={b.id} value={b.id}>{b.name}</option>
-                      ))}
-                    </select>
+                      opciones={opcionesDeMarcas(brands)}
+                      textoVacio="Sin marca / Otra"
+                      placeholder="Escribe para buscar la marca..."
+                      acento="green"
+                      className="mb-2"
+                    />
                     {!pharmacyData.brandId && (
                       <input
                         type="text"

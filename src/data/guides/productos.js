@@ -613,6 +613,10 @@ export default {
           text: 'Los laboratorios se cargan una vez en la página **Laboratorios** y después se eligen de una lista, así no se escriben distinto cada vez.',
         },
         {
+          type: 'consejo',
+          text: 'El campo de **laboratorio** es un buscador: toca el campo, escribe las primeras letras y la lista se reduce sola. Con cien laboratorios cargados ya no hay que recorrer el desplegable entero.',
+        },
+        {
           type: 'enlace',
           to: '/app/laboratorios',
           label: 'Administrar mis laboratorios',
@@ -670,6 +674,14 @@ export default {
         {
           type: 'texto',
           text: 'Las categorías admiten **subcategorías**: puedes tener "Bebidas" y dentro "Gaseosas", "Aguas", "Cervezas". Al tocar una categoría raíz en los filtros, la lista se filtra y se despliega su rama.',
+        },
+        {
+          type: 'consejo',
+          text: 'En la ficha del producto, **categoría** y **marca** no son un desplegable: son un buscador. Escribe dos o tres letras y la lista se reduce sola, sin escribir completo ni cuidar las tildes. Las subcategorías se encuentran también por el nombre de su categoría padre: escribir "bebidas" trae "Gaseosas".',
+        },
+        {
+          type: 'consejo',
+          text: 'Si la **marca** que necesitas todavía no existe, escríbela en ese mismo buscador y te aparece **Crear "..."** al final de la lista. Se crea y queda elegida sin salir del formulario.',
         },
         {
           type: 'consejo',

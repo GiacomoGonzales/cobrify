@@ -26,7 +26,7 @@ import { UNITS, getUnitLabel, formatPresentationEquivalence } from '@/utils/unit
 import { getPresentationCostInfo } from '@/utils/presentationCost'
 import { formatCurrency, formatProductPrice, applyMarginToCost, matchesSearchQuery, buildSearchHaystack, palabrasDeBusqueda, coincidenPalabras } from '@/lib/utils'
 import { buildProductHaystack } from '@/utils/productSearch'
-import { ordenarPorClave } from '@/utils/listasGrandes'
+import { ordenarPorClave, compararEnEspanol } from '@/utils/listasGrandes'
 import { useCoincidePantalla, PANTALLA_LG } from '@/hooks/useCoincidePantalla'
 import CampoDeBusqueda from '@/components/CampoDeBusqueda'
 import {
@@ -57,6 +57,7 @@ import { esDeSucursal } from '@/utils/branchScope'
 import { isPharmaLikeMode, recuerdaServicios, atiendeConCita } from '@/utils/businessModes'
 import { buildProductIndex, findExistingProduct, indexProduct } from '@/utils/productImportMatch'
 import SunatProductCodeField from '@/components/SunatProductCodeField'
+import SelectorBuscable from '@/components/ui/SelectorBuscable'
 import { getRateForDate } from '@/services/exchangeRateService'
 import ProductModifiersSection from '@/components/ProductModifiersSection'
 import { uploadProductImage, deleteProductImage, createImagePreview, revokeImagePreview } from '@/services/productImageService'
@@ -93,6 +94,38 @@ const getRootCategories = (categories) => {
 const getSubcategories = (categories, parentId) => {
   return categories.filter(cat => cat.parentId === parentId).sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
 }
+
+/**
+ * Las categorías aplanadas para un `SelectorBuscable`: la raíz y debajo sus
+ * subcategorías, sangradas.
+ *
+ * El `detalle` de una subcategoría es el nombre de su padre y entra al índice
+ * de búsqueda: escribir "bebidas" también trae "Gaseosas". Es solo ayuda para
+ * encontrarla; lo que se guarda sigue siendo la categoría elegida, sin heredar
+ * nada del padre.
+ *
+ * Ojo: esta pantalla tiene su PROPIA versión de `getRootCategories` /
+ * `getSubcategories` (ordena por `order` y toma raíz solo con
+ * `parentId === null`), distinta de la que exporta ProductFormModal. Se dejó a
+ * cada pantalla con la suya a propósito: unificarlas le cambiaría el orden a
+ * categorías que hoy salen en el que el negocio eligió a mano.
+ */
+const opcionesDeCategorias = (categories) =>
+  getRootCategories(categories).flatMap(cat => [
+    { id: cat.id, nombre: cat.name },
+    ...getSubcategories(categories, cat.id).map(sub => ({
+      id: sub.id,
+      nombre: sub.name,
+      sangria: true,
+      detalle: cat.name,
+    })),
+  ])
+
+/** Las marcas ordenadas alfabéticamente para un `SelectorBuscable`. */
+const opcionesDeMarcas = (brands) =>
+  [...(brands || [])]
+    .sort((a, b) => compararEnEspanol(a.name || '', b.name || ''))
+    .map(b => ({ id: b.id, nombre: b.name }))
 
 const getCategoryPath = (categories, categoryId) => {
   const category = categories.find(cat => cat.id === categoryId)
@@ -6816,40 +6849,25 @@ export default function Products() {
 
             {/* Marca - disponible en todos los modos excepto farmacia (que lo tiene en su sección) */}
             {businessMode !== 'pharmacy' && (() => {
-              const sortedBrands = [...brands].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' }))
               const currentMarca = watch ? watch('marca') : ''
               const currentBrandId = watch ? watch('brandId') : ''
               const hasOrphanText = !!(currentMarca && !currentBrandId)
               return (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Marca (Opcional)
-                  </label>
-                  <div className="flex gap-2">
-                    <select
-                      {...register('brandId')}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm bg-white"
-                    >
-                      <option value="">Sin marca</option>
-                      {sortedBrands.map(b => (
-                        <option key={b.id} value={b.id}>{b.name}</option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        const name = window.prompt('Nombre de la nueva marca:')
-                        if (!name?.trim()) return
-                        const newId = await createQuickBrand(name)
-                        if (newId) setValue('brandId', newId, { shouldDirty: true })
-                      }}
-                      className="px-3 py-2 text-sm text-primary-700 hover:bg-primary-50 border border-primary-300 rounded-lg flex items-center gap-1"
-                      title="Crear nueva marca"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Nueva
-                    </button>
-                  </div>
+                  {/* Buscador: con muchas marcas el desplegable obligaba a
+                      recorrerlas todas. Crear una nueva ya no abre un prompt
+                      aparte: se escribe acá mismo y aparece "Crear". */}
+                  <SelectorBuscable
+                    label="Marca (Opcional)"
+                    value={currentBrandId || ''}
+                    onChange={(id) => setValue('brandId', id, { shouldDirty: true })}
+                    opciones={opcionesDeMarcas(brands)}
+                    textoVacio="Sin marca"
+                    placeholder="Escribe para buscar la marca..."
+                    onCrear={createQuickBrand}
+                    etiquetaCrear="Crear la marca"
+                  />
+                  <input type="hidden" {...register('brandId')} />
                   {hasOrphanText && (
                     <p className="text-xs text-amber-600 mt-1">
                       Marca actual escrita a mano: <strong>{currentMarca}</strong> — sin administrar. Seleccioná o creá una marca arriba.
@@ -7549,23 +7567,15 @@ export default function Products() {
 
             {/* Categoría */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Categoría (Opcional)
-              </label>
-              <select
-                {...register('category')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="">Sin categoría</option>
-                {getRootCategories(categories).map(cat => (
-                  <React.Fragment key={cat.id}>
-                    <option value={cat.id}>{cat.name}</option>
-                    {getSubcategories(categories, cat.id).map(subcat => (
-                      <option key={subcat.id} value={subcat.id}>└─ {subcat.name}</option>
-                    ))}
-                  </React.Fragment>
-                ))}
-              </select>
+              <SelectorBuscable
+                label="Categoría (Opcional)"
+                value={watch ? (watch('category') || '') : ''}
+                onChange={(id) => setValue('category', id, { shouldDirty: true })}
+                opciones={opcionesDeCategorias(categories)}
+                textoVacio="Sin categoría"
+                placeholder="Escribe para buscar la categoría..."
+              />
+              <input type="hidden" {...register('category')} />
               {categories.length === 0 && (
                 <p className="mt-1 text-xs text-gray-500">
                   Crea categorías desde el botón "Categorías"
@@ -8488,26 +8498,19 @@ export default function Products() {
 
                 {/* Laboratorio */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Laboratorio
-                  </label>
-                  <select
+                  <SelectorBuscable
+                    label="Laboratorio"
                     value={pharmacyData.laboratoryId}
-                    onChange={(e) => {
-                      const lab = laboratories.find(l => l.id === e.target.value)
-                      setPharmacyData({
-                        ...pharmacyData,
-                        laboratoryId: e.target.value,
-                        laboratoryName: lab?.name || ''
-                      })
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
-                  >
-                    <option value="">Seleccionar laboratorio</option>
-                    {laboratories.map(lab => (
-                      <option key={lab.id} value={lab.id}>{lab.name}</option>
-                    ))}
-                  </select>
+                    onChange={(id, opcion) => setPharmacyData({
+                      ...pharmacyData,
+                      laboratoryId: id,
+                      laboratoryName: opcion?.nombre || ''
+                    })}
+                    opciones={laboratories.map(lab => ({ id: lab.id, nombre: lab.name }))}
+                    textoVacio="Seleccionar laboratorio"
+                    placeholder="Escribe para buscar el laboratorio..."
+                    acento="green"
+                  />
                   {laboratories.length === 0 && (
                     <p className="text-xs text-amber-600 mt-1">No hay laboratorios registrados. Agrégalos desde el menú Laboratorios.</p>
                   )}
@@ -8516,39 +8519,20 @@ export default function Products() {
                 {/* Marca — solo farmacia: en veterinaria vive en el campo
                     general de arriba, y tener los dos hacía que se pisaran. */}
                 {businessMode === 'pharmacy' && (() => {
-                  const sortedBrands = [...brands].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' }))
                   const hasOrphanText = !!(pharmacyData.marca && !pharmacyData.brandId)
                   return (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Marca
-                      </label>
-                      <div className="flex gap-2">
-                        <select
-                          value={pharmacyData.brandId || ''}
-                          onChange={(e) => setPharmacyData({ ...pharmacyData, brandId: e.target.value })}
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm bg-white"
-                        >
-                          <option value="">Sin marca</option>
-                          {sortedBrands.map(b => (
-                            <option key={b.id} value={b.id}>{b.name}</option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const name = window.prompt('Nombre de la nueva marca:')
-                            if (!name?.trim()) return
-                            const newId = await createQuickBrand(name)
-                            if (newId) setPharmacyData(prev => ({ ...prev, brandId: newId }))
-                          }}
-                          className="px-3 py-2 text-sm text-green-700 hover:bg-green-50 border border-green-300 rounded-lg flex items-center gap-1"
-                          title="Crear nueva marca"
-                        >
-                          <Plus className="w-4 h-4" />
-                          Nueva
-                        </button>
-                      </div>
+                      <SelectorBuscable
+                        label="Marca"
+                        value={pharmacyData.brandId || ''}
+                        onChange={(id) => setPharmacyData(prev => ({ ...prev, brandId: id }))}
+                        opciones={opcionesDeMarcas(brands)}
+                        textoVacio="Sin marca"
+                        placeholder="Escribe para buscar la marca..."
+                        onCrear={createQuickBrand}
+                        etiquetaCrear="Crear la marca"
+                        acento="green"
+                      />
                       {hasOrphanText && (
                         <p className="text-xs text-amber-600 mt-1">
                           Marca actual escrita a mano: <strong>{pharmacyData.marca}</strong> — sin administrar.
@@ -9930,24 +9914,17 @@ export default function Products() {
 
             {/* Parent Category Selector */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Categoría Padre (Opcional)
-              </label>
-              <select
+              <SelectorBuscable
+                label="Categoría Padre (Opcional)"
                 value={parentCategoryId || ''}
-                onChange={e => setParentCategoryId(e.target.value || null)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                disabled={editingCategory && getSubcategories(categories, editingCategory.id).length > 0}
-              >
-                <option value="">Sin categoría padre (Raíz)</option>
-                {getRootCategories(categories)
+                onChange={(id) => setParentCategoryId(id || null)}
+                opciones={getRootCategories(categories)
                   .filter(cat => !editingCategory || cat.id !== editingCategory.id)
-                  .map(cat => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
-              </select>
+                  .map(cat => ({ id: cat.id, nombre: cat.name }))}
+                textoVacio="Sin categoría padre (Raíz)"
+                placeholder="Escribe para buscar la categoría..."
+                disabled={!!editingCategory && getSubcategories(categories, editingCategory.id).length > 0}
+              />
               {editingCategory && getSubcategories(categories, editingCategory.id).length > 0 && (
                 <p className="text-xs text-gray-500 mt-1">
                   No puedes cambiar a subcategoría si ya tiene subcategorías propias
@@ -10614,30 +10591,14 @@ export default function Products() {
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nueva Categoría
-                </label>
-                <Select
+                <SelectorBuscable
+                  label="Nueva Categoría"
                   value={bulkCategoryChange}
-                  onChange={e => setBulkCategoryChange(e.target.value)}
-                  className="w-full"
-                >
-                  <option value="">Seleccionar categoría...</option>
-                  {getRootCategories(categories).map(category => {
-                    const subcategories = getSubcategories(categories, category.id)
-                    return (
-                      <React.Fragment key={category.id}>
-                        <option value={category.id}>{category.name}</option>
-                        {subcategories.map(subcat => (
-                          <option key={subcat.id} value={subcat.id}>
-                            &nbsp;&nbsp;→ {subcat.name}
-                          </option>
-                        ))}
-                      </React.Fragment>
-                    )
-                  })}
-                  <option value="">Sin categoría</option>
-                </Select>
+                  onChange={(id) => setBulkCategoryChange(id)}
+                  opciones={opcionesDeCategorias(categories)}
+                  textoVacio="Seleccionar categoría..."
+                  placeholder="Escribe para buscar la categoría..."
+                />
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={closeBulkActionModal} disabled={isProcessingBulk}>

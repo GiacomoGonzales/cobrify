@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { FileSpreadsheet, Loader2, Building2, Filter, CalendarClock } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
+import SelectorBuscable from '@/components/ui/SelectorBuscable'
 
 /**
  * Modal de opciones para exportar el inventario a Excel.
@@ -276,31 +277,27 @@ export default function InventoryExportModal({
               {brands.length > 0 && (
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Marca</label>
-                  <select
+                  <SelectorBuscable
                     value={brandId}
-                    onChange={e => setBrandId(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
-                  >
-                    <option value="">Todas las marcas</option>
-                    {brands.map(b => (
-                      <option key={b.id} value={b.id}>{b.name || 'Sin nombre'}</option>
-                    ))}
-                  </select>
+                    onChange={(id) => setBrandId(id)}
+                    opciones={brands.map(b => ({ id: b.id, nombre: b.name || 'Sin nombre' }))}
+                    textoVacio="Todas las marcas"
+                    placeholder="Escribe para buscar la marca..."
+                    acento="indigo"
+                  />
                 </div>
               )}
               {categories.length > 0 && (
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Categoría</label>
-                  <select
+                  <SelectorBuscable
                     value={categoryId}
-                    onChange={e => setCategoryId(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
-                  >
-                    <option value="">Todas las categorías</option>
-                    {categories.map(c => (
-                      <option key={c.id} value={c.id}>{c.name || 'Sin nombre'}</option>
-                    ))}
-                  </select>
+                    onChange={(id) => setCategoryId(id)}
+                    opciones={categories.map(c => ({ id: c.id, nombre: c.name || 'Sin nombre' }))}
+                    textoVacio="Todas las categorías"
+                    placeholder="Escribe para buscar la categoría..."
+                    acento="indigo"
+                  />
                 </div>
               )}
               <p className="sm:col-span-2 text-xs text-gray-500">
