@@ -484,7 +484,7 @@ export const GUIDES = [
     title: 'Usuarios y permisos',
     category: 'Configuración',
     description: 'Crear cuentas para tu equipo y decidir qué páginas ve cada uno, a qué sucursal accede y qué información se le oculta.',
-    keywords: 'usuarios permisos acceso paginas sucursales almacenes sub-usuario cajero ocultar descuentos ocultar stock caja independiente tipos de comprobante vendedor asignado desactivar contrasena email',
+    keywords: 'usuarios permisos acceso paginas sucursales almacenes sub-usuario cajero ocultar descuentos ocultar stock caja independiente tipos de comprobante vendedor asignado desactivar contrasena email modificar stock ajustar inventario cambiar precios editar precio',
     modos: null,
     load: () => import('./usuarios.js'),
   },

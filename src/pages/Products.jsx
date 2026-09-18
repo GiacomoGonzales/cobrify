@@ -12,6 +12,7 @@ import { crearProductoDemo, actualizarProductoDemo, eliminarProductoDemo } from 
 import { registrarCambiosDePrecio } from '@/services/priceHistoryService'
 import { useAppNavigate } from '@/hooks/useAppNavigate'
 import { useDataPermissions } from '@/hooks/useDataPermissions'
+import { useInvoicePermissions } from '@/hooks/useInvoicePermissions'
 import { useToast } from '@/contexts/ToastContext'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -291,6 +292,13 @@ export default function Products() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, hasFeature, businessSettings, filterWarehousesByAccess, branchScope, refreshBusinessSettings, allowedWarehouses } = useAppContext()
   const appNavigate = useAppNavigate()
   const permisos = useDataPermissions()
+  // Tocar el stock desde esta pantalla (stock inicial, importar, edición
+  // manual): el dueño se lo puede quitar a un sub-usuario
+  // (utils/permisosDeComprobantes, pedido de GLOBAL TELEAUDIO).
+  const puedeModificarStock = useInvoicePermissions().modificarStock
+  // La edición manual del stock de un producto que ya existe: la habilita el
+  // negocio y además hay que tener el permiso.
+  const edicionManualDeStock = businessSettings?.enableManualStockEdit === true && puedeModificarStock
   const toast = useToast()
   const [products, setProducts] = useState([])
   const [warehouses, setWarehouses] = useState([])
@@ -1825,7 +1833,10 @@ export default function Products() {
               productData.warehouseStocks = warehouseStocksArray
             } else {
               // Fallback: si no hay almacenes o no se ingresó stock por almacén, usar el campo simple
-              const initialStockValue = data.initialStock === '' ? null : parseFloat(data.initialStock)
+              // Sin el permiso de modificar stock el campo ni se muestra: nace en 0.
+              const initialStockValue = !puedeModificarStock
+                ? 0
+                : (data.initialStock === '' ? null : parseFloat(data.initialStock))
               productData.stock = initialStockValue
               productData.initialStock = initialStockValue
               productData.warehouseStocks = []
@@ -1929,7 +1940,7 @@ export default function Products() {
       // generan movements DESPUÉS.
       if (
         editingProduct &&
-        businessSettings?.enableManualStockEdit === true &&
+        edicionManualDeStock &&
         !noStock &&
         !(editingProduct.trackExpiration || editingProduct.trackSerials || (Array.isArray(editingProduct.batches) && editingProduct.batches.length > 0))
       ) {
@@ -4745,7 +4756,7 @@ export default function Products() {
       price2: newVariant.price2 ? parseFloat(newVariant.price2) : null,
       price3: newVariant.price3 ? parseFloat(newVariant.price3) : null,
       price4: newVariant.price4 ? parseFloat(newVariant.price4) : null,
-      stock: newVariant.stock === '' ? null : parseInt(newVariant.stock),
+      stock: !puedeModificarStock ? 0 : (newVariant.stock === '' ? null : parseInt(newVariant.stock)),
       priceUSD: newVariant.priceUSD ? parseFloat(newVariant.priceUSD) : null,
     }])
 
@@ -4835,7 +4846,7 @@ export default function Products() {
       // Con la edición manual apagada el campo se muestra de solo lectura; acá
       // se conserva el valor original en vez de confiar en el estado del form,
       // para que ese camino no pueda tocar el stock ni por accidente.
-      stock: (!editingProduct || businessSettings?.enableManualStockEdit === true)
+      stock: ((!editingProduct && puedeModificarStock) || edicionManualDeStock)
         ? (editingVariant.stock === '' ? null : parseInt(editingVariant.stock))
         : (variants[editingVariantIndex]?.stock ?? null),
       priceUSD: editingVariant.priceUSD ? parseFloat(editingVariant.priceUSD) : null,
@@ -5194,14 +5205,17 @@ export default function Products() {
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setOptionsMenuOpen(false)} />
                 <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1 w-60 max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                  {/* Datos */}
-                  <button
-                    onClick={() => { setOptionsMenuOpen(false); setIsImportModalOpen(true) }}
-                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                  >
-                    <Upload className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                    Importar productos
-                  </button>
+                  {/* Datos. Importar mete stock inicial desde el Excel: va con el
+                      permiso de modificar stock. */}
+                  {puedeModificarStock && (
+                    <button
+                      onClick={() => { setOptionsMenuOpen(false); setIsImportModalOpen(true) }}
+                      className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <Upload className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                      Importar productos
+                    </button>
+                  )}
                   {permisos.exportar && (
                     <button
                       onClick={() => { setOptionsMenuOpen(false); handleExportToExcel() }}
@@ -8127,7 +8141,7 @@ export default function Products() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 bg-gray-50 rounded-lg">
                 {/* Stock Actual (solo al editar) */}
                 {editingProduct && (() => {
-                  const stockEditOn = businessSettings?.enableManualStockEdit === true
+                  const stockEditOn = edicionManualDeStock
                   // Lotes DE VERDAD, no `trackExpiration`. Antes bastaba con que la
                   // bandera estuviera activa para mandar al usuario a Control de Lotes,
                   // pero un producto puede tener fecha a nivel de producto y CERO lotes
@@ -8235,8 +8249,14 @@ export default function Products() {
                   />
                 )}
 
-                {/* Stock por Almacén (solo al crear) */}
-                {!editingProduct && warehouses.length > 0 && (
+                {/* Stock por Almacén (solo al crear). Sin el permiso de modificar stock
+                    no se carga: el producto nace en 0 (utils/permisosDeComprobantes). */}
+                {!editingProduct && !puedeModificarStock && (
+                  <p className="col-span-full text-xs text-gray-600 bg-gray-50 px-3 py-2 rounded-lg">
+                    El producto se crea con stock en 0. El stock lo carga el dueño del negocio, o entra con una compra.
+                  </p>
+                )}
+                {!editingProduct && warehouses.length > 0 && puedeModificarStock && (
                   <div className="col-span-full">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Stock Inicial por Almacén
@@ -8336,7 +8356,7 @@ export default function Products() {
                 )}
 
                 {/* Si no hay almacenes, mostrar campo simple */}
-                {!editingProduct && warehouses.length === 0 && (
+                {!editingProduct && warehouses.length === 0 && puedeModificarStock && (
                   <Input
                     label="Stock Inicial"
                     type="number"
@@ -8673,7 +8693,7 @@ export default function Products() {
 
               {/* Editor manual de stock por variante × almacén — solo en edición con toggle ON
                   y siempre que NO haya lotes activos (los lotes se gestionan aparte). */}
-              {editingProduct && businessSettings?.enableManualStockEdit === true && !noStock && variants.length > 0 &&
+              {editingProduct && edicionManualDeStock && !noStock && variants.length > 0 &&
                 !(editingProduct.trackExpiration || (Array.isArray(editingProduct.batches) && editingProduct.batches.length > 0)) && (() => {
                 const activeWhs = (warehouses || []).filter(w => w.isActive)
                 if (activeWhs.length === 0) return null
@@ -8738,7 +8758,7 @@ export default function Products() {
               })()}
 
               {/* Banner para variantes con control de lotes activo. */}
-              {editingProduct && businessSettings?.enableManualStockEdit === true && !noStock &&
+              {editingProduct && edicionManualDeStock && !noStock &&
                 (editingProduct.trackExpiration || (Array.isArray(editingProduct.batches) && editingProduct.batches.length > 0)) && (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
                   <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
@@ -8985,18 +9005,22 @@ export default function Products() {
                             />
                           </div>
                         ))}
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Stock (Opcional)
-                          </label>
-                          <input
-                            type="number"
-                            value={newVariant.stock}
-                            onChange={e => handleNewVariantChange('stock', e.target.value)}
-                            placeholder="0"
-                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          />
-                        </div>
+                        {/* El stock de una variante nueva es stock que entra: va con
+                            el permiso de modificar stock. Sin él, nace en 0. */}
+                        {puedeModificarStock && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Stock (Opcional)
+                            </label>
+                            <input
+                              type="number"
+                              value={newVariant.stock}
+                              onChange={e => handleNewVariantChange('stock', e.target.value)}
+                              placeholder="0"
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            />
+                          </div>
+                        )}
                         {businessSettings?.multiCurrencyEnabled && (
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -9091,7 +9115,7 @@ export default function Products() {
                                       inventario tecleando acá. Al CREAR el producto sí se deja
                                       editable — ahí es stock inicial, no un ajuste. */}
                                   <td className="px-2 py-1">
-                                    {(!editingProduct || businessSettings?.enableManualStockEdit === true) ? (
+                                    {((!editingProduct && puedeModificarStock) || edicionManualDeStock) ? (
                                       <input type="number" value={editingVariant.stock} onChange={e => setEditingVariant({ ...editingVariant, stock: e.target.value })} className="w-16 px-2 py-1 text-xs border border-gray-300 rounded" />
                                     ) : (
                                       <span

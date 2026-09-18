@@ -6,7 +6,7 @@
  */
 export default {
   id: 'usuarios',
-  actualizado: '14/09/2026',
+  actualizado: '18/09/2026',
   intro:
     'Acá creas las cuentas de tu equipo y decides qué puede ver y hacer cada uno. Es la pantalla que evita que un cajero vea tus márgenes o cambie tus precios.',
 
@@ -127,6 +127,33 @@ export default {
     },
 
     {
+      id: 'stock-y-precios',
+      title: 'Quién puede tocar el stock y los precios',
+      blocks: [
+        {
+          type: 'texto',
+          text: 'Darle **Productos** o **Inventario** no obliga a dejar que cambie el stock. Debajo de la lista de páginas, el bloque **Qué puede hacer con el stock** tiene la casilla **Modificar el stock**; aparece si le diste Productos, Inventario o Control de Lotes.',
+        },
+        {
+          type: 'tabla',
+          encabezados: ['Si desmarcas', 'Qué deja de poder hacer'],
+          filas: [
+            ['Modificar el stock', 'En Productos: cargar stock inicial (sus productos nacen en 0), importar productos y editar el stock. En Inventario: Recuento físico, Consumo interno, Traslado masivo, Transferir, Producir y Registrar merma. En Control de Lotes: editar o eliminar un lote.'],
+            ['Cambiar precios en el POS', 'Tocar el precio de un producto en el carrito: vende a los precios de la lista.'],
+          ],
+        },
+        {
+          type: 'texto',
+          text: '**Cambiar precios en el POS** está en **Configuración del POS y caja**, en el bloque **Precios**. Para que no pueda hacer ningún descuento, marca también **Ocultar descuentos en POS**: bajar el precio en el carrito es un descuento con otro nombre.',
+        },
+        {
+          type: 'ojo',
+          text: 'Vienen **marcadas**, igual que las de Ventas: nada cambia hasta que las desmarques. Vender y comprar siguen moviendo el stock, porque eso queda con su comprobante.',
+        },
+      ],
+    },
+
+    {
       id: 'vincular-vendedor',
       title: 'Vincular con un vendedor',
       blocks: [
@@ -194,6 +221,10 @@ export default {
   ],
 
   preguntas: [
+    {
+      q: 'Quiero que mi cajero no pueda ajustar el inventario ni hacer descuentos.',
+      a: 'En su ficha, desmarca **Modificar el stock** (debajo de las páginas) y **Cambiar precios en el POS** (en Configuración del POS y caja), y marca **Ocultar descuentos en POS**. Sigue viendo productos e inventario y vendiendo a los precios de la lista.',
+    },
     {
       q: 'Un usuario entra y ve la pantalla en blanco o lo saca a otra página.',
       a: 'Casi siempre es que no tiene permiso sobre la página a la que intenta entrar. Revisa sus **Páginas** marcadas; el sistema lo manda a la primera permitida.',

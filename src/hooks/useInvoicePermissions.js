@@ -4,7 +4,8 @@ import { resolverPermisosDeComprobantes, ACCIONES_COMPLETAS } from '@/utils/perm
 
 /**
  * Qué puede hacer el usuario actual con un comprobante ya emitido:
- * `{ editar, anular, reimprimir, cambiarPago }`.
+ * `{ editar, anular, reimprimir, cambiarPago }`, y con la misma regla
+ * `{ modificarStock, cambiarPrecios }` (ACCIONES_DE_OPERACION).
  *
  * En modo demo y para dueño/admin devuelve todo en true. Un sub-usuario también
  * los tiene en true salvo que el dueño se los haya apagado en su ficha

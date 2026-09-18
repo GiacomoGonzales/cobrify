@@ -1,5 +1,6 @@
 /**
- * QUÉ PUEDE HACER un sub-usuario con un comprobante YA EMITIDO.
+ * QUÉ PUEDE HACER un sub-usuario con un comprobante YA EMITIDO — y, con la
+ * misma regla, con el stock y los precios del POS (ACCIONES_DE_OPERACION).
  *
  * Emitir lo emite cualquiera que tenga el POS. Lo que preocupa al dueño es lo
  * que viene después: que el cajero abra una venta de ayer y la cambie, que
@@ -60,7 +61,35 @@ export const ACCIONES_DE_COMPROBANTES = [
   },
 ]
 
-export const IDS_DE_ACCIONES = ACCIONES_DE_COMPROBANTES.map((a) => a.id)
+/**
+ * Dos acciones más, FUERA de Ventas, con la MISMA regla (permitidas salvo que
+ * el dueño las apague; el dueño nunca restringido) y guardadas en el mismo
+ * mapa del usuario. Pedido de GLOBAL TELEAUDIO (18-set-2026): "que en ambos
+ * casos solo nosotros (usuario principal) podamos tener acceso a editar
+ * inventario y descuentos". "Ocultar descuentos en POS" ya existía, pero con
+ * "Permitir modificar precio" encendido el cajero bajaba el precio igual; y el
+ * stock se tocaba sin comprobante desde Productos e Inventario.
+ *
+ * `donde` dice en qué parte de la ficha del usuario se muestra cada una.
+ */
+export const ACCIONES_DE_OPERACION = [
+  {
+    id: 'modificarStock',
+    donde: 'inventario',
+    label: 'Modificar el stock',
+    siPuede: 'Puede cargar stock inicial, importar productos y, en Inventario, hacer recuentos, consumo interno, mermas, producción y traslados.',
+    noPuede: 'Ve el stock pero no lo toca: los productos que crea nacen en 0, no puede importar y en Inventario no le aparecen esas opciones. Vender y comprar siguen moviendo el stock.',
+  },
+  {
+    id: 'cambiarPrecios',
+    donde: 'pos',
+    label: 'Cambiar precios en el POS',
+    siPuede: 'Puede modificar el precio de un producto en el carrito (si el negocio lo permite).',
+    noPuede: 'Vende a los precios de la lista: no puede tocar el precio en el carrito.',
+  },
+]
+
+export const IDS_DE_ACCIONES = [...ACCIONES_DE_COMPROBANTES, ...ACCIONES_DE_OPERACION].map((a) => a.id)
 
 /** Lo que puede el dueño, y también el default de quien no tiene nada guardado. */
 export const ACCIONES_COMPLETAS = Object.fromEntries(IDS_DE_ACCIONES.map((id) => [id, true]))

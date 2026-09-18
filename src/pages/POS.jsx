@@ -6685,6 +6685,11 @@ export default function POS() {
     paymentType,
   })
 
+  // Editar el precio en el carrito: lo habilita el negocio, y el dueño se lo
+  // puede quitar a un sub-usuario (utils/permisosDeComprobantes). Bajar el
+  // precio es un descuento con otro nombre: ocultar los descuentos no alcanzaba.
+  const puedeEditarPrecio = !!companySettings?.allowPriceEdit && permisosComprobante.cambiarPrecios
+
   // Cargar las facturas de anticipo del cliente (para deducirlas en la factura final).
   // Solo califican: facturas marcadas como anticipo (0104), ACEPTADAS por SUNAT
   // (regla 3218: el comprobante referenciado debe existir aceptado) y que no se
@@ -13210,7 +13215,7 @@ Gracias por tu preferencia.`
                             )}
                           </div>
                           {/* Precio */}
-                          {companySettings?.allowPriceEdit && editingPriceItemId === itemId ? (
+                          {puedeEditarPrecio && editingPriceItemId === itemId ? (
                             <div className="flex flex-col gap-0.5 items-end flex-shrink-0">
                               <div className="flex items-center gap-1">
                                 <input
@@ -13277,7 +13282,7 @@ Gracias por tu preferencia.`
                                   </p>
                                 )}
                               </div>
-                              {companySettings?.allowPriceEdit && (
+                              {puedeEditarPrecio && (
                                 <button onClick={() => startEditingPrice(itemId, item.price)} className="text-primary-600 hover:text-primary-700 p-1" title="Editar precio">
                                   <Edit2 className="w-3.5 h-3.5" />
                                 </button>

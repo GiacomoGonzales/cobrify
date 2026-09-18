@@ -46,6 +46,7 @@ import { scanBarcode, scannerDisponible } from '@/utils/scanBarcode'
 import { esDeSucursal } from '@/utils/branchScope'
 import { stockEnVista } from '@/utils/stockDeSucursal'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useInvoicePermissions } from '@/hooks/useInvoicePermissions'
 import { transferirStockDemo, descontarStockDemo } from '@/data/demo/operaciones'
 import { useAuth } from '@/contexts/AuthContext'
 import ConsumoInternoModal from '@/components/inventory/ConsumoInternoModal'
@@ -166,6 +167,10 @@ const getRealStockValue = (item) => {
 
 export default function Inventory() {
   const { user, isDemoMode, demoData, getBusinessId, businessMode, businessSettings, hasMainBranchAccess, allowedWarehouses, isBusinessOwner, branchScope } = useAppContext()
+  // Recuento, consumo interno, mermas, producción y traslados MUEVEN stock sin
+  // comprobante: el dueño se los puede quitar a un sub-usuario, que igual ve el
+  // inventario (utils/permisosDeComprobantes, pedido de GLOBAL TELEAUDIO).
+  const puedeModificarStock = useInvoicePermissions().modificarStock
   const permisos = useDataPermissions()
 
   // Demo: el inventario sigue al estado vivo, así un traslado o una salida se
@@ -2302,6 +2307,7 @@ export default function Inventory() {
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setOptionsMenuOpen(false)} />
                 <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1 w-60 max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                  {puedeModificarStock && (<>
                   <button
                     onClick={() => { setOptionsMenuOpen(false); setShowMassTransferModal(true) }}
                     className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
@@ -2325,6 +2331,7 @@ export default function Inventory() {
                     <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
                     Consumo interno
                   </button>
+                  </>)}
                   <button
                     onClick={() => { setOptionsMenuOpen(false); setShowCountHistory(true) }}
                     className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
@@ -4177,7 +4184,7 @@ export default function Inventory() {
                         transform: menuPosition.openUpward ? 'translateY(-100%)' : 'translateY(0)',
                       }}
                     >
-                      {warehouses.length > 1 && (
+                      {warehouses.length > 1 && puedeModificarStock && (
                         <button
                           onClick={() => { openTransferModal(menuItem); setOpenMenuId(null) }}
                           disabled={noStock}
@@ -4187,6 +4194,7 @@ export default function Inventory() {
                           Transferir
                         </button>
                       )}
+                      {puedeModificarStock && (<>
                       <button
                         onClick={() => { openProductionModal(menuItem); setOpenMenuId(null) }}
                         className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
@@ -4206,6 +4214,7 @@ export default function Inventory() {
                         )}
                         {businessMode === 'logistics' ? 'Registrar salida' : 'Registrar merma'}
                       </button>
+                      </>)}
                       <button
                         onClick={() => { openHistoryModal(menuItem); setOpenMenuId(null) }}
                         className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"

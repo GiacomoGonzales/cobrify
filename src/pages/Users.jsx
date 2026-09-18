@@ -4,7 +4,7 @@ import { EMPLOYMENT_TYPES, HR_STATUSES } from '@/services/personnelService'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppContext } from '@/hooks/useAppContext'
 import { EJES_DE_DATOS, IDS_DE_EJES } from '@/utils/dataPermissions'
-import { ACCIONES_DE_COMPROBANTES } from '@/utils/permisosDeComprobantes'
+import { ACCIONES_DE_COMPROBANTES, ACCIONES_DE_OPERACION } from '@/utils/permisosDeComprobantes'
 import Card, { CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -97,6 +97,29 @@ export default function Users() {
   const permiteAccion = (id) => invoicePermissions?.[id] !== false
   const alternarAccion = (id) =>
     setInvoicePermissions((prev) => ({ ...(prev || {}), [id]: !(prev?.[id] !== false) }))
+  // La casilla de UNA acción, igual en Ventas, en el POS y en Inventario.
+  const casillaDeAccion = (accion) => {
+    const permitido = permiteAccion(accion.id)
+    return (
+      <label
+        key={accion.id}
+        className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer ${permitido ? 'border-primary-300 bg-primary-50/40' : 'border-gray-200 hover:bg-gray-50'}`}
+      >
+        <input
+          type="checkbox"
+          checked={permitido}
+          onChange={() => alternarAccion(accion.id)}
+          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+        />
+        <div className="flex-1">
+          <div className="text-sm font-medium text-gray-900">{accion.label}</div>
+          <div className="text-xs text-gray-500 mt-0.5">
+            {permitido ? accion.siPuede : accion.noPuede}
+          </div>
+        </div>
+      </label>
+    )
+  }
   const [waiters, setWaiters] = useState([])
   const [motoristas, setMotoristas] = useState([])
   const [assignedMotoristaId, setAssignedMotoristaId] = useState('')
@@ -139,10 +162,15 @@ export default function Users() {
   const isRestaurantMode = businessMode === 'restaurant'
 
   // Obtener páginas disponibles según el modo del negocio
-  const availablePages = getAvailablePagesByMode(businessMode, {
-    obrasEnabled: businessSettings?.obrasEnabled === true,
-    lendingEnabled: businessSettings?.lendingEnabled === true,
-  })
+  // Memoizado: getAvailablePagesByMode arma un arreglo NUEVO en cada llamada, y
+  // el efecto que expande las categorías depende de él. Sin esto, con el modal
+  // abierto la página se volvía a dibujar sin parar ("Maximum update depth").
+  const obrasEnabled = businessSettings?.obrasEnabled === true
+  const lendingEnabled = businessSettings?.lendingEnabled === true
+  const availablePages = useMemo(
+    () => getAvailablePagesByMode(businessMode, { obrasEnabled, lendingEnabled }),
+    [businessMode, obrasEnabled, lendingEnabled]
+  )
 
   // Agrupar páginas por categoría para mejor visualización
   const pagesByCategory = useMemo(() => {
@@ -1183,6 +1211,18 @@ export default function Users() {
               {selectedPages.length === 0 && (
                 <p className="mt-3 text-sm text-red-600">Debes seleccionar al menos una página.</p>
               )}
+
+              {/* Ver Productos o Inventario no es poder tocar el stock: el
+                  dueño puede dejar que lo vea y reservarse los ajustes
+                  (utils/permisosDeComprobantes, pedido de GLOBAL TELEAUDIO). */}
+              {['products', 'inventory', 'batch-control'].some((id) => selectedPages.includes(id)) && (
+                <div className="mt-4">
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Qué puede hacer con el stock</h4>
+                  <div className="space-y-2">
+                    {ACCIONES_DE_OPERACION.filter((a) => a.donde === 'inventario').map(casillaDeAccion)}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* === SECCIÓN 3: Acceso a sucursales y almacenes (colapsable) === */}
@@ -1449,28 +1489,7 @@ export default function Users() {
                     <div>
                       <h4 className="text-sm font-medium text-gray-700 mb-2">Qué puede hacer en Ventas</h4>
                       <div className="space-y-2">
-                        {ACCIONES_DE_COMPROBANTES.map((accion) => {
-                          const permitido = permiteAccion(accion.id)
-                          return (
-                            <label
-                              key={accion.id}
-                              className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer ${permitido ? 'border-primary-300 bg-primary-50/40' : 'border-gray-200 hover:bg-gray-50'}`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={permitido}
-                                onChange={() => alternarAccion(accion.id)}
-                                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                              />
-                              <div className="flex-1">
-                                <div className="text-sm font-medium text-gray-900">{accion.label}</div>
-                                <div className="text-xs text-gray-500 mt-0.5">
-                                  {permitido ? accion.siPuede : accion.noPuede}
-                                </div>
-                              </div>
-                            </label>
-                          )
-                        })}
+                        {ACCIONES_DE_COMPROBANTES.map(casillaDeAccion)}
                       </div>
                       <p className="text-xs text-gray-500 mt-2">
                         Desmarcar una casilla le esconde esa opción en Ventas. Vender, cobrar e imprimir el ticket de la venta que acaba de hacer siguen igual.
@@ -1655,6 +1674,15 @@ export default function Users() {
                                 </div>
                               </div>
                             </label>
+                          </div>
+                        </div>
+
+                        {/* Bajar el precio en el carrito es un descuento con otro
+                            nombre: sin esto, ocultar los descuentos no alcanzaba. */}
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">Precios</h4>
+                          <div className="space-y-2">
+                            {ACCIONES_DE_OPERACION.filter((a) => a.donde === 'pos').map(casillaDeAccion)}
                           </div>
                         </div>
                       </>

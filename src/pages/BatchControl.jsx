@@ -7,6 +7,7 @@ import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import Select from '@/components/ui/Select'
 import { useAppContext } from '@/hooks/useAppContext'
+import { useInvoicePermissions } from '@/hooks/useInvoicePermissions'
 import { useToast } from '@/contexts/ToastContext'
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -20,6 +21,9 @@ function BatchControl() {
     allowedWarehouses, isBusinessOwner, isAdmin,
     filterWarehousesByAccess, filterBranchesByAccess, branchScope,
   } = useAppContext()
+  // Editar o eliminar un lote cambia el stock: va con el permiso de modificar
+  // stock que el dueño le puede quitar a un sub-usuario (utils/permisosDeComprobantes).
+  const puedeModificarStock = useInvoicePermissions().modificarStock
   const toast = useToast()
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -865,6 +869,7 @@ function BatchControl() {
                                       </Badge>
                                     )}
                                   </span>
+                                  {puedeModificarStock && (
                                   <div className="flex justify-end gap-1">
                                     <button
                                       onClick={() => openEditModal(product, batch)}
@@ -881,6 +886,7 @@ function BatchControl() {
                                       <Trash2 className="w-4 h-4" />
                                     </button>
                                   </div>
+                                  )}
                                 </div>
                               )
                             })}

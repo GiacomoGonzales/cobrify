@@ -169,12 +169,14 @@ export default function DetalleUsuarioModal({
           )}
 
           {hayRestriccion && (
-            <Dato icono={Ban} etiqueta="Restricciones en Ventas">
+            <Dato icono={Ban} etiqueta="Restricciones">
               {[
                 acciones.editar ? null : 'No puede editar comprobantes emitidos',
                 acciones.anular ? null : 'No puede anular ni eliminar comprobantes',
                 acciones.reimprimir ? null : 'No puede reimprimir tickets ni PDFs',
                 acciones.cambiarPago ? null : 'No puede cambiar el pago de una venta',
+                acciones.modificarStock ? null : 'No puede modificar el stock',
+                acciones.cambiarPrecios ? null : 'No puede cambiar precios en el POS',
               ].filter(Boolean).map((t) => (
                 <span key={t} className="block">{t}</span>
               ))}
