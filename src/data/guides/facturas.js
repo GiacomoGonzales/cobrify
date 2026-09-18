@@ -18,7 +18,7 @@
  */
 export default {
   id: 'facturas',
-  actualizado: '15/09/2026',
+  actualizado: '18/09/2026',
   intro:
     'Ventas es el historial de todo lo que emitiste: facturas, boletas, notas de venta, notas de crédito y de débito. Desde acá consultas, cobras lo pendiente, corriges errores, reimprimes y descargas. Es la página a la que vuelves cuando algo de una venta pasada necesita atención.',
 
@@ -254,7 +254,7 @@ export default {
         },
         {
           type: 'texto',
-          text: '**Enviar por WhatsApp** genera el PDF, lo sube y abre WhatsApp con un enlace corto listo para mandar. Usa el teléfono guardado del cliente: si no tiene, el sistema te lo dice — agrégaselo en Clientes y vuelve a intentar.',
+          text: 'El botón **WhatsApp** del detalle genera el PDF, lo sube y abre WhatsApp con un enlace corto listo para mandar. Usa el teléfono guardado del cliente. Si no tiene, aparece el campo **Número de WhatsApp**: escríbelo y presiona **Enviar al número**.',
         },
         {
           type: 'texto',

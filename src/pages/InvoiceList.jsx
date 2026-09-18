@@ -246,6 +246,11 @@ export default function InvoiceList() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [sendingToSunat, setSendingToSunat] = useState(null) // ID de factura siendo enviada a SUNAT
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false) // Estado de envío por WhatsApp
+  // Número al que mandar el comprobante cuando el cliente no tiene teléfono en
+  // su ficha: null = no se está pidiendo; texto = el campo está a la vista.
+  const [numeroWhatsApp, setNumeroWhatsApp] = useState(null)
+  // Otro comprobante, otro cliente: el número escrito para el anterior no sigue.
+  useEffect(() => { setNumeroWhatsApp(null) }, [viewingInvoice?.id])
   const [openMenuId, setOpenMenuId] = useState(null) // ID del menú de acciones abierto
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0, openUpward: true }) // Posición del menú
   // Botón que abrió el menú. El menú es `position: fixed` (para poder salir del
@@ -696,14 +701,17 @@ export default function InvoiceList() {
     }
   }
 
-  const handleSendWhatsApp = async (invoice) => {
+  const handleSendWhatsApp = async (invoice, telefonoEscrito) => {
     if (!invoice) return
 
-    // Verificar si hay teléfono del cliente
-    const phone = invoice.customer?.phone
+    // El teléfono de la ficha del cliente, o el que se escribió en el momento.
+    // Sin ninguno se pide el número, como el POS al terminar una venta: antes
+    // cortaba con "El cliente no tiene un número de teléfono registrado" y no
+    // había forma de reenviar el comprobante (JMC, 17-set-2026).
+    const phone = String(telefonoEscrito ?? invoice.customer?.phone ?? '').trim()
 
     if (!phone) {
-      toast.error('El cliente no tiene un número de teléfono registrado')
+      setNumeroWhatsApp('')
       return
     }
 
@@ -787,6 +795,7 @@ Gracias por tu preferencia.`
       }
 
       setSendingWhatsApp(false)
+      setNumeroWhatsApp(null)
     } catch (error) {
       console.error('Error al enviar por WhatsApp:', error)
       toast.error('Error al generar el comprobante. Intenta de nuevo.')
@@ -5425,11 +5434,30 @@ Gracias por tu preferencia.`
                   Los tres botones miran la RAZÓN SOCIAL y no el RUC: quien marcó
                   "No tengo RUC" guarda `ruc: ''` a propósito y con la prueba vieja
                   no podía imprimir ni ver el PDF de nada. */}
+              {permisosComprobante.reimprimir && numeroWhatsApp !== null && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Número de WhatsApp</label>
+                  <Input
+                    type="tel"
+                    inputMode="numeric"
+                    placeholder="Ej: 987654321"
+                    value={numeroWhatsApp}
+                    onChange={(e) => setNumeroWhatsApp(e.target.value)}
+                    autoFocus
+                  />
+                  <p className="text-xs text-gray-500 mt-1">El cliente no tiene teléfono registrado. Escribe a qué número enviarlo.</p>
+                </div>
+              )}
               {permisosComprobante.reimprimir && (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <Button size="sm" variant="outline" onClick={() => handleSendWhatsApp(viewingInvoice)} disabled={sendingWhatsApp}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleSendWhatsApp(viewingInvoice, numeroWhatsApp ?? undefined)}
+                    disabled={sendingWhatsApp || (numeroWhatsApp !== null && !numeroWhatsApp.trim())}
+                  >
                     {sendingWhatsApp ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Share2 className="w-4 h-4 mr-1" />}
-                    WhatsApp
+                    {numeroWhatsApp !== null ? 'Enviar al número' : 'WhatsApp'}
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => {
                     if (!empresaDe(viewingInvoice)?.businessName) { toast.error('Configura los datos de tu empresa primero'); return; }
