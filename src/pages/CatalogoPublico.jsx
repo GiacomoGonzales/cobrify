@@ -1227,6 +1227,10 @@ export default function CatalogoPublico({ isDemo = false, isRestaurantMenu = fal
       // vendedor para ESA caja y no se deriva del precio de la unidad, así que
       // el mayorista por cantidad no tiene nada que recalcular ahí.
       excluir: (it) => !!it.fixedPriceUSD || !!it.presentationName,
+      // La presentación no se reprecia, pero sí CUENTA para alcanzar el umbral,
+      // en unidades base (cantidad × factor): 5 sacos de 49 kg son 245 unidades
+      // compradas. Mismo criterio que el POS, que comparte esta función.
+      excluirDelConteo: (it) => !!it.fixedPriceUSD,
     })
 
     return repreciado.map(({ linea, precio, nivel }) => {

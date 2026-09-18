@@ -5238,6 +5238,16 @@ export default function POS() {
         // las dos pantallas comparten `repreciarPorCantidad` y el POS se quedó sin ella.
         !!item.presentationName
       ),
+      // La presentación NO se reprecia (cláusula de arriba), pero SÍ cuenta para
+      // alcanzar el umbral: 5 sacos de 49 kg son 245 unidades compradas y deben
+      // empujar al mayorista las líneas sueltas del MISMO producto. Por eso este
+      // predicado es el de arriba MENOS la cláusula de presentación; el conteo lo
+      // hace `repreciarPorCantidad` en unidades base (cantidad × factor).
+      excluirDelConteo: (item) => (
+        !item.id || item.isCustom ||
+        item.isBonificacion || Number(item.price) === 0 ||
+        !!item.fixedPriceUSD
+      ),
     })
 
     return repreciado.map(({ linea, precio, porSuma }) => {

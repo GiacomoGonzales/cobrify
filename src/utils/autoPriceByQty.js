@@ -128,14 +128,31 @@ export function nivelPorCantidad(opciones) {
  * lo consiguieron OTRAS variantes, no la cantidad de esta línea) para que cada
  * pantalla decida cómo mostrarlo.
  *
- * `excluir` deja fuera lo que no debe repreciarse ni empujar al siguiente
- * nivel: bonificaciones, precios anclados en otra moneda, ítems manuales.
+ * Hay DOS exclusiones y conviene no confundirlas:
+ *  - `excluir`: no le toques el PRECIO a esta línea.
+ *  - `excluirDelConteo`: además, no la cuentes para alcanzar el umbral. Si no se
+ *    pasa, es la misma que `excluir` — que era el único comportamiento de antes.
+ *
+ * La diferencia nació con las presentaciones. El precio de un SACO lo puso el
+ * vendedor para ESE paquete y repreciarlo lo rompe (ver `bd30e95a`: 5 sacos
+ * pasaban a cobrarse al precio del kilo), pero 5 sacos de 49 kg SÍ son 245
+ * unidades compradas y deben empujar al mayorista las líneas sueltas del mismo
+ * producto. Las dos cosas a la vez solo se pueden expresar con predicados
+ * separados. Decisión de Giacomo, 17-set-2026.
+ *
+ * Por eso el conteo va en UNIDADES BASE (`quantity × presentationFactor`), la
+ * misma cuenta que ya usan compras, inventario y reportes. Para una línea sin
+ * presentación el factor es 1, así que nada cambia.
  */
-export function repreciarPorCantidad(lineas, { productoPorId, businessSettings = {}, excluir = () => false, exigirFlag = true } = {}) {
+const unidadesBase = (l) => (parseFloat(l?.quantity) || 0) * (Number(l?.presentationFactor) || 1)
+
+export function repreciarPorCantidad(lineas, { productoPorId, businessSettings = {}, excluir = () => false, excluirDelConteo = null, exigirFlag = true } = {}) {
+  const noCuenta = excluirDelConteo || excluir
+
   const totalPorProducto = {}
   for (const l of lineas || []) {
-    if (!l?.id || excluir(l)) continue
-    totalPorProducto[l.id] = (totalPorProducto[l.id] || 0) + (parseFloat(l.quantity) || 0)
+    if (!l?.id || noCuenta(l)) continue
+    totalPorProducto[l.id] = (totalPorProducto[l.id] || 0) + unidadesBase(l)
   }
 
   return (lineas || []).map(l => {
@@ -146,7 +163,9 @@ export function repreciarPorCantidad(lineas, { productoPorId, businessSettings =
     if (exigirFlag && producto.useAutoPriceByQty !== true) return { linea: l, precio: null, porSuma: false, nivel: null }
 
     const total = totalPorProducto[l.id] || 0
-    const propia = parseFloat(l.quantity) || 0
+    // También en unidades base: se compara contra `total`, que ya viene en esa
+    // escala. Mezclarlas haría que `porSuma` mienta en cuanto haya un factor.
+    const propia = unidadesBase(l)
     const variantSku = l.variantSku || null
 
     const precio = precioPorCantidad({ producto, variantSku, cantidadTotal: total, businessSettings, exigirFlag })
