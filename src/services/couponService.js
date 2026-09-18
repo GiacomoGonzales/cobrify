@@ -36,13 +36,17 @@ export const getCoupons = async (businessId) => {
  * Crea un cupón. type: 'percent' | 'amount'. expiresAt: Date|null.
  * maxUses: number|null (null = sin límite).
  */
-export const createCoupon = async (businessId, { code, type, value, expiresAt = null, maxUses = null }) => {
+export const createCoupon = async (businessId, {
+  code, type, value, expiresAt = null, maxUses = null,
+  categories = [], ownerBusinessId = null,
+}) => {
   try {
     const id = normalizeCouponCode(code)
     if (id.length < 3) return { success: false, error: 'El código necesita al menos 3 letras o números' }
     const val = Number(value)
     if (!(val > 0)) return { success: false, error: 'El valor del descuento debe ser mayor a 0' }
     if (type === 'percent' && val > 100) return { success: false, error: 'Un porcentaje no puede pasar de 100' }
+    const cats = (categories || []).filter(Boolean)
 
     const ref = doc(couponsRef(businessId), id)
     if ((await getDoc(ref)).exists()) return { success: false, error: `El código ${id} ya existe` }
@@ -52,6 +56,20 @@ export const createCoupon = async (businessId, { code, type, value, expiresAt = 
       value: val,
       expiresAt: expiresAt ? Timestamp.fromDate(expiresAt) : null,
       maxUses: maxUses ? Number(maxUses) : null,
+      // Alcance por categoría, opcional. Sin esto el cupón descuenta sobre TODA
+      // la venta, que es como funcionaron siempre: los cupones ya creados no
+      // tienen el campo y se comportan exactamente igual que antes.
+      categories: cats,
+      // ⚠️ POR QUÉ UN CUPÓN CON CATEGORÍAS TIENE DUEÑO.
+      // Los cupones viven en el GRUPO de fidelización, no en el negocio
+      // (utils/businessGroup.js): el mismo código vale en las dos empresas. Eso
+      // se decidió PRECISAMENTE porque "solo tienen código, valor y tope de
+      // usos, ningún producto". Las categorías sí son de una empresa, y el
+      // mismo archivo ya rechazó compartir las promociones por horario por esto:
+      // "apuntaría a productos que del otro lado no existen". Un cupón con
+      // categorías usado en la otra empresa no encontraría ninguna y descontaría
+      // CERO sin avisar. Se guarda el dueño para poder decirlo en pantalla.
+      ownerBusinessId: cats.length ? (ownerBusinessId || businessId) : null,
       uses: 0,
       active: true,
       createdAt: serverTimestamp(),
@@ -88,7 +106,7 @@ export const deleteCoupon = async (businessId, code) => {
  * (dos cajas podrían colarse en el último uso); el conteo real lo hace
  * redeemCoupon al emitir.
  */
-export const validateCoupon = async (businessId, code, { database } = {}) => {
+export const validateCoupon = async (businessId, code, { database, negocioQueOpera = null } = {}) => {
   try {
     const id = normalizeCouponCode(code)
     if (!id) return { success: false, error: 'Escribe el código del cupón' }
@@ -100,11 +118,41 @@ export const validateCoupon = async (businessId, code, { database } = {}) => {
     if (!c.active) return { success: false, error: 'Ese cupón está desactivado' }
     if (c.expiresAt && c.expiresAt.toDate() < new Date()) return { success: false, error: 'Ese cupón ya venció' }
     if (c.maxUses && (c.uses || 0) >= c.maxUses) return { success: false, error: 'Ese cupón agotó sus usos' }
-    return { success: true, coupon: { id, type: c.type, value: c.value } }
+    // Un cupón limitado por categorías solo vale en la empresa dueña de esas
+    // categorías. Es preferible decirlo a descontar cero en silencio, que es lo
+    // que pasaría: del otro lado del grupo esos IDs no existen. Ver el comentario
+    // largo en createCoupon y utils/businessGroup.js.
+    const cats = c.categories || []
+    if (cats.length && c.ownerBusinessId && negocioQueOpera && c.ownerBusinessId !== negocioQueOpera) {
+      return { success: false, error: 'Ese cupón es solo para los productos de la otra empresa del grupo' }
+    }
+    return { success: true, coupon: { id, type: c.type, value: c.value, categories: cats } }
   } catch (error) {
     console.error('Error al validar cupón:', error)
     return { success: false, error: 'No se pudo validar el cupón' }
   }
+}
+
+/**
+ * Las líneas del carrito a las que alcanza un cupón.
+ *
+ * Sin categorías alcanza a TODA la venta, que es como funcionaron siempre: un
+ * cupón viejo no tiene el campo y pasa por acá sin cambiar nada. Con categorías
+ * alcanza solo a esas líneas, y el descuento se calcula sobre ESE subtotal.
+ *
+ * Devuelve LÍNEAS y no un monto a propósito: la caja suma en soles y el catálogo
+ * en su moneda con conversión de tipo de cambio. Lo que se comparte acá es el
+ * CRITERIO (qué entra), que es lo único que puede quedar distinto entre las dos
+ * pantallas; la aritmética del dinero se queda donde ya vive.
+ *
+ * ⚠️ La comparación es PLANA, igual que en los descuentos programados: una
+ * categoría padre no alcanza a sus subcategorías. Mismo criterio en las dos
+ * funciones para que al negocio no le signifiquen cosas distintas.
+ */
+export const lineasQueCalifican = (lineas, categorias = []) => {
+  const cats = (categorias || []).filter(Boolean)
+  if (!cats.length) return lineas || []
+  return (lineas || []).filter((l) => cats.includes(l?.category || ''))
 }
 
 /**

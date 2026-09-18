@@ -21,7 +21,7 @@ import {
   formatQty,
   isBusinessOpen,
 } from '@/components/catalog/catalogHelpers'
-import { validateCoupon, normalizeCouponCode } from '@/services/couponService'
+import { validateCoupon, normalizeCouponCode, lineasQueCalifican } from '@/services/couponService'
 import { idDeFidelizacion } from '@/utils/businessGroup'
 import { eventoDePixel } from '@/utils/pixelesDelCatalogo'
 import {
@@ -58,7 +58,6 @@ import {
   Hash,
   CheckCircle2,
   AlertCircle,
-  Info,
   Mail,
   ArrowRight,
   ChevronDown,
@@ -260,13 +259,19 @@ export default function CartDrawer({
   // PEN; en catálogos USD se convierten con el mismo TC que los precios.
   const couponDiscountInCcy = (() => {
     if (!appliedCoupon) return 0
+    // Con categorías el descuento se calcula sobre el subtotal QUE CALIFICA, no
+    // sobre el total del carrito. Sin categorías `lineasQueCalifican` devuelve
+    // todas las líneas y la cuenta es exactamente la de siempre.
+    const lineas = lineasQueCalifican(cart, appliedCoupon.categories)
+    const baseCcy = lineas.reduce((sum, item) => sum + itemUnitInCatalogCcy(item) * item.quantity, 0)
     const bruto = appliedCoupon.type === 'percent'
-      ? totalInCatalogCcy * (appliedCoupon.value / 100)
+      ? baseCcy * (appliedCoupon.value / 100)
       : (catalogCurrency === 'USD'
           ? convertFromBase(appliedCoupon.value, 'USD', catalogExchangeRate || 1)
           : appliedCoupon.value)
-    // Nunca más que el total: el pedido no puede quedar negativo.
-    return Math.min(Math.round(bruto * 100) / 100, totalInCatalogCcy)
+    // Nunca más que lo que alcanza: el pedido no puede quedar negativo, y un
+    // monto fijo tampoco puede descontar más que los productos que califican.
+    return Math.min(Math.round(bruto * 100) / 100, baseCcy)
   })()
   const totalConCupon = Math.max(0, totalInCatalogCcy - couponDiscountInCcy)
 
@@ -278,8 +283,19 @@ export default function CartDrawer({
     try {
       // Los cupones pueden ser del grupo: el mismo código vale en los dos
       // locales (ver src/utils/businessGroup.js).
-      const res = await validateCoupon(idDeFidelizacion(business, business.id), codigo, { database: db })
+      const res = await validateCoupon(idDeFidelizacion(business, business.id), codigo, {
+        database: db,
+        // Un cupón limitado por categorías solo vale en la empresa dueña de esas
+        // categorías: sin esto, del otro lado del grupo descontaría cero callado.
+        negocioQueOpera: business.id,
+      })
       if (!res.success) { setCouponError(res.error); return }
+      // Un cupón por categorías que no alcanza a nada descontaría cero. Mejor
+      // decírselo al comprador que dejarlo creyendo que se aplicó.
+      if ((res.coupon.categories || []).length && !lineasQueCalifican(cart, res.coupon.categories).length) {
+        setCouponError('Ese cupón no alcanza a ningún producto de tu carrito')
+        return
+      }
       setAppliedCoupon(res.coupon)
       setCouponInput('')
     } catch {

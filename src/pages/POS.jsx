@@ -6192,11 +6192,31 @@ export default function POS() {
     }
     setValidatingCoupon(true)
     try {
-      const { validateCoupon } = await import('@/services/couponService')
-      const res = await validateCoupon(idDeFidelizacion(companySettings, getBusinessId()), codigo)
+      const { validateCoupon, lineasQueCalifican } = await import('@/services/couponService')
+      const res = await validateCoupon(idDeFidelizacion(companySettings, getBusinessId()), codigo, {
+        // Un cupón limitado por categorías solo vale en la empresa dueña de esas
+        // categorías: sin esto, del otro lado del grupo descontaría cero callado.
+        negocioQueOpera: getBusinessId(),
+      })
       if (!res.success) { toast.error(res.error); return }
       const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-      if (res.coupon.type === 'percent') {
+      const categorias = res.coupon.categories || []
+      const lineas = lineasQueCalifican(cart, categorias)
+      const subtotalCalifica = lineas.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+      if (categorias.length && !lineas.length) {
+        toast.error('Ese cupón no alcanza a ningún producto de esta venta')
+        return
+      }
+      if (categorias.length) {
+        // Con categorías el descuento se calcula sobre el subtotal QUE CALIFICA y
+        // se manda siempre como MONTO, incluso si el cupón es de porcentaje: un
+        // porcentaje en el descuento global se aplicaría sobre toda la venta, que
+        // sería otro número. Así el riel que emite SUNAT no cambia.
+        const bruto = res.coupon.type === 'percent'
+          ? subtotalCalifica * (res.coupon.value / 100)
+          : Math.min(res.coupon.value, subtotalCalifica)
+        handleDiscountAmountChange(String((Math.round(bruto * 100) / 100).toFixed(2)))
+      } else if (res.coupon.type === 'percent') {
         handleDiscountPercentageChange(String(res.coupon.value))
       } else {
         // Un monto fijo mayor que la venta se recorta: el total nunca baja de 0.

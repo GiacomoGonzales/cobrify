@@ -228,6 +228,14 @@ export default {
           type: 'texto',
           text: 'El comprobante electrónico registra el descuento del cupón como descuento global — el formato que SUNAT acepta — y cada venta cobrada suma 1 al contador de usos del cupón.',
         },
+        {
+          type: 'texto',
+          text: 'Al crear un cupón puedes limitarlo a ciertas categorías, en **Solo para estas categorías**. Sin marcar nada descuenta sobre toda la venta, como siempre. Si marcas categorías, el descuento se calcula **solo sobre esos productos**: un cupón de 20% en Bebidas, en una venta de S/70 con S/20 de bebidas, descuenta S/4 y no S/14. Si en la venta no hay nada de esas categorías, el sistema avisa y no aplica el cupón, en vez de descontar cero sin decir nada.',
+        },
+        {
+          type: 'ojo',
+          text: 'Si tus dos empresas comparten cupones (tarjeta y cupones en común), un cupón con categorías **deja de valer en la otra**: las categorías son de una sola empresa, y del otro lado esos productos no existen. Al marcarlas te lo avisa en pantalla. Un cupón sin categorías sigue valiendo en las dos, igual que siempre. Y las categorías se comparan una por una: elegir una categoría padre no alcanza a sus subcategorías.',
+        },
       ],
     },
   ],

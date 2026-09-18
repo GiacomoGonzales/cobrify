@@ -83,7 +83,7 @@ export default function Promotions() {
   const [cupones, setCupones] = useState([])
   const [cargandoCupones, setCargandoCupones] = useState(true)
   const [isCuponOpen, setIsCuponOpen] = useState(false)
-  const [cuponForm, setCuponForm] = useState({ code: '', type: 'percent', value: '', expiresAt: '', maxUses: '' })
+  const [cuponForm, setCuponForm] = useState({ code: '', type: 'percent', value: '', expiresAt: '', maxUses: '', categories: [] })
   const [savingCupon, setSavingCupon] = useState(false)
   const [accionandoCupon, setAccionandoCupon] = useState(null)
 
@@ -336,6 +336,12 @@ export default function Promotions() {
         // La fecha del input es local; el cupón vence al FINAL de ese día.
         expiresAt: cuponForm.expiresAt ? new Date(`${cuponForm.expiresAt}T23:59:59`) : null,
         maxUses: cuponForm.maxUses || null,
+        categories: cuponForm.categories,
+        // El cupón se GUARDA bajo idFidelidad (el grupo, que puede ser la otra
+        // empresa), pero las categorías son de ESTA. Por eso el dueño es
+        // businessId y no idFidelidad: es lo que permite avisar en la otra
+        // empresa en vez de descontar cero en silencio (ver couponService).
+        ownerBusinessId: businessId,
       })
       if (!res.success) { toast.error(res.error); return }
       toast.success(`Cupón ${res.id} creado`)
@@ -345,7 +351,7 @@ export default function Promotions() {
         maxUses: cuponForm.maxUses ? Number(cuponForm.maxUses) : null, uses: 0, active: true,
       }, ...prev])
       setIsCuponOpen(false)
-      setCuponForm({ code: '', type: 'percent', value: '', expiresAt: '', maxUses: '' })
+      setCuponForm({ code: '', type: 'percent', value: '', expiresAt: '', maxUses: '', categories: [] })
     } finally {
       setSavingCupon(false)
     }
@@ -1440,6 +1446,42 @@ export default function Promotions() {
                 className={inputCls}
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Solo para estas categorías (opcional)</label>
+            <div className="flex flex-wrap gap-1.5">
+              {categorias.map((c) => {
+                const elegida = cuponForm.categories.includes(c.valor)
+                return (
+                  <button
+                    key={c.valor}
+                    type="button"
+                    onClick={() => setCuponForm((f) => ({
+                      ...f,
+                      categories: elegida
+                        ? f.categories.filter((x) => x !== c.valor)
+                        : [...f.categories, c.valor],
+                    }))}
+                    className={`px-3 h-9 rounded-lg text-sm font-medium border transition-colors ${elegida
+                      ? 'bg-primary-600 border-primary-600 text-white'
+                      : 'bg-white border-gray-300 text-gray-600 hover:border-primary-400'}`}
+                  >
+                    {c.nombre}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="mt-1 text-xs text-gray-500">
+              Sin marcar nada, el cupón descuenta sobre toda la venta, como hasta ahora. Si marcas
+              categorías, el descuento se calcula solo sobre esos productos.
+            </p>
+            {enGrupo && cuponForm.categories.length > 0 && (
+              <p className="mt-1 text-xs text-amber-700">
+                Con categorías marcadas, este cupón deja de valer en la otra empresa del grupo: las
+                categorías son de esta.
+              </p>
+            )}
           </div>
 
           <div className="flex gap-3 pt-2">
