@@ -2619,6 +2619,27 @@ export default function CashRegister() {
           {/* Estado de la caja */}
           {currentSession ? (
         <>
+          {/* Dos cajas abiertas del mismo usuario en la misma sucursal. Ya no
+              debería pasar (openCashRegister lo comprueba con el servidor), pero
+              si pasa, cerrar las dos cuenta dos veces las ventas en común:
+              CONSORCIO ANDINA, 17-set-2026. */}
+          {currentSession.otrasAbiertas?.length > 0 && (() => {
+            const fechas = currentSession.otrasAbiertas
+              .map(o => toDate(o.openedAt)?.toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) || 'sin fecha')
+              .join(' y ')
+            return (
+              <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-red-800">
+                  <p className="font-semibold">Hay otra caja tuya abierta al mismo tiempo que esta</p>
+                  <p className="mt-0.5">
+                    {/* La hora termina en "a. m.": ese punto ya cierra la oración. */}
+                    Se abrió el {fechas}{fechas.endsWith('.') ? '' : '.'} Si cierras las dos, las ventas que tienen en común se cuentan dos veces. Escríbenos antes de cerrarlas.
+                  </p>
+                </div>
+              </div>
+            )
+          })()}
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>

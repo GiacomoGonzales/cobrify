@@ -17,7 +17,7 @@
  */
 export default {
   id: 'caja',
-  actualizado: '22/08/2026',
+  actualizado: '19/09/2026',
   intro:
     'Control de Caja es el ritual de apertura y cierre del turno: con cuánto empezaste, qué entró y salió por fuera de las ventas, y si al final el dinero cuadra con lo que el sistema esperaba. No arquea solo el efectivo: cada medio de pago se cuadra por su cuenta.',
 
@@ -249,6 +249,10 @@ export default {
   ],
 
   preguntas: [
+    {
+      q: 'Me sale "Hay otra caja tuya abierta al mismo tiempo que esta".',
+      a: 'Una caja quedó sin cerrar y después se abrió otra, así que las dos cuentan las ventas hechas desde que se abrió la segunda: si cierras ambas, esas ventas se suman dos veces. **No las cierres** y escríbenos para dejar cada una con lo suyo. Para que no se repita, la caja ya no se abre si el sistema no puede comprobar con el servidor que no hay otra abierta: si te pide **revisar tu conexión**, espera a tener internet e inténtalo de nuevo.',
+    },
     {
       q: 'Anulé una venta con nota de crédito y el producto sigue apareciendo.',
       a: 'Revisa el **motivo** de la nota. Solo se descuentan las de *Anulación de la operación*, *Devolución total* y *Devolución por ítem*, que son las que implican que la mercadería volvió. Una nota por *descuento global*, *disminución en el valor* o *error en el RUC* corrige el monto o los datos, pero el producto salió igual del depósito. Tampoco se descuenta si la nota corrige una venta de otro día: eso dejaría la lista de hoy por debajo de lo que realmente vendiste.',

@@ -5,6 +5,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getDocsFromServer,
   addDoc,
   updateDoc,
   deleteDoc,
@@ -2653,8 +2654,15 @@ export const saveIngredientCategories = async (userId, categories) => {
  * @param {string} userId - ID del negocio
  * @param {string|null} branchId - ID de la sucursal (null = Sucursal Principal)
  * @param {string|null} userUid - Firebase UID del usuario (para filtrar caja por usuario)
+ * @param {{desdeServidor?: boolean}} [opciones] - desdeServidor: preguntar al
+ *   servidor y no a la copia local (lo usa openCashRegister: un equipo que nunca
+ *   vio la otra caja abierta diría "ninguna" desde su copia).
+ *
+ * `data.otrasAbiertas`: las OTRAS cajas abiertas que coinciden con el mismo filtro
+ * (misma sucursal y mismo usuario). No debería haber ninguna; si las hay, la
+ * pantalla de Caja lo avisa.
  */
-export const getCashRegisterSession = async (userId, branchId = null, userUid = null) => {
+export const getCashRegisterSession = async (userId, branchId = null, userUid = null, { desdeServidor = false } = {}) => {
   try {
     // 'main' es lo mismo que null: la Sucursal Principal. Hace falta normalizarlo
     // porque quien llama pasa a veces la sucursal de un COMPROBANTE (al anular una
@@ -2679,7 +2687,7 @@ export const getCashRegisterSession = async (userId, branchId = null, userUid = 
         where('status', '==', 'open')
       )
     }
-    const snapshot = await getDocs(q)
+    const snapshot = desdeServidor ? await getDocsFromServer(q) : await getDocs(q)
 
     if (snapshot.empty) {
       return { success: true, data: null }
@@ -2729,6 +2737,9 @@ export const getCashRegisterSession = async (userId, branchId = null, userUid = 
       data: {
         id: mostRecentSession.id,
         ...mostRecentSession.data(),
+        otrasAbiertas: filteredDocs
+          .filter(d => d.id !== mostRecentSession.id)
+          .map(d => ({ id: d.id, openedAt: d.data().openedAt || null })),
       },
     }
   } catch (error) {
@@ -2781,9 +2792,17 @@ export const getOpenCashSessions = async (businessId, branchId = null) => {
  */
 export const openCashRegister = async (userId, openingAmount, branchId = null, userUid = null, userName = null, openingAmountUSD = 0, openingAmountYape = 0, openingAmountPlin = 0) => {
   try {
-    // Verificar que no haya una caja abierta para esta sucursal Y este usuario
-    const currentSession = await getCashRegisterSession(userId, branchId, userUid)
-    if (currentSession.success && currentSession.data) {
+    // Verificar que no haya una caja abierta para esta sucursal Y este usuario.
+    // Si no se puede COMPROBAR, no se abre: antes un error de la consulta contaba
+    // como "no hay ninguna" y se abría una segunda caja (CONSORCIO ANDINA,
+    // 17-set-2026: dos cajas de la misma cajera; al cerrar una, la otra siguió
+    // abierta y el cierre del día siguiente sumaba las ventas del anterior). Se
+    // pregunta al servidor por lo mismo: la copia local no alcanza.
+    const currentSession = await getCashRegisterSession(userId, branchId, userUid, { desdeServidor: true })
+    if (!currentSession.success) {
+      return { success: false, error: 'No se pudo comprobar si ya hay una caja abierta. Revisa tu conexión a internet e intenta de nuevo.' }
+    }
+    if (currentSession.data) {
       return { success: false, error: 'Ya hay una caja abierta para esta sucursal' }
     }
 
