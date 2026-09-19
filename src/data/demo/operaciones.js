@@ -578,7 +578,7 @@ export function cortesiaItemDemo(orderId, indice, marcar, { reason = '', markedB
 }
 
 /** Descuento a toda la cuenta, en porcentaje o en soles, como `applyOrderDiscount`. */
-export function aplicarDescuentoDemo(orderId, { type, value, reason = '', appliedBy = null } = {}) {
+export function aplicarDescuentoDemo(orderId, { type, value, reason = '', appliedBy = null, coupon = null } = {}) {
   const valor = parseFloat(value)
   if (!['percent', 'amount'].includes(type) || !(valor > 0) || (type === 'percent' && valor > 100)) {
     return { success: false, error: 'Valor de descuento inválido' }
@@ -595,6 +595,7 @@ export function aplicarDescuentoDemo(orderId, { type, value, reason = '', applie
         appliedAt: new Date(),
         appliedBy: appliedBy?.uid || null,
         appliedByName: appliedBy?.name || 'Usuario',
+        ...(coupon?.id && { coupon: { id: coupon.id, type: coupon.type, value: Number(coupon.value) || 0 } }),
       },
       deliveryFee: orden.deliveryFee,
     })

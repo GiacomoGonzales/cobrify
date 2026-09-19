@@ -83,6 +83,7 @@ import { filtrarVendibles, esSoloUsoInterno } from '@/utils/productSale'
 import { heredadoDelProducto, tasaQueChoca } from '@/utils/lineaDelProducto'
 import { lineaDeEnvio, yaHayEnvioEnElCarrito } from '@/utils/deliveryFee'
 import { idDeFidelizacion } from '@/utils/businessGroup'
+import { descuentoDelCupon } from '@/utils/descuentoDelCupon'
 import { getAvailableDocumentTypes, resolveDocumentType } from '@/utils/documentTypes'
 import { calculateMixedInvoiceAmounts, calculateRecargoConsumo, ID_TYPES, DETRACTION_TYPES, DETRACTION_MIN_AMOUNT, calcularDetraccion } from '@/utils/peruUtils'
 import { generateInvoicePDF, getInvoicePDFBlob, previewInvoicePDF, preloadLogo } from '@/utils/pdfGenerator'
@@ -2152,6 +2153,12 @@ export default function POS() {
             if (billableItemsTotal > 0) {
               setDiscountPercentage(((amount / billableItemsTotal) * 100).toFixed(2))
             }
+          }
+          // El cupón aplicado en la precuenta llega con su descuento: sin esto el
+          // comprobante no diría qué cupón fue ni se contaría su uso al emitir.
+          // No se vuelve a validar: la mesa ya tiene impreso ese total.
+          if (tableInfo.discount.coupon?.id) {
+            setAppliedCoupon(tableInfo.discount.coupon)
           }
         }
       }
@@ -6205,36 +6212,21 @@ export default function POS() {
     }
     setValidatingCoupon(true)
     try {
-      const { validateCoupon, lineasQueCalifican } = await import('@/services/couponService')
+      const { validateCoupon } = await import('@/services/couponService')
       const res = await validateCoupon(idDeFidelizacion(companySettings, getBusinessId()), codigo, {
         // Un cupón limitado por categorías solo vale en la empresa dueña de esas
         // categorías: sin esto, del otro lado del grupo descontaría cero callado.
         negocioQueOpera: getBusinessId(),
       })
       if (!res.success) { toast.error(res.error); return }
-      const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-      const categorias = res.coupon.categories || []
-      const lineas = lineasQueCalifican(cart, categorias)
-      const subtotalCalifica = lineas.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-      if (categorias.length && !lineas.length) {
-        toast.error('Ese cupón no alcanza a ningún producto de esta venta')
-        return
-      }
-      if (categorias.length) {
-        // Con categorías el descuento se calcula sobre el subtotal QUE CALIFICA y
-        // se manda siempre como MONTO, incluso si el cupón es de porcentaje: un
-        // porcentaje en el descuento global se aplicaría sobre toda la venta, que
-        // sería otro número. Así el riel que emite SUNAT no cambia.
-        const bruto = res.coupon.type === 'percent'
-          ? subtotalCalifica * (res.coupon.value / 100)
-          : Math.min(res.coupon.value, subtotalCalifica)
-        handleDiscountAmountChange(String((Math.round(bruto * 100) / 100).toFixed(2)))
-      } else if (res.coupon.type === 'percent') {
-        handleDiscountPercentageChange(String(res.coupon.value))
-      } else {
-        // Un monto fijo mayor que la venta se recorta: el total nunca baja de 0.
-        handleDiscountAmountChange(String(Math.min(res.coupon.value, subtotal).toFixed(2)))
-      }
+      // El número sale del mismo criterio que la precuenta de la mesa
+      // (utils/descuentoDelCupon): con categorías va como MONTO sobre lo que
+      // califica; sin ellas, el porcentaje queda porcentaje y el monto fijo se
+      // recorta al total. Así el riel que emite SUNAT no cambia.
+      const descuento = descuentoDelCupon(res.coupon, cart, (item) => item.price * item.quantity)
+      if (descuento.error) { toast.error(descuento.error); return }
+      if (descuento.tipo === 'percent') handleDiscountPercentageChange(String(descuento.valor))
+      else handleDiscountAmountChange(descuento.valor.toFixed(2))
       setAppliedCoupon(res.coupon)
       setCouponInput('')
       toast.success(`Cupón ${res.coupon.id} aplicado`)

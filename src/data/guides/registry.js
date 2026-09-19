@@ -380,7 +380,7 @@ export const GUIDES = [
     title: 'Mesas',
     category: 'Operación',
     description: 'El tablero del salón: mesas y zonas, reservas, juntar/mover/dividir, precuenta y las dos formas de cobrar por separado.',
-    keywords: 'mesas salon zona terraza piso ocupada disponible reservada reservar cancelar reserva mantenimiento consumo precuenta descuento imprimir por persona cobrar cerrar cuenta cobro individual dividir cuenta entre personas asignar items dividir mesa mover transferir juntar unir separar agrupar liberar servido marcar servidos barra cuenta de barra mozo comanda cocina sin comprobante cortesia restaurante',
+    keywords: 'mesas salon zona terraza piso ocupada disponible reservada reservar cancelar reserva mantenimiento consumo precuenta descuento cupon codigo de cupon imprimir por persona cobrar cerrar cuenta cobro individual dividir cuenta entre personas asignar items dividir mesa mover transferir juntar unir separar agrupar liberar servido marcar servidos barra cuenta de barra mozo comanda cocina sin comprobante cortesia restaurante',
     modos: ['restaurant'],
     load: () => import('./mesas.js'),
   },

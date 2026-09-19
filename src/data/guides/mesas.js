@@ -16,7 +16,7 @@
  */
 export default {
   id: 'mesas',
-  actualizado: '10/09/2026',
+  actualizado: '19/09/2026',
   intro:
     'Mesas es el tablero de tu salón: qué está ocupado, cuánto lleva consumido cada mesa y cuál está libre. Desde acá se toma el pedido, se maneja lo que pasa durante la comida —juntar, mover, dividir— y se cobra.',
 
@@ -188,6 +188,10 @@ export default {
         {
           type: 'texto',
           text: 'Antes de cobrar le llevas al cliente la **precuenta**: el detalle de lo consumido, **sin valor tributario**. Puedes verla en pantalla antes de imprimir y aplicarle un descuento si corresponde.',
+        },
+        {
+          type: 'texto',
+          text: 'Si el cliente trae un **cupón** (de Promociones > Cupones), escríbelo en **Código de cupón** y presiona **Aplicar**: el descuento se llena solo y la precuenta sale con él. Al cobrar la mesa, el POS trae el cupón con la cuenta, así que el comprobante lo registra y se cuenta su uso. Mientras el cupón esté puesto, el descuento manual queda bloqueado; para cambiarlo, presiona **Quitar**.',
         },
         {
           type: 'texto',

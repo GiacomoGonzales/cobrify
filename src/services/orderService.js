@@ -1005,7 +1005,7 @@ export const toggleItemCourtesy = async (businessId, orderId, itemIndex, markAsC
  */
 export const applyOrderDiscount = async (businessId, orderId, discountData) => {
   try {
-    const { type, value, reason, appliedBy } = discountData
+    const { type, value, reason, appliedBy, coupon } = discountData
     if (!['percent', 'amount'].includes(type)) {
       return { success: false, error: 'Tipo de descuento inválido' }
     }
@@ -1056,6 +1056,10 @@ export const applyOrderDiscount = async (businessId, orderId, discountData) => {
       appliedAt: new Date(),
       appliedBy: appliedBy?.uid || null,
       appliedByName: appliedBy?.name || 'Usuario',
+      // El cupón aplicado en la precuenta (PreBillPreviewModal). Viaja con la
+      // cuenta al POS, que lo pone como cupón de la venta: así el comprobante lo
+      // registra y su uso se cuenta al emitir. Un descuento manual lo reemplaza.
+      ...(coupon?.id && { coupon: { id: coupon.id, type: coupon.type, value: Number(coupon.value) || 0 } }),
     }
 
     await updateDoc(orderRef, {

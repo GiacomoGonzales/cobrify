@@ -7,6 +7,8 @@ import { applyOrderDiscount, removeOrderDiscount } from '@/services/orderService
 import { aplicarDescuentoDemo, quitarDescuentoDemo } from '@/data/demo/operaciones'
 import { useAppContext } from '@/hooks/useAppContext'
 import { useToast } from '@/contexts/ToastContext'
+import { idDeFidelizacion } from '@/utils/businessGroup'
+import { descuentoDelCupon } from '@/utils/descuentoDelCupon'
 
 export default function PreBillPreviewModal({
   isOpen,
@@ -17,13 +19,20 @@ export default function PreBillPreviewModal({
   printLabel = 'Imprimir',
   title = 'Vista previa precuenta',
 }) {
-  const { getBusinessId, user, isDemoMode } = useAppContext()
+  const { getBusinessId, user, isDemoMode, businessSettings } = useAppContext()
   const toast = useToast()
 
   const [discountType, setDiscountType] = useState('percent')
   const [discountValue, setDiscountValue] = useState('')
   const [discountReason, setDiscountReason] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
+  // Cupón (Promociones > Cupones), el mismo que acepta el POS. Llena el descuento
+  // de abajo y lo bloquea mientras esté puesto, como en el POS. Se guarda en la
+  // cuenta (discount.coupon) y al cobrar la mesa el POS lo trae con ella, así que
+  // el comprobante lo registra y el uso se cuenta al emitir (Mandil, 19-set-2026).
+  const [cupon, setCupon] = useState(null) // { id, type, value }
+  const [codigoCupon, setCodigoCupon] = useState('')
+  const [validandoCupon, setValidandoCupon] = useState(false)
 
   const items = useMemo(() => order?.items || [], [order])
 
@@ -41,11 +50,14 @@ export default function PreBillPreviewModal({
       setDiscountType(order.discount.type || 'percent')
       setDiscountValue(String(order.discount.value ?? ''))
       setDiscountReason(order.discount.reason || '')
+      setCupon(order.discount.coupon?.id ? order.discount.coupon : null)
     } else {
       setDiscountType('percent')
       setDiscountValue('')
       setDiscountReason('')
+      setCupon(null)
     }
+    setCodigoCupon('')
   }, [isOpen, hasExistingDiscount, order])
 
   const numericValue = parseFloat(discountValue) || 0
@@ -76,13 +88,41 @@ export default function PreBillPreviewModal({
     return (
       orig.type !== discountType ||
       (orig.value || 0) !== numericValue ||
-      (orig.reason || '') !== trimmedReason
+      (orig.reason || '') !== trimmedReason ||
+      (orig.coupon?.id || null) !== (cupon?.id || null)
     )
-  }, [hasExistingDiscount, numericValue, discountType, discountReason, order])
+  }, [hasExistingDiscount, numericValue, discountType, discountReason, order, cupon])
 
   const handleClearDiscount = () => {
     setDiscountValue('')
     setDiscountReason('')
+    setCupon(null)
+  }
+
+  const aplicarCupon = async () => {
+    const codigo = codigoCupon.trim()
+    if (!codigo) return
+    setValidandoCupon(true)
+    try {
+      const { validateCoupon } = await import('@/services/couponService')
+      const res = await validateCoupon(idDeFidelizacion(businessSettings, getBusinessId()), codigo, {
+        // Un cupón por categorías solo vale en la empresa dueña de esas categorías.
+        negocioQueOpera: getBusinessId(),
+      })
+      if (!res.success) { toast.error(res.error); return }
+      // Mismo número que daría el POS (utils/descuentoDelCupon). Las cortesías
+      // no se cobran: no cuentan para un cupón por categorías.
+      const descuento = descuentoDelCupon(res.coupon, items.filter((it) => !it.isCourtesy), (it) => it.total || 0)
+      if (descuento.error) { toast.error(descuento.error); return }
+      setDiscountType(descuento.tipo)
+      setDiscountValue(String(descuento.valor))
+      // El motivo es lo que la precuenta impresa dice debajo del descuento.
+      setDiscountReason(`Cupón ${res.coupon.id}`)
+      setCupon({ id: res.coupon.id, type: res.coupon.type, value: res.coupon.value })
+      setCodigoCupon('')
+    } finally {
+      setValidandoCupon(false)
+    }
   }
 
   const handlePrint = async () => {
@@ -110,6 +150,7 @@ export default function PreBillPreviewModal({
               uid: user?.uid,
               name: user?.displayName || user?.email || 'Usuario',
             },
+            ...(cupon && { coupon: cupon }),
           }
           const result = isDemoMode
             ? aplicarDescuentoDemo(order.id, datosDescuento)
@@ -226,7 +267,7 @@ export default function PreBillPreviewModal({
                 Descuento al comensal
               </span>
             </div>
-            {hasExistingDiscount && numericValue > 0 && (
+            {hasExistingDiscount && numericValue > 0 && !cupon && (
               <button
                 type="button"
                 onClick={handleClearDiscount}
@@ -247,7 +288,7 @@ export default function PreBillPreviewModal({
                   ? 'border-primary-600 bg-primary-50 text-primary-700 font-semibold'
                   : 'border-gray-200 bg-white hover:border-gray-300 text-gray-700'
               }`}
-              disabled={isProcessing}
+              disabled={isProcessing || !!cupon}
             >
               <Percent className="w-3.5 h-3.5" />
               Porcentaje
@@ -260,7 +301,7 @@ export default function PreBillPreviewModal({
                   ? 'border-primary-600 bg-primary-50 text-primary-700 font-semibold'
                   : 'border-gray-200 bg-white hover:border-gray-300 text-gray-700'
               }`}
-              disabled={isProcessing}
+              disabled={isProcessing || !!cupon}
             >
               <DollarSign className="w-3.5 h-3.5" />
               Monto fijo
@@ -276,7 +317,7 @@ export default function PreBillPreviewModal({
               value={discountValue}
               onChange={(e) => setDiscountValue(e.target.value)}
               placeholder={discountType === 'percent' ? 'Ej: 10' : 'Ej: 5.00'}
-              disabled={isProcessing}
+              disabled={isProcessing || !!cupon}
             />
             <Input
               type="text"
@@ -284,7 +325,7 @@ export default function PreBillPreviewModal({
               onChange={(e) => setDiscountReason(e.target.value)}
               placeholder="Motivo (opcional)"
               maxLength={120}
-              disabled={isProcessing}
+              disabled={isProcessing || !!cupon}
             />
           </div>
           {discountType === 'percent' && numericValue > 100 && (
@@ -299,6 +340,48 @@ export default function PreBillPreviewModal({
                 No puede superar S/ {billableTotal.toFixed(2)}
               </p>
             )}
+
+          {/* Cupón: llena el descuento de arriba y lo bloquea hasta quitarlo,
+              igual que en el POS. */}
+          {cupon ? (
+            <div className="flex items-center gap-2 mt-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+              <Tag className="w-4 h-4 text-gray-500 shrink-0" />
+              <span className="text-sm font-mono font-semibold text-gray-800 flex-1 truncate">
+                {cupon.id}
+                <span className="font-sans font-normal text-gray-500 ml-2">
+                  {cupon.type === 'percent' ? `-${cupon.value}%` : `-S/ ${Number(cupon.value).toFixed(2)}`}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={handleClearDiscount}
+                className="text-xs text-red-600 hover:underline shrink-0"
+                disabled={isProcessing}
+              >
+                Quitar
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 mt-2">
+              <input
+                type="text"
+                value={codigoCupon}
+                onChange={(e) => setCodigoCupon(e.target.value.toUpperCase())}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); aplicarCupon() } }}
+                placeholder="Código de cupón"
+                className="flex-1 min-w-0 px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                disabled={isProcessing || validandoCupon}
+              />
+              <button
+                type="button"
+                onClick={aplicarCupon}
+                disabled={!codigoCupon.trim() || validandoCupon || isProcessing}
+                className="shrink-0 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 transition-colors"
+              >
+                {validandoCupon ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Aplicar'}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Resumen */}
@@ -312,7 +395,7 @@ export default function PreBillPreviewModal({
           {previewDiscountAmount > 0 && (
             <div className="flex justify-between text-red-600">
               <span>
-                Descuento
+                {cupon ? `Cupón ${cupon.id}` : 'Descuento'}
                 {discountType === 'percent' && numericValue > 0
                   ? ` (-${Math.min(numericValue, 100)}%)`
                   : ''}

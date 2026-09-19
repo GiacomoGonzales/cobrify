@@ -416,6 +416,10 @@ export default function OrderItemsModal({
           total: price,
           notes: '',
           category: getCategoryName(product.category),
+          // `category` es el NOMBRE (la cocina reparte por estación con él); el
+          // código va aparte, que es lo que guarda un cupón por categorías
+          // (utils/descuentoDelCupon).
+          ...(product.category && { categoryId: product.category }),
           // Variante: el nombre lleva el detalle para que cocina y el ticket lo vean
           ...(variant && {
             variantSku: variant.sku,
@@ -569,6 +573,7 @@ export default function OrderItemsModal({
           modifiers: selectedModifiers, // Guardar modificadores seleccionados
           modifierKey: modifierKey, // Para identificar items únicos
           category: getCategoryName(productForModifiers.category), // Categoría para filtrado por estación
+          ...(productForModifiers.category && { categoryId: productForModifiers.category }), // Código, para cupones por categoría
           ...(mVariant && {
             variantSku: mVariant.sku,
             variantAttributes: mVariant.attributes,
@@ -657,6 +662,7 @@ export default function OrderItemsModal({
           ...(i.notes ? { notes: i.notes } : {}),
           ...(i.modifiers ? { modifiers: i.modifiers } : {}),
           ...(i.category ? { category: i.category } : {}),
+          ...(i.categoryId ? { categoryId: i.categoryId } : {}),
         })))
         toast.success(`${cart.length} items agregados a la orden`)
         setCart([])

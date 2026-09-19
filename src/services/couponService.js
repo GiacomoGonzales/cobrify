@@ -133,27 +133,10 @@ export const validateCoupon = async (businessId, code, { database, negocioQueOpe
   }
 }
 
-/**
- * Las líneas del carrito a las que alcanza un cupón.
- *
- * Sin categorías alcanza a TODA la venta, que es como funcionaron siempre: un
- * cupón viejo no tiene el campo y pasa por acá sin cambiar nada. Con categorías
- * alcanza solo a esas líneas, y el descuento se calcula sobre ESE subtotal.
- *
- * Devuelve LÍNEAS y no un monto a propósito: la caja suma en soles y el catálogo
- * en su moneda con conversión de tipo de cambio. Lo que se comparte acá es el
- * CRITERIO (qué entra), que es lo único que puede quedar distinto entre las dos
- * pantallas; la aritmética del dinero se queda donde ya vive.
- *
- * ⚠️ La comparación es PLANA, igual que en los descuentos programados: una
- * categoría padre no alcanza a sus subcategorías. Mismo criterio en las dos
- * funciones para que al negocio no le signifiquen cosas distintas.
- */
-export const lineasQueCalifican = (lineas, categorias = []) => {
-  const cats = (categorias || []).filter(Boolean)
-  if (!cats.length) return lineas || []
-  return (lineas || []).filter((l) => cats.includes(l?.category || ''))
-}
+// Qué líneas alcanza un cupón y cuánto descuenta viven en utils/descuentoDelCupon
+// (sin Firebase, para probarlas en Node). Se reexporta para quien ya lo importaba
+// de acá: el catálogo online y el POS.
+export { lineasQueCalifican } from '@/utils/descuentoDelCupon'
 
 /**
  * Cuenta un uso tras emitir la venta. Fire-and-forget desde el POS: si

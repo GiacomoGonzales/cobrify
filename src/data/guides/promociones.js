@@ -8,7 +8,7 @@
  */
 export default {
   id: 'promociones',
-  actualizado: '16/08/2026',
+  actualizado: '19/09/2026',
   intro:
     'Promociones reúne en un solo lugar las herramientas para atraer y fidelizar clientes: la **Tarjeta de sellos** (tu programa de fidelidad, con tarjeta digital para el celular del cliente), los **Combos** (varios productos a un precio especial) y los **Cupones** (códigos de descuento como VERANO10). Todo lo que crees aquí se usa después en el POS y en tu catálogo online.',
 
@@ -219,6 +219,10 @@ export default {
         {
           type: 'ojo',
           text: 'Con un cupón aplicado, los campos de descuento manual se bloquean: el descuento pertenece al cupón. Para modificarlo a mano, primero presiona **Quitar**. Si el código no es válido, el mensaje te dice por qué: vencido, agotado o desactivado.',
+        },
+        {
+          type: 'texto',
+          text: 'En un restaurante también se aplica en la **precuenta** de la mesa, con el mismo campo **Código de cupón**: la precuenta sale con el descuento y, al cobrar la mesa, el POS trae el cupón con la cuenta.',
         },
         {
           type: 'texto',
