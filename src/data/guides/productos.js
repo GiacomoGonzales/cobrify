@@ -6,7 +6,7 @@
  */
 export default {
   id: 'productos',
-  actualizado: '12/09/2026',
+  actualizado: '19/09/2026',
   intro:
     'Tu catálogo: lo que vendes, a cuánto y cuánto te cuesta. Todo lo que registres acá es lo que aparece en el Punto de Venta, así que vale la pena cargarlo bien una vez.',
 
@@ -723,7 +723,7 @@ export default {
     },
     {
       q: 'Vendo por peso, ¿cómo cobro 1.5 kg?',
-      a: 'Activa **Permitir decimales** en ese producto (individualmente o en lote desde las acciones masivas) y podrás poner cantidades con decimales en el carrito.',
+      a: 'Activa **Permitir decimales** en ese producto (individualmente o en lote desde las acciones masivas) y podrás poner cantidades con decimales en el carrito. Vale también para sus presentaciones: media caja es **0.5** y el stock descuenta la mitad de lo que trae la caja.',
     },
     {
       q: '¿Por qué mi reporte de utilidad sale en cero?',

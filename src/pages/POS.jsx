@@ -13097,23 +13097,18 @@ Gracias por tu preferencia.`
                         <div className="flex items-center justify-between gap-2 mt-2 min-w-0">
                           {/* Controles cantidad */}
                           <div className="flex items-center gap-1 flex-shrink-0">
-                            {/* Una PRESENTACIÓN (Saco, Caja, Plancha...) se vende por unidades
-                                ENTERAS: son 5 sacos, no 5.3. Hereda `allowDecimalQuantity` del
-                                producto a granel por el spread `...product` de
-                                `handlePresentationSelection`, así que sin el `!presentationName`
-                                caía en la rama decimal y pasaban dos cosas: (1) salía el toggle
-                                con la unidad de la presentación junto a la moneda —el "Saco | S/"
-                                que se reportó—, y (2) en modo monto la conversión usa
-                                `item.unitPrice ?? item.price`, que en esa línea es el precio POR
-                                SACO y no por kilo, así que escribir un monto daba una cantidad
-                                FRACCIONARIA de sacos mientras el stock se descontaba por
-                                `quantity * presentationFactor`. Ahora cae en la rama de abajo,
-                                que es la de cantidad entera. */}
+                            {/* Si el producto permite decimales, la PRESENTACIÓN también: GRUPO
+                                JC & AN vende 0.5 JABA, 1.5 PAQUETE o 0.5 CAJA todos los días, y el
+                                stock sale bien (quantity * presentationFactor). 7a9c6f45 (17-set)
+                                las dejó en enteros para quitar el selector unidad/monto, y la
+                                cajera ya no podía cobrar media jaba (19-set). Lo que una
+                                presentación NO lleva es ese selector: mostraba la unidad de la
+                                presentación junto a la moneda ("Saco | S/"). */}
                             {isSerialGroup ? (
                               <span className="text-sm font-semibold text-gray-700 px-1">
                                 ×{displayQty}
                               </span>
-                            ) : (item.allowDecimalQuantity && !item.presentationName) ? (
+                            ) : item.allowDecimalQuantity ? (
                               <div className="flex items-center gap-1">
                                 <input
                                   type="number"
@@ -13148,6 +13143,7 @@ Gracias por tu preferencia.`
                                     amountModeItemId === itemId ? 'border-primary-400 bg-primary-50' : 'border-gray-300'
                                   }`}
                                 />
+                                {!item.presentationName && (
                                 <div className="flex rounded border border-gray-300 overflow-hidden text-[10px]">
                                   <button
                                     onClick={() => { setAmountModeItemId(null); setAmountModeValue('') }}
@@ -13172,6 +13168,7 @@ Gracias por tu preferencia.`
                                     {currency === 'USD' ? '$' : 'S/'}
                                   </button>
                                 </div>
+                                )}
                               </div>
                             ) : (
                               <>
